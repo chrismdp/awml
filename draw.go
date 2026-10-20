@@ -16,7 +16,7 @@ func Draw(doc *Map) string {
 	emit = func(parent, indent string) {
 		for _, p := range parts {
 			if where[str(p, "id")] == parent {
-				out = append(out, indent+str(p, "id")+fmt.Sprintf(shapes[str(p, "kind")], text(str(p, "label"))))
+				out = append(out, indent+str(p, "id")+fmt.Sprintf(shapes[str(p, "kind")], label(p)))
 			}
 		}
 		for _, g := range groups {
@@ -110,6 +110,17 @@ const red = "stroke:#d0342c,stroke-width:2.5px,color:#b0271f"
 
 var header = []string{"---", "config:", "  theme: default", "  flowchart:", "    useMaxWidth: false",
 	"    subGraphTitleMargin:", "      top: 6", "      bottom: 30", "---", "flowchart TB"}
+
+// A step's operation is a UML stereotype, smaller and softer than the label beneath it.
+const stereotype = "<small style='color:#3d434f'>«%s»</small><br>"
+
+// label is a part's label as Mermaid reads it, under its stereotype if it has one.
+func label(p *Map) string {
+	if op := str(p, "op"); op != "" {
+		return fmt.Sprintf(stereotype, op) + text(str(p, "label"))
+	}
+	return text(str(p, "label"))
+}
 
 // text keeps a label inside its quotes: Mermaid ends a label at a double quote, and reads #quot; as one.
 func text(s string) string {

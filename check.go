@@ -108,6 +108,13 @@ func Check(doc any) []string {
 		if in := p.get("in"); in != nil && !groupIDs[keyOf(in)] {
 			errors = append(errors, fmt.Sprintf(`%s is in unknown group "%s"`, name, show(in)))
 		}
+		if op := p.get("op"); op != nil {
+			if k, _ := p.get("kind").(string); !steps[k] {
+				errors = append(errors, name+" has an op, but only an ai, rule or human step takes one")
+			} else if s, _ := op.(string); !ops[s] {
+				errors = append(errors, fmt.Sprintf(`%s has unknown op "%s"`, name, show(op)))
+			}
+		}
 	}
 
 	for n, l := range lines {
@@ -151,6 +158,77 @@ func Check(doc any) []string {
 			errors = append(errors, fmt.Sprintf(`the tie from "%s" to "%s" has no comment at either end`, show(l.get("from")), show(l.get("to"))))
 		}
 	}
+	return append(errors, operations(parts, lines)...)
+}
+
+// The operations a step may name, and the kinds of part that are steps.
+var ops = setOf([]string{"bring-in", "sort", "learn", "prepare", "check", "reflect", "draft", "do", "answer"})
+var steps = setOf([]string{"ai", "rule", "human"})
+
+// operations holds each step to what its op must not do, wherever the drawing shows it. Only a do
+// step leads to an outside action, directly or through a review or a fork, and an answer or check
+// step never writes to a context. A red line draws what a live system did, not the design, so
+// these rules don't hold it.
+func operations(parts, lines []*Map) []string {
+	byID := map[any]*Map{}
+	for _, p := range parts {
+		byID[keyOf(p.get("id"))] = p
+	}
+	// opOf gives a step's op, or nothing if it names none or one that isn't known.
+	opOf := func(p *Map) string {
+		if k, _ := p.get("kind").(string); !steps[k] {
+			return ""
+		}
+		op, _ := p.get("op").(string)
+		if !ops[op] {
+			return ""
+		}
+		return op
+	}
+	// moves is whether a line takes work on: a hidden line steers the layout and a refused one never
+	// happens.
+	moves := func(l *Map) bool {
+		k := l.get("kind")
+		return (k == "start" || k == "data" || k == "publish") && l.get("breaks") != true
+	}
+	var errors []string
+	for _, out := range parts {
+		if out.get("kind") != "outside" {
+			continue
+		}
+		seen, reported := map[*Map]bool{}, map[*Map]bool{}
+		var back func(to *Map)
+		back = func(to *Map) {
+			seen[to] = true
+			for _, l := range lines {
+				from := byID[keyOf(l.get("from"))]
+				if !moves(l) || from == nil || byID[keyOf(l.get("to"))] != to {
+					continue
+				}
+				if k := from.get("kind"); k == "review" || k == "fork" {
+					if !seen[from] {
+						back(from)
+					}
+				} else if op := opOf(from); op != "" && op != "do" && !reported[from] {
+					reported[from] = true
+					errors = append(errors, fmt.Sprintf(`part "%s" leads to outside action "%s", but its op is %s: only a do step leads to an outside action`,
+						show(from.get("id")), show(out.get("id")), op))
+				}
+			}
+		}
+		back(out)
+	}
+	for _, l := range lines {
+		from, to := byID[keyOf(l.get("from"))], byID[keyOf(l.get("to"))]
+		if !moves(l) || from == nil || to == nil || to.get("kind") != "context" {
+			continue
+		}
+		if op := opOf(from); op == "answer" || op == "check" {
+			a := map[string]string{"answer": "an", "check": "a"}[op]
+			errors = append(errors, fmt.Sprintf(`part "%s" writes to context "%s", but its op is %s: %s %s step never writes to a context`,
+				show(from.get("id")), show(to.get("id")), op, a, op))
+		}
+	}
 	return errors
 }
 
@@ -159,12 +237,12 @@ const version = "0.1"
 var fieldSets = map[string][2][]string{
 	"file":  {{"awml", "title", "view", "parts"}, {"groups", "lines"}},
 	"group": {{"id", "label"}, {"in"}},
-	"part":  {{"id", "kind", "label"}, {"in"}},
+	"part":  {{"id", "kind", "label"}, {"in", "op"}},
 	"line":  {{"from", "to", "kind"}, {"label", "breaks"}},
 }
 
 // The fields that must be text, when they're given at all.
-var textFields = map[string]bool{"title": true, "view": true, "id": true, "label": true, "in": true, "kind": true, "from": true, "to": true}
+var textFields = map[string]bool{"title": true, "view": true, "id": true, "label": true, "in": true, "kind": true, "from": true, "to": true, "op": true}
 
 // Mermaid reads anything else in an id as part of the syntax around it.
 var id = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`)

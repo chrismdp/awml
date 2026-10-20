@@ -233,3 +233,119 @@ func TestBreaksIsTrueOrFalse(t *testing.T) {
 	mistakes(t, changed(t, "lines.1.breaks", false))
 	mistakes(t, changed(t, "lines.1.breaks", "no"), `the line from "plan" to "mealplan": breaks must be true or false, not "no"`)
 }
+
+const reply = `
+awml: "0.1"
+title: A reply
+view: scopes
+parts:
+  - { id: write, kind: ai, op: draft, label: Draft the reply }
+  - { id: drafts, kind: context, label: Drafts }
+  - { id: ask, kind: rule, op: do, label: Ask for the send }
+  - { id: split, kind: fork }
+  - { id: approve, kind: review, label: Yes to the exact reply }
+  - { id: send, kind: outside, label: "Send the reply: Ask" }
+  - { id: file, kind: outside, label: "File the reply: Allow" }
+lines:
+  - { from: write, to: drafts, kind: data }
+  - { from: drafts, to: ask, kind: data }
+  - { from: ask, to: approve, kind: data }
+  - { from: approve, to: send, kind: data, label: "[yes]" }
+`
+
+// withLines is the reply with more lines.
+func withLines(t *testing.T, lines ...string) *Map {
+	t.Helper()
+	src := reply
+	for _, l := range lines {
+		src += "  - " + l + "\n"
+	}
+	return parsed(t, src)
+}
+
+func TestEachOperationNamesAStep(t *testing.T) {
+	for _, op := range []string{"bring-in", "sort", "learn", "prepare", "check", "reflect", "draft", "do", "answer"} {
+		for _, kind := range []string{"ai", "rule", "human"} {
+			d := parsed(t, fmt.Sprintf(`{awml: "0.1", title: T, view: scopes, parts: [{id: s, kind: %s, op: %s, label: S}]}`, kind, op))
+			mistakes(t, d)
+		}
+	}
+}
+
+func TestAnUnknownOperation(t *testing.T) {
+	mistakes(t, changed(t, "parts.1.op", "write-up"), `part "plan" has unknown op "write-up"`)
+}
+
+func TestAnOperationMustBeText(t *testing.T) {
+	mistakes(t, changed(t, "parts.1.op", true),
+		`part "plan": YAML read its op as true, not text: put it in quotes`, `part "plan" has unknown op "true"`)
+}
+
+func TestOnlyAStepNamesAnOperation(t *testing.T) {
+	mistakes(t, changed(t, "parts.2.op", "learn"), `part "mealplan" has an op, but only an ai, rule or human step takes one`)
+}
+
+func TestADoStepLeadsToAnOutsideActionThroughAReview(t *testing.T) {
+	mistakes(t, parsed(t, reply))
+}
+
+func TestOnlyADoStepLeadsToAnOutsideAction(t *testing.T) {
+	want := `part "write" leads to outside action "send", but its op is draft: only a do step leads to an outside action`
+	mistakes(t, withLines(t, "{ from: write, to: send, kind: data }"), want)
+	mistakes(t, withLines(t, "{ from: write, to: approve, kind: data }"), want)
+	mistakes(t, withLines(t, "{ from: write, to: split, kind: data }", "{ from: split, to: send, kind: data }"), want)
+	mistakes(t, withLines(t, "{ from: write, to: split, kind: start }", "{ from: split, to: approve, kind: data }"), want)
+}
+
+func TestAStepIsReportedOnceForEachOutsideActionItLeadsTo(t *testing.T) {
+	mistakes(t, withLines(t, "{ from: write, to: send, kind: data }", "{ from: write, to: approve, kind: data }",
+		"{ from: write, to: file, kind: data }"),
+		`part "write" leads to outside action "send", but its op is draft: only a do step leads to an outside action`,
+		`part "write" leads to outside action "file", but its op is draft: only a do step leads to an outside action`)
+}
+
+func TestAContextOrASurfaceBetweenStopsTheLead(t *testing.T) {
+	mistakes(t, withLines(t, "{ from: drafts, to: approve, kind: data }"))
+}
+
+func TestAStepWithNoOperationIsHeldToNone(t *testing.T) {
+	src := strings.Replace(reply, "op: draft, ", "", 1) + "  - { from: write, to: send, kind: data }\n"
+	mistakes(t, parsed(t, src))
+}
+
+func TestHiddenAndRefusedLinesLeadNowhere(t *testing.T) {
+	mistakes(t, withLines(t, "{ from: write, to: send, kind: hidden }", "{ from: write, to: file, kind: refused }"))
+}
+
+func TestARedLineIsHeldToNoOperation(t *testing.T) {
+	mistakes(t, withLines(t, "{ from: write, to: send, kind: data, breaks: true }"))
+}
+
+const question = `
+awml: "0.1"
+title: A question
+view: scopes
+parts:
+  - { id: notes, kind: context, label: Family notes }
+  - { id: word, kind: ai, op: answer, label: Word the answer }
+  - { id: match, kind: rule, op: check, label: Match the bills }
+  - { id: chat, kind: surface, label: Family chat }
+lines:
+  - { from: notes, to: word, kind: data }
+  - { from: notes, to: match, kind: data }
+  - { from: word, to: chat, kind: data }
+  - { from: match, to: chat, kind: data }
+`
+
+func TestAnAnswerOrACheckReadsContextsAndSpeaksOnSurfaces(t *testing.T) {
+	mistakes(t, parsed(t, question))
+}
+
+func TestAnAnswerOrACheckNeverWritesToAContext(t *testing.T) {
+	d := parsed(t, question+"  - { from: word, to: notes, kind: data }\n  - { from: match, to: notes, kind: publish }\n")
+	mistakes(t, d,
+		`part "word" writes to context "notes", but its op is answer: an answer step never writes to a context`,
+		`part "match" writes to context "notes", but its op is check: a check step never writes to a context`)
+	mistakes(t, parsed(t, question+"  - { from: word, to: notes, kind: data, breaks: true }\n"))
+	mistakes(t, parsed(t, question+"  - { from: word, to: notes, kind: refused }\n"))
+}

@@ -12,14 +12,14 @@ flowchart TB
     direction TB
     weekdays(["Weekdays 07:00"])
     mail{{"The business mail service, as the consultant"}}
-    bring("Bring in the consulting inbox")
-    rules("Sort by rule: newsletters, receipts, sent mail")
-    sort("Choose where the email belongs from the projects listed, or nowhere with a reason")
+    bring("<small style='color:#3d434f'>«bring-in»</small><br>Bring in the consulting inbox")
+    rules("<small style='color:#3d434f'>«sort»</small><br>Sort by rule: newsletters, receipts, sent mail")
+    sort("<small style='color:#3d434f'>«sort»</small><br>Choose where the email belongs from the projects listed, or nowhere with a reason")
     notes[("Business notes, with the engagement's project")]
     draft_gap@{ shape: notch-rect, label: "Missing from the design: no scheduled task or skill drafts a reply to a client" }
     daily(["Every day 06:15"])
     drafts[("Drafts")]
-    advance("Move the projects on, and ask for the send of each due draft")
+    advance("<small style='color:#3d434f'>«do»</small><br>Move the projects on, and ask for the send of each due draft")
     today@{ shape: win-pane, label: "Today, on the phone" }
     approve{"The approver of sends: yes to the exact draft"}
     send>"Send the mail: Ask"]

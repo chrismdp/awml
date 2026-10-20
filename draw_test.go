@@ -180,6 +180,13 @@ groups: [{id: g, label: g}]`)
 	}
 }
 
+func TestAStepsOperationIsAQuietStereotypeAboveItsLabel(t *testing.T) {
+	for _, kind := range []string{"ai", "rule", "human"} {
+		out := drawing(t, "scopes", fmt.Sprintf(`parts: [{id: p, kind: %s, op: draft, label: 'Draft the "reply"'}]`, kind))
+		has(t, out, "\n  p(\"<small style='color:#3d434f'>«draft»</small><br>Draft the #quot;reply#quot;\")\n")
+	}
+}
+
 const questionFile = `
 awml: "0.1"
 title: A question in the family chat

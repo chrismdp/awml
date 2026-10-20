@@ -11,14 +11,14 @@ flowchart TB
   subgraph server["A server running scheduled jobs"]
     direction TB
     weekdays(["Weekdays 07:00"])
-    bring("Bring in the consulting inbox")
-    rules("Sort by rule: newsletters, receipts, sent mail")
+    bring("<small style='color:#3d434f'>«bring-in»</small><br>Bring in the consulting inbox")
+    rules("<small style='color:#3d434f'>«sort»</small><br>Sort by rule: newsletters, receipts, sent mail")
     daily(["Every day 06:15"])
-    advance("Move the projects on, and ask for the send of each due draft")
+    advance("<small style='color:#3d434f'>«do»</small><br>Move the projects on, and ask for the send of each due draft")
   end
   subgraph model["A model, through its API"]
     direction TB
-    sort("Choose where the email belongs from the projects listed, or nowhere with a reason")
+    sort("<small style='color:#3d434f'>«sort»</small><br>Choose where the email belongs from the projects listed, or nowhere with a reason")
   end
   subgraph files["Markdown notes, synced to each machine"]
     direction TB

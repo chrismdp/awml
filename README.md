@@ -36,7 +36,7 @@ lines:
   - { from: plan, to: chat, kind: data, label: posted }
 ```
 
-The part kinds are `trigger`, `ai`, `rule`, `human`, `review`, `fork`, `context`, `connector`, `surface`, `outside` and `comment`. The line kinds are `start`, `data`, `publish`, `refused`, `tie` and `hidden`, and `breaks: true` draws a line red. A trigger or comment with no `in` is drawn in the group of what it starts or explains. [`SPEC.md`](SPEC.md) gives every field and what each part and line means, and [`examples/`](examples) has three workflows to start from, two of them in both views. [`examples/client-email-where.svg`](examples/client-email-where.svg) shows one small workflow running across five platforms, which is how most agentic work is put together today.
+The part kinds are `trigger`, `ai`, `rule`, `human`, `review`, `fork`, `context`, `connector`, `surface`, `outside` and `comment`. The line kinds are `start`, `data`, `publish`, `refused`, `tie` and `hidden`, and `breaks: true` draws a line red. A step may name its operation, such as `op: draft`, which is drawn as `«draft»` above its label, and `awml check` then holds the step to what that operation must not do. A trigger or comment with no `in` is drawn in the group of what it starts or explains. [`SPEC.md`](SPEC.md) gives every field and what each part and line means, and [`examples/`](examples) has three workflows to start from, two of them in both views. [`examples/client-email-where.svg`](examples/client-email-where.svg) shows one small workflow running across five platforms, which is how most agentic work is put together today.
 
 ## Drawing it
 
