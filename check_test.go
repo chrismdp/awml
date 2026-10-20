@@ -9,7 +9,7 @@ import (
 )
 
 const good = `
-awml: "0.1"
+awml: "0.2"
 title: The family's dinners
 view: security
 groups:
@@ -117,7 +117,7 @@ func TestTheOldNamesForViewsAndKindsAreUnknown(t *testing.T) {
 }
 
 func TestAnUnknownVersion(t *testing.T) {
-	mistakes(t, changed(t, "awml", "2"), `awml must be "0.1", not "2"`)
+	mistakes(t, changed(t, "awml", "2"), `awml must be "0.2", not "2"`)
 }
 
 func TestAPartInAnUnknownGroup(t *testing.T) {
@@ -177,7 +177,11 @@ func TestAMissingField(t *testing.T) {
 }
 
 func TestTheVersionMayBeWrittenAsANumber(t *testing.T) {
-	mistakes(t, changed(t, "awml", 0.1))
+	mistakes(t, changed(t, "awml", 0.2))
+}
+
+func TestAFileInTheOldVersionIsRefused(t *testing.T) {
+	mistakes(t, changed(t, "awml", "0.1"), `awml must be "0.2", not "0.1"`)
 }
 
 func TestAnUnknownField(t *testing.T) {
@@ -194,12 +198,12 @@ func TestNotAFileOfParts(t *testing.T) {
 
 func TestEveryMistakeIsReportedAtOnce(t *testing.T) {
 	mistakes(t, changed(t, "awml", "2", "lines.1.to", "plann"),
-		`awml must be "0.1", not "2"`, `the line from "plan" to "plann" ends at unknown part "plann"`)
+		`awml must be "0.2", not "2"`, `the line from "plan" to "plann" ends at unknown part "plann"`)
 }
 
 func TestAValueYAMLReadsAsTrueMustBeQuoted(t *testing.T) {
 	d := parsed(t, `
-awml: "0.1"
+awml: "0.2"
 title: T
 view: security
 parts:
@@ -215,13 +219,13 @@ lines:
 }
 
 func TestANumberMustBeQuoted(t *testing.T) {
-	d := parsed(t, `{awml: "0.1", title: T, view: security, parts: [{id: t, kind: trigger, label: 12}]}`)
+	d := parsed(t, `{awml: "0.2", title: T, view: security, parts: [{id: t, kind: trigger, label: 12}]}`)
 	mistakes(t, d, `part "t": YAML read its label as 12, not text: put it in quotes`)
 }
 
 func TestYesNoOnOffAndTimesAreText(t *testing.T) {
 	d := parsed(t, `
-awml: "0.1"
+awml: "0.2"
 title: T
 view: security
 parts:
@@ -242,7 +246,7 @@ func TestBreaksIsTrueOrFalse(t *testing.T) {
 }
 
 const reply = `
-awml: "0.1"
+awml: "0.2"
 title: A reply
 view: security
 parts:
@@ -273,7 +277,7 @@ func withLines(t *testing.T, lines ...string) *Map {
 func TestEachOperationNamesAStep(t *testing.T) {
 	for _, op := range []string{"bring-in", "sort", "learn", "prepare", "check", "reflect", "draft", "do", "answer", "other"} {
 		for _, kind := range []string{"ai", "code", "person"} {
-			d := parsed(t, fmt.Sprintf(`{awml: "0.1", title: T, view: security, parts: [{id: s, kind: %s, op: %s, label: S}]}`, kind, op))
+			d := parsed(t, fmt.Sprintf(`{awml: "0.2", title: T, view: security, parts: [{id: s, kind: %s, op: %s, label: S}]}`, kind, op))
 			mistakes(t, d)
 		}
 	}
@@ -336,7 +340,7 @@ func TestARedLineIsHeldToNoOperation(t *testing.T) {
 }
 
 const question = `
-awml: "0.1"
+awml: "0.2"
 title: A question
 view: security
 parts:

@@ -20,7 +20,7 @@ func parsed(t *testing.T, src string) *Map {
 }
 
 func TestAMappingKeepsTheOrderOfItsKeys(t *testing.T) {
-	m := parsed(t, "view: security\nawml: \"0.1\"\ntitle: T\n")
+	m := parsed(t, "view: security\nawml: \"0.2\"\ntitle: T\n")
 	if got := m.Keys(); !reflect.DeepEqual(got, []string{"view", "awml", "title"}) {
 		t.Errorf("keys = %q", got)
 	}

@@ -1,5 +1,5 @@
 # A fork: one input, and two steps that work on it side by side. The family is fictional.
-awml: "0.1"
+awml: "0.2"
 title: The school newsletter
 view: security
 groups:

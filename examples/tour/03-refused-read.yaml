@@ -1,5 +1,5 @@
 # A refused read: an answer that may not read one flatmate's own notes. The flatmates are fictional.
-awml: "0.1"
+awml: "0.2"
 title: A question in the flat's chat
 view: security
 groups:

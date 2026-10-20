@@ -1,6 +1,6 @@
 # AWML: the Agentic Workflow Modelling Language
 
-Draft 0.1, 20 October 2026.
+Draft 0.2, 20 October 2026.
 
 AWML describes agentic work as diagrams, written as YAML files and drawn with Mermaid.
 
@@ -182,7 +182,7 @@ AWML runs nothing and grants nothing. In a workflow tool such as n8n, the diagra
 One YAML file holds one view of one workflow.
 
 ```yaml
-awml: "0.1"
+awml: "0.2"
 title: The family's dinners
 view: security
 groups:
@@ -197,7 +197,7 @@ lines:
   - { from: plan, to: mealplan, kind: data, label: posted }
 ```
 
-The file needs `awml`, the version `"0.1"`; `title`, the workflow's name; `view`, `security` or `platform`; and `parts`. It may have `groups` and `lines`.
+The file needs `awml`, the version `"0.2"`; `title`, the workflow's name; `view`, `security` or `platform`; and `parts`. It may have `groups` and `lines`.
 
 - A **group** has an `id` and a `label`, and may have `in`, the id of the group it sits inside.
 - A **part** has an `id`, a `kind` and a `label`, which a fork doesn't need and never shows. It may have `in`, the id of its group. A step, `ai`, `code` or `person`, may have `op`, its operation.

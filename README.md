@@ -447,7 +447,7 @@ npx -y @mermaid-js/mermaid-cli@11.4.1 -b white -i my-workflow.mmd -o my-workflow
 One file holds one view of one workflow:
 
 ```yaml
-awml: "0.1"
+awml: "0.2"
 title: The family's dinners
 view: security      # or: platform
 groups:
@@ -464,7 +464,7 @@ lines:
   - { from: plan, to: chat, kind: data, label: posted }
 ```
 
-- The file needs `awml`, the version `"0.1"`; `title`, the workflow's name; `view`, `security` or `platform`; and `parts`. It may have `groups` and `lines`.
+- The file needs `awml`, the version `"0.2"`; `title`, the workflow's name; `view`, `security` or `platform`; and `parts`. It may have `groups` and `lines`.
 - A **group** is a scope in a security view, or a platform in a platform view. It has an `id` and a `label`, and may have `in`, the id of the group it sits inside.
 - A **part** has an `id`, a `kind` and a `label`, which a fork doesn't need. It may have `in`, the id of its group. A step, `ai`, `code` or `person`, may have `op`, its operation, such as `op: draft`.
 - A **line** has `from` and `to`, the ids of two parts, and a `kind`. It may have a `label`, and `breaks: true` to draw it red.
@@ -490,6 +490,6 @@ Besides the gallery, [`examples/`](examples) has three workflows to start from: 
 
 ## Status and licence
 
-Draft 0.1. The notation and the file format may still change.
+Draft 0.2. The notation and the file format may still change.
 
 MIT. See `LICENSE`.

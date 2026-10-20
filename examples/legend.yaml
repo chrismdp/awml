@@ -1,5 +1,5 @@
 # Every kind of part, as a key to reading the drawings. The hidden lines only lay it out as a grid.
-awml: "0.1"
+awml: "0.2"
 title: The parts of a drawing
 view: security
 parts:

@@ -9,7 +9,7 @@ import (
 // drawing draws a file of the given view whose groups, parts and lines are body.
 func drawing(t *testing.T, view, body string) string {
 	t.Helper()
-	return Draw(parsed(t, fmt.Sprintf("awml: \"0.1\"\ntitle: T\nview: %s\n%s", view, body)))
+	return Draw(parsed(t, fmt.Sprintf("awml: \"0.2\"\ntitle: T\nview: %s\n%s", view, body)))
 }
 
 // body is a drawing without its config header.
@@ -218,7 +218,7 @@ func TestEachOperationIsDrawnWithItsEmoji(t *testing.T) {
 }
 
 const questionFile = `
-awml: "0.1"
+awml: "0.2"
 title: A question in the family chat
 view: security
 groups:

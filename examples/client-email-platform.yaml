@@ -1,7 +1,7 @@
 # The same workflow as client-email.yaml, by where each part runs. Each block is a platform, with
 # its own harness, models, surfaces and triggers: one activity needs four of them here, which is
 # normal today. The consultant is fictional.
-awml: "0.1"
+awml: "0.2"
 title: A client's email, by where each part runs
 view: platform
 groups:

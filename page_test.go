@@ -11,7 +11,7 @@ import (
 
 func pageDoc(t *testing.T, title, view, label string) *Map {
 	t.Helper()
-	return parsed(t, fmt.Sprintf("{awml: \"0.1\", title: %q, view: %s, parts: [{id: a, kind: ai, label: %q}]}", title, view, label))
+	return parsed(t, fmt.Sprintf("{awml: \"0.2\", title: %q, view: %s, parts: [{id: a, kind: ai, label: %q}]}", title, view, label))
 }
 
 func drawings(t *testing.T, html string) []string {

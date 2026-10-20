@@ -1,6 +1,6 @@
 # A red line: the club's Friday message, as the live system ran it one week. The design waits for
 # Ella's yes, but the system sent the draft straight out. Ella is fictional.
-awml: "0.1"
+awml: "0.2"
 title: The club's Friday message, one week
 view: security
 groups:

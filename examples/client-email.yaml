@@ -2,7 +2,7 @@
 # consultant's private mailbox, and a standing rule moves a client's email into the business. The
 # consultant edits the draft and sends it, which takes the reply back into the private mailbox.
 # The consultant, the associate and the client are fictional.
-awml: "0.1"
+awml: "0.2"
 title: A client's email, answered with a draft
 view: security
 groups:

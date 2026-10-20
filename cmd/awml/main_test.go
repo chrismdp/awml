@@ -10,7 +10,7 @@ import (
 	"github.com/chrismdp/awml"
 )
 
-const good = `awml: "0.1"
+const good = `awml: "0.2"
 title: Dinners
 view: security
 groups:

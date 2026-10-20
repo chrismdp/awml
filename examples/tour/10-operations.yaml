@@ -1,5 +1,5 @@
 # One step in each of four operations, so each one's emoji and name show. Kemi is fictional.
-awml: "0.1"
+awml: "0.2"
 title: An email from the school
 view: security
 groups:

@@ -236,7 +236,7 @@ func operations(parts, lines []*Map) []string {
 	return errors
 }
 
-const version = "0.1"
+const version = "0.2"
 
 var fieldSets = map[string][2][]string{
 	"file":  {{"awml", "title", "view", "parts"}, {"groups", "lines"}},
