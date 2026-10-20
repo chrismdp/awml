@@ -8,31 +8,28 @@ config:
       bottom: 30
 ---
 flowchart TB
-  subgraph server["A server running scheduled jobs"]
+  subgraph cowork["Claude Cowork, on a Mac mini"]
     direction TB
-    weekdays(["Weekdays 07:00"])
+    weekdays(["A scheduled task, weekdays 07:00"])
     bring("<small style='color:#3d434f'>⚙️ 📥 bring-in</small><br>Bring in the consulting inbox")
     rules("<small style='color:#3d434f'>⚙️ 🗂️ sort</small><br>Sort by rule: newsletters, receipts, sent mail")
-    ask("<small style='color:#3d434f'>⚙️ 🛠️ do</small><br>Ask the consultant to approve the reply, saying what it is for")
-  end
-  subgraph model["A model, through its API"]
-    direction TB
     choose("<small style='color:#3d434f'>🤖 🗂️ sort</small><br>Choose the engagement the email belongs to")
     learn("<small style='color:#3d434f'>🤖 🧠 learn</small><br>Update the engagement's project with what the email says")
     draft("<small style='color:#3d434f'>🤖 ✏️ draft</small><br>Draft a reply")
+    ask("<small style='color:#3d434f'>⚙️ 🛠️ do</small><br>Ask the consultant to approve the reply, saying what it is for")
   end
-  subgraph files["Markdown notes, synced to each machine"]
+  subgraph files["Markdown notes, synced to the laptop and the Mac mini"]
     direction TB
     project[("The engagement's project")]
-    drafts[("Drafts")]
   end
   subgraph phone["The consultant's phone"]
     direction TB
     today@{ shape: win-pane, label: "Today" }
     approve{"👤 The consultant's yes to the exact reply"}
   end
-  subgraph mailservice["The mail service"]
+  subgraph gmail["Gmail"]
     direction TB
+    drafts[("Drafts")]
     mailbox{{"The consultant's mailbox"}}
     send>"Send the reply: Ask"]
   end
@@ -68,8 +65,7 @@ flowchart TB
   class choose,learn,draft ai
   class bring,rules,ask rule
   class approve human
-  style server fill:#e3ebfa,stroke:#b9c8e8,color:#16171b
-  style model fill:#fbe9df,stroke:#ecc7b2,color:#16171b
-  style files fill:#efe6fa,stroke:#d3c2ea,color:#16171b
-  style phone fill:#fbf3d9,stroke:#e8d9a6,color:#16171b
-  style mailservice fill:#dff3ef,stroke:#b4ddd4,color:#16171b
+  style cowork fill:#e3ebfa,stroke:#b9c8e8,color:#16171b
+  style files fill:#fbe9df,stroke:#ecc7b2,color:#16171b
+  style phone fill:#efe6fa,stroke:#d3c2ea,color:#16171b
+  style gmail fill:#fbf3d9,stroke:#e8d9a6,color:#16171b

@@ -57,13 +57,13 @@ Agentic work has three layers, and it helps to keep them apart.
 
 - **The operating model:** how work is organised and what it's for: who it serves, what each part may see, and what needs a person's yes. A way of running projects is an operating model, and so is a family's rule that nobody spends over a set amount without asking. It has very little to do with AI: it's how work is organised, whoever or whatever does it.
 - **The workflow:** who must do what. The structure of the work, and the concrete steps taken from a trigger to the surfaces and outside actions it ends in. **This is what AWML describes.**
-- **The platforms** that run it: usually several at once, such as a scheduled job on a server, a model behind an API, a folder of notes synced between machines, a mail service and a phone.
+- **The platforms** that run it: usually several at once, such as Claude Cowork on a Mac mini, a folder of notes synced between machines, a mail service and a phone. Each brings its own surfaces, harness and models, and often its own triggers, so a model on its own isn't a platform.
 
 Take a fictional consultant who answers clients' email:
 
 - **Operating model:** every client engagement is a project, and anything that goes out in the consultant's name waits for the consultant's yes.
 - **Workflow:** each weekday morning the inbox is brought in and sorted. An email from a client updates the engagement's project, a reply is drafted, the consultant approves the exact reply, and it's sent.
-- **Platforms:** a server running scheduled jobs, a model through its API, Markdown notes synced to each machine, the mail service and the consultant's phone. Any of these can change.
+- **Platforms:** Claude Cowork on a Mac mini, Markdown notes synced to the laptop and the Mac mini, Gmail, and the consultant's phone. Any of these can change.
 
 The platforms each work with AI in their own way. Those ways are slowly converging, but none of them is standard, and much of what the platforms end up running has little to do with AI at all: a rule that sorts receipts needs no model. A platform's incentive is lock-in, so the description of the work tends to end up in its own format, where only it can read it. AWML keeps the workflow in a plain file of its own, so the platforms can change around it.
 
@@ -154,7 +154,7 @@ part "due" has unknown op "chek"
 Why not draw it all as one diagram? Because there are two questions to ask of every workflow, and each answer hides the other.
 
 - **Who may see each part** (`view: scopes`). This lens shows the permission boundaries: which people may see each part, and where content crosses from one group of people to a wider one.
-- **Where each part runs** (`view: where`). This lens shows the platforms: which machine or service each part runs on or lives in, and how the platforms fit together.
+- **Where each part runs** (`view: where`). This lens shows the platforms: which one each part runs on or lives in, and how they fit together.
 
 They're two views of the same facts. The parts and lines are the same in both, and only the boxes around them change. Draw both, one file for each, and read them side by side.
 
@@ -168,9 +168,9 @@ Here's the consultant's email again, through both lenses:
 </tr>
 </table>
 
-In the first view everything sits in one scope, the consultant's business, so nothing crosses a boundary and there's no thick line. In the second the same thirteen parts spread across five platforms, which is how most agentic work is put together today: no single tool can yet run a whole workflow, so most of us join several together.
+In the first view everything sits in one scope, the consultant's business, so nothing crosses a boundary and there's no thick line. In the second the same thirteen parts spread across four platforms, which is how most agentic work is put together today: no single tool can yet run a whole workflow, so most of us join several together.
 
-The second lens is the one that changes when you change tools. Swap the model, move the notes into a notes service, or replace the scheduled job with a managed agent service, and the boxes stay the same, just in different blocks.
+The second lens is the one that changes when you change tools. Move the notes into a notes service, or the scheduled task from Claude Cowork to a managed agent service, and the boxes stay the same, just in different blocks. Swapping the model moves no box at all: it changes how a step is done, on the same platform.
 
 ## Who may see each part
 
@@ -220,7 +220,7 @@ Whose access it is matters, because a connector speaks with that access.
 
 ## Where each part runs
 
-In the where view, each machine and outside service is a tinted block, and each part sits in the block of the machine or service it runs on or lives in. A **machine** is anywhere the system's tools run that share one set of access: a server, a laptop, or a sandbox on either.
+In the where view, each platform is a tinted block, and each part sits in the block of the platform it runs on or lives in. A **platform** is a machine or service that brings its own surfaces, its own **harness** (the program that runs each step and calls a model) and its own models, and often its own triggers: Claude Cowork on a Mac mini, a mail service or a phone. So a trigger sits in the block of the platform that fires it, and a model on its own isn't a platform: it's a choice a platform makes. A **machine** is anywhere the system's tools run that share one set of access: a server, a laptop, or a sandbox on either.
 
 ![The family's dinners, by where each part runs](examples/dinners-where.svg)
 

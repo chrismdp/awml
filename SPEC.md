@@ -71,7 +71,7 @@ A person's connector reaches only what that person can, and what it sends speaks
 
 ## Where it runs
 
-In the where view, each machine and outside service is a tinted block, and each part sits in the block of the machine or service it runs on or lives in. A **machine** is anywhere the system's tools run that shares one set of access: a server, a laptop, or a sandbox on either.
+In the where view, each platform is a tinted block, and each part sits in the block of the platform it runs on or lives in. A **platform** is a machine or service that brings its own surfaces, its own **harness** (the program that runs each step and calls a model) and its own models, and often its own triggers: Claude Cowork on a Mac mini, a mail service or a phone. A trigger sits in the block of the platform that fires it. A model on its own isn't a platform: it's a choice a platform makes. A **machine** is anywhere the system's tools run that shares one set of access: a server, a laptop, or a sandbox on either.
 
 A block is labelled with what an **implementation** chose there, such as the model, as in `Server: claude-sonnet-4-5`, and with when the machine is on, if that isn't always, as in `Noor's laptop: on some evenings`. Work for a machine that is off waits for it. An implementation is one running system built from the design, and each draws its own where view, with the same parts in different blocks.
 
