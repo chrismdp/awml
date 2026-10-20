@@ -12,7 +12,7 @@ A fictional family's dinners. On Thursday evening a model plans next week's dinn
 go install github.com/chrismdp/awml/cmd/awml@latest
 ```
 
-This needs Go 1.22 or later, and puts `awml` in Go's own folder for commands, usually `~/go/bin`.
+This needs Go 1.22 or later, and puts `awml` in Go's own folder for commands, usually `~/go/bin`. Or download a binary for Linux, macOS or Windows from the [Releases page](https://github.com/chrismdp/awml/releases), unpack it and put `awml` on your path.
 
 ## A tour
 

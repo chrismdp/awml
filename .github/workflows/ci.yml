@@ -1,0 +1,20 @@
+# Vets and tests the code, and checks every example, on every push. It runs on the oldest Go that
+# go.mod allows, and on the newest.
+name: CI
+
+on: [push]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go: ["1.22", stable]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+      - run: go vet ./...
+      - run: go test ./...
+      - run: go run ./cmd/awml check examples/*.yaml examples/tour/*.yaml
