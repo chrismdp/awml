@@ -185,6 +185,7 @@ func TestAStepsOperationIsAQuietStereotypeAboveItsLabel(t *testing.T) {
 		out := drawing(t, "scopes", fmt.Sprintf(`parts: [{id: p, kind: %s, op: draft, label: 'Draft the "reply"'}]`, kind))
 		has(t, out, "\n  p(\"<small style='color:#3d434f'>«draft»</small><br>Draft the #quot;reply#quot;\")\n")
 	}
+	has(t, drawing(t, "scopes", "parts: [{id: p, kind: rule, op: other, label: Tidy}]"), "\n  p(\"<small style='color:#3d434f'>«other»</small><br>Tidy\")\n")
 }
 
 const questionFile = `

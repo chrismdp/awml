@@ -161,8 +161,9 @@ func Check(doc any) []string {
 	return append(errors, operations(parts, lines)...)
 }
 
-// The operations a step may name, and the kinds of part that are steps.
-var ops = setOf([]string{"bring-in", "sort", "learn", "prepare", "check", "reflect", "draft", "do", "answer"})
+// The operations a step may name, and the kinds of part that are steps. other is for work that fits
+// none of the nine, and is held to no operation's rules.
+var ops = setOf([]string{"bring-in", "sort", "learn", "prepare", "check", "reflect", "draft", "do", "answer", "other"})
 var steps = setOf([]string{"ai", "rule", "human"})
 
 // operations holds each step to what its op must not do, wherever the drawing shows it. Only a do
@@ -174,13 +175,13 @@ func operations(parts, lines []*Map) []string {
 	for _, p := range parts {
 		byID[keyOf(p.get("id"))] = p
 	}
-	// opOf gives a step's op, or nothing if it names none or one that isn't known.
+	// opOf gives the op a step is held to: nothing if it names none, other, or one that isn't known.
 	opOf := func(p *Map) string {
 		if k, _ := p.get("kind").(string); !steps[k] {
 			return ""
 		}
 		op, _ := p.get("op").(string)
-		if !ops[op] {
+		if !ops[op] || op == "other" {
 			return ""
 		}
 		return op

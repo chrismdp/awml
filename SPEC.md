@@ -32,7 +32,7 @@ UML has nothing for a connector or a surface, so those two shapes are AWML's own
 
 ## What kind of work a step is
 
-A step's colour says who decides it. A step may also name its **operation**, with `op`, to say what kind of work it is. The two are separate: a model can sort or draft, and so can a person. The drawing shows the operation above the step's label as a UML stereotype, smaller and quieter than the label, such as `«draft»`. `op` is optional, and a step without one is drawn and checked as before.
+A step's colour says who decides it. A step may also name its **operation**, with `op`, to say what kind of work it is. The two are separate: a model can sort or draft, and so can a person. The drawing shows the operation above the step's label as a UML stereotype, smaller and quieter than the label, such as `«draft»`. `op` is optional, and a step without one is drawn and checked as before. For work that fits none of the nine, `op: other` draws `«other»` and holds the step to no operation's limits.
 
 | Operation | `op` | It asks | It produces | It must not |
 |---|---|---|---|---|

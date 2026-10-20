@@ -264,7 +264,7 @@ func withLines(t *testing.T, lines ...string) *Map {
 }
 
 func TestEachOperationNamesAStep(t *testing.T) {
-	for _, op := range []string{"bring-in", "sort", "learn", "prepare", "check", "reflect", "draft", "do", "answer"} {
+	for _, op := range []string{"bring-in", "sort", "learn", "prepare", "check", "reflect", "draft", "do", "answer", "other"} {
 		for _, kind := range []string{"ai", "rule", "human"} {
 			d := parsed(t, fmt.Sprintf(`{awml: "0.1", title: T, view: scopes, parts: [{id: s, kind: %s, op: %s, label: S}]}`, kind, op))
 			mistakes(t, d)
@@ -311,6 +311,13 @@ func TestAContextOrASurfaceBetweenStopsTheLead(t *testing.T) {
 func TestAStepWithNoOperationIsHeldToNone(t *testing.T) {
 	src := strings.Replace(reply, "op: draft, ", "", 1) + "  - { from: write, to: send, kind: data }\n"
 	mistakes(t, parsed(t, src))
+}
+
+func TestAStepWhoseWorkIsOtherIsHeldToNoOperation(t *testing.T) {
+	src := strings.Replace(reply, "op: draft, ", "op: other, ", 1) + "  - { from: write, to: send, kind: data }\n  - { from: write, to: drafts, kind: data }\n"
+	mistakes(t, parsed(t, src))
+	q := strings.Replace(question, "op: answer, ", "op: other, ", 1) + "  - { from: word, to: notes, kind: data }\n"
+	mistakes(t, parsed(t, q))
 }
 
 func TestHiddenAndRefusedLinesLeadNowhere(t *testing.T) {
