@@ -16,11 +16,11 @@ This needs Go 1.22 or later, and puts `awml` in Go's own folder for commands, us
 
 ## A tour
 
-Each of these shows one idea in a small drawing. Their files are in [`examples/tour/`](examples/tour).
+Each of these shows one idea in a small drawing. Their files are in [`examples/tour/`](examples/tour), and [`SPEC.md`](SPEC.md#patterns) names the patterns that come up most.
 
 ### A draft, a yes and the send
 
-A model drafts the swimming club's Friday message to the parents. A `do` step asks Ella to send it, and it goes only after Ella's yes to the exact message: the draft step itself never sends.
+A model drafts the swimming club's Friday message to the parents. Ella says yes to the exact message, and only then does a `do` step send it: the draft step itself never sends.
 
 ![The club's Friday message: a draft, Ella's yes and the send](examples/tour/01-draft-and-send.svg)
 
@@ -77,6 +77,24 @@ The family's photos, by where each part runs. The server is always on and Noor's
 One step in each of four operations: sort, learn, draft and do. Only the `do` step leads to an outside action.
 
 ![An email from the school, sorted, learned from, drafted to and filed](examples/tour/10-operations.svg)
+
+### A do step
+
+A `do` step settles the window cleaner's visit. Putting the next visit in the parents' calendar can be undone, so it's Allow and just happens. Paying is Ask, so it waits for Dev's yes to the exact payment.
+
+![The window cleaner's visit: one Allow action and one Ask action](examples/tour/11-do.svg)
+
+### A standing approval
+
+Sam approved the morning renewals once, for renewals only and up to six a week, so each renewal goes without a yes and is listed for Sam with how to undo it.
+
+![Library renewals under Sam's standing approval](examples/tour/12-standing-approval.svg)
+
+### Check by rule
+
+Every morning a rule matches the joint account against the bills expected, and reports anything missing or different in the parents' chat. It reads and reports, and changes nothing.
+
+![The morning bills check](examples/tour/13-check-by-rule.svg)
 
 ## Writing a file
 

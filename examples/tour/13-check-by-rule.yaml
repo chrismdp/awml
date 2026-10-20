@@ -1,0 +1,18 @@
+# Check by rule. A rule matches the joint account against the bills expected and reports what's
+# missing or different. It reads and reports, and changes nothing. The parents are fictional.
+awml: "0.1"
+title: The morning bills check
+view: scopes
+groups:
+  - { id: parents, label: "parents: Mia, Dev" }
+parts:
+  - { id: daily, kind: trigger, label: "Every day 07:00" }
+  - { id: bank, kind: connector, label: "The joint account, read only, on Mia's consent", in: parents }
+  - { id: expected, kind: context, label: "Bills expected", in: parents }
+  - { id: match, kind: rule, op: check, label: "Match the account against the bills expected", in: parents }
+  - { id: chat, kind: surface, label: "Parents' chat", in: parents }
+lines:
+  - { from: daily, to: match, kind: start }
+  - { from: bank, to: match, kind: data }
+  - { from: expected, to: match, kind: data }
+  - { from: match, to: chat, kind: data, label: "anything missing or different" }

@@ -1,0 +1,38 @@
+---
+config:
+  theme: default
+  flowchart:
+    useMaxWidth: false
+    subGraphTitleMargin:
+      top: 6
+      bottom: 30
+---
+flowchart TB
+  subgraph parents["parents: Mia, Dev"]
+    direction TB
+    done(["The window cleaner says the windows are done"])
+    settle("<small style='color:#3d434f'>«do»</small><br>Settle the visit")
+    book>"Put the next visit in the parents' calendar: Allow"]
+    approve{"Dev's yes to the exact payment"}
+    pay>"Pay the window cleaner £20: Ask"]
+  end
+
+  done -.-> settle
+  settle --> book
+  settle --> approve
+  approve -->|"[yes]"| pay
+  classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
+  classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
+  classDef con fill:#eceef2,stroke:#5d6472,color:#16171b
+  classDef surf fill:#ffffff,stroke:#2a2d35,stroke-width:1.5px,color:#16171b
+  classDef out fill:#fde4dc,stroke:#b5532f,color:#16171b
+  classDef ai fill:#cdd3fb,stroke:#3b4bb0,color:#16171b
+  classDef rule fill:#c4e3d1,stroke:#2b7a4f,color:#16171b
+  classDef human fill:#f7d79a,stroke:#9a6100,color:#16171b
+  classDef uml fill:#16171b,stroke:#16171b,color:#16171b
+  classDef gap fill:#ffffff,stroke:#8a93a3,stroke-dasharray:4 3,color:#6b7280
+  class done trig
+  class book,pay out
+  class settle rule
+  class approve human
+  style parents fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
