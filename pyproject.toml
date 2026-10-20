@@ -1,8 +1,9 @@
 [project]
 name = "awml"
 version = "0.1.0"
-description = "The Agentic Workflow Modelling Language: agentic workflows described as text and drawn with Mermaid"
+description = "The Agentic Workflow Markup Language: agentic workflows described as text and drawn with Mermaid"
 readme = "README.md"
+license = { text = "MIT" }
 requires-python = ">=3.9"
 dependencies = ["PyYAML"]
 

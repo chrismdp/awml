@@ -1,4 +1,4 @@
-# AWML: the Agentic Workflow Modelling Language
+# AWML: the Agentic Workflow Markup Language
 
 Draft 0.1, 20 October 2026.
 

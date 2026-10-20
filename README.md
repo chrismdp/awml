@@ -1,6 +1,6 @@
 # AWML
 
-AWML, the Agentic Workflow Modelling Language, describes agentic work as diagrams. You write a workflow as a small YAML file: its triggers, the steps that pass work along, the notes they read, and the surfaces and outside actions it ends in. AWML draws it with Mermaid, on the shapes of a UML activity diagram, coloured so you can see at a glance whether a model, a rule or a person decides each step. Dashed boxes show who may see each part, and a second view shows where each part runs. A drawing runs nothing and grants nothing: it's the description a live system is checked against, and a red line marks where the system does something the description doesn't allow.
+AWML, the Agentic Workflow Markup Language, describes agentic work as diagrams. You write a workflow as a small YAML file: its triggers, the steps that pass work along, the notes they read, and the surfaces and outside actions it ends in. AWML draws it with Mermaid, on the shapes of a UML activity diagram, coloured so you can see at a glance whether a model, a rule or a person decides each step. Dashed boxes show who may see each part, and a second view shows where each part runs. A drawing runs nothing and grants nothing: it's the description a live system is checked against, and a red line marks where the system does something the description doesn't allow.
 
 ![A family's dinners, by who may see each part](examples/dinners-scopes.svg)
 
@@ -54,3 +54,7 @@ npx -y @mermaid-js/mermaid-cli@11.4.1 -b white -i my-workflow.mmd -o my-workflow
 ## Status
 
 Draft 0.1. The notation and the file format may still change.
+
+## Licence
+
+MIT. See `LICENSE`.
