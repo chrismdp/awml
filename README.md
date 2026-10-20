@@ -195,7 +195,7 @@ In the security view, each scope is a dashed box, labelled with its name and mem
 
 One box sits inside another only where every member of the inner scope is in the outer one. A family's scopes often nest: the parents' box sits inside the family's, which sits inside the box of the family and its carers.
 
-Scopes aren't a ladder, though. Two may overlap, each with someone the other lacks, and then their boxes sit side by side. A consultant's client and the consultant's side venture share only the consultant, so neither box goes inside the other, and any line between them is publishing.
+Scopes aren't a ladder, though. Two may overlap, each with someone the other lacks, and then their boxes sit side by side. A consultant's client and the consultant's side venture share only the consultant, so neither box goes inside the other, and any line between them is publishing. Boxes also sit side by side when one scope's people are all in the other but its terms are looser, as with the consultant's private scope beside the business in [the client email](#two-lenses-on-one-workflow).
 
 ![Two scopes side by side](examples/tour/05-side-by-side.svg)
 
