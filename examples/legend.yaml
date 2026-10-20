@@ -1,0 +1,24 @@
+# Every kind of part, as a key to reading the drawings. The hidden lines only lay it out as a grid.
+awml: "0.1"
+title: The parts of a drawing
+view: scopes
+parts:
+  - { id: trigger, kind: trigger, label: "A trigger: a time or an event" }
+  - { id: ai, kind: ai, label: "A step a model decides" }
+  - { id: rule, kind: rule, label: "A step a rule decides" }
+  - { id: human, kind: human, label: "A step a person decides" }
+  - { id: review, kind: review, label: "A review: a person's yes" }
+  - { id: context, kind: context, label: "A context: the notes in a folder" }
+  - { id: connector, kind: connector, label: "A connector: someone's access to a service" }
+  - { id: fork, kind: fork }
+  - { id: surface, kind: surface, label: "A surface: where people meet the work" }
+  - { id: outside, kind: outside, label: "An outside action, with its tier: Ask" }
+  - { id: comment, kind: comment, label: "A comment, tied to what it explains: the black bar is a fork, where work splits" }
+lines:
+  - { from: trigger, to: review, kind: hidden }
+  - { from: review, to: surface, kind: hidden }
+  - { from: ai, to: context, kind: hidden }
+  - { from: context, to: outside, kind: hidden }
+  - { from: rule, to: connector, kind: hidden }
+  - { from: human, to: fork, kind: hidden }
+  - { from: fork, to: comment, kind: tie }

@@ -26,7 +26,7 @@ func TestThereAreExamples(t *testing.T) {
 	for _, p := range examples(t) {
 		names = append(names, strings.TrimSuffix(strings.TrimPrefix(p, "examples/"), ".yaml"))
 	}
-	want := []string{"client-email-where", "client-email", "dinners-scopes", "dinners-where", "question",
+	want := []string{"client-email-where", "client-email", "dinners-scopes", "dinners-where", "legend", "question",
 		"tour/01-draft-and-send", "tour/02-fork", "tour/03-refused-read", "tour/04-publishing", "tour/05-side-by-side",
 		"tour/06-red-line", "tour/07-human-step", "tour/08-gap", "tour/09-where-it-runs", "tour/10-operations",
 		"tour/11-do", "tour/12-standing-approval", "tour/13-check-by-rule"}

@@ -1,0 +1,49 @@
+---
+config:
+  theme: default
+  flowchart:
+    useMaxWidth: false
+    subGraphTitleMargin:
+      top: 6
+      bottom: 30
+---
+flowchart TB
+  trigger(["A trigger: a time or an event"])
+  ai("A step a model decides")
+  rule("A step a rule decides")
+  human("A step a person decides")
+  review{"A review: a person's yes"}
+  context[("A context: the notes in a folder")]
+  connector{{"A connector: someone's access to a service"}}
+  fork@{ shape: fork, label: "" }
+  surface@{ shape: win-pane, label: "A surface: where people meet the work" }
+  outside>"An outside action, with its tier: Ask"]
+  comment@{ shape: notch-rect, label: "A comment, tied to what it explains: the black bar is a fork, where work splits" }
+
+  trigger ~~~ review
+  review ~~~ surface
+  ai ~~~ context
+  context ~~~ outside
+  rule ~~~ connector
+  human ~~~ fork
+  fork -.- comment
+  classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
+  classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
+  classDef con fill:#eceef2,stroke:#5d6472,color:#16171b
+  classDef surf fill:#ffffff,stroke:#2a2d35,stroke-width:1.5px,color:#16171b
+  classDef out fill:#fde4dc,stroke:#b5532f,color:#16171b
+  classDef ai fill:#cdd3fb,stroke:#3b4bb0,color:#16171b
+  classDef rule fill:#c4e3d1,stroke:#2b7a4f,color:#16171b
+  classDef human fill:#f7d79a,stroke:#9a6100,color:#16171b
+  classDef uml fill:#16171b,stroke:#16171b,color:#16171b
+  classDef gap fill:#ffffff,stroke:#8a93a3,stroke-dasharray:4 3,color:#6b7280
+  class trigger trig
+  class context ctx
+  class connector con
+  class surface surf
+  class outside out
+  class ai ai
+  class rule rule
+  class human,review human
+  class fork uml
+  class comment gap

@@ -4,7 +4,32 @@ AWML, the Agentic Workflow Modelling Language, describes agentic work as diagram
 
 ![A family's dinners, by who may see each part](examples/dinners-scopes.svg)
 
-A fictional family's dinners. On Thursday evening a model plans next week's dinners and posts the plan in the family chat. On Saturday a rule fills the supermarket basket, and checking out waits for a parent's yes to the exact basket. Every morning a rule matches the joint account against the bills expected, which only the parents see. The thick line is the meal plan moving out to a wider scope, so the carers can see it on the kitchen screen. The comment is a gap that drawing it found: nothing keeps that screen current. The same workflow, by where each part runs, is [`examples/dinners-where.svg`](examples/dinners-where.svg).
+A fictional family's dinners. On Thursday evening a model plans next week's dinners and posts the plan in the family chat. On Saturday a rule fills the supermarket basket, and checking out waits for a parent's yes to the exact basket. Every morning a rule checks the joint account against the bills expected, which only the parents see. The thick line is the meal plan moving out to a wider scope, so the carers can see it on the kitchen screen. The comment is a gap that drawing it found: nothing keeps that screen current.
+
+This README is the long guide: what AWML is for, how to read a drawing, and how to write and check one. [`SPEC.md`](SPEC.md) is the short, exact definition, and wherever the two seem to differ, the spec is right.
+
+## Contents
+
+- [Install](#install)
+- [Why AWML](#why-awml)
+- [Three layers](#three-layers)
+- [Reading a drawing](#reading-a-drawing)
+- [Operations](#operations)
+- [Two lenses on one workflow](#two-lenses-on-one-workflow)
+- [Who may see each part](#who-may-see-each-part)
+- [Connectors](#connectors)
+- [Where each part runs](#where-each-part-runs)
+- [Tiers and yeses](#tiers-and-yeses)
+- [Standing approvals](#standing-approvals)
+- [Records](#records)
+- [The red line](#the-red-line)
+- [Patterns](#patterns)
+- [Improving one step at a time](#improving-one-step-at-a-time)
+- [What AWML is not](#what-awml-is-not)
+- [A tour of the gallery](#a-tour-of-the-gallery)
+- [Using awml](#using-awml)
+- [What comes next](#what-comes-next)
+- [Status and licence](#status-and-licence)
 
 ## Install
 
@@ -12,11 +37,302 @@ A fictional family's dinners. On Thursday evening a model plans next week's dinn
 go install github.com/chrismdp/awml/cmd/awml@latest
 ```
 
-This needs Go 1.22 or later, and puts `awml` in Go's own folder for commands, usually `~/go/bin`. Or download a binary for Linux, macOS or Windows from the [Releases page](https://github.com/chrismdp/awml/releases), unpack it and put `awml` on your path.
+This needs Go 1.22 or later, and puts `awml` in Go's own folder for commands, usually `~/go/bin`. Or download a binary for Linux, macOS or Windows from the [Releases page](https://github.com/chrismdp/awml/releases), unpack it and put `awml` on your path. [Using awml](#using-awml) covers the commands and the file format.
 
-## A tour
+## Why AWML
 
-Each of these shows one idea in a small drawing. Their files are in [`examples/tour/`](examples/tour), and [`SPEC.md`](SPEC.md#patterns) names the patterns that come up most.
+People say they have automated their work, or their family's admin, with AI. It's useful work, and there's more of it every month. But ask how it works, and the answer is a list of tools: scheduled tasks, chat bots, connectors, shared notes, managed agents, documents a model keeps up to date. There's no shared vocabulary yet for the work itself, apart from the tools that carry it out.
+
+That matters, because work tangled up with its tools has three problems.
+
+- **It can't be moved.** If the work is only ever described as the settings of one tool, moving it to another tool means building it again from memory.
+- **It can't be improved piece by piece.** To make one step better, such as one prompt or one choice of model, you need to know where that step starts and ends, what it reads and what it hands on. A tool that hides the steps hides that too.
+- **It can't be traced.** When the flow of work is itself decided by a model in a loop, one day you're asked for a crucial yes, and the next day you aren't. And what you're shown at the end has no provenance: it's hard to know what drove it, or whether you were even allowed to see it.
+
+AWML separates the work from the tools. It describes one workflow as one picture, independent of any tool, so a person can see who decides each step, who may see each part and what leaves the system. The same picture can then be checked against what a live system really does.
+
+## Three layers
+
+Agentic work has three layers, and it helps to keep them apart.
+
+- **The operating model:** how work is organised and what it's for: who it serves, what each part may see, and what needs a person's yes. A way of running projects is an operating model, and so is a family's rule that nobody spends over a set amount without asking. It has very little to do with AI: it's how work is organised, whoever or whatever does it.
+- **The workflow:** who must do what. The structure of the work, and the concrete steps taken from a trigger to the surfaces and outside actions it ends in. **This is what AWML describes.**
+- **The platforms** that run it: usually several at once, such as a scheduled job on a server, a model behind an API, a folder of notes synced between machines, a mail service and a phone.
+
+Take a fictional consultant who answers clients' email:
+
+- **Operating model:** every client engagement is a project, and anything that goes out in the consultant's name waits for the consultant's yes.
+- **Workflow:** each weekday morning the inbox is brought in and sorted. An email from a client updates the engagement's project, a reply is drafted, the consultant approves the exact reply, and it's sent.
+- **Platforms:** a server running scheduled jobs, a model through its API, Markdown notes synced to each machine, the mail service and the consultant's phone. Any of these can change.
+
+The platforms each work with AI in their own way. Those ways are slowly converging, but none of them is standard, and much of what the platforms end up running has little to do with AI at all: a rule that sorts receipts needs no model. A platform's incentive is lock-in, so the description of the work tends to end up in its own format, where only it can read it. AWML keeps the workflow in a plain file of its own, so the platforms can change around it.
+
+## Reading a drawing
+
+### The parts
+
+![Every kind of part, laid out as a key](examples/legend.svg)
+
+A drawing is made of a few kinds of part. Each has its own shape, and each shape means what it means in a UML activity diagram, so anyone who reads those can read these.
+
+- A **trigger** is a pink pill. It starts the workflow: a time, such as `Weekdays 07:00`, or an event, such as someone asking in a chat or an email arriving. In UML it's an accept time event or an accept event.
+- A **step** is a rounded box: one piece of work, coloured by what decides it. A **model** decides the blue steps, a **rule** the green ones, and a **person** the amber ones. In UML it's an action.
+- A **review** is an amber diamond: a person's yes to exact content before it goes ahead. It's left by a line labelled `[yes]`. In UML it's a decision node with guards.
+- A **fork** is a black bar, where work splits to run side by side. In UML it's a fork node.
+- A **context** is a pale blue cylinder: the notes a step may read or write, kept as one folder. In UML it's a data store node.
+- A **connector** is a grey hexagon: someone's access to an outside service, such as a calendar, a mailbox or a bank account.
+- A **surface** is a white window box: where people meet the system's work, such as a chat, a list on their phone or a screen on a wall.
+- An **outside action** is a coral flag: something that changes the world outside the system, such as sending an email or paying a bill. Its label ends with its **tier**, such as `Send the reply: Ask`. In UML it's a send signal action.
+- A **comment** is a dashed box with a cut corner. It points out a gap, or gives an example of what a part could carry, and a dotted line ties it to what it explains. In UML it's a comment.
+
+UML has nothing for a connector or a surface, so those two shapes are AWML's own. Posting on a shared surface to the people it serves is delivery, not an outside action, so a family chat needs no flag and no review.
+
+### Who decides each step
+
+The colour of a step is the first thing to read, because it tells you what kind of thing you're trusting.
+
+| Colour | Who decides | What that means |
+|---|---|---|
+| Green | A rule | Code that does the same thing every time. It costs almost nothing to run, and you can test it once and rely on it. |
+| Blue | A model | A judgement call. It can be wrong in new ways, so it needs inspecting and improving, and its output is worth scoring. |
+| Amber | A person | The slowest step of all, and the one that needs someone to be there. Keep it for where it matters, such as a yes to something that can't be undone. |
+
+A workflow that is all green has no AI in it, even if AI helped build it. That's common, and it's worth seeing.
+
+### The lines
+
+| Line | Drawn as | Means |
+|---|---|---|
+| `start` | A dotted arrow | Starts something, as a trigger starts a step |
+| `data` | A solid arrow | Moves data from one part to the next |
+| `publish` | A thick arrow | Moves content into a wider scope, which is publishing |
+| `refused` | A line ending in a cross | A read the design refuses |
+| `tie` | A dotted line | Links a comment to what it explains |
+| `hidden` | Nothing | Steers the layout only |
+
+A line may carry a label. Words in square brackets are a **guard**, the condition the line is taken on, as in UML: `[yes]` is the way out of a review. A line drawn red is a **finding**: something a live system did that its design doesn't allow (see [The red line](#the-red-line)).
+
+## Operations
+
+A step's colour says who decides it. A step may also name its **operation**: what kind of work it does. The two are separate, since a model can sort or draft, and so can a person. The drawing shows the operation on its own line above the step's label, as its emoji and its name in small grey type, such as `✏️ draft`. Naming an operation is optional.
+
+![One step in each of four operations](examples/tour/10-operations.svg)
+
+| | Operation | `op` | It answers | It produces | It must never |
+|---|---|---|---|---|---|
+| 📥 | Bring in | `bring-in` | What's new? | The input as it really is, such as an email, a transcript or a calendar, made readable | Decide where it goes |
+| 🗂️ | Sort | `sort` | Where does this belong? | A place for it, or none with the reason | Change anything outside the system |
+| 🧠 | Learn | `learn` | What does this teach us? | New notes, or more in old ones, and rules taken from corrections | Act in the world |
+| 📋 | Prepare | `prepare` | What's needed before this? | A brief for a named moment, such as a meeting | Decide for a person |
+| 🔍 | Check | `check` | Is anything wrong or missing? | A verdict | Change anything |
+| 🪞 | Reflect | `reflect` | Is time going where it should? | Evidence and questions for the people who set the aims | Make up an aim |
+| ✏️ | Draft | `draft` | What should be said? | A draft | Send it or publish it |
+| 🛠️ | Do | `do` | What should change, in the world or in a piece of work? | The change, within its tier | Act without the yes its tier needs, or replace something without keeping what was there |
+| 💬 | Answer | `answer` | What do we know about this? | An answer from the notes, naming them | Act, or change a note |
+| ❔ | Other | `other` | Work that fits none of the nine | Whatever it is for | Nothing AWML checks |
+
+Each operation has one kind of thing it must never do. Some of those a drawing can show, and `awml check` holds every step to them:
+
+- **Only a `do` step leads to an outside action**, by a line straight to it or through a review or a fork. A draft step never leads to an outside action, even through a review: a draft goes to a `do` step, which asks to send it, and a person's yes releases the send.
+- **An `answer` step and a `check` step never write to a context.** They read contexts, and speak on surfaces.
+- **An `op` names one of the ten,** and only a step names one.
+
+A line counts as leading somewhere when it starts something, moves data or publishes. A hidden line, a refused read and a tie lead nowhere. A step marked `other`, or with no `op` at all, is held to none of these rules, and nor is a red line, which draws what a live system did rather than what the design allows.
+
+The other limits, such as never deciding for a person or never making up an aim, are about what happens inside a step. No drawing shows those, so the people who read it judge them.
+
+When a rule is broken, `awml check` says which step and why:
+
+```
+part "write" leads to outside action "send", but its op is draft: only a do step leads to an outside action
+part "answer" writes to context "notes", but its op is answer: an answer step never writes to a context
+part "due" has unknown op "chek"
+```
+
+## Two lenses on one workflow
+
+Why not draw it all as one diagram? Because there are two questions to ask of every workflow, and each answer hides the other.
+
+- **Who may see each part** (`view: scopes`). This lens shows the permission boundaries: which people may see each part, and where content crosses from one group of people to a wider one.
+- **Where each part runs** (`view: where`). This lens shows the platforms: which machine or service each part runs on or lives in, and how the platforms fit together.
+
+They're two views of the same facts. The parts and lines are the same in both, and only the boxes around them change. Draw both, one file for each, and read them side by side.
+
+Here's the consultant's email again, through both lenses:
+
+<table>
+<tr><th>Who may see each part</th><th>Where each part runs</th></tr>
+<tr>
+<td valign="top"><img src="examples/client-email.svg" width="260" alt="A client's email, by who may see each part"></td>
+<td valign="top"><img src="examples/client-email-where.svg" width="540" alt="A client's email, by where each part runs"></td>
+</tr>
+</table>
+
+In the first view everything sits in one scope, the consultant's business, so nothing crosses a boundary and there's no thick line. In the second the same thirteen parts spread across five platforms, which is how most agentic work is put together today: no single tool can yet run a whole workflow, so most of us join several together.
+
+The second lens is the one that changes when you change tools. Swap the model, move the notes into a notes service, or replace the scheduled job with a managed agent service, and the boxes stay the same, just in different blocks.
+
+## Who may see each part
+
+A **scope** is a set of people. Everything in a workflow belongs to one scope, which says two things: who may see it, and which companies may process it. The companies are the makers of the models the system uses, and services such as transcription or the host of a folder. A scope's terms say whether a company may keep the content, and a company that may train on it is never used at all. A scope may also allow no processing, as for something told in confidence.
+
+In the scopes view, each scope is a dashed box, labelled with its name and members, such as `family: parents, kids`. A box inside another can name only the people it adds, with `+`, as in `carers: + June, Beth` around the family's box.
+
+### Where each part sits
+
+- A **context** sits in the box of its scope.
+- A **step** sits in the box of the scope it writes into, with the reviews and outside actions it leads to.
+- A **connector** sits in the box of the scope its inputs take, so a connector only the parents may use sits in the parents' box, and nothing outside that box can read through it.
+- A **surface** sits in the box of the scope its viewers make up.
+- A **trigger** or **comment** given no box is drawn in the box of what it starts or explains.
+
+### Boxes inside boxes, and side by side
+
+One box sits inside another only where every member of the inner scope is in the outer one. A family's scopes often nest: the parents' box sits inside the family's, which sits inside the box of the family and its carers.
+
+Scopes aren't a ladder, though. Two may overlap, each with someone the other lacks, and then their boxes sit side by side. A consultant's client and the consultant's side venture share only the consultant, so neither box goes inside the other, and any line between them is publishing.
+
+![Two scopes side by side](examples/tour/05-side-by-side.svg)
+
+### Reading across scopes
+
+A step reads from its own scope or a wider one, since everyone in a scope may see what a wider scope holds. A read from a narrower scope is one the design refuses, drawn as a line ending in a cross. In the family's question below, the answer may use the family's notes and the carers' notes, but never one person's own notes, even when that person is the one asking.
+
+![A question in the family chat](examples/question.svg)
+
+### Publishing
+
+Content moves between scopes in only two ways.
+
+- A move **narrows** when every member of the target scope is in the source, and the target's terms are at least as strict. Narrowing is routing: it shows content to fewer people, or to the same people more carefully, so it's drawn as an ordinary line.
+- Any other move adds a viewer or loosens the terms. That's **publishing**, drawn as a thick line so you notice it first.
+
+Publishing waits for a person's yes, unless a **standing rule** names that target for that kind of item, and then the thick line's label names the rule, as in `standing rule: dinners to carers`. Only the item crosses, never what lies behind it. And nothing reaches the public without a person's yes to that item, under any rule or approval.
+
+## Connectors
+
+A **connector** is access to one outside service through one credential. The credential is a person's, one an outside party lends, or the system's own. The design names whose access each connector is, which service it reaches and what it may do, such as read, post or carry an outside action, and its label says whose it is, as in `Owen's supermarket account`.
+
+Whose access it is matters, because a connector speaks with that access.
+
+- **A person's connector** reaches only what that person can, and what it sends speaks in their name. So they, or a role they choose, approve what it sends. It stops when they leave, so work that must outlive them shouldn't rest on one.
+- **The system's own connector**, such as a service account, often reaches more than any one person. So each item it brings in takes the scope of who could see it where it came from, never everyone's.
+
+## Where each part runs
+
+In the where view, each machine and outside service is a tinted block, and each part sits in the block of the machine or service it runs on or lives in. A **machine** is anywhere the system's tools run that share one set of access: a server, a laptop, or a sandbox on either.
+
+![The family's dinners, by where each part runs](examples/dinners-where.svg)
+
+A block is labelled with what an **implementation** chose there, such as the model it runs, and with when the machine is on, if that isn't always, as in `Noor's laptop: on some evenings`. Work for a machine that is off waits for it. An implementation is one running system built from a design, and each implementation draws its own where view, with the same parts in different blocks.
+
+Two rules make this view worth drawing.
+
+- **Anything running on a machine can reach everything that machine holds, and send it to any host the machine can reach.** So a machine holds only contexts and connectors whose scopes allow every company that processes content there, and reaches only the hosts its connectors need. The where view is where you see what each machine holds, and so what anything running on it could reach.
+- **An implementation's choices change how a step is done, never what it may do.** The contexts a step reads, the tier of each action it takes and its review stay the design's call. A different model may mean a different company processing the content, and every context feeding the step must allow that company.
+
+## Tiers and yeses
+
+Every outside action has a **tier**, which ends its label.
+
+| Tier | When it applies | Drawn as |
+|---|---|---|
+| **Allow** | The action can be undone when it's taken, is seen only within its scope, and stays within the design's spending limits: a note, a draft, a label, an entry in a person's own calendar | A flag a step leads to directly: it just happens |
+| **Ask** | Any other action that isn't blocked, and any the design marks Ask because the person who answers for it would be surprised | A flag with a review on the way to it: it waits for a yes, unless a standing approval covers it |
+| **Block** | Never, whatever anyone says | Never a line. A flag with nothing leading to it may name it, and a line into one is red |
+
+A **yes** is an approver's yes to one action and its exact content, shown with what it's for: the work it serves, why now, what started it and what it drew on. A yes to "send the reply" in general is no yes at all. Any change to the content after the yes, a fix included, needs a new yes.
+
+An **approver** is a role, such as the approver of sends, held by one or more people. A rare, high-stakes kind of action may need a yes from two approvers, two people in two roles, to the same content, drawn as two reviews in a row. Every such action waits on both, so it's kept for few kinds.
+
+## Standing approvals
+
+Asking for a yes to every small, reversible action soon trains people to say yes without looking. A **standing approval** is the way out. The person who answers for a scheduled task approves it once to take named kinds of action that can be undone, within limits such as how many and how often, so each item doesn't wait for a yes. Each action under it is recorded and listed for that person, with how to undo it. One that acts in someone else's name needs their yes too, and ends when their access does.
+
+Nothing that can't be undone goes this way, such as a send to a person or a payment, and nothing that reaches the public.
+
+A standing approval is drawn on the outside action it covers: the label names it, and a comment tied to the flag gives its kinds and limits. The file format needs no field of its own for one.
+
+![Library renewals under a standing approval](examples/tour/12-standing-approval.svg)
+
+## Records
+
+Every step leaves one **record** each time it runs: what started it, what decided it (a rule, a model with its instructions and exact version, or a person), what it drew on, what it made and what it cost. Records are only ever added to, and only the system writes them.
+
+A drawing shows what each record should say, never what any record does say. A step's lines show what it may draw on, its colour what decides it, and its operation what kind of work it does. So a record that names other sources, another kind of decider or other work is a finding. What a drawing can't show is whether a step ran, which model version decided it, what it cost or what it really read. Those live in the records.
+
+## The red line
+
+Where a live system does something its design doesn't allow, the line for it is drawn red, labelled with what is wrong. A red line is a finding about the live system, not part of the design. It usually comes from the records, which show what the system did, set against the drawing, which shows what it may do.
+
+![The club's Friday message, sent without a yes](examples/tour/06-red-line.svg)
+
+Here the design waits for Ella's yes to the exact message, but one week the live system sent the draft straight out. `awml check` doesn't hold a red line to the operations' rules, since it draws a breach rather than the design, so the drawing can show exactly what went wrong.
+
+## Patterns
+
+A few shapes come up again and again. Learn these and most drawings read at a glance. The first two are the commonest.
+
+### Draft for review
+
+<img src="examples/tour/01-draft-and-send.svg" width="220" alt="Draft for review">
+
+A `draft` step writes the content, a `do` step asks to send it, a person says yes to that exact content, and the send goes out. Use it for anything that goes out in someone's name or can't be taken back. Any change to the content after the yes needs a new yes, and a draft step never leads to an outside action, even through a review.
+
+### Do
+
+<img src="examples/tour/11-do.svg" width="390" alt="Do">
+
+A `do` step whose outside action either just happens, because it's Allow and can be undone, or waits for a yes, because it's Ask. Use it for any change in the world, or in the state of a piece of work.
+
+### Standing approval
+
+<img src="examples/tour/12-standing-approval.svg" width="410" alt="Standing approval">
+
+A person approves a scheduled task once to take named kinds of action that can be undone, within limits, so each item doesn't wait for a yes. Use it for small, frequent actions that a yes each time would only slow down. Nothing that can't be undone and nothing public goes this way.
+
+### Answer from the notes
+
+<img src="examples/tour/03-refused-read.svg" width="400" alt="Answer from the notes">
+
+An `answer` step that reads only what everyone present may see, and says which notes it used. Use it wherever someone asks a question on a surface that others can see.
+
+### Check by rule
+
+<img src="examples/tour/13-check-by-rule.svg" width="410" alt="Check by rule">
+
+A `check` step, decided by a rule, that reads and reports, and changes nothing. Use it for any question a rule can settle, such as whether each bill expected was paid.
+
+### Publish
+
+<img src="examples/tour/04-publishing.svg" width="316" alt="Publish">
+
+Content moving into a wider scope, drawn as a thick line, which waits for a person's yes unless a standing rule names that move. Use it whenever something leaves its scope for one with more people or looser terms.
+
+## Improving one step at a time
+
+Once each step is a box with a known input and a known output, you can improve it on its own.
+
+1. Keep a set of past cases for the step: what came in, and what it should have produced.
+2. Score the step's output against those cases.
+3. Try a change to that step alone: a different prompt, a different model, or a rule in place of a model.
+4. Keep the change only if the score goes up.
+
+Every review is a label for the step before it. Each yes, each no and each edit says how that step is doing, so the workflow gathers its own test cases as it runs. The comments on the family's planning step in the where view are examples of this: one says the step is scored against the plans the family kept, and the other that it's tried on a second model some weeks.
+
+This kind of hill climbing only works if you understand the workflow, and if your platform lets you see and change one step without touching the rest. Most of today's tools don't, which is one more reason to keep the workflow in a file of its own.
+
+## What AWML is not
+
+AWML runs nothing and grants nothing. In a visual workflow tool, the diagram is the program: drawing a line makes data flow. An AWML drawing is the description a system is checked against.
+
+Every part and line is something the design names, so a drawing can be made from the design itself, and then it can't drift from it. Drawing a workflow also shows what a list of scheduled tasks hides, such as a kitchen screen the design says shows the week's dinners, though nothing in the design keeps it current.
+
+AWML builds on UML's activity diagram rather than BPMN, which covers similar ground, because more engineers already read UML.
+
+## A tour of the gallery
+
+Each of these shows one idea in a small drawing, with fictional people and plain, everyday cases. Their files are in [`examples/tour/`](examples/tour).
 
 ### A draft, a yes and the send
 
@@ -96,7 +412,30 @@ Every morning a rule matches the joint account against the bills expected, and r
 
 ![The morning bills check](examples/tour/13-check-by-rule.svg)
 
-## Writing a file
+## Using awml
+
+### The commands
+
+```sh
+awml check examples/question.yaml        # report mistakes; exits 1 on any
+awml draw examples/question.yaml         # print the Mermaid
+awml page examples/dinners-*.yaml -o dinners.html
+```
+
+- `awml check` reads each file and prints `ok`, or one line for each mistake, and exits 1 if any file has one.
+- `awml draw` prints a file's Mermaid. It refuses a file with mistakes, and prints them instead.
+- `awml page` writes one standalone HTML page that draws each file with Mermaid in the browser. Each file gets its own heading, saying which view it is. The page takes the files' title when they all share one, as the two views of the family's dinners do, and is called Workflows when they don't.
+
+The Mermaid works anywhere that draws Mermaid 11.4.1. To make an SVG, use the Mermaid CLI, which needs Node:
+
+```sh
+awml draw my-workflow.yaml > my-workflow.mmd
+npx -y @mermaid-js/mermaid-cli@11.4.1 -b white -i my-workflow.mmd -o my-workflow.svg
+```
+
+`examples/render.sh` redraws every example this way.
+
+### Writing a file
 
 One file holds one view of one workflow:
 
@@ -118,31 +457,31 @@ lines:
   - { from: plan, to: chat, kind: data, label: posted }
 ```
 
-The part kinds are `trigger`, `ai`, `rule`, `human`, `review`, `fork`, `context`, `connector`, `surface`, `outside` and `comment`. The line kinds are `start`, `data`, `publish`, `refused`, `tie` and `hidden`, and `breaks: true` draws a line red. A step may name its operation, such as `op: draft`, which is drawn as `✏️ draft` above its label, and `awml check` then holds the step to what that operation must not do. A trigger or comment with no `in` is drawn in the group of what it starts or explains. [`SPEC.md`](SPEC.md) gives every field and what each part and line means, [`examples/`](examples) has three workflows to start from, two of them in both views, and [`examples/tour/`](examples/tour) has the drawings above. [`examples/client-email-where.svg`](examples/client-email-where.svg) shows one small workflow running across five platforms, which is how most agentic work is put together today.
+- The file needs `awml`, the version `"0.1"`; `title`, the workflow's name; `view`, `scopes` or `where`; and `parts`. It may have `groups` and `lines`.
+- A **group** is a scope in a scopes view, or a machine or service in a where view. It has an `id` and a `label`, and may have `in`, the id of the group it sits inside.
+- A **part** has an `id`, a `kind` and a `label`, which a fork doesn't need. It may have `in`, the id of its group. A step, `ai`, `rule` or `human`, may have `op`, its operation, such as `op: draft`.
+- A **line** has `from` and `to`, the ids of two parts, and a `kind`. It may have a `label`, and `breaks: true` to draw it red.
+- The part kinds are `trigger`, `ai`, `rule`, `human`, `review`, `fork`, `context`, `connector`, `surface`, `outside` and `comment`. The line kinds are `start`, `data`, `publish`, `refused`, `tie` and `hidden`.
+- An id is letters, digits and underscores, starting with a letter, and no two are the same.
+- Parts are drawn in the order listed, and each group after the parts beside it. A trigger or comment with no `in` is drawn in the group of what it starts or explains. A `hidden` line steers the layout when Mermaid puts something in an awkward place.
 
-## Drawing it
+Every id, label, kind and reference to an id is text. `awml` reads YAML 1.2, which reads `true`, `false`, numbers and dates such as `2026-10-20` as something other than text, so quote those. Tools that read YAML 1.1 also read `yes`, `no`, `on` and `off` as true or false, and `19:00` as a number, so quoting those too keeps a file the same in every tool. `breaks` is `true` or `false`, unquoted.
 
-```sh
-awml check examples/question.yaml        # report mistakes; exits 1 on any
-awml draw examples/question.yaml         # print the Mermaid
-awml page examples/dinners-*.yaml -o dinners.html
-```
+### What `awml check` reports
 
-`page` writes one standalone HTML page that draws each file with Mermaid in the browser.
+`awml check` reports a missing or unknown field, an unknown kind or view, an id used twice or badly written, a value YAML didn't read as text, a `breaks` that isn't true or false, a part or group in an unknown group, a group nested in itself, a line to or from an unknown part, a comment linked by anything but `tie`, a `tie` with no comment at either end, an unknown `op` or one on a part that isn't a step, and a step that does what its operation must never do, as far as the drawing shows it. [`SPEC.md`](SPEC.md) gives the exact rules.
 
-The Mermaid works anywhere that draws Mermaid 11.4.1. To make an SVG, use the Mermaid CLI, which needs Node:
+### Examples to start from
 
-```sh
-awml draw my-workflow.yaml > my-workflow.mmd
-npx -y @mermaid-js/mermaid-cli@11.4.1 -b white -i my-workflow.mmd -o my-workflow.svg
-```
+Besides the gallery, [`examples/`](examples) has three workflows to start from: the family's dinners and the consultant's email, each in both views, and the question in the family chat. It also has [`examples/legend.yaml`](examples/legend.yaml), the key at the top of [Reading a drawing](#reading-a-drawing). The tests run with `go test ./...`, and they check that every example has no mistakes and that its drawings are current.
 
-`examples/render.sh` redraws every example this way. The tests run with `go test ./...`.
+## What comes next
 
-## Status
+- **Platforms that conform to AWML.** A platform that can read a workflow file, run it as drawn and report each step's record against it would let people move their work between platforms as they see fit. It could also give the guarantees these designs badly need, such as refusing an outside action that no yes released, rather than leaving them to each workflow's author.
+- **A plan for each platform.** From an AWML file, generate something like a Terraform plan: a repeatable description of how a workflow fits a particular platform, which that platform can apply. Moving a workflow would then mean applying a different plan, rather than rebuilding it by hand.
+
+## Status and licence
 
 Draft 0.1. The notation and the file format may still change.
-
-## Licence
 
 MIT. See `LICENSE`.
