@@ -133,7 +133,7 @@ A step's colour and its decider's emoji say who decides it. A step may also name
 
 Each operation has one kind of thing it must never do. Some of those a drawing can show, and `awml check` holds every step to them:
 
-- **Only a `do` step leads to an outside action**, by a line straight to it or through a review or a fork. A draft step never leads to an outside action, even through a review: a draft goes to a `do` step, which asks to send it, and a person's yes releases the send.
+- **Only a `do` step leads to an outside action**, by a line straight to it or through a review or a fork. A draft step never leads to an outside action, even through a review: a draft goes to a `do` step, which asks to send it, and a person's yes releases the send, or to a person's own `do` step, which is their yes.
 - **An `answer` step and a `check` step never write to a context.** They read contexts, and speak on surfaces.
 - **An `op` names one of the ten,** and only a step names one.
 
@@ -238,10 +238,12 @@ Every outside action has a **tier**, which ends its label.
 | Tier | When it applies | Drawn as |
 |---|---|---|
 | **Allow** | The action can be undone when it's taken, is seen only within its scope, and stays within the design's spending limits: a note, a draft, a label, an entry in a person's own calendar | A flag a step leads to directly: it just happens |
-| **Ask** | Any other action that isn't blocked, and any the design marks Ask because the person who answers for it would be surprised | A flag with a review on the way to it: it waits for a yes, unless a standing approval covers it |
+| **Ask** | Any other action that isn't blocked, and any the design marks Ask because the person who answers for it would be surprised | A flag with a review on the way to it, or one a person's own `do` step leads straight to: it waits for a yes, unless a standing approval covers it |
 | **Block** | Never, whatever anyone says | Never a line. A flag with nothing leading to it may name it, and a line into one is red |
 
 A **yes** is an approver's yes to one action and its exact content, shown with what it's for: the work it serves, why now, what started it and what it drew on. A yes to "send the reply" in general is no yes at all. Any change to the content after the yes, a fix included, needs a new yes.
+
+A person's own `do` step is their yes. When the consultant edits the reply and sends it, they've said yes to its exact content, so the send needs no review in front of it.
 
 An **approver** is a role, such as the approver of sends, held by one or more people. A rare, high-stakes kind of action may need a yes from two approvers, two people in two roles, to the same content, drawn as two reviews in a row. Every such action waits on both, so it's kept for few kinds.
 
@@ -277,13 +279,13 @@ A few shapes come up again and again. Learn these and most drawings read at a gl
 
 <img src="examples/tour/01-draft-and-send.svg" width="220" alt="Draft for review">
 
-A `draft` step writes the content, a `do` step asks to send it, a person says yes to that exact content, and the send goes out. Use it for anything that goes out in someone's name or can't be taken back. Any change to the content after the yes needs a new yes, and a draft step never leads to an outside action, even through a review.
+A `draft` step writes the content, a `do` step asks to send it, a person says yes to that exact content, and the send goes out. If a person edits the draft and sends it in their own `do` step instead, that step is their yes, and the send needs no review. Use it for anything that goes out in someone's name or can't be taken back. Any change to the content after the yes needs a new yes, and a draft step never leads to an outside action, even through a review.
 
 ### Do
 
 <img src="examples/tour/11-do.svg" width="390" alt="Do">
 
-A `do` step whose outside action either just happens, because it's Allow and can be undone, or waits for a yes, because it's Ask. Use it for any change in the world, or in the state of a piece of work.
+A `do` step whose outside action either just happens, because it's Allow and can be undone, or waits for a yes, because it's Ask. A person's own `do` step is their yes, so an Ask action straight after one needs no review. Use it for any change in the world, or in the state of a piece of work.
 
 ### Standing approval
 
