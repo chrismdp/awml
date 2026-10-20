@@ -9,7 +9,7 @@ EXAMPLES = sorted((Path(__file__).resolve().parent.parent / "examples").glob("*.
 
 
 def test_there_are_examples():
-    assert [p.stem for p in EXAMPLES] == ["client-email", "dinners-scopes", "dinners-where", "question"]
+    assert [p.stem for p in EXAMPLES] == ["client-email-where", "client-email", "dinners-scopes", "dinners-where", "question"]
 
 
 @pytest.mark.parametrize("path", EXAMPLES, ids=lambda p: p.stem)
