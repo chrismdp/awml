@@ -43,8 +43,8 @@ This needs Go 1.22 or later, and puts `awml` in Go's own folder for commands, us
 
 Any AI system that does work has three layers:
 
-- **The operating model:** what the work is and how it's organised, down to who does which task.
-- **The workflow:** the steps the work goes through to get done, driven by the operating model.
+- **The operating model:** what the work is and how it's organised.
+- **The workflow:** the steps the work goes through, driven by the operating model.
 - **The platforms:** the AI systems, harnesses, models and programs that carry out the work.
 
 AWML describes the middle layer, the workflow, apart from the platforms that run it.
@@ -53,10 +53,12 @@ AWML has no notion of an agent. An AI might act as one, depending on the platfor
 
 Drawing a workflow gives you:
 
-- **Auditing:** where content moves from a private scope to a wider one, or across tools, and how much of the work is automated.
-- **Hill climbing:** each step is a box with a known input and output, so you can score it and improve it on its own.
+- **Auditing:** where content moves to a wider scope or across tools, and how much of the work is automated.
+- **Hill climbing:** each step is a box with a known input and output, so you can score and improve it on its own.
 - **Portability:** the workflow stays the same when a platform changes, so each part can move to the best platform.
 - **Efficiency:** the same patterns of steps turn up again and again, so each can be optimised once.
+
+The thinking behind AWML is in [You Must Draw Your AI Workflow to Control It](https://www.chrismdp.com/awml/).
 
 ## Three layers, for one consultant
 
