@@ -2,12 +2,12 @@
 # other waits for a yes, because it's Ask. The parents and the window cleaner are fictional.
 awml: "0.1"
 title: The window cleaner's visit
-view: scopes
+view: security
 groups:
   - { id: parents, label: "parents: Mia, Dev" }
 parts:
   - { id: done, kind: trigger, label: "The window cleaner says the windows are done" }
-  - { id: settle, kind: rule, op: do, label: "Settle the visit", in: parents }
+  - { id: settle, kind: code, op: do, label: "Settle the visit", in: parents }
   - { id: book, kind: outside, label: "Put the next visit in the parents' calendar: Allow", in: parents }
   - { id: approve, kind: review, label: "Dev's yes to the exact payment", in: parents }
   - { id: pay, kind: outside, label: "Pay the window cleaner £20: Ask", in: parents }

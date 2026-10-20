@@ -1,7 +1,7 @@
 # A fork: one input, and two steps that work on it side by side. The family is fictional.
 awml: "0.1"
 title: The school newsletter
-view: scopes
+view: security
 groups:
   - { id: family, label: "family: Mia, Dev, the children" }
 parts:

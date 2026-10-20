@@ -2,20 +2,20 @@
 # are fictional.
 awml: "0.1"
 title: A client's email, answered with a draft
-view: scopes
+view: security
 groups:
   - { id: business, label: "business: the consultant" }
 parts:
   - { id: weekdays, kind: trigger, label: "Weekdays 07:00" }
   - { id: mailbox, kind: connector, label: "The consultant's mailbox", in: business }
-  - { id: bring, kind: rule, op: bring-in, label: "Bring in the consulting inbox", in: business }
-  - { id: rules, kind: rule, op: sort, label: "Sort by rule: newsletters, receipts, sent mail", in: business }
+  - { id: bring, kind: code, op: bring-in, label: "Bring in the consulting inbox", in: business }
+  - { id: rules, kind: code, op: sort, label: "Sort by rule: newsletters, receipts, sent mail", in: business }
   - { id: choose, kind: ai, op: sort, label: "Choose the engagement the email belongs to", in: business }
   - { id: learn, kind: ai, op: learn, label: "Update the engagement's project with what the email says", in: business }
   - { id: project, kind: context, label: "The engagement's project", in: business }
   - { id: draft, kind: ai, op: draft, label: "Draft a reply", in: business }
   - { id: drafts, kind: context, label: "Drafts", in: business }
-  - { id: ask, kind: rule, op: do, label: "Ask the consultant to approve the reply, saying what it is for", in: business }
+  - { id: ask, kind: code, op: do, label: "Ask the consultant to approve the reply, saying what it is for", in: business }
   - { id: today, kind: surface, label: "Today, on the phone", in: business }
   - { id: approve, kind: review, label: "The consultant's yes to the exact reply", in: business }
   - { id: send, kind: outside, label: "Send the reply: Ask", in: business }

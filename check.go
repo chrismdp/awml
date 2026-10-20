@@ -17,8 +17,8 @@ func Check(doc any) []string {
 	if file.has("awml") && show(file.get("awml")) != version {
 		errors = append(errors, fmt.Sprintf(`awml must be "%s", not "%s"`, version, show(file.get("awml"))))
 	}
-	if file.has("view") && !isOneOf(file.get("view"), "scopes", "where") {
-		errors = append(errors, fmt.Sprintf(`view must be "scopes" or "where", not "%s"`, show(file.get("view"))))
+	if file.has("view") && !isOneOf(file.get("view"), "security", "platform") {
+		errors = append(errors, fmt.Sprintf(`view must be "security" or "platform", not "%s"`, show(file.get("view"))))
 	}
 	var lists [3][]*Map
 	var broken []string
@@ -110,7 +110,7 @@ func Check(doc any) []string {
 		}
 		if op := p.get("op"); op != nil {
 			if k, _ := p.get("kind").(string); !steps[k] {
-				errors = append(errors, name+" has an op, but only an ai, rule or human step takes one")
+				errors = append(errors, name+" has an op, but only an ai, code or person step takes one")
 			} else if s, _ := op.(string); ops[s] == "" {
 				errors = append(errors, fmt.Sprintf(`%s has unknown op "%s"`, name, show(op)))
 			}
@@ -167,7 +167,7 @@ var ops = map[string]string{
 	"bring-in": "📥", "sort": "🗂️", "learn": "🧠", "prepare": "📋", "check": "🔍",
 	"reflect": "🪞", "draft": "✏️", "do": "🛠️", "answer": "💬", "other": "❔",
 }
-var steps = setOf([]string{"ai", "rule", "human"})
+var steps = setOf([]string{"ai", "code", "person"})
 
 // operations holds each step to what its op must not do, wherever the drawing shows it. Only a do
 // step leads to an outside action, directly or through a review or a fork, and an answer or check

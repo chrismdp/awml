@@ -1,7 +1,7 @@
 # The family's dinners, by where each part runs. The family is fictional.
 awml: "0.1"
 title: The family's dinners
-view: where
+view: platform
 groups:
   - { id: server, label: "Server: claude-sonnet-4-5" }
   - { id: app, label: "The family messaging app" }
@@ -12,8 +12,8 @@ parts:
   - { id: favourites, kind: context, label: "Favourites, recipes and the shopping list", in: server }
   - { id: plan, kind: ai, label: "Plan next week's dinners", in: server }
   - { id: mealplan, kind: context, label: "Meal plan", in: server }
-  - { id: fill, kind: rule, op: do, label: "Fill the basket from the plan and the list", in: server }
-  - { id: copy, kind: rule, op: bring-in, label: "Copy the pickups calendar", in: server }
+  - { id: fill, kind: code, op: do, label: "Fill the basket from the plan and the list", in: server }
+  - { id: copy, kind: code, op: bring-in, label: "Copy the pickups calendar", in: server }
   - { id: pickups, kind: context, label: "Pickups", in: server }
   - { id: screen_gap, kind: comment, label: "Missing from the design: no scheduled task keeps the screen current", in: server }
   - { id: scored, kind: comment, label: "For example: scored against the plans the family kept", in: server }

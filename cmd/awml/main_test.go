@@ -12,7 +12,7 @@ import (
 
 const good = `awml: "0.1"
 title: Dinners
-view: scopes
+view: security
 groups:
   - { id: family, label: family }
 parts:
@@ -102,14 +102,14 @@ func TestCheckReportsAMissingFile(t *testing.T) {
 }
 
 func TestPageWritesOneHTMLFile(t *testing.T) {
-	where := strings.Replace(good, "view: scopes", "view: where", 1)
-	a, b := write(t, "a.yaml", good), write(t, "b.yaml", where)
+	platform := strings.Replace(good, "view: security", "view: platform", 1)
+	a, b := write(t, "a.yaml", good), write(t, "b.yaml", platform)
 	out := filepath.Join(t.TempDir(), "out.html")
 	if r := awmlRun("page", a, b, "-o", out); r != (result{0, "", ""}) {
 		t.Errorf("page gave %+v", r)
 	}
 	html, err := os.ReadFile(out)
-	if err != nil || string(html) != awml.Page([]*awml.Map{doc(t, good), doc(t, where)}) {
+	if err != nil || string(html) != awml.Page([]*awml.Map{doc(t, good), doc(t, platform)}) {
 		t.Errorf("the page isn't the two drawings: %v", err)
 	}
 }

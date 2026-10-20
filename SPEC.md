@@ -4,22 +4,22 @@ Draft 0.1, 20 October 2026.
 
 AWML describes agentic work as diagrams, written as YAML files and drawn with Mermaid.
 
-**Contents:** [What it describes](#what-it-describes) · [The parts](#the-parts) · [The lines](#the-lines) · [Scopes](#scopes-who-may-see-each-part) · [Connectors](#connectors) · [Where it runs](#where-it-runs) · [Tiers and yeses](#tiers-and-yeses) · [Standing approvals](#standing-approvals) · [Operations](#operations) · [Patterns](#patterns) · [Records](#records) · [The red line](#the-red-line) · [What AWML is not](#what-awml-is-not) · [The file format](#the-file-format)
+**Contents:** [What it describes](#what-it-describes) · [The parts](#the-parts) · [The lines](#the-lines) · [The security view](#the-security-view-who-may-see-each-part) · [Connectors](#connectors) · [The platform view](#the-platform-view-where-each-part-runs) · [Tiers and yeses](#tiers-and-yeses) · [Standing approvals](#standing-approvals) · [Operations](#operations) · [Patterns](#patterns) · [Records](#records) · [The red line](#the-red-line) · [What AWML is not](#what-awml-is-not) · [The file format](#the-file-format)
 
 ## What it describes
 
 A **workflow** is the chain from a trigger to the surfaces and outside actions it ends in, through the steps and approvals that pass work along. A **design** is the written description of a system that does such work: who takes part, what each part may read and write, and what needs a person's yes. AWML draws one workflow of a design as one picture, so a person can see who decides each step, who may see each part and what leaves the system.
 
-Each workflow can be drawn two ways, one file for each: by who may see each part (`view: scopes`), and by where each part runs (`view: where`). AWML builds on the UML activity diagram, so each part means what its UML element means.
+Each workflow can be drawn two ways, one file for each: the **security view** (`view: security`), by who may see each part, and the **platform view** (`view: platform`), by where each part runs. AWML builds on the UML activity diagram, so each part means what its UML element means.
 
 ## The parts
 
 | Part | `kind` | Drawn as | Colour | UML element |
 |---|---|---|---|---|
 | Trigger | `trigger` | A pill, with its time if it has one | Pink `#fbe1ee` | Accept event, or accept time event |
-| Step decided by a model | `ai` | A rounded box, with 🤖 and its operation above its label | Blue `#cdd3fb` | Action |
-| Step decided by a rule | `rule` | A rounded box, with ⚙️ and its operation above its label | Green `#c4e3d1` | Action |
-| Step decided by a person | `human` | A rounded box, with 👤 and its operation above its label | Amber `#f7d79a` | Action |
+| Step decided by AI | `ai` | A rounded box, with 🤖 and its operation above its label | Blue `#cdd3fb` | Action |
+| Step decided by code | `code` | A rounded box, with ⚙️ and its operation above its label | Green `#c4e3d1` | Action |
+| Step decided by a person | `person` | A rounded box, with 👤 and its operation above its label | Amber `#f7d79a` | Action |
 | Review | `review` | A rounded box, with 👤 ✅ review above its label, left by `[yes]` | Amber `#f7d79a` | Action, whose one way out is guarded by `[yes]`, so not a decision node |
 | Fork | `fork` | A black bar | Black `#16171b` | Fork node |
 | Context | `context` | A cylinder | Pale blue `#e2eef9` | Data store node |
@@ -28,13 +28,13 @@ Each workflow can be drawn two ways, one file for each: by who may see each part
 | Outside action | `outside` | A flag, with its tier | Coral `#fde4dc` | Send signal action |
 | Comment | `comment` | A dashed box with a cut corner | White | Comment |
 
-A **trigger** starts a workflow: a time, or an event such as someone asking in a chat. A **step** is one piece of work, drawn with the colour and emoji of what decides it: a model, a rule (code that does the same thing every time) or a person. A **review** is a person's yes to exact content before it goes ahead. A **fork** is where work splits to run side by side. A **context** is the notes a step may read or write, kept as one folder. A **connector** is someone's access to an outside service, such as a calendar or a bank account. A **surface** is where people meet the system's work: a chat, a list on their phone, a screen on a wall. An **outside action** changes something outside the system, and its label ends with its tier. A **comment** marks a gap, or gives an example of what a part could carry.
+A **trigger** starts a workflow: a time, or an event such as someone asking in a chat. A **step** is one piece of work, drawn with the colour and emoji of who decides it: AI, code (which does the same thing every time) or a person. A **review** is a person's yes to exact content before it goes ahead. A **fork** is where work splits to run side by side. A **context** is the notes a step may read or write, kept as one folder. A **connector** is someone's access to an outside service, such as a calendar or a bank account. A **surface** is where people meet the system's work: a chat, a list on their phone, a screen on a wall. An **outside action** changes something outside the system, and its label ends with its tier. A **comment** marks a gap, or gives an example of what a part could carry.
 
-The emoji say what the colours say, for a reader who can't tell the colours apart and on a page printed without them: 🤖 is a model, ⚙️ a rule and 👤 a person, on every step and review. A rule is a gear rather than a computer, because a computer reads as a machine, and machines such as a laptop or a server are what the where view shows.
+The emoji say what the colours say, for a reader who can't tell the colours apart and on a page printed without them: 🤖 is AI, ⚙️ code and 👤 a person, on every step and review. Code is a gear rather than a computer, because a computer reads as a machine, and machines such as a laptop or a server are what the platform view shows.
 
 UML has nothing for a connector or a surface, so those two shapes are AWML's own.
 
-In either view, a trigger or comment given no group is drawn in the group of the part at the other end of its first line that isn't hidden. A view may leave out parts that don't help it, as a where view often leaves out triggers.
+In either view, a trigger or comment given no group is drawn in the group of the part at the other end of its first line that isn't hidden. A view may leave out parts that don't help it, as a platform view often leaves out triggers.
 
 ## The lines
 
@@ -49,11 +49,11 @@ In either view, a trigger or comment given no group is drawn in the group of the
 
 A line may carry a label. Words in square brackets are a guard, the condition the line is taken on, as in UML: `[yes]` leaves a review. A comment moves nothing, so only `tie` lines link it.
 
-## Scopes: who may see each part
+## The security view: who may see each part
 
 A **scope** is a set of people. Everything belongs to one scope, which says who may see it and which companies may process it: the makers of the models the system uses, and services such as transcription or the host of a folder. Its terms say whether a company may keep the content, and a company that may train on it is never used. A scope may also allow no processing, as for something told in confidence. Scopes aren't a ladder: two may overlap, each with someone the other lacks.
 
-In the scopes view, each scope is a dashed box, labelled with its name and members, such as `family: parents, kids`, or with `+` and the people it adds to the scope inside it, such as `carers: + June, Beth`.
+In the security view, each scope is a dashed box, labelled with its name and members, such as `family: parents, kids`, or with `+` and the people it adds to the scope inside it, such as `carers: + June, Beth`.
 
 **Where a part sits.** A context sits in the box of its scope. A step sits in the box of the scope it writes into, with the reviews and outside actions it leads to. A connector sits in the box of the scope its inputs take. A surface sits in the box of the scope its viewers make up.
 
@@ -69,11 +69,11 @@ A **connector** is access to one outside service through one credential: a perso
 
 A person's connector reaches only what that person can, and what it sends speaks in their name, so they, or a role they choose, approve what it sends. It stops when they leave, so work that must outlive them shouldn't rest on one. The system's own connector, such as a service account, often reaches more than any one person, so each item it brings in takes the scope of who could see it at its source, never everyone's.
 
-## Where it runs
+## The platform view: where each part runs
 
-In the where view, each platform is a tinted block, and each part sits in the block of the platform it runs on or lives in. A **platform** is a machine or service that brings its own surfaces, its own **harness** (the program that runs each step and calls a model) and its own models, and often its own triggers: Claude Cowork on a Mac mini, a mail service or a phone. A trigger sits in the block of the platform that fires it. A model on its own isn't a platform: it's a choice a platform makes. A **machine** is anywhere the system's tools run that shares one set of access: a server, a laptop, or a sandbox on either.
+In the platform view, each platform is a tinted block, and each part sits in the block of the platform it runs on or lives in. A **platform** is a machine or service that brings its own surfaces, its own **harness** (the program that runs each step and calls a model) and its own models, and often its own triggers: Claude Cowork on a Mac mini, a mail service or a phone. A trigger sits in the block of the platform that fires it. A model on its own isn't a platform: it's a choice a platform makes. A **machine** is anywhere the system's tools run that shares one set of access: a server, a laptop, or a sandbox on either.
 
-A block is labelled with what an **implementation** chose there, such as the model, as in `Server: claude-sonnet-4-5`, and with when the machine is on, if that isn't always, as in `Noor's laptop: on some evenings`. Work for a machine that is off waits for it. An implementation is one running system built from the design, and each draws its own where view, with the same parts in different blocks.
+A block is labelled with what an **implementation** chose there, such as the model, as in `Server: claude-sonnet-4-5`, and with when the machine is on, if that isn't always, as in `Noor's laptop: on some evenings`. Work for a machine that is off waits for it. An implementation is one running system built from the design, and each draws its own platform view, with the same parts in different blocks.
 
 Anything running on a machine can reach everything that machine holds, and send it to any host the machine can reach. So a machine holds only contexts and connectors whose scopes allow every company that processes content there, and reaches only the hosts its connectors need.
 
@@ -100,7 +100,7 @@ A standing approval is drawn on the outside action it covers: the label names it
 
 ## Operations
 
-A step's colour and its decider's emoji say who decides it. A step may also name its **operation**, with `op`, to say what kind of work it is. The two are separate: a model can sort or draft, and so can a person. The drawing shows both on a line of their own above the step's label, in smaller, softer type: who decides first, then the operation's emoji and name, as in `🤖 ✏️ draft`. `op` is optional, and a step without one has who decides it alone on that line, as in `🤖`. For work that fits none of the nine, `op: other` draws `❔ other` and holds the step to no operation's limits.
+A step's colour and its decider's emoji say who decides it. A step may also name its **operation**, with `op`, to say what kind of work it is. The two are separate: AI can sort or draft, and so can a person. The drawing shows both on a line of their own above the step's label, in smaller, softer type: who decides first, then the operation's emoji and name, as in `🤖 ✏️ draft`. `op` is optional, and a step without one has who decides it alone on that line, as in `🤖`. For work that fits none of the nine, `op: other` draws `❔ other` and holds the step to no operation's limits.
 
 | Operation | `op` | It asks | It produces | It must not |
 |---|---|---|---|---|
@@ -149,11 +149,11 @@ A person approves a scheduled task once to take named kinds of action that can b
 
 An `answer` step that reads only what everyone present may see, and says which notes it used. Use it wherever someone asks a question on a surface others can see.
 
-### Check by rule
+### Check by code
 
-<img src="examples/tour/13-check-by-rule.svg" width="410" alt="Check by rule">
+<img src="examples/tour/13-check-by-code.svg" width="410" alt="Check by code">
 
-A `check` step, decided by a rule, that reads and reports, and changes nothing. Use it for any question a rule can settle, such as whether each bill expected was paid.
+A `check` step, decided by code, that reads and reports, and changes nothing. Use it for any question code can settle, such as whether each bill expected was paid.
 
 ### Publish
 
@@ -163,9 +163,9 @@ Content moving into a wider scope, drawn as a thick line, which waits for a pers
 
 ## Records
 
-Every step leaves one **record** each time it runs: what started it, what decided it (a rule, a model with its instructions and exact version, or a person), what it drew on, what it made and what it cost. Records are only ever added to, and only the system writes them.
+Every step leaves one **record** each time it runs: what started it, what decided it (code, a model with its instructions and exact version, or a person), what it drew on, what it made and what it cost. Records are only ever added to, and only the system writes them.
 
-A drawing shows what each record should say, never what any record does say. A step's lines show what it may draw on, its colour and emoji what decides it, and its operation what kind of work it does, so a record naming other sources, another kind of decider or other work is a finding. A drawing can't show whether a step ran, which model version decided it, what it cost or what it really read. Those are in the records.
+A drawing shows what each record should say, never what any record does say. A step's lines show what it may draw on, its colour and emoji who decides it, and its operation what kind of work it does, so a record naming other sources, another kind of decider or other work is a finding. A drawing can't show whether a step ran, which model version decided it, what it cost or what it really read. Those are in the records.
 
 ## The red line
 
@@ -182,7 +182,7 @@ One YAML file holds one view of one workflow.
 ```yaml
 awml: "0.1"
 title: The family's dinners
-view: scopes
+view: security
 groups:
   - { id: carers, label: "carers: + June, Beth" }
   - { id: family, label: "family: parents, kids", in: carers }
@@ -195,10 +195,10 @@ lines:
   - { from: plan, to: mealplan, kind: data, label: posted }
 ```
 
-The file needs `awml`, the version `"0.1"`; `title`, the workflow's name; `view`, `scopes` or `where`; and `parts`. It may have `groups` and `lines`.
+The file needs `awml`, the version `"0.1"`; `title`, the workflow's name; `view`, `security` or `platform`; and `parts`. It may have `groups` and `lines`.
 
 - A **group** has an `id` and a `label`, and may have `in`, the id of the group it sits inside.
-- A **part** has an `id`, a `kind` and a `label`, which a fork doesn't need and never shows. It may have `in`, the id of its group. A step, `ai`, `rule` or `human`, may have `op`, its operation.
+- A **part** has an `id`, a `kind` and a `label`, which a fork doesn't need and never shows. It may have `in`, the id of its group. A step, `ai`, `code` or `person`, may have `op`, its operation.
 - A **line** has `from` and `to`, the ids of two parts, and a `kind`. It may have a `label`, and `breaks: true` to draw it red.
 
 An id is letters, digits and underscores, starting with a letter, and no two are the same. Every id, label, kind and reference to an id is text. `awml` reads YAML 1.2, which reads `true`, `false`, numbers and dates such as `2026-10-20` as something other than text, so quote them. YAML 1.1, which many other tools read, also reads `yes`, `no`, `on` and `off` as true or false, and `19:00` as a number, so quoting those too keeps a file the same in every tool. `breaks` is `true` or `false`, unquoted. Parts are drawn in the order listed, and each group after the parts beside it.

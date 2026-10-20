@@ -1,13 +1,13 @@
 # A comment marking a gap that drawing the workflow found. The household is fictional.
 awml: "0.1"
 title: Bin day
-view: scopes
+view: security
 groups:
   - { id: house, label: "house: Sam, Priya" }
 parts:
   - { id: monday, kind: trigger, label: "Monday 06:00" }
   - { id: council, kind: connector, label: "The council's bin calendar", in: house }
-  - { id: copy, kind: rule, op: bring-in, label: "Copy this week's bin day", in: house }
+  - { id: copy, kind: code, op: bring-in, label: "Copy this week's bin day", in: house }
   - { id: bins, kind: context, label: "Bin days", in: house }
   - { id: chat, kind: surface, label: "The house chat", in: house }
   - { id: gap, kind: comment, label: "Missing from the design: nothing posts the bin day here the night before" }

@@ -3,7 +3,7 @@
 # normal today. The consultant is fictional.
 awml: "0.1"
 title: A client's email, by where each part runs
-view: where
+view: platform
 groups:
   - { id: cowork, label: "Claude Cowork, Mac mini" }
   - { id: files, label: "Synced Markdown notes" }
@@ -11,14 +11,14 @@ groups:
   - { id: gmail, label: "Gmail" }
 parts:
   - { id: weekdays, kind: trigger, label: "A scheduled task, weekdays 07:00", in: cowork }
-  - { id: bring, kind: rule, op: bring-in, label: "Bring in the consulting inbox", in: cowork }
-  - { id: rules, kind: rule, op: sort, label: "Sort by rule: newsletters, receipts, sent mail", in: cowork }
+  - { id: bring, kind: code, op: bring-in, label: "Bring in the consulting inbox", in: cowork }
+  - { id: rules, kind: code, op: sort, label: "Sort by rule: newsletters, receipts, sent mail", in: cowork }
   - { id: choose, kind: ai, op: sort, label: "Choose the engagement the email belongs to", in: cowork }
   - { id: learn, kind: ai, op: learn, label: "Update the engagement's project with what the email says", in: cowork }
   - { id: draft, kind: ai, op: draft, label: "Draft a reply", in: cowork }
   - { id: project, kind: context, label: "The engagement's project", in: files }
   - { id: drafts, kind: context, label: "Drafts", in: gmail }
-  - { id: ask, kind: rule, op: do, label: "Ask the consultant to approve the reply, saying what it is for", in: cowork }
+  - { id: ask, kind: code, op: do, label: "Ask the consultant to approve the reply, saying what it is for", in: cowork }
   - { id: today, kind: surface, label: "Today", in: phone }
   - { id: approve, kind: review, label: "The consultant's yes to the exact reply", in: phone }
   - { id: mailbox, kind: connector, label: "The consultant's mailbox", in: gmail }

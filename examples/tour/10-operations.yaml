@@ -1,7 +1,7 @@
 # One step in each of four operations, so each one's emoji and name show. Kemi is fictional.
 awml: "0.1"
 title: An email from the school
-view: scopes
+view: security
 groups:
   - { id: kemi, label: "kemi: Kemi" }
 parts:
@@ -11,7 +11,7 @@ parts:
   - { id: notes, kind: context, label: "Kemi's notes", in: kemi }
   - { id: draft, kind: ai, op: draft, label: "Draft a reply to any request", in: kemi }
   - { id: drafts, kind: context, label: "Drafts", in: kemi }
-  - { id: file, kind: rule, op: do, label: "File the email", in: kemi }
+  - { id: file, kind: code, op: do, label: "File the email", in: kemi }
   - { id: move, kind: outside, label: "Move it to the school folder: Allow", in: kemi }
 lines:
   - { from: arrives, to: sort, kind: start }

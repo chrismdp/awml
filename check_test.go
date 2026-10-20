@@ -11,7 +11,7 @@ import (
 const good = `
 awml: "0.1"
 title: The family's dinners
-view: scopes
+view: security
 groups:
   - { id: carers, label: carers }
   - { id: family, label: family, in: carers }
@@ -106,7 +106,14 @@ func TestAnUnknownLineKind(t *testing.T) {
 }
 
 func TestAnUnknownView(t *testing.T) {
-	mistakes(t, changed(t, "view", "who"), `view must be "scopes" or "where", not "who"`)
+	mistakes(t, changed(t, "view", "who"), `view must be "security" or "platform", not "who"`)
+}
+
+func TestTheOldNamesForViewsAndKindsAreUnknown(t *testing.T) {
+	mistakes(t, changed(t, "view", "scopes"), `view must be "security" or "platform", not "scopes"`)
+	mistakes(t, changed(t, "view", "where"), `view must be "security" or "platform", not "where"`)
+	mistakes(t, changed(t, "parts.1.kind", "rule"), `part "plan" has unknown kind "rule"`)
+	mistakes(t, changed(t, "parts.1.kind", "human"), `part "plan" has unknown kind "human"`)
 }
 
 func TestAnUnknownVersion(t *testing.T) {
@@ -194,7 +201,7 @@ func TestAValueYAMLReadsAsTrueMustBeQuoted(t *testing.T) {
 	d := parsed(t, `
 awml: "0.1"
 title: T
-view: scopes
+view: security
 parts:
   - { id: true, kind: review, label: True }
   - { id: send, kind: outside, label: "Send: Ask" }
@@ -208,7 +215,7 @@ lines:
 }
 
 func TestANumberMustBeQuoted(t *testing.T) {
-	d := parsed(t, `{awml: "0.1", title: T, view: scopes, parts: [{id: t, kind: trigger, label: 12}]}`)
+	d := parsed(t, `{awml: "0.1", title: T, view: security, parts: [{id: t, kind: trigger, label: 12}]}`)
 	mistakes(t, d, `part "t": YAML read its label as 12, not text: put it in quotes`)
 }
 
@@ -216,13 +223,13 @@ func TestYesNoOnOffAndTimesAreText(t *testing.T) {
 	d := parsed(t, `
 awml: "0.1"
 title: T
-view: scopes
+view: security
 parts:
   - { id: t, kind: trigger, label: 19:00 }
   - { id: yes, kind: review, label: yes }
-  - { id: no, kind: rule, label: no }
-  - { id: on, kind: rule, label: on }
-  - { id: off, kind: rule, label: off }
+  - { id: no, kind: code, label: no }
+  - { id: on, kind: code, label: on }
+  - { id: off, kind: code, label: off }
 lines:
   - { from: t, to: yes, kind: start }
 `)
@@ -237,11 +244,11 @@ func TestBreaksIsTrueOrFalse(t *testing.T) {
 const reply = `
 awml: "0.1"
 title: A reply
-view: scopes
+view: security
 parts:
   - { id: write, kind: ai, op: draft, label: Draft the reply }
   - { id: drafts, kind: context, label: Drafts }
-  - { id: ask, kind: rule, op: do, label: Ask for the send }
+  - { id: ask, kind: code, op: do, label: Ask for the send }
   - { id: split, kind: fork }
   - { id: approve, kind: review, label: Yes to the exact reply }
   - { id: send, kind: outside, label: "Send the reply: Ask" }
@@ -265,8 +272,8 @@ func withLines(t *testing.T, lines ...string) *Map {
 
 func TestEachOperationNamesAStep(t *testing.T) {
 	for _, op := range []string{"bring-in", "sort", "learn", "prepare", "check", "reflect", "draft", "do", "answer", "other"} {
-		for _, kind := range []string{"ai", "rule", "human"} {
-			d := parsed(t, fmt.Sprintf(`{awml: "0.1", title: T, view: scopes, parts: [{id: s, kind: %s, op: %s, label: S}]}`, kind, op))
+		for _, kind := range []string{"ai", "code", "person"} {
+			d := parsed(t, fmt.Sprintf(`{awml: "0.1", title: T, view: security, parts: [{id: s, kind: %s, op: %s, label: S}]}`, kind, op))
 			mistakes(t, d)
 		}
 	}
@@ -282,7 +289,7 @@ func TestAnOperationMustBeText(t *testing.T) {
 }
 
 func TestOnlyAStepNamesAnOperation(t *testing.T) {
-	mistakes(t, changed(t, "parts.2.op", "learn"), `part "mealplan" has an op, but only an ai, rule or human step takes one`)
+	mistakes(t, changed(t, "parts.2.op", "learn"), `part "mealplan" has an op, but only an ai, code or person step takes one`)
 }
 
 func TestADoStepLeadsToAnOutsideActionThroughAReview(t *testing.T) {
@@ -331,11 +338,11 @@ func TestARedLineIsHeldToNoOperation(t *testing.T) {
 const question = `
 awml: "0.1"
 title: A question
-view: scopes
+view: security
 parts:
   - { id: notes, kind: context, label: Family notes }
   - { id: word, kind: ai, op: answer, label: Word the answer }
-  - { id: match, kind: rule, op: check, label: Match the bills }
+  - { id: match, kind: code, op: check, label: Match the bills }
   - { id: chat, kind: surface, label: Family chat }
 lines:
   - { from: notes, to: word, kind: data }

@@ -2,14 +2,14 @@
 # The family is fictional.
 awml: "0.1"
 title: The week's pickups, for Grandma
-view: scopes
+view: security
 groups:
   - { id: wider, label: "with grandma: + Grandma Rose" }
   - { id: parents, label: "parents: Mia, Dev", in: wider }
 parts:
   - { id: sun, kind: trigger, label: "Sunday 18:00" }
   - { id: calendar, kind: connector, label: "The parents' calendar", in: parents }
-  - { id: copy, kind: rule, op: bring-in, label: "Copy the week's school pickups", in: parents }
+  - { id: copy, kind: code, op: bring-in, label: "Copy the week's school pickups", in: parents }
   - { id: pickups, kind: context, label: "This week's pickups", in: parents }
   - { id: tablet, kind: surface, label: "Grandma Rose's tablet", in: wider }
 lines:

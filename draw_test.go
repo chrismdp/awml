@@ -28,9 +28,9 @@ func TestEachPartKindHasItsShapeAndColour(t *testing.T) {
 	for _, c := range []struct{ kind, node, class string }{
 		{"trigger", `p(["Label"])`, "trig"},
 		{"ai", `p("<small style='color:#3d434f'>🤖</small><br>Label")`, "ai"},
-		{"rule", `p("<small style='color:#3d434f'>⚙️</small><br>Label")`, "rule"},
-		{"human", `p("<small style='color:#3d434f'>👤</small><br>Label")`, "human"},
-		{"review", `p("<small style='color:#3d434f'>👤 ✅ review</small><br>Label")`, "human"},
+		{"code", `p("<small style='color:#3d434f'>⚙️</small><br>Label")`, "code"},
+		{"person", `p("<small style='color:#3d434f'>👤</small><br>Label")`, "person"},
+		{"review", `p("<small style='color:#3d434f'>👤 ✅ review</small><br>Label")`, "person"},
 		{"fork", `p@{ shape: fork, label: "" }`, "uml"},
 		{"context", `p[("Label")]`, "ctx"},
 		{"connector", `p{{"Label"}}`, "con"},
@@ -39,7 +39,7 @@ func TestEachPartKindHasItsShapeAndColour(t *testing.T) {
 		{"comment", `p@{ shape: notch-rect, label: "Label" }`, "gap"},
 	} {
 		t.Run(c.kind, func(t *testing.T) {
-			out := drawing(t, "scopes", fmt.Sprintf("parts: [{id: p, kind: %s, label: Label}]", c.kind)) + "\n"
+			out := drawing(t, "security", fmt.Sprintf("parts: [{id: p, kind: %s, label: Label}]", c.kind)) + "\n"
 			has(t, out, "\n  "+c.node+"\n")
 			has(t, out, "\n  class p "+c.class+"\n")
 		})
@@ -47,14 +47,14 @@ func TestEachPartKindHasItsShapeAndColour(t *testing.T) {
 }
 
 func TestAForkNeedsNoLabel(t *testing.T) {
-	has(t, drawing(t, "scopes", "parts: [{id: f, kind: fork}]"), "\n  f@{ shape: fork, label: \"\" }\n")
+	has(t, drawing(t, "security", "parts: [{id: f, kind: fork}]"), "\n  f@{ shape: fork, label: \"\" }\n")
 }
 
 func TestEachLineKindHasItsArrow(t *testing.T) {
 	for kind, arrow := range map[string]string{"start": "-.->", "data": "-->", "publish": "==>", "refused": "--x", "tie": "-.-", "hidden": "~~~"} {
 		t.Run(kind, func(t *testing.T) {
-			out := drawing(t, "scopes", fmt.Sprintf(`
-parts: [{id: a, kind: rule, label: A}, {id: b, kind: comment, label: B}]
+			out := drawing(t, "security", fmt.Sprintf(`
+parts: [{id: a, kind: code, label: A}, {id: b, kind: comment, label: B}]
 lines: [{from: a, to: b, kind: %s}]`, kind))
 			has(t, out, "\n  a "+arrow+" b\n")
 		})
@@ -62,23 +62,23 @@ lines: [{from: a, to: b, kind: %s}]`, kind))
 }
 
 func TestALineCarriesItsLabel(t *testing.T) {
-	out := drawing(t, "scopes", `
-parts: [{id: a, kind: rule, label: A}, {id: b, kind: surface, label: B}]
+	out := drawing(t, "security", `
+parts: [{id: a, kind: code, label: A}, {id: b, kind: surface, label: B}]
 lines: [{from: a, to: b, kind: data, label: posted}]`)
 	has(t, out, "\n  a -->|\"posted\"| b\n")
 }
 
 func TestQuotesInLabelsDontBreakTheDrawing(t *testing.T) {
-	out := drawing(t, "scopes", `
-parts: [{id: a, kind: rule, label: 'Say "yes"'}, {id: b, kind: surface, label: B}]
+	out := drawing(t, "security", `
+parts: [{id: a, kind: code, label: 'Say "yes"'}, {id: b, kind: surface, label: B}]
 lines: [{from: a, to: b, kind: data, label: '"now"'}]`)
 	has(t, out, `a("<small style='color:#3d434f'>⚙️</small><br>Say #quot;yes#quot;")`)
 	has(t, out, `a -->|"#quot;now#quot;"| b`)
 }
 
 func TestRedLinesAreCountedAmongAllLinesHiddenOnesToo(t *testing.T) {
-	out := drawing(t, "scopes", `
-parts: [{id: a, kind: rule, label: a}, {id: b, kind: rule, label: b}, {id: c, kind: rule, label: c}, {id: d, kind: rule, label: d}]
+	out := drawing(t, "security", `
+parts: [{id: a, kind: code, label: a}, {id: b, kind: code, label: b}, {id: c, kind: code, label: c}, {id: d, kind: code, label: d}]
 lines:
   - {from: a, to: b, kind: hidden}
   - {from: b, to: c, kind: data, breaks: true}
@@ -90,8 +90,8 @@ lines:
 }
 
 func TestNoRedLinesMeansNoLinkStyle(t *testing.T) {
-	out := drawing(t, "scopes", `
-parts: [{id: a, kind: rule, label: A}, {id: b, kind: rule, label: B}]
+	out := drawing(t, "security", `
+parts: [{id: a, kind: code, label: A}, {id: b, kind: code, label: B}]
 lines: [{from: a, to: b, kind: data, breaks: false}]`)
 	if strings.Contains(out, "linkStyle") {
 		t.Errorf("a linkStyle in\n%s", out)
@@ -99,7 +99,7 @@ lines: [{from: a, to: b, kind: data, breaks: false}]`)
 }
 
 func TestGroupsNestAndEachKeepsItsDirection(t *testing.T) {
-	out := drawing(t, "scopes", `
+	out := drawing(t, "security", `
 parts: [{id: a, kind: context, label: Outer notes, in: outer}, {id: b, kind: context, label: Inner notes, in: inner}]
 groups: [{id: outer, label: carers}, {id: inner, label: family, in: outer}]`)
 	want := `flowchart TB
@@ -118,26 +118,26 @@ groups: [{id: outer, label: carers}, {id: inner, label: family, in: outer}]`)
 }
 
 func TestAScopeIsADashedBox(t *testing.T) {
-	out := drawing(t, "scopes", "parts: []\ngroups: [{id: g, label: family}]")
+	out := drawing(t, "security", "parts: []\ngroups: [{id: g, label: family}]")
 	has(t, out, "\n  style g fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f")
 }
 
-func TestWhereItRunsIsATintedBlockEachInTheNextTint(t *testing.T) {
+func TestAPlatformIsATintedBlockEachInTheNextTint(t *testing.T) {
 	groups := "groups:\n"
 	for i := 0; i < 8; i++ {
 		groups += fmt.Sprintf("  - {id: g%d, label: x}\n", i)
 	}
-	out := drawing(t, "where", "parts: []\n"+groups)
+	out := drawing(t, "platform", "parts: []\n"+groups)
 	has(t, out, "\n  style g0 fill:#e3ebfa,stroke:#b9c8e8,color:#16171b")
 	has(t, out, "\n  style g1 fill:#fbe9df,stroke:#ecc7b2,color:#16171b")
 	has(t, out, "\n  style g7 fill:#e3ebfa,stroke:#b9c8e8,color:#16171b")
 	if strings.Contains(out, "stroke-dasharray:6 4") {
-		t.Errorf("a dashed box in a where view")
+		t.Errorf("a dashed box in a platform view")
 	}
 }
 
 func TestATriggerSitsInTheGroupOfWhatItStarts(t *testing.T) {
-	out := drawing(t, "scopes", `
+	out := drawing(t, "security", `
 parts: [{id: t, kind: trigger, label: "Thursday 19:00"}, {id: s, kind: ai, label: Plan, in: family}]
 lines: [{from: t, to: s, kind: start}]
 groups: [{id: family, label: family}]`)
@@ -145,7 +145,7 @@ groups: [{id: family, label: family}]`)
 }
 
 func TestATriggerPlacedByHandStaysPut(t *testing.T) {
-	out := drawing(t, "scopes", `
+	out := drawing(t, "security", `
 parts: [{id: t, kind: trigger, label: Daily, in: a}, {id: s, kind: ai, label: Plan, in: b}]
 lines: [{from: t, to: s, kind: start}]
 groups: [{id: a, label: a}, {id: b, label: b}]`)
@@ -153,7 +153,7 @@ groups: [{id: a, label: a}, {id: b, label: b}]`)
 }
 
 func TestACommentSitsInTheGroupOfWhatItIsTiedTo(t *testing.T) {
-	out := drawing(t, "scopes", `
+	out := drawing(t, "security", `
 parts: [{id: s, kind: ai, label: Plan, in: g}, {id: n, kind: comment, label: An example}]
 lines: [{from: s, to: n, kind: tie}]
 groups: [{id: g, label: g}]`)
@@ -161,7 +161,7 @@ groups: [{id: g, label: g}]`)
 }
 
 func TestHiddenLinesDontPlaceATrigger(t *testing.T) {
-	out := drawing(t, "scopes", `
+	out := drawing(t, "security", `
 parts: [{id: t, kind: trigger, label: Daily}, {id: s, kind: ai, label: Plan, in: g}]
 lines: [{from: t, to: s, kind: hidden}]
 groups: [{id: g, label: g}]`)
@@ -171,7 +171,7 @@ groups: [{id: g, label: g}]`)
 }
 
 func TestOtherPartsAreNeverMoved(t *testing.T) {
-	out := drawing(t, "scopes", `
+	out := drawing(t, "security", `
 parts: [{id: c, kind: context, label: Notes}, {id: s, kind: ai, label: Plan, in: g}]
 lines: [{from: c, to: s, kind: data}]
 groups: [{id: g, label: g}]`)
@@ -181,21 +181,21 @@ groups: [{id: g, label: g}]`)
 }
 
 func TestAStepsDeciderAndOperationAreAQuietLineAboveItsLabel(t *testing.T) {
-	for _, c := range []struct{ kind, who string }{{"ai", "🤖"}, {"rule", "⚙️"}, {"human", "👤"}} {
-		out := drawing(t, "scopes", fmt.Sprintf(`parts: [{id: p, kind: %s, op: draft, label: 'Draft the "reply"'}]`, c.kind))
+	for _, c := range []struct{ kind, who string }{{"ai", "🤖"}, {"code", "⚙️"}, {"person", "👤"}} {
+		out := drawing(t, "security", fmt.Sprintf(`parts: [{id: p, kind: %s, op: draft, label: 'Draft the "reply"'}]`, c.kind))
 		has(t, out, "\n  p(\"<small style='color:#3d434f'>"+c.who+" ✏️ draft</small><br>Draft the #quot;reply#quot;\")\n")
 	}
 }
 
 func TestAStepWithNoOperationStillShowsWhoDecidesIt(t *testing.T) {
-	for _, c := range []struct{ kind, who string }{{"ai", "🤖"}, {"rule", "⚙️"}, {"human", "👤"}} {
-		out := drawing(t, "scopes", fmt.Sprintf("parts: [{id: p, kind: %s, label: Step}]", c.kind))
+	for _, c := range []struct{ kind, who string }{{"ai", "🤖"}, {"code", "⚙️"}, {"person", "👤"}} {
+		out := drawing(t, "security", fmt.Sprintf("parts: [{id: p, kind: %s, label: Step}]", c.kind))
 		has(t, out, "\n  p(\"<small style='color:#3d434f'>"+c.who+"</small><br>Step\")\n")
 	}
 }
 
 func TestAReviewIsARoundedBoxWithItsOwnQuietLineAboveItsLabel(t *testing.T) {
-	out := drawing(t, "scopes", `parts: [{id: p, kind: review, label: 'The "yes" to the reply'}]`)
+	out := drawing(t, "security", `parts: [{id: p, kind: review, label: 'The "yes" to the reply'}]`)
 	has(t, out, "\n  p(\"<small style='color:#3d434f'>👤 ✅ review</small><br>The #quot;yes#quot; to the reply\")\n")
 }
 
@@ -212,7 +212,7 @@ func TestEachOperationIsDrawnWithItsEmoji(t *testing.T) {
 		{"answer", "💬"},
 		{"other", "❔"},
 	} {
-		out := drawing(t, "scopes", fmt.Sprintf("parts: [{id: p, kind: rule, op: %s, label: Step}]", c.op))
+		out := drawing(t, "security", fmt.Sprintf("parts: [{id: p, kind: code, op: %s, label: Step}]", c.op))
 		has(t, out, "\n  p(\"<small style='color:#3d434f'>⚙️ "+c.emoji+" "+c.op+"</small><br>Step\")\n")
 	}
 }
@@ -220,7 +220,7 @@ func TestEachOperationIsDrawnWithItsEmoji(t *testing.T) {
 const questionFile = `
 awml: "0.1"
 title: A question in the family chat
-view: scopes
+view: security
 groups:
   - {id: zCarers, label: "carers: + June, Beth"}
   - {id: zFamily, label: "family: parents, kids", in: zCarers}
@@ -229,7 +229,7 @@ parts:
   - {id: tAsk, kind: trigger, label: Someone in the family chat asks what time swimming is}
   - {id: cCar, kind: context, label: Carers notes, in: zCarers}
   - {id: cFam, kind: context, label: Family notes, in: zFamily}
-  - {id: sFind, kind: rule, label: Find the notes that speak to it, in: zFamily}
+  - {id: sFind, kind: code, label: Find the notes that speak to it, in: zFamily}
   - {id: sWord, kind: ai, label: Word the answer from those notes alone, in: zFamily}
   - {id: uChat, kind: surface, label: Family chat, in: zFamily}
   - {id: cNadia, kind: context, label: "Nadia's own notes", in: zNadia}
@@ -282,15 +282,15 @@ flowchart TB
   classDef surf fill:#ffffff,stroke:#2a2d35,stroke-width:1.5px,color:#16171b
   classDef out fill:#fde4dc,stroke:#b5532f,color:#16171b
   classDef ai fill:#cdd3fb,stroke:#3b4bb0,color:#16171b
-  classDef rule fill:#c4e3d1,stroke:#2b7a4f,color:#16171b
-  classDef human fill:#f7d79a,stroke:#9a6100,color:#16171b
+  classDef code fill:#c4e3d1,stroke:#2b7a4f,color:#16171b
+  classDef person fill:#f7d79a,stroke:#9a6100,color:#16171b
   classDef uml fill:#16171b,stroke:#16171b,color:#16171b
   classDef gap fill:#ffffff,stroke:#8a93a3,stroke-dasharray:4 3,color:#6b7280
   class tAsk trig
   class cCar,cFam,cNadia ctx
   class uChat surf
   class sWord ai
-  class sFind rule
+  class sFind code
   style zCarers fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
   style zFamily fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
   style zNadia fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f`

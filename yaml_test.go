@@ -20,7 +20,7 @@ func parsed(t *testing.T, src string) *Map {
 }
 
 func TestAMappingKeepsTheOrderOfItsKeys(t *testing.T) {
-	m := parsed(t, "view: scopes\nawml: \"0.1\"\ntitle: T\n")
+	m := parsed(t, "view: security\nawml: \"0.1\"\ntitle: T\n")
 	if got := m.Keys(); !reflect.DeepEqual(got, []string{"view", "awml", "title"}) {
 		t.Errorf("keys = %q", got)
 	}
@@ -58,7 +58,7 @@ func TestListsAndMappingsShowAsYAMLWritesThem(t *testing.T) {
 }
 
 func TestAnAliasAndAMergeAreFollowed(t *testing.T) {
-	m := parsed(t, "base: &b {kind: rule, label: Copy}\npart: {<<: *b, id: copy, label: Copy the calendar}\nsame: *b\n")
+	m := parsed(t, "base: &b {kind: code, label: Copy}\npart: {<<: *b, id: copy, label: Copy the calendar}\nsame: *b\n")
 	v, _ := m.Get("part")
 	part := v.(*Map)
 	if got := part.Keys(); !reflect.DeepEqual(got, []string{"kind", "label", "id"}) {
@@ -68,7 +68,7 @@ func TestAnAliasAndAMergeAreFollowed(t *testing.T) {
 		t.Errorf("label = %v: the mapping's own key should win", label)
 	}
 	v, _ = m.Get("same")
-	if kind, _ := v.(*Map).Get("kind"); kind != "rule" {
+	if kind, _ := v.(*Map).Get("kind"); kind != "code" {
 		t.Errorf("alias kind = %v", kind)
 	}
 }

@@ -3,7 +3,7 @@
 # is publishing. Jo, the bakery and the shop are fictional.
 awml: "0.1"
 title: A checklist moves from a client to a side venture
-view: scopes
+view: security
 groups:
   - { id: bakery, label: "bakery: Jo, Ben, Lou" }
   - { id: pottery, label: "pottery: Jo, Kit" }

@@ -2,13 +2,13 @@
 # Ella's yes, but the system sent the draft straight out. Ella is fictional.
 awml: "0.1"
 title: The club's Friday message, one week
-view: scopes
+view: security
 groups:
   - { id: ella, label: "ella: Ella" }
 parts:
   - { id: fri, kind: trigger, label: "Friday 16:00" }
   - { id: write, kind: ai, op: draft, label: "Draft the week's message to the parents", in: ella }
-  - { id: ask, kind: rule, op: do, label: "Ask Ella to send it", in: ella }
+  - { id: ask, kind: code, op: do, label: "Ask Ella to send it", in: ella }
   - { id: approve, kind: review, label: "Ella's yes to the exact message", in: ella }
   - { id: send, kind: outside, label: "Send it to the parents: Ask", in: ella }
 lines:

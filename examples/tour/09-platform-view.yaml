@@ -2,13 +2,13 @@
 # is. Noor and the family are fictional.
 awml: "0.1"
 title: The family's photos, by where each part runs
-view: where
+view: platform
 groups:
   - { id: server, label: "Server: always on" }
   - { id: laptop, label: "Noor's laptop: a small model, on some evenings" }
 parts:
   - { id: nightly, kind: trigger, label: "Every night 23:00", in: server }
-  - { id: bring, kind: rule, op: bring-in, label: "Bring in the day's photos from the family's phones", in: server }
+  - { id: bring, kind: code, op: bring-in, label: "Bring in the day's photos from the family's phones", in: server }
   - { id: new, kind: context, label: "New photos", in: server }
   - { id: sort, kind: ai, op: sort, label: "Sort them into albums", in: laptop }
   - { id: albums, kind: context, label: "Albums", in: laptop }

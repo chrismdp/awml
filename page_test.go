@@ -28,7 +28,7 @@ func drawings(t *testing.T, html string) []string {
 }
 
 func TestAPageStandsAloneAndDrawsWithMermaid1141(t *testing.T) {
-	html := Page([]*Map{pageDoc(t, "Dinners", "scopes", "Plan")})
+	html := Page([]*Map{pageDoc(t, "Dinners", "security", "Plan")})
 	if !strings.HasPrefix(html, "<!doctype html>\n") {
 		t.Errorf("the page has no doctype first")
 	}
@@ -37,7 +37,7 @@ func TestAPageStandsAloneAndDrawsWithMermaid1141(t *testing.T) {
 }
 
 func TestAPageHoldsEachDrawingInOrder(t *testing.T) {
-	docs := []*Map{pageDoc(t, "Dinners", "scopes", "Plan"), pageDoc(t, "Dinners", "where", "Plan"), pageDoc(t, "A question", "scopes", "Plan")}
+	docs := []*Map{pageDoc(t, "Dinners", "security", "Plan"), pageDoc(t, "Dinners", "platform", "Plan"), pageDoc(t, "A question", "security", "Plan")}
 	html := Page(docs)
 	var want []string
 	for _, d := range docs {
@@ -49,14 +49,14 @@ func TestAPageHoldsEachDrawingInOrder(t *testing.T) {
 	if n := strings.Count(html, `<div class="awml"`); n != 3 {
 		t.Errorf("%d drawings", n)
 	}
-	a, b, c := strings.Index(html, "Who may see each part"), strings.Index(html, "Where each part runs"), strings.Index(html, "<h2>A question</h2>")
+	a, b, c := strings.Index(html, "Security view: who may see each part"), strings.Index(html, "Platform view: where each part runs"), strings.Index(html, "<h2>A question</h2>")
 	if !(a < b && b < c) {
 		t.Errorf("the drawings are out of order")
 	}
 }
 
 func TestEachDrawingIsOnAWhitePanel(t *testing.T) {
-	html := Page([]*Map{pageDoc(t, "Dinners", "scopes", "Plan")})
+	html := Page([]*Map{pageDoc(t, "Dinners", "security", "Plan")})
 	if !regexp.MustCompile(`\.panel \{[^}]*background: #ffffff`).MatchString(html) {
 		t.Errorf("no white panel")
 	}
@@ -64,12 +64,12 @@ func TestEachDrawingIsOnAWhitePanel(t *testing.T) {
 }
 
 func TestThePageIsNamedAfterItsWorkflowOrSimplyWorkflows(t *testing.T) {
-	has(t, Page([]*Map{pageDoc(t, "Dinners", "scopes", "Plan"), pageDoc(t, "Dinners", "where", "Plan")}), "<title>Dinners</title>")
-	has(t, Page([]*Map{pageDoc(t, "Dinners", "scopes", "Plan"), pageDoc(t, "A question", "scopes", "Plan")}), "<title>Workflows</title>")
+	has(t, Page([]*Map{pageDoc(t, "Dinners", "security", "Plan"), pageDoc(t, "Dinners", "platform", "Plan")}), "<title>Dinners</title>")
+	has(t, Page([]*Map{pageDoc(t, "Dinners", "security", "Plan"), pageDoc(t, "A question", "security", "Plan")}), "<title>Workflows</title>")
 }
 
 func TestAWideDrawingShrinksToFitAWideScreenAndScrollsOnAPhone(t *testing.T) {
-	html := Page([]*Map{pageDoc(t, "Dinners", "scopes", "Plan")})
+	html := Page([]*Map{pageDoc(t, "Dinners", "security", "Plan")})
 	has(t, html, "@media (min-width: 900px) { .awml svg { max-width: 100%; height: auto; } }")
 	if !regexp.MustCompile(`\.panel \{[^}]*overflow-x: auto`).MatchString(html) {
 		t.Errorf("the panel doesn't scroll")
@@ -77,12 +77,12 @@ func TestAWideDrawingShrinksToFitAWideScreenAndScrollsOnAPhone(t *testing.T) {
 }
 
 func TestTitlesAreEscaped(t *testing.T) {
-	has(t, Page([]*Map{pageDoc(t, "Fish & <chips>", "scopes", "Plan")}), "<h2>Fish &amp; &lt;chips&gt;</h2>")
-	has(t, Page([]*Map{pageDoc(t, `The family's "dinners"`, "scopes", "Plan")}), "<h2>The family&#x27;s &quot;dinners&quot;</h2>")
+	has(t, Page([]*Map{pageDoc(t, "Fish & <chips>", "security", "Plan")}), "<h2>Fish &amp; &lt;chips&gt;</h2>")
+	has(t, Page([]*Map{pageDoc(t, `The family's "dinners"`, "security", "Plan")}), "<h2>The family&#x27;s &quot;dinners&quot;</h2>")
 }
 
 func TestALabelCantEndTheScriptEarly(t *testing.T) {
-	d := pageDoc(t, "Dinners", "scopes", "</script><b>bold</b>")
+	d := pageDoc(t, "Dinners", "security", "</script><b>bold</b>")
 	html := Page([]*Map{d})
 	if n := strings.Count(html, "</script>"); n != 2 {
 		t.Errorf("%d script ends", n)
@@ -93,7 +93,7 @@ func TestALabelCantEndTheScriptEarly(t *testing.T) {
 }
 
 func TestTheDrawingsAreWrittenInPlainASCII(t *testing.T) {
-	html := Page([]*Map{pageDoc(t, "Dinners", "scopes", "Fill the basket: Allow under £180 «🛒»"), pageDoc(t, "Dinners", "where", "Plan")})
+	html := Page([]*Map{pageDoc(t, "Dinners", "security", "Fill the basket: Allow under £180 «🛒»"), pageDoc(t, "Dinners", "platform", "Plan")})
 	has(t, html, `Fill the basket: Allow under \u00a3180 \u00ab\ud83d\uded2\u00bb`)
 	has(t, html, `bottom: 30\n---\nflowchart TB\n  a(\"\u003csmall style='color:#3d434f'>\ud83e\udd16\u003c/small>\u003cbr>Plan\")`)
 	has(t, html, `"`+`, "---\nconfig:`)

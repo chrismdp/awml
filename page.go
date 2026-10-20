@@ -25,7 +25,7 @@ func Page(docs []*Map) string {
 	for i, d := range docs {
 		title, view := escape(str(d, "title")), views[str(d, "view")]
 		out = append(out, "<section>", "<h2>"+title+"</h2>", `<p class="view">`+view+"</p>",
-			fmt.Sprintf(`<div class="panel"><div class="awml" role="img" aria-label="%s: %s"></div></div>`, title, strings.ToLower(view)),
+			fmt.Sprintf(`<div class="panel"><div class="awml" role="img" aria-label="%s, %s"></div></div>`, title, strings.ToLower(view)),
 			"</section>")
 		sources[i] = quote(Draw(d))
 	}
@@ -36,7 +36,7 @@ func Page(docs []*Map) string {
 	return strings.Join(out, "\n") + "\n"
 }
 
-var views = map[string]string{"scopes": "Who may see each part", "where": "Where each part runs"}
+var views = map[string]string{"security": "Security view: who may see each part", "platform": "Platform view: where each part runs"}
 
 const style = `:root { color-scheme: light; }
 body { margin: 0; background: #f6f7f9; color: #1a1c21; font: 16px/1.6 system-ui, "Segoe UI", sans-serif; }

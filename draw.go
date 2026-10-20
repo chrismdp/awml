@@ -39,7 +39,7 @@ func Draw(doc *Map) string {
 		out = append(out, fmt.Sprintf("  %s %s%s %s", str(l, "from"), arrows[str(l, "kind")], mid, str(l, "to")))
 	}
 	out = append(out, defs)
-	for _, cls := range []string{"trig", "ctx", "con", "surf", "out", "ai", "rule", "human", "uml", "gap"} {
+	for _, cls := range []string{"trig", "ctx", "con", "surf", "out", "ai", "code", "person", "uml", "gap"} {
 		var ids []string
 		for _, p := range parts {
 			if classes[str(p, "kind")] == cls {
@@ -52,7 +52,7 @@ func Draw(doc *Map) string {
 	}
 	for i, g := range groups {
 		look := scope
-		if str(doc, "view") != "scopes" {
+		if str(doc, "view") != "security" {
 			look = pastel[i%len(pastel)] + ",color:#16171b"
 		}
 		out = append(out, fmt.Sprintf("  style %s %s", str(g, "id"), look))
@@ -78,15 +78,15 @@ var shapes = map[string]string{
 	"surface":   `@{ shape: win-pane, label: "%s" }`, // surface: ours
 	"outside":   `>"%s"]`,                            // send signal action, drawn as a flag
 	"ai":        `("%s")`,                            // actions
-	"rule":      `("%s")`,
-	"human":     `("%s")`,
+	"code":      `("%s")`,
+	"person":    `("%s")`,
 	"review":    `("%s")`,                              // an action too, since its one way out is [yes]
 	"fork":      `@{ shape: fork, label: "" }%.0s`,     // fork node, which shows no label
 	"comment":   `@{ shape: notch-rect, label: "%s" }`, // comment
 }
 
 var classes = map[string]string{"trigger": "trig", "context": "ctx", "connector": "con", "surface": "surf", "outside": "out",
-	"ai": "ai", "rule": "rule", "human": "human", "review": "human", "fork": "uml", "comment": "gap"}
+	"ai": "ai", "code": "code", "person": "person", "review": "person", "fork": "uml", "comment": "gap"}
 
 var arrows = map[string]string{"start": "-.->", "data": "-->", "publish": "==>", "refused": "--x", "tie": "-.-", "hidden": "~~~"}
 
@@ -96,8 +96,8 @@ const defs = `  classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef surf fill:#ffffff,stroke:#2a2d35,stroke-width:1.5px,color:#16171b
   classDef out fill:#fde4dc,stroke:#b5532f,color:#16171b
   classDef ai fill:#cdd3fb,stroke:#3b4bb0,color:#16171b
-  classDef rule fill:#c4e3d1,stroke:#2b7a4f,color:#16171b
-  classDef human fill:#f7d79a,stroke:#9a6100,color:#16171b
+  classDef code fill:#c4e3d1,stroke:#2b7a4f,color:#16171b
+  classDef person fill:#f7d79a,stroke:#9a6100,color:#16171b
   classDef uml fill:#16171b,stroke:#16171b,color:#16171b
   classDef gap fill:#ffffff,stroke:#8a93a3,stroke-dasharray:4 3,color:#6b7280`
 
@@ -111,9 +111,9 @@ const red = "stroke:#d0342c,stroke-width:2.5px,color:#b0271f"
 var header = []string{"---", "config:", "  theme: default", "  flowchart:", "    useMaxWidth: false",
 	"    subGraphTitleMargin:", "      top: 6", "      bottom: 30", "---", "flowchart TB"}
 
-// Who decides a step or review, as an emoji, so a reader needn't tell the colours apart. A rule is
-// a gear rather than a computer, since a computer reads as a machine, which the where view is about.
-var deciders = map[string]string{"ai": "🤖", "rule": "⚙️", "human": "👤", "review": "👤"}
+// Who decides a step or review, as an emoji, so a reader needn't tell the colours apart. Code is a
+// gear rather than a computer, since a computer reads as a machine, which the platform view is about.
+var deciders = map[string]string{"ai": "🤖", "code": "⚙️", "person": "👤", "review": "👤"}
 
 // A step's own line holds who decides it, then its operation's emoji and name if it has one,
 // smaller and softer than the label beneath it. A review's holds ✅ review, which no operation uses.

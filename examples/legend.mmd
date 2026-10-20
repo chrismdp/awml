@@ -9,9 +9,9 @@ config:
 ---
 flowchart TB
   trigger(["A trigger: a time or an event"])
-  ai("<small style='color:#3d434f'>🤖</small><br>A step a model decides")
-  rule("<small style='color:#3d434f'>⚙️</small><br>A step a rule decides")
-  human("<small style='color:#3d434f'>👤</small><br>A step a person decides")
+  ai("<small style='color:#3d434f'>🤖</small><br>A step decided by AI")
+  code("<small style='color:#3d434f'>⚙️</small><br>A step decided by code")
+  person("<small style='color:#3d434f'>👤</small><br>A step decided by a person")
   review("<small style='color:#3d434f'>👤 ✅ review</small><br>A review: a person's yes")
   context[("A context: the notes in a folder")]
   connector{{"A connector: someone's access to a service"}}
@@ -24,8 +24,8 @@ flowchart TB
   review ~~~ surface
   ai ~~~ context
   context ~~~ outside
-  rule ~~~ connector
-  human ~~~ fork
+  code ~~~ connector
+  person ~~~ fork
   fork -.- comment
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
@@ -33,8 +33,8 @@ flowchart TB
   classDef surf fill:#ffffff,stroke:#2a2d35,stroke-width:1.5px,color:#16171b
   classDef out fill:#fde4dc,stroke:#b5532f,color:#16171b
   classDef ai fill:#cdd3fb,stroke:#3b4bb0,color:#16171b
-  classDef rule fill:#c4e3d1,stroke:#2b7a4f,color:#16171b
-  classDef human fill:#f7d79a,stroke:#9a6100,color:#16171b
+  classDef code fill:#c4e3d1,stroke:#2b7a4f,color:#16171b
+  classDef person fill:#f7d79a,stroke:#9a6100,color:#16171b
   classDef uml fill:#16171b,stroke:#16171b,color:#16171b
   classDef gap fill:#ffffff,stroke:#8a93a3,stroke-dasharray:4 3,color:#6b7280
   class trigger trig
@@ -43,7 +43,7 @@ flowchart TB
   class surface surf
   class outside out
   class ai ai
-  class rule rule
-  class human,review human
+  class code code
+  class person,review person
   class fork uml
   class comment gap
