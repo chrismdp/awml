@@ -5,8 +5,8 @@ awml: "0.1"
 title: A client's email, by where each part runs
 view: where
 groups:
-  - { id: cowork, label: "Claude Cowork, on a Mac mini" }
-  - { id: files, label: "Markdown notes, synced to the laptop and the Mac mini" }
+  - { id: cowork, label: "Claude Cowork, Mac mini" }
+  - { id: files, label: "Synced Markdown notes" }
   - { id: phone, label: "The consultant's phone" }
   - { id: gmail, label: "Gmail" }
 parts:
