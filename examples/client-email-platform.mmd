@@ -11,41 +11,39 @@ flowchart TB
   subgraph cowork["Claude Cowork, Mac mini"]
     direction TB
     weekdays(["A scheduled task, weekdays 07:00"])
-    bring("<small style='color:#3d434f'>⚙️ 📥 bring-in</small><br>Bring in the consulting inbox")
-    rules("<small style='color:#3d434f'>⚙️ 🗂️ sort</small><br>Sort by rule: newsletters, receipts, sent mail")
+    bring("<small style='color:#3d434f'>⚙️ 📥 bring-in</small><br>Bring in the inbox")
+    rules("<small style='color:#3d434f'>⚙️ 🗂️ sort</small><br>Sort by rule: is the sender a client?")
     choose("<small style='color:#3d434f'>🤖 🗂️ sort</small><br>Choose the engagement the email belongs to")
     learn("<small style='color:#3d434f'>🤖 🧠 learn</small><br>Update the engagement's project with what the email says")
     draft("<small style='color:#3d434f'>🤖 ✏️ draft</small><br>Draft a reply")
-    ask("<small style='color:#3d434f'>⚙️ 🛠️ do</small><br>Ask the consultant to approve the reply, saying what it is for")
   end
   subgraph files["Synced Markdown notes"]
     direction TB
+    engagements[("The business's engagements")]
     project[("The engagement's project")]
   end
   subgraph phone["The consultant's phone"]
     direction TB
-    today@{ shape: win-pane, label: "Today" }
-    approve("<small style='color:#3d434f'>👤 ✅ review</small><br>The consultant's yes to the exact reply")
+    edit("<small style='color:#3d434f'>👤 🛠️ do</small><br>Edit the reply and send it")
   end
   subgraph gmail["Gmail"]
     direction TB
-    drafts[("Drafts")]
     mailbox{{"The consultant's mailbox"}}
+    drafts[("Drafts")]
     send>"Send the reply: Ask"]
   end
 
   weekdays -.-> bring
   mailbox --> bring
   bring --> rules
-  rules -->|"no rule matches"| choose
+  rules ==>|"standing rule: a client's email"| choose
+  engagements --> choose
   choose --> learn
   learn --> project
   project --> draft
   draft --> drafts
-  drafts --> ask
-  ask --> today
-  today --> approve
-  approve -->|"[yes]"| send
+  drafts ==>|"the consultant takes the reply"| edit
+  edit --> send
   send --> mailbox
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
@@ -58,13 +56,12 @@ flowchart TB
   classDef uml fill:#16171b,stroke:#16171b,color:#16171b
   classDef gap fill:#ffffff,stroke:#8a93a3,stroke-dasharray:4 3,color:#6b7280
   class weekdays trig
-  class project,drafts ctx
+  class engagements,project,drafts ctx
   class mailbox con
-  class today surf
   class send out
   class choose,learn,draft ai
-  class bring,rules,ask code
-  class approve person
+  class bring,rules code
+  class edit person
   style cowork fill:#e3ebfa,stroke:#b9c8e8,color:#16171b
   style files fill:#fbe9df,stroke:#ecc7b2,color:#16171b
   style phone fill:#efe6fa,stroke:#d3c2ea,color:#16171b

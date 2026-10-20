@@ -62,7 +62,7 @@ Agentic work has three layers, and it helps to keep them apart.
 Take a fictional consultant who answers clients' email:
 
 - **Operating model:** every client engagement is a project, and anything that goes out in the consultant's name waits for the consultant's yes.
-- **Workflow:** each weekday morning the inbox is brought in and sorted. An email from a client updates the engagement's project, a reply is drafted, the consultant approves the exact reply, and it's sent.
+- **Workflow:** each weekday morning the inbox is brought in, and a client's email updates the engagement's project. A reply is drafted, and the consultant edits it and sends it.
 - **Platforms:** Claude Cowork on a Mac mini, Markdown notes synced to the laptop and the Mac mini, Gmail, and the consultant's phone. Any of these can change.
 
 The platforms each work with AI in their own way. Those ways are slowly converging, but none of them is standard, and much of what the platforms end up running has little to do with AI at all: code that sorts receipts needs no model. A platform's incentive is lock-in, so the description of the work tends to end up in its own format, where only it can read it. AWML keeps the workflow in a plain file of its own, so the platforms can change around it.
@@ -161,16 +161,18 @@ They're two views of the same facts. The parts and lines are the same in both, a
 Here's the consultant's email again, through both lenses:
 
 <table>
-<tr><th>Who may see each part</th><th>Where each part runs</th></tr>
+<tr><th>The security view</th><th>The platform view</th></tr>
 <tr>
-<td valign="top"><img src="examples/client-email.svg" width="260" alt="A client's email, by who may see each part"></td>
-<td valign="top"><img src="examples/client-email-platform.svg" width="540" alt="A client's email, by where each part runs"></td>
+<td valign="top"><img src="examples/client-email.svg" width="440" alt="A client's email, by who may see each part"></td>
+<td valign="top"><img src="examples/client-email-platform.svg" width="330" alt="A client's email, by where each part runs"></td>
 </tr>
 </table>
 
-In the first view everything sits in one scope, the consultant's business, so nothing crosses a boundary and there's no thick line. In the second the same thirteen parts spread across four platforms, which is how most agentic work is put together today: no single tool can yet run a whole workflow, so most of us join several together.
+The security view has two scopes side by side: the consultant's private scope, and the business, which the consultant shares with an associate. Two thick lines cross between them, and each is publishing. A standing rule lets a client's email into the business, and the consultant takes the reply back into the private scope by editing it and sending it. The consultant's own `do` step is their yes, so the send needs no review in front of it.
 
-The second lens is the one that changes when you change tools. Move the notes into a notes service, or the scheduled task from Claude Cowork to a managed agent service, and the boxes stay the same, just in different blocks. Swapping the model moves no box at all: it changes how a step is done, on the same platform.
+The platform view spreads the same twelve parts over four platforms, with the edit on the consultant's phone. That's how most agentic work is put together today: no single tool can yet run a whole workflow, so most of us join several together.
+
+The platform view is the one that changes when you change tools. Move the notes into a notes service, or the scheduled task from Claude Cowork to a managed agent service, and the boxes stay the same, just in different blocks. Swapping the model moves no box at all: it changes how a step is done, on the same platform.
 
 ## The security view: who may see each part
 
