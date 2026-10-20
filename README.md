@@ -20,7 +20,7 @@ Each of these shows one idea in a small drawing. Their files are in [`examples/t
 
 ### A draft, a yes and the send
 
-A model drafts the swimming club's Friday message to the parents. Ella says yes to the exact message, and only then does a `do` step send it: the draft step itself never sends.
+A model drafts the swimming club's Friday message to the parents. A `do` step asks Ella to send it, and the message goes out only after Ella's yes to that exact message: the draft step itself never sends.
 
 ![The club's Friday message: a draft, Ella's yes and the send](examples/tour/01-draft-and-send.svg)
 

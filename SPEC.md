@@ -115,7 +115,7 @@ A step's colour says who decides it. A step may also name its **operation**, wit
 
 A drawing can show some of these limits, and `awml check` holds each step to those:
 
-- **Only a `do` step leads to an outside action**, by a line straight to it or through a review or a fork. A draft goes to a review and then to a `do` step, which sends it.
+- **Only a `do` step leads to an outside action**, by a line straight to it or through a review or a fork. A draft goes to a `do` step, which asks to send it, and a person's yes releases the send. A draft step never leads to an outside action, even through a review.
 - **An `answer` step and a `check` step never write to a context.** They read contexts, and speak on surfaces.
 
 A line leads somewhere when it starts something, moves data or publishes. A hidden line, a refused read and a tie lead nowhere. The other limits, such as deciding for a person or making up an aim, are about what happens inside a step, which no drawing shows, so the people who read it judge those.
@@ -138,7 +138,7 @@ These shapes come up again and again. The first two are the commonest.
 
 <img src="examples/tour/01-draft-and-send.svg" width="220" alt="A draft, the owner's yes to the exact message, and the send">
 
-A `draft` step, then a person's yes to the exact content, then a `do` step that sends it. Use it for anything that goes out in someone's name or can't be taken back. Any change to the content after the yes needs a new yes, and the draft step never leads to the send itself, even through the review.
+A `draft` step writes the content, a `do` step asks to send it, a person says yes to that exact content, and the send goes out. Use it for anything that goes out in someone's name or can't be taken back. Any change to the content after the yes needs a new yes. A draft step never leads to an outside action, even through a review.
 
 ### Do
 

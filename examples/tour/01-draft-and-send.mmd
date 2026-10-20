@@ -12,15 +12,15 @@ flowchart TB
     direction TB
     fri(["Friday 16:00"])
     write("<small style='color:#3d434f'>«draft»</small><br>Draft the week's message to the parents")
+    ask("<small style='color:#3d434f'>«do»</small><br>Ask Ella to send it")
     approve{"Ella's yes to the exact message"}
-    send("<small style='color:#3d434f'>«do»</small><br>Send the message Ella said yes to")
-    email>"Email the parents: Ask"]
+    send>"Send it to the parents: Ask"]
   end
 
   fri -.-> write
-  write -->|"the draft"| approve
+  write -->|"the draft"| ask
+  ask --> approve
   approve -->|"[yes]"| send
-  send --> email
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
   classDef con fill:#eceef2,stroke:#5d6472,color:#16171b
@@ -32,8 +32,8 @@ flowchart TB
   classDef uml fill:#16171b,stroke:#16171b,color:#16171b
   classDef gap fill:#ffffff,stroke:#8a93a3,stroke-dasharray:4 3,color:#6b7280
   class fri trig
-  class email out
+  class send out
   class write ai
-  class send rule
+  class ask rule
   class approve human
   style ella fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
