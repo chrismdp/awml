@@ -180,12 +180,29 @@ groups: [{id: g, label: g}]`)
 	}
 }
 
-func TestAStepsOperationIsAQuietStereotypeAboveItsLabel(t *testing.T) {
+func TestAStepsOperationIsAQuietLineAboveItsLabel(t *testing.T) {
 	for _, kind := range []string{"ai", "rule", "human"} {
 		out := drawing(t, "scopes", fmt.Sprintf(`parts: [{id: p, kind: %s, op: draft, label: 'Draft the "reply"'}]`, kind))
-		has(t, out, "\n  p(\"<small style='color:#3d434f'>«draft»</small><br>Draft the #quot;reply#quot;\")\n")
+		has(t, out, "\n  p(\"<small style='color:#3d434f'>✏️ draft</small><br>Draft the #quot;reply#quot;\")\n")
 	}
-	has(t, drawing(t, "scopes", "parts: [{id: p, kind: rule, op: other, label: Tidy}]"), "\n  p(\"<small style='color:#3d434f'>«other»</small><br>Tidy\")\n")
+}
+
+func TestEachOperationIsDrawnWithItsEmoji(t *testing.T) {
+	for _, c := range []struct{ op, emoji string }{
+		{"bring-in", "📥"},
+		{"sort", "🗂️"},
+		{"learn", "🧠"},
+		{"prepare", "📋"},
+		{"check", "🔍"},
+		{"reflect", "🪞"},
+		{"draft", "✏️"},
+		{"do", "🛠️"},
+		{"answer", "💬"},
+		{"other", "❔"},
+	} {
+		out := drawing(t, "scopes", fmt.Sprintf("parts: [{id: p, kind: rule, op: %s, label: Step}]", c.op))
+		has(t, out, "\n  p(\"<small style='color:#3d434f'>"+c.emoji+" "+c.op+"</small><br>Step\")\n")
+	}
 }
 
 const questionFile = `

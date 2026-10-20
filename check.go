@@ -111,7 +111,7 @@ func Check(doc any) []string {
 		if op := p.get("op"); op != nil {
 			if k, _ := p.get("kind").(string); !steps[k] {
 				errors = append(errors, name+" has an op, but only an ai, rule or human step takes one")
-			} else if s, _ := op.(string); !ops[s] {
+			} else if s, _ := op.(string); ops[s] == "" {
 				errors = append(errors, fmt.Sprintf(`%s has unknown op "%s"`, name, show(op)))
 			}
 		}
@@ -161,9 +161,12 @@ func Check(doc any) []string {
 	return append(errors, operations(parts, lines)...)
 }
 
-// The operations a step may name, and the kinds of part that are steps. other is for work that fits
-// none of the nine, and is held to no operation's rules.
-var ops = setOf([]string{"bring-in", "sort", "learn", "prepare", "check", "reflect", "draft", "do", "answer", "other"})
+// The operations a step may name, each with the emoji it is drawn with, and the kinds of part that
+// are steps. other is for work that fits none of the nine, and is held to no operation's rules.
+var ops = map[string]string{
+	"bring-in": "📥", "sort": "🗂️", "learn": "🧠", "prepare": "📋", "check": "🔍",
+	"reflect": "🪞", "draft": "✏️", "do": "🛠️", "answer": "💬", "other": "❔",
+}
 var steps = setOf([]string{"ai", "rule", "human"})
 
 // operations holds each step to what its op must not do, wherever the drawing shows it. Only a do
@@ -181,7 +184,7 @@ func operations(parts, lines []*Map) []string {
 			return ""
 		}
 		op, _ := p.get("op").(string)
-		if !ops[op] || op == "other" {
+		if ops[op] == "" || op == "other" {
 			return ""
 		}
 		return op

@@ -111,13 +111,14 @@ const red = "stroke:#d0342c,stroke-width:2.5px,color:#b0271f"
 var header = []string{"---", "config:", "  theme: default", "  flowchart:", "    useMaxWidth: false",
 	"    subGraphTitleMargin:", "      top: 6", "      bottom: 30", "---", "flowchart TB"}
 
-// A step's operation is a UML stereotype, smaller and softer than the label beneath it.
-const stereotype = "<small style='color:#3d434f'>«%s»</small><br>"
+// A step's operation is its emoji and its name, on a line of its own, smaller and softer than the
+// label beneath it.
+const operation = "<small style='color:#3d434f'>%s %s</small><br>"
 
-// label is a part's label as Mermaid reads it, under its stereotype if it has one.
+// label is a part's label as Mermaid reads it, under its operation if it has one.
 func label(p *Map) string {
 	if op := str(p, "op"); op != "" {
-		return fmt.Sprintf(stereotype, op) + text(str(p, "label"))
+		return fmt.Sprintf(operation, ops[op], op) + text(str(p, "label"))
 	}
 	return text(str(p, "label"))
 }

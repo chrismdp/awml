@@ -12,12 +12,12 @@ flowchart TB
     direction TB
     invoices[("The bakery's invoices")]
     checklist[("Jo's checklist for chasing")]
-    chase("<small style='color:#3d434f'>«draft»</small><br>Draft a reminder for each late invoice")
+    chase("<small style='color:#3d434f'>✏️ draft</small><br>Draft a reminder for each late invoice")
   end
   subgraph pottery["pottery: Jo, Kit"]
     direction TB
     shop_notes[("The shop's notes")]
-    remind("<small style='color:#3d434f'>«draft»</small><br>Draft a reminder for each late order")
+    remind("<small style='color:#3d434f'>✏️ draft</small><br>Draft a reminder for each late order")
   end
 
   invoices --> chase
