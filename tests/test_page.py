@@ -33,9 +33,15 @@ def test_each_drawing_is_on_a_white_panel():
     assert '<div class="panel"><div class="awml"' in html
 
 
-def test_the_page_is_named_after_its_workflows():
+def test_the_page_is_named_after_its_workflow_or_simply_workflows():
     assert "<title>Dinners</title>" in page([doc("Dinners"), doc("Dinners", view="where")])
-    assert "<title>Dinners, A question</title>" in page([doc("Dinners"), doc("A question")])
+    assert "<title>Workflows</title>" in page([doc("Dinners"), doc("A question")])
+
+
+def test_a_wide_drawing_shrinks_to_fit_a_wide_screen_and_scrolls_on_a_phone():
+    html = page([doc("Dinners")])
+    assert "@media (min-width: 900px) { .awml svg { max-width: 100%; height: auto; } }" in html
+    assert re.search(r"\.panel \{[^}]*overflow-x: auto", html)
 
 
 def test_titles_are_escaped():

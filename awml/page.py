@@ -14,7 +14,8 @@ section { display: grid; gap: 10px; }
 .view { margin: 0; color: #5b6270; }
 .panel { box-sizing: border-box; background: #ffffff; border: 1px solid #dde1e7; border-radius: 10px; padding: 16px; overflow-x: auto; }
 .awml { min-height: 120px; color: #3d434f; font-size: 14px; }
-.awml svg { display: block; margin: 0 auto; }"""
+.awml svg { display: block; margin: 0 auto; }
+@media (min-width: 900px) { .awml svg { max-width: 100%; height: auto; } }"""
 RUNTIME = """<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
 <script>
 var DRAWINGS = {};
@@ -31,11 +32,12 @@ var DRAWINGS = {};
 
 
 def page(docs):
-    titles = list(dict.fromkeys(d["title"] for d in docs))
+    # Two views of one workflow share its title; several workflows each have their own heading.
+    titles = {d["title"] for d in docs}
+    name = html.escape(titles.pop() if len(titles) == 1 else "Workflows")
     out = ["<!doctype html>", '<html lang="en">', '<meta charset="utf-8">',
            '<meta name="viewport" content="width=device-width, initial-scale=1">',
-           f"<title>{html.escape(', '.join(titles))}</title>", f"<style>\n{STYLE}\n</style>",
-           "<main>", f"<h1>{html.escape(', '.join(titles))}</h1>"]
+           f"<title>{name}</title>", f"<style>\n{STYLE}\n</style>", "<main>", f"<h1>{name}</h1>"]
     for d in docs:
         title = html.escape(d["title"])
         out += ["<section>", f"<h2>{title}</h2>", f'<p class="view">{VIEWS[d["view"]]}</p>',
