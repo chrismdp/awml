@@ -12,7 +12,7 @@ This README is the long guide: what AWML is for, how to read a drawing, and how 
 
 - [Install](#install)
 - [Why AWML](#why-awml)
-- [Three layers](#three-layers)
+- [Three layers, for one consultant](#three-layers-for-one-consultant)
 - [Reading a drawing](#reading-a-drawing)
 - [Operations](#operations)
 - [Two lenses on one workflow](#two-lenses-on-one-workflow)
@@ -41,23 +41,24 @@ This needs Go 1.22 or later, and puts `awml` in Go's own folder for commands, us
 
 ## Why AWML
 
-People say they have automated their work, or their family's admin, with AI. It's useful work, and there's more of it every month. But ask how it works, and the answer is a list of tools: scheduled tasks, chat bots, connectors, shared notes, managed agents, documents a model keeps up to date. There's no shared vocabulary yet for the work itself, apart from the tools that carry it out.
+Any AI system that does work has three layers:
 
-That matters, because work tangled up with its tools has three problems.
+- **The operating model:** what the work is and how it's organised, down to who does which task.
+- **The workflow:** the steps the work goes through to get done, driven by the operating model.
+- **The platforms:** the AI systems, harnesses, models and programs that carry out the work.
 
-- **It can't be moved.** If the work is only ever described as the settings of one tool, moving it to another tool means building it again from memory.
-- **It can't be improved piece by piece.** To make one step better, such as one prompt or one choice of model, you need to know where that step starts and ends, what it reads and what it hands on. A tool that hides the steps hides that too.
-- **It can't be traced.** When the flow of work is itself decided by a model in a loop, one day you're asked for a crucial yes, and the next day you aren't. And what you're shown at the end has no provenance: it's hard to know what drove it, or whether you were even allowed to see it.
+AWML describes the middle layer, the workflow, apart from the platforms that run it.
 
-AWML separates the work from the tools. It describes one workflow as one picture, independent of any tool, so a person can see who decides each step, who may see each part and what leaves the system. The same picture can then be checked against what a live system really does.
+AWML has no notion of an agent. An AI might act as one, depending on the platform, but the word isn't precise enough to describe a workflow. Each step says who decides it instead: AI, code or a person.
 
-## Three layers
+Drawing a workflow gives you:
 
-Agentic work has three layers, and it helps to keep them apart.
+- **Auditing:** where content moves from a private scope to a wider one, or across tools, and how much of the work is automated.
+- **Hill climbing:** each step is a box with a known input and output, so you can score it and improve it on its own.
+- **Portability:** the workflow stays the same when a platform changes, so each part can move to the best platform.
+- **Efficiency:** the same patterns of steps turn up again and again, so each can be optimised once.
 
-- **The operating model:** how work is organised and what it's for: who it serves, what each part may see, and what needs a person's yes. A way of running projects is an operating model, and so is a family's rule that nobody spends over a set amount without asking. It has very little to do with AI: it's how work is organised, whoever or whatever does it.
-- **The workflow:** who must do what. The structure of the work, and the concrete steps taken from a trigger to the surfaces and outside actions it ends in. **This is what AWML describes.**
-- **The platforms** that run it: usually several at once, such as Claude Cowork on a Mac mini, a folder of notes synced between machines, a mail service and a phone. Each brings its own surfaces, harness and models, and often its own triggers, so a model on its own isn't a platform.
+## Three layers, for one consultant
 
 Take a fictional consultant who answers clients' email:
 
@@ -65,7 +66,7 @@ Take a fictional consultant who answers clients' email:
 - **Workflow:** each weekday morning the inbox is brought in, and a client's email updates the engagement's project. A reply is drafted, and the consultant edits it and sends it.
 - **Platforms:** Claude Cowork on a Mac mini, Markdown notes synced to the laptop and the Mac mini, Gmail, and the consultant's phone. Any of these can change.
 
-The platforms each work with AI in their own way. Those ways are slowly converging, but none of them is standard, and much of what the platforms end up running has little to do with AI at all: code that sorts receipts needs no model. A platform's incentive is lock-in, so the description of the work tends to end up in its own format, where only it can read it. AWML keeps the workflow in a plain file of its own, so the platforms can change around it.
+The operating model has little to do with AI: it's how work is organised, whoever or whatever does it. The platforms each work with AI in their own way. Those ways are slowly converging, but none of them is standard, and much of what the platforms end up running has little to do with AI at all: code that sorts receipts needs no model. A platform's incentive is lock-in, so the description of the work tends to end up in its own format, where only it can read it. AWML keeps the workflow in a plain file of its own, so the platforms can change around it.
 
 ## Reading a drawing
 
@@ -77,7 +78,7 @@ A drawing is made of a few kinds of part. Each has its own shape, and each shape
 
 - A **trigger** is a pink pill. It starts the workflow: a time, such as `Weekdays 07:00`, or an event, such as someone asking in a chat or an email arriving. In UML it's an accept time event or an accept event.
 - A **step** is a rounded box: one piece of work, with the colour and emoji of who decides it. **AI** decides the blue 🤖 steps, **code** the green ⚙️ ones, and a **person** the amber 👤 ones. In UML it's an action.
-- A **review** is an amber rounded box, like a step, with `👤 ✅ review` above its label: a person's yes to exact content before it goes ahead. It has only one way out, a line labelled `[yes]`, so in UML it's an action whose way out is guarded by `[yes]`, not a decision node.
+- A **review** is an amber rounded box, like a step, with `👤 ✅ review` above its label: a person's yes to exact content before it goes ahead. It has only one way out, a line labelled `[yes]`, so in UML it's an action with a guard on that line, not a decision node.
 - A **fork** is a black bar, where work splits to run side by side. In UML it's a fork node.
 - A **context** is a pale blue cylinder: the notes a step may read or write, kept as one folder. In UML it's a data store node.
 - A **connector** is a grey hexagon: someone's access to an outside service, such as a calendar, a mailbox or a bank account.
@@ -172,7 +173,7 @@ The security view has two scopes side by side: the consultant's private scope, a
 
 The platform view spreads the same twelve parts over four platforms, with the edit on the consultant's phone. That's how most agentic work is put together today: no single tool can yet run a whole workflow, so most of us join several together.
 
-The platform view is the one that changes when you change tools. Move the notes into a notes service, or the scheduled task from Claude Cowork to a managed agent service, and the boxes stay the same, just in different blocks. Swapping the model moves no box at all: it changes how a step is done, on the same platform.
+The platform view is the one that changes when you change tools. Move the notes into a notes service, or the scheduled task from Claude Cowork to a managed agent service, and the boxes stay the same, just in different blocks. Wherever the flow crosses from one platform to another, it needs the right connector in place, or someone has to copy and paste. Swapping the model moves no box at all: it changes how a step is done, on the same platform.
 
 ## The security view: who may see each part
 
@@ -483,6 +484,7 @@ Besides the gallery, [`examples/`](examples) has three workflows to start from: 
 
 - **Platforms that conform to AWML.** A platform that can read a workflow file, run it as drawn and report each step's record against it would let people move their work between platforms as they see fit. It could also give the guarantees these designs badly need, such as refusing an outside action that no yes released, rather than leaving them to each workflow's author.
 - **A plan for each platform.** From an AWML file, generate something like a Terraform plan: a repeatable description of how a workflow fits a particular platform, which that platform can apply. Moving a workflow would then mean applying a different plan, rather than rebuilding it by hand.
+- **Evaluations for every step.** A platform could capture evaluations for each step as it runs, and rerun them on different models to find the cheapest one that still does the job well.
 
 ## Status and licence
 
