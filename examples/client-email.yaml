@@ -1,0 +1,36 @@
+# A client's email answered with a draft, by who may see each part. The consultant and the client
+# are fictional.
+awml: "0.1"
+title: A client's email, answered with a draft
+view: scopes
+groups:
+  - { id: business, label: "business: the consultant" }
+parts:
+  - { id: weekdays, kind: trigger, label: "Weekdays 07:00" }
+  - { id: mail, kind: connector, label: "The business mail service, as the consultant", in: business }
+  - { id: bring, kind: rule, label: "Bring in the consulting inbox", in: business }
+  - { id: rules, kind: rule, label: "Sort by rule: newsletters, receipts, sent mail", in: business }
+  - { id: sort, kind: ai, label: "Choose where the email belongs from the projects listed, or nowhere with a reason", in: business }
+  - { id: notes, kind: context, label: "Business notes, with the engagement's project", in: business }
+  - { id: draft_gap, kind: comment, label: "Missing from the design: no scheduled task or skill drafts a reply to a client" }
+  - { id: daily, kind: trigger, label: "Every day 06:15" }
+  - { id: drafts, kind: context, label: "Drafts", in: business }
+  - { id: advance, kind: rule, label: "Move the projects on, and ask for the send of each due draft", in: business }
+  - { id: today, kind: surface, label: "Today, on the phone", in: business }
+  - { id: approve, kind: review, label: "The approver of sends: yes to the exact draft", in: business }
+  - { id: send, kind: outside, label: "Send the mail: Ask", in: business }
+lines:
+  - { from: weekdays, to: bring, kind: start }
+  - { from: mail, to: bring, kind: data }
+  - { from: bring, to: rules, kind: data }
+  - { from: rules, to: sort, kind: data, label: no rule matches }
+  - { from: sort, to: notes, kind: data, label: matched to its project }
+  # Layout only: the mail service both starts the chain and ends it, so keep the chain reading down.
+  - { from: notes, to: draft_gap, kind: hidden }
+  - { from: draft_gap, to: drafts, kind: tie }
+  - { from: daily, to: advance, kind: start }
+  - { from: drafts, to: advance, kind: data }
+  - { from: advance, to: today, kind: data, label: "the draft to approve, with what it's for" }
+  - { from: today, to: approve, kind: data }
+  - { from: approve, to: send, kind: data, label: "[yes]" }
+  - { from: send, to: mail, kind: data }

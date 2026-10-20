@@ -1,0 +1,23 @@
+# A question asked in the family chat, by who may see each part. The family is fictional.
+awml: "0.1"
+title: A question in the family chat
+view: scopes
+groups:
+  - { id: carers, label: "carers: + June, Beth" }
+  - { id: family, label: "family: parents, kids", in: carers }
+  - { id: nadia, label: "nadia: Nadia", in: family }
+parts:
+  - { id: ask, kind: trigger, label: "Someone in the family chat asks what time swimming is" }
+  - { id: carers_notes, kind: context, label: "Carers notes", in: carers }
+  - { id: family_notes, kind: context, label: "Family notes", in: family }
+  - { id: find, kind: rule, label: "Find the notes that speak to it", in: family }
+  - { id: word, kind: ai, label: "Word the answer from those notes alone", in: family }
+  - { id: chat, kind: surface, label: "Family chat", in: family }
+  - { id: nadia_notes, kind: context, label: "Nadia's own notes", in: nadia }
+lines:
+  - { from: ask, to: find, kind: start }
+  - { from: family_notes, to: find, kind: data }
+  - { from: carers_notes, to: find, kind: data }
+  - { from: nadia_notes, to: find, kind: refused, label: never read here }
+  - { from: find, to: word, kind: data }
+  - { from: word, to: chat, kind: data, label: "the answer, naming its notes" }
