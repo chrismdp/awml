@@ -280,13 +280,13 @@ A few shapes come up again and again. Learn these and most drawings read at a gl
 
 ### Draft for review
 
-<img src="examples/tour/01-draft-and-send.svg" width="220" alt="Draft for review">
+<img src="examples/tour/01-draft-and-send.svg" width="190" alt="Draft for review">
 
 A `draft` step writes the content, a `do` step asks to send it, a person says yes to that exact content, and the send goes out. If a person edits the draft and sends it in their own `do` step instead, that step is their yes, and the send needs no review. Use it for anything that goes out in someone's name or can't be taken back. Any change to the content after the yes needs a new yes, and a draft step never leads to an outside action, even through a review.
 
 ### Do
 
-<img src="examples/tour/11-do.svg" width="390" alt="Do">
+<img src="examples/tour/11-do.svg" width="360" alt="Do">
 
 A `do` step whose outside action either just happens, because it's Allow and can be undone, or waits for a yes, because it's Ask. A person's own `do` step is their yes, so an Ask action straight after one needs no review. Use it for any change in the world, or in the state of a piece of work.
 
