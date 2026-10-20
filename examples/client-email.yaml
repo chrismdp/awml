@@ -1,7 +1,10 @@
 # A client's email answered with a draft, by who may see each part. The email arrives in the
 # consultant's private mailbox, and a standing rule moves a client's email into the business. The
 # consultant edits the draft and sends it, which takes the reply back into the private mailbox.
-# The consultant, the associate and the client are fictional.
+# Both thick lines are publishing: the first adds a viewer, the associate, and the second loosens
+# the terms, since the business keeps client work under the engagement's confidentiality terms,
+# which the consultant's own mailbox doesn't carry. The consultant, the associate and the client
+# are fictional.
 awml: "0.2"
 title: A client's email, answered with a draft
 view: security

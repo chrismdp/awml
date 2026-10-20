@@ -1,6 +1,8 @@
 # The same workflow as client-email.yaml, by where each part runs. Each block is a platform, with
 # its own harness, models, surfaces and triggers: one activity needs four of them here, which is
-# normal today. The consultant is fictional.
+# normal today. The thick lines are publishing, as in client-email.yaml: the first adds the
+# associate as a viewer, and the second loosens the terms, since the consultant's own mailbox
+# doesn't carry the engagement's confidentiality terms. The consultant is fictional.
 awml: "0.2"
 title: A client's email, by where each part runs
 view: platform
