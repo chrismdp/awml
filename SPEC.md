@@ -17,10 +17,10 @@ Each workflow can be drawn two ways, one file for each: by who may see each part
 | Part | `kind` | Drawn as | Colour | UML element |
 |---|---|---|---|---|
 | Trigger | `trigger` | A pill, with its time if it has one | Pink `#fbe1ee` | Accept event, or accept time event |
-| Step decided by a model | `ai` | A rounded box, with its operation above its label | Blue `#cdd3fb` | Action |
-| Step decided by a rule | `rule` | A rounded box, with its operation above its label | Green `#c4e3d1` | Action |
-| Step decided by a person | `human` | A rounded box, with its operation above its label | Amber `#f7d79a` | Action |
-| Review | `review` | A diamond, left by `[yes]` | Amber `#f7d79a` | Decision node with guards |
+| Step decided by a model | `ai` | A rounded box, with 🤖 and its operation above its label | Blue `#cdd3fb` | Action |
+| Step decided by a rule | `rule` | A rounded box, with ⚙️ and its operation above its label | Green `#c4e3d1` | Action |
+| Step decided by a person | `human` | A rounded box, with 👤 and its operation above its label | Amber `#f7d79a` | Action |
+| Review | `review` | A diamond, with 👤 before its label, left by `[yes]` | Amber `#f7d79a` | Decision node with guards |
 | Fork | `fork` | A black bar | Black `#16171b` | Fork node |
 | Context | `context` | A cylinder | Pale blue `#e2eef9` | Data store node |
 | Connector | `connector` | A hexagon | Grey `#eceef2` | None |
@@ -28,7 +28,9 @@ Each workflow can be drawn two ways, one file for each: by who may see each part
 | Outside action | `outside` | A flag, with its tier | Coral `#fde4dc` | Send signal action |
 | Comment | `comment` | A dashed box with a cut corner | White | Comment |
 
-A **trigger** starts a workflow: a time, or an event such as someone asking in a chat. A **step** is one piece of work, coloured by what decides it: a model, a rule (code that does the same thing every time) or a person. A **review** is a person's yes to exact content before it goes ahead. A **fork** is where work splits to run side by side. A **context** is the notes a step may read or write, kept as one folder. A **connector** is someone's access to an outside service, such as a calendar or a bank account. A **surface** is where people meet the system's work: a chat, a list on their phone, a screen on a wall. An **outside action** changes something outside the system, and its label ends with its tier. A **comment** marks a gap, or gives an example of what a part could carry.
+A **trigger** starts a workflow: a time, or an event such as someone asking in a chat. A **step** is one piece of work, drawn with the colour and emoji of what decides it: a model, a rule (code that does the same thing every time) or a person. A **review** is a person's yes to exact content before it goes ahead. A **fork** is where work splits to run side by side. A **context** is the notes a step may read or write, kept as one folder. A **connector** is someone's access to an outside service, such as a calendar or a bank account. A **surface** is where people meet the system's work: a chat, a list on their phone, a screen on a wall. An **outside action** changes something outside the system, and its label ends with its tier. A **comment** marks a gap, or gives an example of what a part could carry.
+
+The emoji say what the colours say, for a reader who can't tell the colours apart and on a page printed without them: 🤖 is a model, ⚙️ a rule and 👤 a person, on every step and review. A rule is a gear rather than a computer, because a computer reads as a machine, and machines such as a laptop or a server are what the where view shows.
 
 UML has nothing for a connector or a surface, so those two shapes are AWML's own.
 
@@ -98,7 +100,7 @@ A standing approval is drawn on the outside action it covers: the label names it
 
 ## Operations
 
-A step's colour says who decides it. A step may also name its **operation**, with `op`, to say what kind of work it is. The two are separate: a model can sort or draft, and so can a person. The drawing shows the operation on its own line above the step's label, as its emoji and name in smaller, softer type, such as `✏️ draft`. `op` is optional, and a step without one is drawn as before. For work that fits none of the nine, `op: other` draws `❔ other` and holds the step to no operation's limits.
+A step's colour and its decider's emoji say who decides it. A step may also name its **operation**, with `op`, to say what kind of work it is. The two are separate: a model can sort or draft, and so can a person. The drawing shows both on a line of their own above the step's label, in smaller, softer type: who decides first, then the operation's emoji and name, as in `🤖 ✏️ draft`. `op` is optional, and a step without one has who decides it alone on that line, as in `🤖`. For work that fits none of the nine, `op: other` draws `❔ other` and holds the step to no operation's limits.
 
 | Operation | `op` | It asks | It produces | It must not |
 |---|---|---|---|---|
@@ -163,7 +165,7 @@ Content moving into a wider scope, drawn as a thick line, which waits for a pers
 
 Every step leaves one **record** each time it runs: what started it, what decided it (a rule, a model with its instructions and exact version, or a person), what it drew on, what it made and what it cost. Records are only ever added to, and only the system writes them.
 
-A drawing shows what each record should say, never what any record does say. A step's lines show what it may draw on, its colour what decides it, and its operation what kind of work it does, so a record naming other sources, another kind of decider or other work is a finding. A drawing can't show whether a step ran, which model version decided it, what it cost or what it really read. Those are in the records.
+A drawing shows what each record should say, never what any record does say. A step's lines show what it may draw on, its colour and emoji what decides it, and its operation what kind of work it does, so a record naming other sources, another kind of decider or other work is a finding. A drawing can't show whether a step ran, which model version decided it, what it cost or what it really read. Those are in the records.
 
 ## The red line
 

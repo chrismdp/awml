@@ -1,6 +1,6 @@
 # AWML
 
-AWML, the Agentic Workflow Modelling Language, describes agentic work as diagrams. You write a workflow as a small YAML file: its triggers, the steps that pass work along, the notes they read, and the surfaces and outside actions it ends in. AWML draws it with Mermaid, on the shapes of a UML activity diagram, coloured so you can see at a glance whether a model, a rule or a person decides each step. Dashed boxes show who may see each part, and a second view shows where each part runs. A drawing runs nothing and grants nothing: it's the description a live system is checked against, and a red line marks where the system does something the description doesn't allow.
+AWML, the Agentic Workflow Modelling Language, describes agentic work as diagrams. You write a workflow as a small YAML file: its triggers, the steps that pass work along, the notes they read, and the surfaces and outside actions it ends in. AWML draws it with Mermaid, on the shapes of a UML activity diagram, and gives each step a colour and an emoji so you can see at a glance whether a model, a rule or a person decides it. Dashed boxes show who may see each part, and a second view shows where each part runs. A drawing runs nothing and grants nothing: it's the description a live system is checked against, and a red line marks where the system does something the description doesn't allow.
 
 ![A family's dinners, by who may see each part](examples/dinners-scopes.svg)
 
@@ -76,8 +76,8 @@ The platforms each work with AI in their own way. Those ways are slowly convergi
 A drawing is made of a few kinds of part. Each has its own shape, and each shape means what it means in a UML activity diagram, so anyone who reads those can read these.
 
 - A **trigger** is a pink pill. It starts the workflow: a time, such as `Weekdays 07:00`, or an event, such as someone asking in a chat or an email arriving. In UML it's an accept time event or an accept event.
-- A **step** is a rounded box: one piece of work, coloured by what decides it. A **model** decides the blue steps, a **rule** the green ones, and a **person** the amber ones. In UML it's an action.
-- A **review** is an amber diamond: a person's yes to exact content before it goes ahead. It's left by a line labelled `[yes]`. In UML it's a decision node with guards.
+- A **step** is a rounded box: one piece of work, with the colour and emoji of what decides it. A **model** decides the blue 🤖 steps, a **rule** the green ⚙️ ones, and a **person** the amber 👤 ones. In UML it's an action.
+- A **review** is an amber diamond with 👤 before its label: a person's yes to exact content before it goes ahead. It's left by a line labelled `[yes]`. In UML it's a decision node with guards.
 - A **fork** is a black bar, where work splits to run side by side. In UML it's a fork node.
 - A **context** is a pale blue cylinder: the notes a step may read or write, kept as one folder. In UML it's a data store node.
 - A **connector** is a grey hexagon: someone's access to an outside service, such as a calendar, a mailbox or a bank account.
@@ -89,15 +89,15 @@ UML has nothing for a connector or a surface, so those two shapes are AWML's own
 
 ### Who decides each step
 
-The colour of a step is the first thing to read, because it tells you what kind of thing you're trusting.
+The colour of a step and the emoji at its top are the first things to read, because they tell you what kind of thing you're trusting. The emoji says what the colour says, for anyone who can't tell the colours apart and on a page printed without them.
 
-| Colour | Who decides | What that means |
-|---|---|---|
-| Green | A rule | Code that does the same thing every time. It costs almost nothing to run, and you can test it once and rely on it. |
-| Blue | A model | A judgement call. It can be wrong in new ways, so it needs inspecting and improving, and its output is worth scoring. |
-| Amber | A person | The slowest step of all, and the one that needs someone to be there. Keep it for where it matters, such as a yes to something that can't be undone. |
+| Colour | Emoji | Who decides | What that means |
+|---|---|---|---|
+| Green | ⚙️ | A rule | Code that does the same thing every time. It costs almost nothing to run, and you can test it once and rely on it. |
+| Blue | 🤖 | A model | A judgement call. It can be wrong in new ways, so it needs inspecting and improving, and its output is worth scoring. |
+| Amber | 👤 | A person | The slowest step of all, and the one that needs someone to be there. Keep it for where it matters, such as a yes to something that can't be undone. |
 
-A workflow that is all green has no AI in it, even if AI helped build it. That's common, and it's worth seeing.
+A workflow whose every step is green ⚙️ has no AI in it, even if AI helped build it. That's common, and it's worth seeing.
 
 ### The lines
 
@@ -114,7 +114,7 @@ A line may carry a label. Words in square brackets are a **guard**, the conditio
 
 ## Operations
 
-A step's colour says who decides it. A step may also name its **operation**: what kind of work it does. The two are separate, since a model can sort or draft, and so can a person. The drawing shows the operation on its own line above the step's label, as its emoji and its name in small grey type, such as `✏️ draft`. Naming an operation is optional.
+A step's colour and its decider's emoji say who decides it. A step may also name its **operation**: what kind of work it does. The two are separate, since a model can sort or draft, and so can a person. The drawing shows both on a line of their own above the step's label, in small grey type: who decides first, then the operation's emoji and its name, as in `🤖 ✏️ draft` for a draft a model writes. Naming an operation is optional, and a step without one has who decides it alone on that line.
 
 ![One step in each of four operations](examples/tour/10-operations.svg)
 
@@ -259,7 +259,7 @@ A standing approval is drawn on the outside action it covers: the label names it
 
 Every step leaves one **record** each time it runs: what started it, what decided it (a rule, a model with its instructions and exact version, or a person), what it drew on, what it made and what it cost. Records are only ever added to, and only the system writes them.
 
-A drawing shows what each record should say, never what any record does say. A step's lines show what it may draw on, its colour what decides it, and its operation what kind of work it does. So a record that names other sources, another kind of decider or other work is a finding. What a drawing can't show is whether a step ran, which model version decided it, what it cost or what it really read. Those live in the records.
+A drawing shows what each record should say, never what any record does say. A step's lines show what it may draw on, its colour and emoji what decides it, and its operation what kind of work it does. So a record that names other sources, another kind of decider or other work is a finding. What a drawing can't show is whether a step ran, which model version decided it, what it cost or what it really read. Those live in the records.
 
 ## The red line
 
@@ -372,7 +372,7 @@ The club's Friday message as the live system ran it one week: it sent the draft 
 
 ### A step a person does
 
-A rule checks what the car needs each month and puts the MOT on Ade's list. Booking it is Ade's own step, so it's amber, and it waits on Ade's list.
+A rule checks what the car needs each month and puts the MOT on Ade's list. Booking it is Ade's own step, so it's amber and marked 👤, and it waits on Ade's list.
 
 ![The car's MOT, booked from Ade's list](examples/tour/07-human-step.svg)
 
