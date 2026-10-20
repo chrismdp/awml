@@ -11,6 +11,7 @@ FIELDS = {
     "part": ({"id", "kind", "label"}, {"in"}),
     "line": ({"from", "to", "kind"}, {"label", "breaks"}),
 }
+TEXT = {"title", "view", "id", "label", "in", "kind", "from", "to"}
 # Mermaid reads anything else in an id as part of the syntax around it.
 ID = re.compile(r"[A-Za-z][A-Za-z0-9_]*\Z")
 
@@ -22,6 +23,9 @@ def fields(what, name, item, errors):
         need, may = need - {"label"}, may | {"label"}
     errors += [f"{name} has no {f}" for f in sorted(need) if f not in item]
     errors += [f'{name} has unknown field "{f}"' for f in item if f not in need | may]
+    # YAML reads yes, no, on and off as true or false, and 19:00 as a number of minutes.
+    errors += [f"{name}: YAML read its {f} as {v!r}, not text: put it in quotes"
+               for f, v in item.items() if f in TEXT and v is not None and not isinstance(v, str)]
 
 
 def check(doc):
@@ -54,7 +58,7 @@ def check(doc):
         if i in seen:
             errors.append(f'id "{i}" is used twice')
         seen.add(i)
-        if not ID.match(str(i)):
+        if isinstance(i, str) and not ID.match(i):
             errors.append(f'id "{i}" must be letters, digits and underscores, starting with a letter')
     group_ids = {g.get("id") for g in groups}
     kinds = {p.get("id"): p.get("kind") for p in parts}

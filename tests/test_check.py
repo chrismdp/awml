@@ -1,6 +1,7 @@
 import copy
 
 import pytest
+import yaml
 
 from awml import check
 
@@ -125,3 +126,24 @@ def test_not_a_file_of_parts():
 def test_every_mistake_is_reported_at_once():
     assert check(changed(awml="2", lines__1__to="plann")) == ['awml must be "0.1", not "2"',
                                                              'the line from "plan" to "plann" ends at unknown part "plann"']
+
+
+def test_a_word_yaml_reads_as_true_or_false_must_be_quoted():
+    d = yaml.safe_load("""
+awml: "0.1"
+title: T
+view: scopes
+parts:
+  - { id: yes, kind: review, label: Yes }
+  - { id: send, kind: outside, label: "Send: Ask" }
+lines:
+  - { from: yes, to: send, kind: data }
+""")
+    assert check(d) == ['part "True": YAML read its id as True, not text: put it in quotes',
+                        'part "True": YAML read its label as True, not text: put it in quotes',
+                        'the line from "True" to "send": YAML read its from as True, not text: put it in quotes']
+
+
+def test_a_time_yaml_reads_as_a_number_must_be_quoted():
+    d = yaml.safe_load('{awml: "0.1", title: T, view: scopes, parts: [{id: t, kind: trigger, label: 19:00}]}')
+    assert check(d) == ['part "t": YAML read its label as 1140, not text: put it in quotes']
