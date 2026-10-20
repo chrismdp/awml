@@ -1,0 +1,45 @@
+---
+config:
+  theme: default
+  flowchart:
+    useMaxWidth: false
+    subGraphTitleMargin:
+      top: 6
+      bottom: 30
+---
+flowchart TB
+  subgraph server["Server: always on"]
+    direction TB
+    nightly(["Every night 23:00"])
+    bring("<small style='color:#3d434f'>«bring-in»</small><br>Bring in the day's photos from the family's phones")
+    new[("New photos")]
+  end
+  subgraph laptop["Noor's laptop: a small model, on some evenings"]
+    direction TB
+    sort("<small style='color:#3d434f'>«sort»</small><br>Sort them into albums")
+    albums[("Albums")]
+    wait@{ shape: notch-rect, label: "The laptop is off most days, so new photos wait on the server until it's on" }
+  end
+
+  nightly -.-> bring
+  bring --> new
+  new -->|"when the laptop is on"| sort
+  sort --> albums
+  wait -.- sort
+  classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
+  classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
+  classDef con fill:#eceef2,stroke:#5d6472,color:#16171b
+  classDef surf fill:#ffffff,stroke:#2a2d35,stroke-width:1.5px,color:#16171b
+  classDef out fill:#fde4dc,stroke:#b5532f,color:#16171b
+  classDef ai fill:#cdd3fb,stroke:#3b4bb0,color:#16171b
+  classDef rule fill:#c4e3d1,stroke:#2b7a4f,color:#16171b
+  classDef human fill:#f7d79a,stroke:#9a6100,color:#16171b
+  classDef uml fill:#16171b,stroke:#16171b,color:#16171b
+  classDef gap fill:#ffffff,stroke:#8a93a3,stroke-dasharray:4 3,color:#6b7280
+  class nightly trig
+  class new,albums ctx
+  class sort ai
+  class bring rule
+  class wait gap
+  style server fill:#e3ebfa,stroke:#b9c8e8,color:#16171b
+  style laptop fill:#fbe9df,stroke:#ecc7b2,color:#16171b

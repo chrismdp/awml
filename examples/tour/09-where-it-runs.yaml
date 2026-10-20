@@ -1,0 +1,21 @@
+# Where each part runs, with a laptop that is only on some of the time beside a server that always
+# is. Noor and the family are fictional.
+awml: "0.1"
+title: The family's photos, by where each part runs
+view: where
+groups:
+  - { id: server, label: "Server: always on" }
+  - { id: laptop, label: "Noor's laptop: a small model, on some evenings" }
+parts:
+  - { id: nightly, kind: trigger, label: "Every night 23:00", in: server }
+  - { id: bring, kind: rule, op: bring-in, label: "Bring in the day's photos from the family's phones", in: server }
+  - { id: new, kind: context, label: "New photos", in: server }
+  - { id: sort, kind: ai, op: sort, label: "Sort them into albums", in: laptop }
+  - { id: albums, kind: context, label: "Albums", in: laptop }
+  - { id: wait, kind: comment, label: "The laptop is off most days, so new photos wait on the server until it's on", in: laptop }
+lines:
+  - { from: nightly, to: bring, kind: start }
+  - { from: bring, to: new, kind: data }
+  - { from: new, to: sort, kind: data, label: when the laptop is on }
+  - { from: sort, to: albums, kind: data }
+  - { from: wait, to: sort, kind: tie }

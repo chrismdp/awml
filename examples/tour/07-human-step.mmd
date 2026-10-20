@@ -1,0 +1,40 @@
+---
+config:
+  theme: default
+  flowchart:
+    useMaxWidth: false
+    subGraphTitleMargin:
+      top: 6
+      bottom: 30
+---
+flowchart TB
+  subgraph ade["ade: Ade"]
+    direction TB
+    monthly(["The first of each month"])
+    car_notes[("Car notes")]
+    due("<small style='color:#3d434f'>«check»</small><br>Check what the car needs this month")
+    list@{ shape: win-pane, label: "Ade's list" }
+    book("<small style='color:#3d434f'>«do»</small><br>Book the MOT with the garage")
+  end
+
+  monthly -.-> due
+  car_notes --> due
+  due -->|"the MOT is due"| list
+  list --> book
+  book -->|"the booking"| car_notes
+  classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
+  classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
+  classDef con fill:#eceef2,stroke:#5d6472,color:#16171b
+  classDef surf fill:#ffffff,stroke:#2a2d35,stroke-width:1.5px,color:#16171b
+  classDef out fill:#fde4dc,stroke:#b5532f,color:#16171b
+  classDef ai fill:#cdd3fb,stroke:#3b4bb0,color:#16171b
+  classDef rule fill:#c4e3d1,stroke:#2b7a4f,color:#16171b
+  classDef human fill:#f7d79a,stroke:#9a6100,color:#16171b
+  classDef uml fill:#16171b,stroke:#16171b,color:#16171b
+  classDef gap fill:#ffffff,stroke:#8a93a3,stroke-dasharray:4 3,color:#6b7280
+  class monthly trig
+  class car_notes ctx
+  class list surf
+  class due rule
+  class book human
+  style ade fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f

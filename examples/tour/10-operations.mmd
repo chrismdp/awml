@@ -1,0 +1,45 @@
+---
+config:
+  theme: default
+  flowchart:
+    useMaxWidth: false
+    subGraphTitleMargin:
+      top: 6
+      bottom: 30
+---
+flowchart TB
+  subgraph kemi["kemi: Kemi"]
+    direction TB
+    arrives(["An email from the school arrives"])
+    sort("<small style='color:#3d434f'>«sort»</small><br>Sort it: a date, a request, or neither")
+    learn("<small style='color:#3d434f'>«learn»</small><br>Take any date into Kemi's notes")
+    notes[("Kemi's notes")]
+    draft("<small style='color:#3d434f'>«draft»</small><br>Draft a reply to any request")
+    drafts[("Drafts")]
+    file("<small style='color:#3d434f'>«do»</small><br>File the email")
+    move>"Move it to the school folder: Allow"]
+  end
+
+  arrives -.-> sort
+  sort -->|"a date"| learn
+  learn --> notes
+  sort -->|"a request"| draft
+  draft --> drafts
+  sort --> file
+  file --> move
+  classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
+  classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
+  classDef con fill:#eceef2,stroke:#5d6472,color:#16171b
+  classDef surf fill:#ffffff,stroke:#2a2d35,stroke-width:1.5px,color:#16171b
+  classDef out fill:#fde4dc,stroke:#b5532f,color:#16171b
+  classDef ai fill:#cdd3fb,stroke:#3b4bb0,color:#16171b
+  classDef rule fill:#c4e3d1,stroke:#2b7a4f,color:#16171b
+  classDef human fill:#f7d79a,stroke:#9a6100,color:#16171b
+  classDef uml fill:#16171b,stroke:#16171b,color:#16171b
+  classDef gap fill:#ffffff,stroke:#8a93a3,stroke-dasharray:4 3,color:#6b7280
+  class arrives trig
+  class notes,drafts ctx
+  class move out
+  class sort,learn,draft ai
+  class file rule
+  style kemi fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f

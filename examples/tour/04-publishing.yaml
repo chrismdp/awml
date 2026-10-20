@@ -1,0 +1,19 @@
+# Publishing: a thick line out of the parents' scope into a wider one that adds a grandparent.
+# The family is fictional.
+awml: "0.1"
+title: The week's pickups, for Grandma
+view: scopes
+groups:
+  - { id: wider, label: "with grandma: + Grandma Rose" }
+  - { id: parents, label: "parents: Mia, Dev", in: wider }
+parts:
+  - { id: sun, kind: trigger, label: "Sunday 18:00" }
+  - { id: calendar, kind: connector, label: "The parents' calendar", in: parents }
+  - { id: copy, kind: rule, op: bring-in, label: "Copy the week's school pickups", in: parents }
+  - { id: pickups, kind: context, label: "This week's pickups", in: parents }
+  - { id: tablet, kind: surface, label: "Grandma Rose's tablet", in: wider }
+lines:
+  - { from: sun, to: copy, kind: start }
+  - { from: calendar, to: copy, kind: data }
+  - { from: copy, to: pickups, kind: data }
+  - { from: pickups, to: tablet, kind: publish, label: "standing rule: pickups to Grandma" }

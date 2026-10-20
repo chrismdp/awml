@@ -1,0 +1,18 @@
+# A refused read: an answer that may not read one flatmate's own notes. The flatmates are fictional.
+awml: "0.1"
+title: A question in the flat's chat
+view: scopes
+groups:
+  - { id: flat, label: "flat: Tom, Ana, Joe" }
+  - { id: tom, label: "tom: Tom", in: flat }
+parts:
+  - { id: ask, kind: trigger, label: "Ana asks in the flat's chat when the boiler is serviced" }
+  - { id: flat_notes, kind: context, label: "Flat notes", in: flat }
+  - { id: answer, kind: ai, op: answer, label: "Answer from the flat's notes alone", in: flat }
+  - { id: chat, kind: surface, label: "The flat's chat", in: flat }
+  - { id: tom_notes, kind: context, label: "Tom's own notes", in: tom }
+lines:
+  - { from: ask, to: answer, kind: start }
+  - { from: flat_notes, to: answer, kind: data }
+  - { from: tom_notes, to: answer, kind: refused, label: never read here }
+  - { from: answer, to: chat, kind: data, label: "the answer, naming its notes" }

@@ -1,0 +1,23 @@
+# One step in each of four operations, so their stereotypes show. Kemi is fictional.
+awml: "0.1"
+title: An email from the school
+view: scopes
+groups:
+  - { id: kemi, label: "kemi: Kemi" }
+parts:
+  - { id: arrives, kind: trigger, label: "An email from the school arrives" }
+  - { id: sort, kind: ai, op: sort, label: "Sort it: a date, a request, or neither", in: kemi }
+  - { id: learn, kind: ai, op: learn, label: "Take any date into Kemi's notes", in: kemi }
+  - { id: notes, kind: context, label: "Kemi's notes", in: kemi }
+  - { id: draft, kind: ai, op: draft, label: "Draft a reply to any request", in: kemi }
+  - { id: drafts, kind: context, label: "Drafts", in: kemi }
+  - { id: file, kind: rule, op: do, label: "File the email", in: kemi }
+  - { id: move, kind: outside, label: "Move it to the school folder: Allow", in: kemi }
+lines:
+  - { from: arrives, to: sort, kind: start }
+  - { from: sort, to: learn, kind: data, label: a date }
+  - { from: learn, to: notes, kind: data }
+  - { from: sort, to: draft, kind: data, label: a request }
+  - { from: draft, to: drafts, kind: data }
+  - { from: sort, to: file, kind: data }
+  - { from: file, to: move, kind: data }

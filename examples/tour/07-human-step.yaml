@@ -1,0 +1,18 @@
+# A step a person does, which reaches them on their list. Ade is fictional.
+awml: "0.1"
+title: The car's MOT
+view: scopes
+groups:
+  - { id: ade, label: "ade: Ade" }
+parts:
+  - { id: monthly, kind: trigger, label: "The first of each month" }
+  - { id: car_notes, kind: context, label: "Car notes", in: ade }
+  - { id: due, kind: rule, op: check, label: "Check what the car needs this month", in: ade }
+  - { id: list, kind: surface, label: "Ade's list", in: ade }
+  - { id: book, kind: human, op: do, label: "Book the MOT with the garage", in: ade }
+lines:
+  - { from: monthly, to: due, kind: start }
+  - { from: car_notes, to: due, kind: data }
+  - { from: due, to: list, kind: data, label: the MOT is due }
+  - { from: list, to: book, kind: data }
+  - { from: book, to: car_notes, kind: data, label: the booking }

@@ -1,0 +1,41 @@
+---
+config:
+  theme: default
+  flowchart:
+    useMaxWidth: false
+    subGraphTitleMargin:
+      top: 6
+      bottom: 30
+---
+flowchart TB
+  subgraph ella["ella: Ella"]
+    direction TB
+    fri(["Friday 16:00"])
+    write("<small style='color:#3d434f'>«draft»</small><br>Draft the week's message to the parents")
+    ask("<small style='color:#3d434f'>«do»</small><br>Ask Ella to send it")
+    approve{"Ella's yes to the exact message"}
+    send>"Send it to the parents: Ask"]
+  end
+
+  fri -.-> write
+  write -->|"the draft"| ask
+  ask --> approve
+  approve -->|"[yes]"| send
+  write -->|"sent without Ella's yes"| send
+  classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
+  classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
+  classDef con fill:#eceef2,stroke:#5d6472,color:#16171b
+  classDef surf fill:#ffffff,stroke:#2a2d35,stroke-width:1.5px,color:#16171b
+  classDef out fill:#fde4dc,stroke:#b5532f,color:#16171b
+  classDef ai fill:#cdd3fb,stroke:#3b4bb0,color:#16171b
+  classDef rule fill:#c4e3d1,stroke:#2b7a4f,color:#16171b
+  classDef human fill:#f7d79a,stroke:#9a6100,color:#16171b
+  classDef uml fill:#16171b,stroke:#16171b,color:#16171b
+  classDef gap fill:#ffffff,stroke:#8a93a3,stroke-dasharray:4 3,color:#6b7280
+  class fri trig
+  class send out
+  class write ai
+  class ask rule
+  class approve human
+  style ella fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
+  linkStyle 4 stroke:#d0342c,stroke-width:2.5px,color:#b0271f

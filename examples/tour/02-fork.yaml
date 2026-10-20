@@ -1,0 +1,19 @@
+# A fork: one input, and two steps that work on it side by side. The family is fictional.
+awml: "0.1"
+title: The school newsletter
+view: scopes
+groups:
+  - { id: family, label: "family: Mia, Dev, the children" }
+parts:
+  - { id: arrives, kind: trigger, label: "The school's newsletter arrives" }
+  - { id: split, kind: fork, in: family }
+  - { id: learn, kind: ai, op: learn, label: "Take the term dates into the family notes", in: family }
+  - { id: notes, kind: context, label: "Family notes", in: family }
+  - { id: due, kind: ai, op: check, label: "Look for anything that needs a reply or a payment", in: family }
+  - { id: chat, kind: surface, label: "Family chat", in: family }
+lines:
+  - { from: arrives, to: split, kind: start }
+  - { from: split, to: learn, kind: data }
+  - { from: split, to: due, kind: data }
+  - { from: learn, to: notes, kind: data }
+  - { from: due, to: chat, kind: data, label: what needs doing }

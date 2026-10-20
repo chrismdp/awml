@@ -1,0 +1,43 @@
+---
+config:
+  theme: default
+  flowchart:
+    useMaxWidth: false
+    subGraphTitleMargin:
+      top: 6
+      bottom: 30
+---
+flowchart TB
+  subgraph wider["with grandma: + Grandma Rose"]
+    direction TB
+    tablet@{ shape: win-pane, label: "Grandma Rose's tablet" }
+    subgraph parents["parents: Mia, Dev"]
+      direction TB
+      sun(["Sunday 18:00"])
+      calendar{{"The parents' calendar"}}
+      copy("<small style='color:#3d434f'>«bring-in»</small><br>Copy the week's school pickups")
+      pickups[("This week's pickups")]
+    end
+  end
+
+  sun -.-> copy
+  calendar --> copy
+  copy --> pickups
+  pickups ==>|"standing rule: pickups to Grandma"| tablet
+  classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
+  classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
+  classDef con fill:#eceef2,stroke:#5d6472,color:#16171b
+  classDef surf fill:#ffffff,stroke:#2a2d35,stroke-width:1.5px,color:#16171b
+  classDef out fill:#fde4dc,stroke:#b5532f,color:#16171b
+  classDef ai fill:#cdd3fb,stroke:#3b4bb0,color:#16171b
+  classDef rule fill:#c4e3d1,stroke:#2b7a4f,color:#16171b
+  classDef human fill:#f7d79a,stroke:#9a6100,color:#16171b
+  classDef uml fill:#16171b,stroke:#16171b,color:#16171b
+  classDef gap fill:#ffffff,stroke:#8a93a3,stroke-dasharray:4 3,color:#6b7280
+  class sun trig
+  class pickups ctx
+  class calendar con
+  class tablet surf
+  class copy rule
+  style wider fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
+  style parents fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
