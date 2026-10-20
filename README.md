@@ -171,7 +171,7 @@ Here's the consultant's email again, through both lenses:
 </tr>
 </table>
 
-The security view has two scopes side by side: the consultant's private scope, and the business, which the consultant shares with an associate. Two thick lines cross between them, and each is publishing. A standing rule lets a client's email into the business, and the consultant takes the reply back into the private scope by editing it and sending it. The two lines are publishing for different reasons. The first adds a viewer, the associate. The second loosens the terms, because the business keeps client work under the engagement's confidentiality terms, which the consultant's own mailbox doesn't carry. The consultant's own `do` step is their yes, so the send needs no review in front of it.
+The security view has two scopes side by side: the consultant's private scope, and the business, which the consultant shares with an associate. Two thick lines cross between them, and each is publishing, for a different reason. A standing rule lets a client's email into the business, which adds a viewer, the associate. The consultant takes the reply back into the private scope by editing it and sending it, which loosens the terms: the business keeps client work under the engagement's confidentiality terms, and the consultant's own mailbox doesn't carry them. The consultant's own `do` step is their yes, so the send needs no review in front of it.
 
 The platform view spreads the same twelve parts over four platforms, with the edit on the consultant's phone. That's how most agentic work is put together today: no single tool can yet run a whole workflow, so most of us join several together.
 
