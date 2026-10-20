@@ -30,7 +30,7 @@ lines:
   - { from: draft_gap, to: drafts, kind: tie }
   - { from: daily, to: advance, kind: start }
   - { from: drafts, to: advance, kind: data }
-  - { from: advance, to: today, kind: data, label: "the draft to approve, with what it's for" }
+  - { from: advance, to: today, kind: data, label: "the draft to approve, with what it is for" }
   - { from: today, to: approve, kind: data }
   - { from: approve, to: send, kind: data, label: "[yes]" }
   - { from: send, to: mail, kind: data }

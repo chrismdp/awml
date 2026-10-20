@@ -34,7 +34,7 @@ flowchart TB
   draft_gap -.- drafts
   daily -.-> advance
   drafts --> advance
-  advance -->|"the draft to approve, with what it's for"| today
+  advance -->|"the draft to approve, with what it is for"| today
   today --> approve
   approve -->|"[yes]"| send
   send --> mail
