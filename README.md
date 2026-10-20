@@ -164,8 +164,8 @@ Here's the consultant's email again, through both lenses:
 <table>
 <tr><th>The security view</th><th>The platform view</th></tr>
 <tr>
-<td valign="top"><img src="examples/client-email.svg" width="440" alt="A client's email, by who may see each part"></td>
-<td valign="top"><img src="examples/client-email-platform.svg" width="330" alt="A client's email, by where each part runs"></td>
+<td valign="top"><img src="examples/client-email.svg" width="416" alt="A client's email, by who may see each part"></td>
+<td valign="top"><img src="examples/client-email-platform.svg" width="353" alt="A client's email, by where each part runs"></td>
 </tr>
 </table>
 
