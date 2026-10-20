@@ -6,6 +6,14 @@ AWML, the Agentic Workflow Modelling Language, describes agentic work as diagram
 
 A fictional family's dinners. On Thursday evening a model plans next week's dinners and posts the plan in the family chat. On Saturday a rule fills the supermarket basket, and checking out waits for a parent's yes to the exact basket. Every morning a rule matches the joint account against the bills expected, which only the parents see. The thick line is the meal plan moving out to a wider scope, so the carers can see it on the kitchen screen. The comment is a gap that drawing it found: nothing keeps that screen current. The same workflow, by where each part runs, is [`examples/dinners-where.svg`](examples/dinners-where.svg).
 
+## Install
+
+```sh
+go install github.com/chrismdp/awml/cmd/awml@latest
+```
+
+This needs Go 1.22 or later, and puts `awml` in Go's own folder for commands, usually `~/go/bin`.
+
 ## Writing a file
 
 One file holds one view of one workflow:
@@ -32,24 +40,22 @@ The part kinds are `trigger`, `ai`, `rule`, `human`, `review`, `fork`, `context`
 
 ## Drawing it
 
-AWML needs Python 3.9 or later and PyYAML. From a copy of this repository:
-
 ```sh
-python3 -m awml check examples/question.yaml        # report mistakes; exits 1 on any
-python3 -m awml draw examples/question.yaml         # print the Mermaid
-python3 -m awml page examples/dinners-*.yaml -o dinners.html
+awml check examples/question.yaml        # report mistakes; exits 1 on any
+awml draw examples/question.yaml         # print the Mermaid
+awml page examples/dinners-*.yaml -o dinners.html
 ```
 
-`page` writes one standalone HTML page that draws each file with Mermaid in the browser. `pip install .` puts the same commands on your path as `awml`.
+`page` writes one standalone HTML page that draws each file with Mermaid in the browser.
 
 The Mermaid works anywhere that draws Mermaid 11.4.1. To make an SVG, use the Mermaid CLI, which needs Node:
 
 ```sh
-python3 -m awml draw my-workflow.yaml > my-workflow.mmd
+awml draw my-workflow.yaml > my-workflow.mmd
 npx -y @mermaid-js/mermaid-cli@11.4.1 -b white -i my-workflow.mmd -o my-workflow.svg
 ```
 
-`examples/render.sh` redraws every example this way. The tests run with `python3 -m pytest`.
+`examples/render.sh` redraws every example this way. The tests run with `go test ./...`.
 
 ## Status
 
