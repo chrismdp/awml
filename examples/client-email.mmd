@@ -12,16 +12,16 @@ flowchart TB
     direction TB
     weekdays(["Weekdays 07:00"])
     mailbox{{"The consultant's mailbox"}}
-    bring("<small style='color:#3d434f'>📥 bring-in</small><br>Bring in the consulting inbox")
-    rules("<small style='color:#3d434f'>🗂️ sort</small><br>Sort by rule: newsletters, receipts, sent mail")
-    choose("<small style='color:#3d434f'>🗂️ sort</small><br>Choose the engagement the email belongs to")
-    learn("<small style='color:#3d434f'>🧠 learn</small><br>Update the engagement's project with what the email says")
+    bring("<small style='color:#3d434f'>⚙️ 📥 bring-in</small><br>Bring in the consulting inbox")
+    rules("<small style='color:#3d434f'>⚙️ 🗂️ sort</small><br>Sort by rule: newsletters, receipts, sent mail")
+    choose("<small style='color:#3d434f'>🤖 🗂️ sort</small><br>Choose the engagement the email belongs to")
+    learn("<small style='color:#3d434f'>🤖 🧠 learn</small><br>Update the engagement's project with what the email says")
     project[("The engagement's project")]
-    draft("<small style='color:#3d434f'>✏️ draft</small><br>Draft a reply")
+    draft("<small style='color:#3d434f'>🤖 ✏️ draft</small><br>Draft a reply")
     drafts[("Drafts")]
-    ask("<small style='color:#3d434f'>🛠️ do</small><br>Ask the consultant to approve the reply, saying what it is for")
+    ask("<small style='color:#3d434f'>⚙️ 🛠️ do</small><br>Ask the consultant to approve the reply, saying what it is for")
     today@{ shape: win-pane, label: "Today, on the phone" }
-    approve{"The consultant's yes to the exact reply"}
+    approve{"👤 The consultant's yes to the exact reply"}
     send>"Send the reply: Ask"]
   end
 

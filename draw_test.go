@@ -27,10 +27,10 @@ func has(t *testing.T, out, want string) {
 func TestEachPartKindHasItsShapeAndColour(t *testing.T) {
 	for _, c := range []struct{ kind, node, class string }{
 		{"trigger", `p(["Label"])`, "trig"},
-		{"ai", `p("Label")`, "ai"},
-		{"rule", `p("Label")`, "rule"},
-		{"human", `p("Label")`, "human"},
-		{"review", `p{"Label"}`, "human"},
+		{"ai", `p("<small style='color:#3d434f'>🤖</small><br>Label")`, "ai"},
+		{"rule", `p("<small style='color:#3d434f'>⚙️</small><br>Label")`, "rule"},
+		{"human", `p("<small style='color:#3d434f'>👤</small><br>Label")`, "human"},
+		{"review", `p{"👤 Label"}`, "human"},
 		{"fork", `p@{ shape: fork, label: "" }`, "uml"},
 		{"context", `p[("Label")]`, "ctx"},
 		{"connector", `p{{"Label"}}`, "con"},
@@ -72,7 +72,7 @@ func TestQuotesInLabelsDontBreakTheDrawing(t *testing.T) {
 	out := drawing(t, "scopes", `
 parts: [{id: a, kind: rule, label: 'Say "yes"'}, {id: b, kind: surface, label: B}]
 lines: [{from: a, to: b, kind: data, label: '"now"'}]`)
-	has(t, out, `a("Say #quot;yes#quot;")`)
+	has(t, out, `a("<small style='color:#3d434f'>⚙️</small><br>Say #quot;yes#quot;")`)
 	has(t, out, `a -->|"#quot;now#quot;"| b`)
 }
 
@@ -141,7 +141,7 @@ func TestATriggerSitsInTheGroupOfWhatItStarts(t *testing.T) {
 parts: [{id: t, kind: trigger, label: "Thursday 19:00"}, {id: s, kind: ai, label: Plan, in: family}]
 lines: [{from: t, to: s, kind: start}]
 groups: [{id: family, label: family}]`)
-	has(t, out, "  subgraph family[\"family\"]\n    direction TB\n    t([\"Thursday 19:00\"])\n    s(\"Plan\")\n  end")
+	has(t, out, "  subgraph family[\"family\"]\n    direction TB\n    t([\"Thursday 19:00\"])\n    s(\"<small style='color:#3d434f'>🤖</small><br>Plan\")\n  end")
 }
 
 func TestATriggerPlacedByHandStaysPut(t *testing.T) {
@@ -157,7 +157,7 @@ func TestACommentSitsInTheGroupOfWhatItIsTiedTo(t *testing.T) {
 parts: [{id: s, kind: ai, label: Plan, in: g}, {id: n, kind: comment, label: An example}]
 lines: [{from: s, to: n, kind: tie}]
 groups: [{id: g, label: g}]`)
-	has(t, out, "    s(\"Plan\")\n    n@{ shape: notch-rect, label: \"An example\" }\n  end")
+	has(t, out, "    s(\"<small style='color:#3d434f'>🤖</small><br>Plan\")\n    n@{ shape: notch-rect, label: \"An example\" }\n  end")
 }
 
 func TestHiddenLinesDontPlaceATrigger(t *testing.T) {
@@ -180,11 +180,23 @@ groups: [{id: g, label: g}]`)
 	}
 }
 
-func TestAStepsOperationIsAQuietLineAboveItsLabel(t *testing.T) {
-	for _, kind := range []string{"ai", "rule", "human"} {
-		out := drawing(t, "scopes", fmt.Sprintf(`parts: [{id: p, kind: %s, op: draft, label: 'Draft the "reply"'}]`, kind))
-		has(t, out, "\n  p(\"<small style='color:#3d434f'>✏️ draft</small><br>Draft the #quot;reply#quot;\")\n")
+func TestAStepsDeciderAndOperationAreAQuietLineAboveItsLabel(t *testing.T) {
+	for _, c := range []struct{ kind, who string }{{"ai", "🤖"}, {"rule", "⚙️"}, {"human", "👤"}} {
+		out := drawing(t, "scopes", fmt.Sprintf(`parts: [{id: p, kind: %s, op: draft, label: 'Draft the "reply"'}]`, c.kind))
+		has(t, out, "\n  p(\"<small style='color:#3d434f'>"+c.who+" ✏️ draft</small><br>Draft the #quot;reply#quot;\")\n")
 	}
+}
+
+func TestAStepWithNoOperationStillShowsWhoDecidesIt(t *testing.T) {
+	for _, c := range []struct{ kind, who string }{{"ai", "🤖"}, {"rule", "⚙️"}, {"human", "👤"}} {
+		out := drawing(t, "scopes", fmt.Sprintf("parts: [{id: p, kind: %s, label: Step}]", c.kind))
+		has(t, out, "\n  p(\"<small style='color:#3d434f'>"+c.who+"</small><br>Step\")\n")
+	}
+}
+
+func TestAReviewShowsWhoDecidesItBeforeItsLabel(t *testing.T) {
+	out := drawing(t, "scopes", `parts: [{id: p, kind: review, label: 'The "yes" to the reply'}]`)
+	has(t, out, "\n  p{\"👤 The #quot;yes#quot; to the reply\"}\n")
 }
 
 func TestEachOperationIsDrawnWithItsEmoji(t *testing.T) {
@@ -201,7 +213,7 @@ func TestEachOperationIsDrawnWithItsEmoji(t *testing.T) {
 		{"other", "❔"},
 	} {
 		out := drawing(t, "scopes", fmt.Sprintf("parts: [{id: p, kind: rule, op: %s, label: Step}]", c.op))
-		has(t, out, "\n  p(\"<small style='color:#3d434f'>"+c.emoji+" "+c.op+"</small><br>Step\")\n")
+		has(t, out, "\n  p(\"<small style='color:#3d434f'>⚙️ "+c.emoji+" "+c.op+"</small><br>Step\")\n")
 	}
 }
 
@@ -248,8 +260,8 @@ flowchart TB
       direction TB
       tAsk(["Someone in the family chat asks what time swimming is"])
       cFam[("Family notes")]
-      sFind("Find the notes that speak to it")
-      sWord("Word the answer from those notes alone")
+      sFind("<small style='color:#3d434f'>⚙️</small><br>Find the notes that speak to it")
+      sWord("<small style='color:#3d434f'>🤖</small><br>Word the answer from those notes alone")
       uChat@{ shape: win-pane, label: "Family chat" }
       subgraph zNadia["nadia: Nadia"]
         direction TB

@@ -11,10 +11,10 @@ flowchart TB
   subgraph server["Server: claude-sonnet-4-5"]
     direction TB
     favourites[("Favourites, recipes and the shopping list")]
-    plan("Plan next week's dinners")
+    plan("<small style='color:#3d434f'>🤖</small><br>Plan next week's dinners")
     mealplan[("Meal plan")]
-    fill("<small style='color:#3d434f'>🛠️ do</small><br>Fill the basket from the plan and the list")
-    copy("<small style='color:#3d434f'>📥 bring-in</small><br>Copy the pickups calendar")
+    fill("<small style='color:#3d434f'>⚙️ 🛠️ do</small><br>Fill the basket from the plan and the list")
+    copy("<small style='color:#3d434f'>⚙️ 📥 bring-in</small><br>Copy the pickups calendar")
     pickups[("Pickups")]
     screen_gap@{ shape: notch-rect, label: "Missing from the design: no scheduled task keeps the screen current" }
     scored@{ shape: notch-rect, label: "For example: scored against the plans the family kept" }
@@ -23,7 +23,7 @@ flowchart TB
   subgraph app["The family messaging app"]
     direction TB
     chat@{ shape: win-pane, label: "Family chat" }
-    approve{"Owen's yes, in his private chat"}
+    approve{"👤 Owen's yes, in his private chat"}
   end
   subgraph supermarket["The supermarket"]
     direction TB

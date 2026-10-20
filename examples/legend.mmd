@@ -9,10 +9,10 @@ config:
 ---
 flowchart TB
   trigger(["A trigger: a time or an event"])
-  ai("A step a model decides")
-  rule("A step a rule decides")
-  human("A step a person decides")
-  review{"A review: a person's yes"}
+  ai("<small style='color:#3d434f'>🤖</small><br>A step a model decides")
+  rule("<small style='color:#3d434f'>⚙️</small><br>A step a rule decides")
+  human("<small style='color:#3d434f'>👤</small><br>A step a person decides")
+  review{"👤 A review: a person's yes"}
   context[("A context: the notes in a folder")]
   connector{{"A connector: someone's access to a service"}}
   fork@{ shape: fork, label: "" }

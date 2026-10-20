@@ -111,16 +111,28 @@ const red = "stroke:#d0342c,stroke-width:2.5px,color:#b0271f"
 var header = []string{"---", "config:", "  theme: default", "  flowchart:", "    useMaxWidth: false",
 	"    subGraphTitleMargin:", "      top: 6", "      bottom: 30", "---", "flowchart TB"}
 
-// A step's operation is its emoji and its name, on a line of its own, smaller and softer than the
-// label beneath it.
-const operation = "<small style='color:#3d434f'>%s %s</small><br>"
+// Who decides a step or review, as an emoji, so a reader needn't tell the colours apart. A rule is
+// a gear rather than a computer, since a computer reads as a machine, which the where view is about.
+var deciders = map[string]string{"ai": "🤖", "rule": "⚙️", "human": "👤", "review": "👤"}
 
-// label is a part's label as Mermaid reads it, under its operation if it has one.
+// A step's own line holds who decides it, then its operation's emoji and name if it has one,
+// smaller and softer than the label beneath it.
+const operation = "<small style='color:#3d434f'>%s</small><br>"
+
+// label is a part's label as Mermaid reads it. A step's sits under its own line, and a review, kept
+// small, has who decides it before its label.
 func label(p *Map) string {
-	if op := str(p, "op"); op != "" {
-		return fmt.Sprintf(operation, ops[op], op) + text(str(p, "label"))
+	who, words := deciders[str(p, "kind")], text(str(p, "label"))
+	switch {
+	case who == "":
+		return words
+	case str(p, "kind") == "review":
+		return who + " " + words
 	}
-	return text(str(p, "label"))
+	if op := str(p, "op"); op != "" {
+		who += " " + ops[op] + " " + op
+	}
+	return fmt.Sprintf(operation, who) + words
 }
 
 // text keeps a label inside its quotes: Mermaid ends a label at a double quote, and reads #quot; as one.

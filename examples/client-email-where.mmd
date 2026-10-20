@@ -11,15 +11,15 @@ flowchart TB
   subgraph server["A server running scheduled jobs"]
     direction TB
     weekdays(["Weekdays 07:00"])
-    bring("<small style='color:#3d434f'>📥 bring-in</small><br>Bring in the consulting inbox")
-    rules("<small style='color:#3d434f'>🗂️ sort</small><br>Sort by rule: newsletters, receipts, sent mail")
-    ask("<small style='color:#3d434f'>🛠️ do</small><br>Ask the consultant to approve the reply, saying what it is for")
+    bring("<small style='color:#3d434f'>⚙️ 📥 bring-in</small><br>Bring in the consulting inbox")
+    rules("<small style='color:#3d434f'>⚙️ 🗂️ sort</small><br>Sort by rule: newsletters, receipts, sent mail")
+    ask("<small style='color:#3d434f'>⚙️ 🛠️ do</small><br>Ask the consultant to approve the reply, saying what it is for")
   end
   subgraph model["A model, through its API"]
     direction TB
-    choose("<small style='color:#3d434f'>🗂️ sort</small><br>Choose the engagement the email belongs to")
-    learn("<small style='color:#3d434f'>🧠 learn</small><br>Update the engagement's project with what the email says")
-    draft("<small style='color:#3d434f'>✏️ draft</small><br>Draft a reply")
+    choose("<small style='color:#3d434f'>🤖 🗂️ sort</small><br>Choose the engagement the email belongs to")
+    learn("<small style='color:#3d434f'>🤖 🧠 learn</small><br>Update the engagement's project with what the email says")
+    draft("<small style='color:#3d434f'>🤖 ✏️ draft</small><br>Draft a reply")
   end
   subgraph files["Markdown notes, synced to each machine"]
     direction TB
@@ -29,7 +29,7 @@ flowchart TB
   subgraph phone["The consultant's phone"]
     direction TB
     today@{ shape: win-pane, label: "Today" }
-    approve{"The consultant's yes to the exact reply"}
+    approve{"👤 The consultant's yes to the exact reply"}
   end
   subgraph mailservice["The mail service"]
     direction TB

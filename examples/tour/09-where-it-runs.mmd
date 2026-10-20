@@ -11,12 +11,12 @@ flowchart TB
   subgraph server["Server: always on"]
     direction TB
     nightly(["Every night 23:00"])
-    bring("<small style='color:#3d434f'>📥 bring-in</small><br>Bring in the day's photos from the family's phones")
+    bring("<small style='color:#3d434f'>⚙️ 📥 bring-in</small><br>Bring in the day's photos from the family's phones")
     new[("New photos")]
   end
   subgraph laptop["Noor's laptop: a small model, on some evenings"]
     direction TB
-    sort("<small style='color:#3d434f'>🗂️ sort</small><br>Sort them into albums")
+    sort("<small style='color:#3d434f'>🤖 🗂️ sort</small><br>Sort them into albums")
     albums[("Albums")]
     wait@{ shape: notch-rect, label: "The laptop is off most days, so new photos wait on the server until it's on" }
   end

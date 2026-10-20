@@ -95,6 +95,6 @@ func TestALabelCantEndTheScriptEarly(t *testing.T) {
 func TestTheDrawingsAreWrittenInPlainASCII(t *testing.T) {
 	html := Page([]*Map{pageDoc(t, "Dinners", "scopes", "Fill the basket: Allow under £180 «🛒»"), pageDoc(t, "Dinners", "where", "Plan")})
 	has(t, html, `Fill the basket: Allow under \u00a3180 \u00ab\ud83d\uded2\u00bb`)
-	has(t, html, `bottom: 30\n---\nflowchart TB\n  a(\"Plan\")`)
+	has(t, html, `bottom: 30\n---\nflowchart TB\n  a(\"\u003csmall style='color:#3d434f'>\ud83e\udd16\u003c/small>\u003cbr>Plan\")`)
 	has(t, html, `"`+`, "---\nconfig:`)
 }
