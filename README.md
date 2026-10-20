@@ -424,12 +424,12 @@ Every morning, code matches the joint account against the bills expected, and re
 ```sh
 awml check examples/question.yaml        # report mistakes; exits 1 on any
 awml draw examples/question.yaml         # print the Mermaid
-awml page examples/dinners-*.yaml -o dinners.html
+awml page examples/dinners-security.yaml examples/dinners-platform.yaml -o dinners.html
 ```
 
 - `awml check` reads each file and prints `ok`, or one line for each mistake, and exits 1 if any file has one.
 - `awml draw` prints a file's Mermaid. It refuses a file with mistakes, and prints them instead.
-- `awml page` writes one standalone HTML page that draws each file with Mermaid in the browser. Each file gets its own heading, saying which view it is. The page takes the files' title when they all share one, as the two views of the family's dinners do, and is called Workflows when they don't.
+- `awml page` writes one standalone HTML page that draws each file with Mermaid in the browser, in the order given. Each file gets its own heading, saying which view it is. The page takes the files' title when they all share one, as the two views of the family's dinners do, and is called Workflows when they don't.
 
 The Mermaid works anywhere that draws Mermaid 11.4.1. To make an SVG, use the Mermaid CLI, which needs Node:
 
