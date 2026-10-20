@@ -80,7 +80,7 @@ var shapes = map[string]string{
 	"ai":        `("%s")`,                            // actions
 	"rule":      `("%s")`,
 	"human":     `("%s")`,
-	"review":    `{"%s"}`,                              // decision node
+	"review":    `("%s")`,                              // an action too, since its one way out is [yes]
 	"fork":      `@{ shape: fork, label: "" }%.0s`,     // fork node, which shows no label
 	"comment":   `@{ shape: notch-rect, label: "%s" }`, // comment
 }
@@ -116,20 +116,18 @@ var header = []string{"---", "config:", "  theme: default", "  flowchart:", "   
 var deciders = map[string]string{"ai": "🤖", "rule": "⚙️", "human": "👤", "review": "👤"}
 
 // A step's own line holds who decides it, then its operation's emoji and name if it has one,
-// smaller and softer than the label beneath it.
+// smaller and softer than the label beneath it. A review's holds ✅ review, which no operation uses.
 const operation = "<small style='color:#3d434f'>%s</small><br>"
 
-// label is a part's label as Mermaid reads it. A step's sits under its own line, and a review, kept
-// small, has who decides it before its label.
+// label is a part's label as Mermaid reads it. A step's or a review's sits under its own line.
 func label(p *Map) string {
 	who, words := deciders[str(p, "kind")], text(str(p, "label"))
-	switch {
-	case who == "":
+	if who == "" {
 		return words
-	case str(p, "kind") == "review":
-		return who + " " + words
 	}
-	if op := str(p, "op"); op != "" {
+	if str(p, "kind") == "review" {
+		who += " ✅ review"
+	} else if op := str(p, "op"); op != "" {
 		who += " " + ops[op] + " " + op
 	}
 	return fmt.Sprintf(operation, who) + words

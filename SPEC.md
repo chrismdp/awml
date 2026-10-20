@@ -20,7 +20,7 @@ Each workflow can be drawn two ways, one file for each: by who may see each part
 | Step decided by a model | `ai` | A rounded box, with 🤖 and its operation above its label | Blue `#cdd3fb` | Action |
 | Step decided by a rule | `rule` | A rounded box, with ⚙️ and its operation above its label | Green `#c4e3d1` | Action |
 | Step decided by a person | `human` | A rounded box, with 👤 and its operation above its label | Amber `#f7d79a` | Action |
-| Review | `review` | A diamond, with 👤 before its label, left by `[yes]` | Amber `#f7d79a` | Decision node with guards |
+| Review | `review` | A rounded box, with 👤 ✅ review above its label, left by `[yes]` | Amber `#f7d79a` | Action, whose one way out is guarded by `[yes]`, so not a decision node |
 | Fork | `fork` | A black bar | Black `#16171b` | Fork node |
 | Context | `context` | A cylinder | Pale blue `#e2eef9` | Data store node |
 | Connector | `connector` | A hexagon | Grey `#eceef2` | None |

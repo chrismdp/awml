@@ -77,7 +77,7 @@ A drawing is made of a few kinds of part. Each has its own shape, and each shape
 
 - A **trigger** is a pink pill. It starts the workflow: a time, such as `Weekdays 07:00`, or an event, such as someone asking in a chat or an email arriving. In UML it's an accept time event or an accept event.
 - A **step** is a rounded box: one piece of work, with the colour and emoji of what decides it. A **model** decides the blue 🤖 steps, a **rule** the green ⚙️ ones, and a **person** the amber 👤 ones. In UML it's an action.
-- A **review** is an amber diamond with 👤 before its label: a person's yes to exact content before it goes ahead. It's left by a line labelled `[yes]`. In UML it's a decision node with guards.
+- A **review** is an amber rounded box, like a step, with `👤 ✅ review` above its label: a person's yes to exact content before it goes ahead. It has only one way out, a line labelled `[yes]`, so in UML it's an action whose way out is guarded by `[yes]`, not a decision node.
 - A **fork** is a black bar, where work splits to run side by side. In UML it's a fork node.
 - A **context** is a pale blue cylinder: the notes a step may read or write, kept as one folder. In UML it's a data store node.
 - A **connector** is a grey hexagon: someone's access to an outside service, such as a calendar, a mailbox or a bank account.

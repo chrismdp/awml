@@ -30,7 +30,7 @@ func TestEachPartKindHasItsShapeAndColour(t *testing.T) {
 		{"ai", `p("<small style='color:#3d434f'>🤖</small><br>Label")`, "ai"},
 		{"rule", `p("<small style='color:#3d434f'>⚙️</small><br>Label")`, "rule"},
 		{"human", `p("<small style='color:#3d434f'>👤</small><br>Label")`, "human"},
-		{"review", `p{"👤 Label"}`, "human"},
+		{"review", `p("<small style='color:#3d434f'>👤 ✅ review</small><br>Label")`, "human"},
 		{"fork", `p@{ shape: fork, label: "" }`, "uml"},
 		{"context", `p[("Label")]`, "ctx"},
 		{"connector", `p{{"Label"}}`, "con"},
@@ -194,9 +194,9 @@ func TestAStepWithNoOperationStillShowsWhoDecidesIt(t *testing.T) {
 	}
 }
 
-func TestAReviewShowsWhoDecidesItBeforeItsLabel(t *testing.T) {
+func TestAReviewIsARoundedBoxWithItsOwnQuietLineAboveItsLabel(t *testing.T) {
 	out := drawing(t, "scopes", `parts: [{id: p, kind: review, label: 'The "yes" to the reply'}]`)
-	has(t, out, "\n  p{\"👤 The #quot;yes#quot; to the reply\"}\n")
+	has(t, out, "\n  p(\"<small style='color:#3d434f'>👤 ✅ review</small><br>The #quot;yes#quot; to the reply\")\n")
 }
 
 func TestEachOperationIsDrawnWithItsEmoji(t *testing.T) {
