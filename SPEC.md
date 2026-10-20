@@ -4,7 +4,7 @@ Draft 0.1, 20 October 2026.
 
 AWML describes agentic work as diagrams, written as YAML files and drawn with Mermaid.
 
-**Contents:** [What it describes](#what-it-describes) · [The parts](#the-parts) · [The lines](#the-lines) · [Scopes](#scopes-who-may-see-each-part) · [Connectors](#connectors) · [Where it runs](#where-it-runs) · [Tiers and yeses](#tiers-and-yeses) · [Standing approvals](#standing-approvals) · [Operations](#operations) · [Records](#records) · [The red line](#the-red-line) · [Patterns](#patterns) · [What AWML is not](#what-awml-is-not) · [The file format](#the-file-format)
+**Contents:** [What it describes](#what-it-describes) · [The parts](#the-parts) · [The lines](#the-lines) · [Scopes](#scopes-who-may-see-each-part) · [Connectors](#connectors) · [Where it runs](#where-it-runs) · [Tiers and yeses](#tiers-and-yeses) · [Standing approvals](#standing-approvals) · [Operations](#operations) · [Patterns](#patterns) · [Records](#records) · [The red line](#the-red-line) · [What AWML is not](#what-awml-is-not) · [The file format](#the-file-format)
 
 ## What it describes
 
@@ -49,11 +49,11 @@ A line may carry a label. Words in square brackets are a guard, the condition th
 
 ## Scopes: who may see each part
 
-A **scope** is a set of people. Everything belongs to one scope, which says who may see it and which companies may process it: the makers of the models the system uses, and services such as transcription or the host of a folder. A scope's terms say whether a company may keep the content or must keep none of it, and a company that may train on the content is never used at all. A scope may also allow no processing, as for something told in confidence. Scopes aren't a ladder: two may overlap, each with someone the other lacks.
+A **scope** is a set of people. Everything belongs to one scope, which says who may see it and which companies may process it: the makers of the models the system uses, and services such as transcription or the host of a folder. Its terms say whether a company may keep the content, and a company that may train on it is never used. A scope may also allow no processing, as for something told in confidence. Scopes aren't a ladder: two may overlap, each with someone the other lacks.
 
 In the scopes view, each scope is a dashed box, labelled with its name and members, such as `family: parents, kids`, or with `+` and the people it adds to the scope inside it, such as `carers: + June, Beth`.
 
-**Where a part sits.** A context sits in the box of its scope. A step sits in the box of the scope it writes into, with the reviews and outside actions it leads to. A connector sits in the box of the scope its inputs take, so a connector only the parents may use sits in the parents' box. A surface sits in the box of the scope its viewers make up. An input takes the scope of who could see it where it came from.
+**Where a part sits.** A context sits in the box of its scope. A step sits in the box of the scope it writes into, with the reviews and outside actions it leads to. A connector sits in the box of the scope its inputs take. A surface sits in the box of the scope its viewers make up.
 
 **Boxes inside boxes.** One box sits inside another only where every member of the inner scope is in the outer one. Otherwise they sit side by side. A family's scopes often nest: the parents' box sits inside the family's, which sits inside the box of the family and its carers. A consultant's client scope and their side venture's share only the consultant, so they sit side by side.
 
@@ -83,19 +83,18 @@ Each outside action has a **tier**, which ends its label, as in `Send the mail: 
 
 | Tier | When it applies | Drawn as |
 |---|---|---|
-| **Allow** | The action can be undone, is seen only within its scope, and stays within the design's spending limits: a note, a draft, a label, an entry in a person's own calendar | A flag a step leads to directly: it just happens |
+| **Allow** | The action can be undone when it is taken, is seen only within its scope, and stays within the design's spending limits: a note, a draft, a label, an entry in a person's own calendar | A flag a step leads to directly: it just happens |
 | **Ask** | Any other action that isn't blocked, and any the design marks Ask because the person who answers for it would be surprised | A flag with a review on the way to it: it waits for a yes, unless a standing approval covers it |
 | **Block** | Never, whatever anyone says | Never a line. A flag with nothing leading to it may name it, and a line into one is red |
 
-Whether an action can be undone is judged when it is taken. A booking that can be cancelled until a date can be undone now, so it also gets a step before that date, while it still can be.
 
-A **yes** is an approver's yes to one action and its exact content, shown with what it is for: the work it serves, why now, what started it and what it drew on. A review is drawn where that yes is given. Any change to the content after the yes, a fix included, needs a new yes. An **approver** is a role, such as the approver of sends, held by one or more people. A rare, high-stakes kind of action may need a yes from two approvers, two people in two roles, to the same content, drawn as two reviews in a row. Each such action waits on both, so keep it for few kinds.
+A **yes** is an approver's yes to one action and its exact content, shown with what it is for: the work it serves, why now, what started it and what it drew on. Any change to the content after the yes, a fix included, needs a new yes. An **approver** is a role, such as the approver of sends, held by one or more people. A rare, high-stakes kind of action may need a yes from two approvers, two people in two roles, to the same content, drawn as two reviews in a row, and kept for few kinds.
 
 ## Standing approvals
 
-A **standing approval** lets the runs of one scheduled task take named kinds of action that can be undone, within limits such as how many and how often, without a yes to each one. The person who answers for the task gives it once. Each action under it is recorded and listed for that person with how to undo it. One that acts in someone else's name needs their yes too, and ends when their access does. It covers only that task, those kinds of action and those limits. Nothing that can't be undone goes this way, such as a send to a person or a payment, and nothing that reaches the public.
+A **standing approval** lets the runs of one scheduled task take named kinds of action that can be undone, within limits such as how many and how often, without a yes to each one. The person who answers for the task gives it once. Each action under it is recorded and listed for that person with how to undo it. One that acts in someone else's name needs their yes too, and ends when their access does. Nothing that can't be undone goes this way, such as a send to a person or a payment, and nothing that reaches the public.
 
-A standing approval is drawn on the outside action it covers: the label names it, as in `Renew the book: Ask, under Sam's standing approval`, and a comment tied to the flag gives its kinds and limits.
+A standing approval is drawn on the outside action it covers: the label names it, as in `Renew the book: Ask, under Sam's standing approval`, and a comment tied to the flag gives its kinds and limits. The file format needs no field for one, since a drawing can show no more of it than that.
 
 ## Operations
 
@@ -120,6 +119,46 @@ A drawing can show some of these limits, and `awml check` holds each step to tho
 
 A line leads somewhere when it starts something, moves data or publishes. A hidden line, a refused read and a tie lead nowhere. The other limits, such as deciding for a person or making up an aim, are about what happens inside a step, which no drawing shows, so the people who read it judge those.
 
+## Patterns
+
+These shapes come up again and again. The first two are the commonest.
+
+### Draft for review
+
+<img src="examples/tour/01-draft-and-send.svg" width="220" alt="Draft for review">
+
+A `draft` step writes the content, a `do` step asks to send it, a person says yes to that exact content, and the send goes out. Use it for anything that goes out in someone's name or can't be taken back. Any change to the content after the yes needs a new yes. A draft step never leads to an outside action, even through a review.
+
+### Do
+
+<img src="examples/tour/11-do.svg" width="390" alt="Do">
+
+A `do` step whose outside action either just happens, because it is Allow and can be undone, or waits for a yes, because it is Ask. Use it for any change in the world, or in the state of a piece of work.
+
+### Standing approval
+
+<img src="examples/tour/12-standing-approval.svg" width="410" alt="Standing approval">
+
+A person approves a scheduled task once to take named kinds of action that can be undone, within limits, so each item doesn't wait for a yes. Use it for small, frequent actions that a yes each time would only slow down. Nothing that can't be undone and nothing public goes this way.
+
+### Answer from the notes
+
+<img src="examples/tour/03-refused-read.svg" width="400" alt="Answer from the notes">
+
+An `answer` step that reads only what everyone present may see, and says which notes it used. Use it wherever someone asks a question on a surface others can see.
+
+### Check by rule
+
+<img src="examples/tour/13-check-by-rule.svg" width="410" alt="Check by rule">
+
+A `check` step, decided by a rule, that reads and reports, and changes nothing. Use it for any question a rule can settle, such as whether each bill expected was paid.
+
+### Publish
+
+<img src="examples/tour/04-publishing.svg" width="316" alt="Publish">
+
+Content moving into a wider scope, drawn as a thick line, which waits for a person's yes unless a standing rule names that move. Use it whenever something leaves its scope for one with more people or looser terms.
+
 ## Records
 
 Every step leaves one **record** each time it runs: what started it, what decided it (a rule, a model with its instructions and exact version, or a person), what it drew on, what it made and what it cost. Records are only ever added to, and only the system writes them.
@@ -128,47 +167,7 @@ A drawing shows what each record should say, never what any record does say. A s
 
 ## The red line
 
-Where a live system does something its design doesn't allow, the line for it is drawn red, labelled with what is wrong, which is usually what the records show it doing. A red line is a finding about the live system, not part of the design, so `awml check` doesn't hold it to the operations' limits.
-
-## Patterns
-
-These shapes come up again and again. The first two are the commonest.
-
-### Draft for review
-
-<img src="examples/tour/01-draft-and-send.svg" width="220" alt="A draft, the owner's yes to the exact message, and the send">
-
-A `draft` step writes the content, a `do` step asks to send it, a person says yes to that exact content, and the send goes out. Use it for anything that goes out in someone's name or can't be taken back. Any change to the content after the yes needs a new yes. A draft step never leads to an outside action, even through a review.
-
-### Do
-
-<img src="examples/tour/11-do.svg" width="390" alt="A do step with one Allow action and one Ask action">
-
-A `do` step whose outside action either just happens, because it is Allow and can be undone, or waits for a yes, because it is Ask. Use it for any change in the world, or in the state of a piece of work.
-
-### Standing approval
-
-<img src="examples/tour/12-standing-approval.svg" width="410" alt="Library renewals under a standing approval">
-
-A person approves a scheduled task once to take named kinds of action that can be undone, within limits, so each item doesn't wait for a yes. Use it for small, frequent actions that a yes each time would only slow down. Nothing that can't be undone and nothing public goes this way.
-
-### Answer from the notes
-
-<img src="examples/tour/03-refused-read.svg" width="400" alt="An answer from the flat's notes that may not read Tom's own notes">
-
-An `answer` step that reads only what everyone present may see, and says which notes it used. Use it wherever someone asks a question on a surface others can see.
-
-### Check by rule
-
-<img src="examples/tour/13-check-by-rule.svg" width="410" alt="A rule matching the account against the bills expected">
-
-A `check` step, decided by a rule, that reads and reports, and changes nothing. Use it for any question a rule can settle, such as whether every bill expected has been paid.
-
-### Publish
-
-<img src="examples/tour/04-publishing.svg" width="316" alt="The week's pickups published to a grandparent's tablet">
-
-Content moving into a wider scope, drawn as a thick line, which waits for a person's yes unless a standing rule names that move. Use it whenever something leaves the scope it was made in for one with more people or looser terms.
+Where a live system does something its design doesn't allow, the line for it is drawn red, labelled with what is wrong. A red line is a finding about the live system, not part of the design, so `awml check` doesn't hold it to the operations' limits.
 
 ## What AWML is not
 
