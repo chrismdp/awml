@@ -1,0 +1,40 @@
+# The same workflow as client-email.yaml, by where each part runs. One activity needs five
+# platforms here, which is normal today. The consultant is fictional.
+awml: "0.1"
+title: A client's email, by where each part runs
+view: where
+groups:
+  - { id: server, label: "A server running scheduled jobs" }
+  - { id: model, label: "A model, through its API" }
+  - { id: files, label: "Markdown notes, synced to each machine" }
+  - { id: mailservice, label: "The mail service" }
+  - { id: phone, label: "The consultant's phone" }
+parts:
+  - { id: weekdays, kind: trigger, label: "Weekdays 07:00", in: server }
+  - { id: bring, kind: rule, label: "Bring in the consulting inbox", in: server }
+  - { id: rules, kind: rule, label: "Sort by rule: newsletters, receipts, sent mail", in: server }
+  - { id: sort, kind: ai, label: "Choose where the email belongs from the projects listed, or nowhere with a reason", in: model }
+  - { id: notes, kind: context, label: "Business notes, with the engagement's project", in: files }
+  - { id: drafts, kind: context, label: "Drafts", in: files }
+  - { id: draft_gap, kind: comment, label: "Missing from the design: nothing drafts a reply to a client" }
+  - { id: daily, kind: trigger, label: "Every day 06:15", in: server }
+  - { id: advance, kind: rule, label: "Move the projects on, and ask for the send of each due draft", in: server }
+  - { id: today, kind: surface, label: "Today", in: phone }
+  - { id: approve, kind: review, label: "Yes to the exact draft", in: phone }
+  - { id: mail, kind: connector, label: "The consultant's mailbox", in: mailservice }
+  - { id: send, kind: outside, label: "Send the mail: Ask", in: mailservice }
+lines:
+  - { from: weekdays, to: bring, kind: start }
+  - { from: mail, to: bring, kind: data }
+  - { from: bring, to: rules, kind: data }
+  - { from: rules, to: sort, kind: data, label: no rule matches }
+  - { from: sort, to: notes, kind: data, label: matched to its project }
+  # Layout only: keep the chain reading down, from the inbox to the send.
+  - { from: notes, to: draft_gap, kind: hidden }
+  - { from: draft_gap, to: drafts, kind: tie }
+  - { from: daily, to: advance, kind: start }
+  - { from: drafts, to: advance, kind: data }
+  - { from: advance, to: today, kind: data }
+  - { from: today, to: approve, kind: data }
+  - { from: approve, to: send, kind: data, label: "[yes]" }
+  - { from: send, to: mail, kind: data }
