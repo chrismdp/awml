@@ -1,11 +1,13 @@
-// The awml command: draw, page and check.
+// The awml command checks, draws, summarises and exchanges workflow files with a registry.
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 	"syscall"
 
@@ -13,22 +15,27 @@ import (
 )
 
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
 
-const usage = "usage: awml [-h] {draw,page,check} ...\n"
+const usage = "usage: awml [-h] [--registry URL] {draw,page,check,summary,login,push,pull} ...\n"
 
 const help = usage + `
 Draw agentic workflows written in AWML.
 
 positional arguments:
-  {draw,page,check}
+  {draw,page,check,summary,login,push,pull}
     draw             print a file's Mermaid
     page             write one HTML page that draws each file
     check            report a file's structural mistakes
+    summary          count the parts and lines in one workflow
+    login            save a registry API token
+    push             push a new workflow version
+    pull             download a workflow version
 
 options:
   -h, --help         show this help message and exit
+  --registry URL     registry URL (default: AWML_REGISTRY or https://awml.io)
 `
 
 var commands = map[string]struct{ usage, help string }{
@@ -54,11 +61,43 @@ positional arguments:
 options:
   -h, --help  show this help message and exit
 `},
+	"summary": {"usage: awml summary [-h] [--json] files [files ...]\n", `
+positional arguments:
+  files
+
+options:
+  -h, --help  show this help message and exit
+  --json      print JSON
+`},
+	"login": {"usage: awml login [-h] [--registry URL]\n", `
+options:
+  -h, --help      show this help message and exit
+  --registry URL  registry URL
+`},
+	"push": {"usage: awml push [-h] [--private] [--registry URL] owner/slug files [files ...]\n", `
+positional arguments:
+  owner/slug
+  files
+
+options:
+  -h, --help      show this help message and exit
+  --private       make a new workflow private
+  --registry URL  registry URL
+`},
+	"pull": {"usage: awml pull [-h] [-o DIR] [--registry URL] owner/slug[@n]\n", `
+positional arguments:
+  owner/slug[@n]
+
+options:
+  -h, --help         show this help message and exit
+  -o DIR, --out DIR  output directory
+  --registry URL     registry URL
+`},
 }
 
 // run reads its arguments as the Python tool's argparse did, with the same messages, and gives the
 // exit code: 0 when all is well, 1 for a file with mistakes, 2 for a mistake in the command.
-func run(args []string, stdout, stderr io.Writer) int {
+func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fail := func(use, prog, msg string) int {
 		fmt.Fprintf(stderr, "%s%s: error: %s\n", use, prog, msg)
 		return 2
@@ -66,6 +105,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	var command string
 	var files, unknown []string
 	var out *string
+	jsonOutput := false
+	private := false
+	var registryFlag *string
 	flags := true
 	for i := 0; i < len(args); i++ {
 		a := args[i]
@@ -79,23 +121,40 @@ func run(args []string, stdout, stderr io.Writer) int {
 				fmt.Fprint(stdout, commands[command].usage+commands[command].help)
 			}
 			return 0
-		case flags && command == "page" && (a == "-o" || a == "--out"):
+		case flags && a == "--registry":
 			if i+1 == len(args) || (strings.HasPrefix(args[i+1], "-") && args[i+1] != "-") {
-				return fail(commands[command].usage, "awml page", "argument -o/--out: expected one argument")
+				use, prog := usage, "awml"
+				if command != "" {
+					use, prog = commands[command].usage, "awml "+command
+				}
+				return fail(use, prog, "argument --registry: expected one argument")
+			}
+			i++
+			registryFlag = &args[i]
+		case flags && strings.HasPrefix(a, "--registry="):
+			v := strings.TrimPrefix(a, "--registry=")
+			registryFlag = &v
+		case flags && (command == "page" || command == "pull") && (a == "-o" || a == "--out"):
+			if i+1 == len(args) || (strings.HasPrefix(args[i+1], "-") && args[i+1] != "-") {
+				return fail(commands[command].usage, "awml "+command, "argument -o/--out: expected one argument")
 			}
 			i++
 			out = &args[i]
-		case flags && command == "page" && strings.HasPrefix(a, "--out="):
+		case flags && (command == "page" || command == "pull") && strings.HasPrefix(a, "--out="):
 			v := strings.TrimPrefix(a, "--out=")
 			out = &v
-		case flags && command == "page" && strings.HasPrefix(a, "-o") && !strings.HasPrefix(a, "--"):
+		case flags && (command == "page" || command == "pull") && strings.HasPrefix(a, "-o") && !strings.HasPrefix(a, "--"):
 			v := strings.TrimPrefix(a, "-o")
 			out = &v
+		case flags && command == "summary" && a == "--json":
+			jsonOutput = true
+		case flags && command == "push" && a == "--private":
+			private = true
 		case flags && strings.HasPrefix(a, "-") && a != "-":
 			unknown = append(unknown, a)
 		case command == "":
 			if _, ok := commands[a]; !ok {
-				return fail(usage, "awml", fmt.Sprintf("argument command: invalid choice: '%s' (choose from 'draw', 'page', 'check')", a))
+				return fail(usage, "awml", fmt.Sprintf("argument command: invalid choice: '%s' (choose from 'draw', 'page', 'check', 'summary', 'login', 'push', 'pull')", a))
 			}
 			command = a
 		default:
@@ -106,8 +165,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return fail(usage, "awml", "the following arguments are required: command")
 	}
 	var missing []string
-	if len(files) == 0 {
-		missing = append(missing, map[string]string{"draw": "file", "page": "files", "check": "files"}[command])
+	if len(files) == 0 && command != "login" {
+		missing = append(missing, map[string]string{"draw": "file", "page": "files", "check": "files", "summary": "files", "push": "owner/slug, files", "pull": "owner/slug[@n]"}[command])
 	}
 	if command == "page" && out == nil {
 		missing = append(missing, "-o/--out")
@@ -118,8 +177,32 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if command == "draw" && len(files) > 1 {
 		unknown = append(files[1:], unknown...)
 	}
+	if command == "login" && len(files) > 0 {
+		unknown = append(files, unknown...)
+	}
+	if command == "pull" && len(files) > 1 {
+		unknown = append(files[1:], unknown...)
+	}
+	if command == "push" && len(files) == 1 {
+		return fail(commands[command].usage, "awml push", "the following arguments are required: files")
+	}
 	if unknown != nil {
 		return fail(usage, "awml", "unrecognized arguments: "+strings.Join(unknown, " "))
+	}
+
+	registry := registryURL(registryFlag)
+	if command == "login" {
+		return login(stdin, stdout, stderr, registry)
+	}
+	if command == "push" {
+		return push(files[0], files[1:], private, registry, stdout, stderr)
+	}
+	if command == "pull" {
+		dir := "."
+		if out != nil {
+			dir = *out
+		}
+		return pull(files[0], dir, registry, stdout, stderr)
 	}
 
 	if command == "check" {
@@ -145,11 +228,43 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, awml.Draw(docs[0]))
 		return 0
 	}
+	if command == "summary" {
+		summary := awml.Summarise(docs...)
+		if jsonOutput {
+			if err := json.NewEncoder(stdout).Encode(summary); err != nil {
+				fmt.Fprintf(stderr, "awml summary: can't write its output: %s\n", err)
+				return 1
+			}
+			return 0
+		}
+		printSummary(stdout, summary)
+		return 0
+	}
 	if err := os.WriteFile(*out, []byte(awml.Page(docs)), 0o644); err != nil {
 		fmt.Fprintf(stderr, "%s: can't be written: %s\n", *out, reason(err))
 		return 1
 	}
 	return 0
+}
+
+func printSummary(out io.Writer, s awml.Summary) {
+	fmt.Fprintf(out, "steps: AI %d, code %d, person %d\n", s.Steps.AI, s.Steps.Code, s.Steps.Person)
+	var operations []string
+	for op, count := range s.Operations {
+		operations = append(operations, fmt.Sprintf("%s %d", op, count))
+	}
+	sort.Strings(operations)
+	if len(operations) == 0 {
+		operations = []string{"none"}
+	}
+	fmt.Fprintf(out, "operations: %s\n", strings.Join(operations, ", "))
+	fmt.Fprintf(out, "outside actions: Allow %d, Ask %d, Block %d\n", s.OutsideActions.Allow, s.OutsideActions.Ask, s.OutsideActions.Block)
+	fmt.Fprintf(out, "triggers: %d\nreviews: %d\ncontexts: %d\nconnectors: %d\nsurfaces: %d\nscopes: %d\nplatforms: %d\n", s.Triggers, s.Reviews, s.Contexts, s.Connectors, s.Surfaces, s.Scopes, s.Platforms)
+	fmt.Fprintf(out, "publishing lines: %d\n", s.PublishingLines.Count)
+	for _, label := range s.PublishingLines.Labels {
+		fmt.Fprintf(out, "  %s\n", label)
+	}
+	fmt.Fprintf(out, "refused reads: %d\nred lines: %d\n", s.RefusedReads, s.RedLines)
 }
 
 // read gives the document in a file, and the mistakes that stop it being drawn.

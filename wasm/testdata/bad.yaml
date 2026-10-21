@@ -1,0 +1,8 @@
+awml: "0.2"
+title: Broken
+view: security
+parts:
+  - { id: start, kind: trigger, label: Start }
+  - { id: work, kind: code, label: Work }
+lines:
+  - { from: start, to: missing, kind: start }
