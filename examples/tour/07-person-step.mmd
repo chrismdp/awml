@@ -8,20 +8,20 @@ config:
       bottom: 30
 ---
 flowchart TB
-  subgraph ade["ade: Ade"]
+  subgraph ade["ade#58; Ade"]
     direction TB
     monthly(["The first of each month"])
     car_notes[("Car notes")]
-    due("<small style='color:#3d434f'>⚙️ 🔍 check</small><br>Check what the car needs this month")
-    list@{ shape: win-pane, label: "Ade's list" }
-    book("<small style='color:#3d434f'>👤 🛠️ do</small><br>Book the MOT with the garage")
+    due("<small style='color:rgb(61,67,79)'>⚙️ 🔍 check</small><br>Check what the car needs this month")
+    list@{ shape: win-pane, label: "Ade#39;s list" }
+    book("<small style='color:rgb(61,67,79)'>👤 🛠️ do</small><br>Book the MOT with the garage")
   end
 
   monthly -.-> due
   car_notes --> due
   due -->|"the MOT is due"| list
   list --> book
-  book -->|"the booking"| car_notes
+  car_notes <-->|"the booking"| book
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
   classDef con fill:#eceef2,stroke:#5d6472,color:#16171b
@@ -38,3 +38,4 @@ flowchart TB
   class due code
   class book person
   style ade fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
+  linkStyle 4 marker-end:none

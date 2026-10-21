@@ -8,17 +8,17 @@ config:
       bottom: 30
 ---
 flowchart TB
-  trigger(["A trigger: a time or an event"])
-  ai("<small style='color:#3d434f'>🤖</small><br>A step decided by AI")
-  code("<small style='color:#3d434f'>⚙️</small><br>A step decided by code")
-  person("<small style='color:#3d434f'>👤</small><br>A step decided by a person")
-  review("<small style='color:#3d434f'>👤 ✅ review</small><br>A review: a person's yes")
-  context[("A context: the notes in a folder")]
-  connector{{"A connector: someone's access to a service"}}
+  trigger(["A trigger#58; a time or an event"])
+  ai("<small style='color:rgb(61,67,79)'>🤖</small><br>A step decided by AI")
+  code("<small style='color:rgb(61,67,79)'>⚙️</small><br>A step decided by code")
+  person("<small style='color:rgb(61,67,79)'>👤</small><br>A step decided by a person")
+  review("<small style='color:rgb(61,67,79)'>👤 ✅ review</small><br>A review#58; a person#39;s yes")
+  context[("A context#58; the notes in a folder")]
+  connector{{"A connector#58; someone#39;s access to a service"}}
   fork@{ shape: fork, label: "" }
-  surface@{ shape: win-pane, label: "A surface: where people meet the work" }
-  outside>"An outside action, with its tier: Ask"]
-  comment@{ shape: notch-rect, label: "A comment, tied to what it explains: the black bar is a fork, where work splits" }
+  surface@{ shape: win-pane, label: "A surface#58; where people meet the work" }
+  outside>"An outside action#44; with its tier#58; Ask"]
+  comment@{ shape: notch-rect, label: "A comment#44; tied to what it explains#58; the black bar is a fork#44; where work splits" }
 
   trigger ~~~ review
   review ~~~ surface

@@ -8,29 +8,29 @@ config:
       bottom: 30
 ---
 flowchart TB
-  subgraph private["private: the consultant"]
+  subgraph private["private#58; the consultant"]
     direction TB
-    mailbox{{"The consultant's mailbox"}}
-    weekdays(["Weekdays 07:00"])
-    bring("<small style='color:#3d434f'>⚙️ 📥 bring-in</small><br>Bring in the inbox")
-    rules("<small style='color:#3d434f'>⚙️ 🗂️ sort</small><br>Sort by rule: is the sender a client?")
-    edit("<small style='color:#3d434f'>👤 🛠️ do</small><br>Edit the reply and send it")
-    send>"Send the reply: Ask"]
+    mailbox{{"The consultant#39;s mailbox"}}
+    weekdays(["Weekdays 07#58;00"])
+    bring("<small style='color:rgb(61,67,79)'>⚙️ 📥 bring-in</small><br>Bring in the inbox")
+    rules("<small style='color:rgb(61,67,79)'>⚙️ 🗂️ sort</small><br>Sort by rule#58; is the sender a client#63;")
+    edit("<small style='color:rgb(61,67,79)'>👤 🛠️ do</small><br>Edit the reply and send it")
+    send>"Send the reply#58; Ask"]
   end
-  subgraph business["business: the consultant, an associate"]
+  subgraph business["business#58; the consultant#44; an associate"]
     direction TB
-    engagements[("The business's engagements")]
-    choose("<small style='color:#3d434f'>🤖 🗂️ sort</small><br>Choose the engagement the email belongs to")
-    learn("<small style='color:#3d434f'>🤖 🧠 learn</small><br>Update the engagement's project with what the email says")
-    project[("The engagement's project")]
-    draft("<small style='color:#3d434f'>🤖 ✏️ draft</small><br>Draft a reply")
+    engagements[("The business#39;s engagements")]
+    choose("<small style='color:rgb(61,67,79)'>🤖 🗂️ sort</small><br>Choose the engagement the email belongs to")
+    learn("<small style='color:rgb(61,67,79)'>🤖 🧠 learn</small><br>Update the engagement#39;s project with what the email says")
+    project[("The engagement#39;s project")]
+    draft("<small style='color:rgb(61,67,79)'>🤖 ✏️ draft</small><br>Draft a reply")
     drafts[("Drafts")]
   end
 
   weekdays -.-> bring
   mailbox --> bring
   bring --> rules
-  rules ==>|"standing rule: a client's email"| choose
+  rules ==>|"standing rule#58; a client#39;s email"| choose
   engagements --> choose
   choose --> learn
   learn --> project
@@ -38,7 +38,7 @@ flowchart TB
   draft --> drafts
   drafts ==>|"the consultant takes the reply"| edit
   edit --> send
-  send --> mailbox
+  mailbox <--> send
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
   classDef con fill:#eceef2,stroke:#5d6472,color:#16171b
@@ -58,3 +58,4 @@ flowchart TB
   class edit person
   style private fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
   style business fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
+  linkStyle 11 marker-end:none

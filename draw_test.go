@@ -27,10 +27,10 @@ func has(t *testing.T, out, want string) {
 func TestEachPartKindHasItsShapeAndColour(t *testing.T) {
 	for _, c := range []struct{ kind, node, class string }{
 		{"trigger", `p(["Label"])`, "trig"},
-		{"ai", `p("<small style='color:#3d434f'>🤖</small><br>Label")`, "ai"},
-		{"code", `p("<small style='color:#3d434f'>⚙️</small><br>Label")`, "code"},
-		{"person", `p("<small style='color:#3d434f'>👤</small><br>Label")`, "person"},
-		{"review", `p("<small style='color:#3d434f'>👤 ✅ review</small><br>Label")`, "person"},
+		{"ai", `p("<small style='color:rgb(61,67,79)'>🤖</small><br>Label")`, "ai"},
+		{"code", `p("<small style='color:rgb(61,67,79)'>⚙️</small><br>Label")`, "code"},
+		{"person", `p("<small style='color:rgb(61,67,79)'>👤</small><br>Label")`, "person"},
+		{"review", `p("<small style='color:rgb(61,67,79)'>👤 ✅ review</small><br>Label")`, "person"},
 		{"fork", `p@{ shape: fork, label: "" }`, "uml"},
 		{"context", `p[("Label")]`, "ctx"},
 		{"connector", `p{{"Label"}}`, "con"},
@@ -72,8 +72,33 @@ func TestQuotesInLabelsDontBreakTheDrawing(t *testing.T) {
 	out := drawing(t, "security", `
 parts: [{id: a, kind: code, label: 'Say "yes"'}, {id: b, kind: surface, label: B}]
 lines: [{from: a, to: b, kind: data, label: '"now"'}]`)
-	has(t, out, `a("<small style='color:#3d434f'>⚙️</small><br>Say #quot;yes#quot;")`)
-	has(t, out, `a -->|"#quot;now#quot;"| b`)
+	has(t, out, `a("<small style='color:rgb(61,67,79)'>⚙️</small><br>Say #34;yes#34;")`)
+	has(t, out, `a -->|"#34;now#34;"| b`)
+}
+
+func TestMarkdownPunctuationInEveryKindOfLabelIsEscaped(t *testing.T) {
+	out := drawing(t, "security", `
+groups: [{id: g, label: '# Team: noor@example.com'}]
+parts:
+  - {id: a, kind: code, label: 'Email noor@example.com and visit https://example.org/a', in: g}
+  - {id: b, kind: comment, label: '**Keep** ~~this~~ [literal](https://example.com)', in: g}
+  - {id: c, kind: surface, label: '1. First - # heading > quote', in: g}
+lines: [{from: a, to: c, kind: data, label: 'Read https://example.com'}]`)
+	has(t, out, `subgraph g["#35; Team#58; noor#64;example#46;com"]`)
+	has(t, out, `a("<small style='color:rgb(61,67,79)'>⚙️</small><br>Email noor#64;example#46;com and visit https#58;#47;#47;example#46;org#47;a")`)
+	has(t, out, `b@{ shape: notch-rect, label: "#42;#42;Keep#42;#42; #126;#126;this#126;#126; #91;literal#93;#40;https#58;#47;#47;example#46;com#41;" }`)
+	has(t, out, `c@{ shape: win-pane, label: "1#46; First #45; #35; heading #62; quote" }`)
+	has(t, out, `a -->|"Read https#58;#47;#47;example#46;com"| c`)
+}
+
+func TestMarkdownPunctuationIsAnEntityInLabelText(t *testing.T) {
+	const punctuation = `!"#$%&'()*+,-./:;<=>?@[\]^_` + "`" + `{|}~`
+	for _, mark := range punctuation {
+		want := fmt.Sprintf("#%d;", mark)
+		if got := text(string(mark)); got != want {
+			t.Errorf("text(%q) = %q, want %q", mark, got, want)
+		}
+	}
 }
 
 func TestRedLinesAreCountedAmongAllLinesHiddenOnesToo(t *testing.T) {
@@ -95,6 +120,38 @@ parts: [{id: a, kind: code, label: A}, {id: b, kind: code, label: B}]
 lines: [{from: a, to: b, kind: data, breaks: false}]`)
 	if strings.Contains(out, "linkStyle") {
 		t.Errorf("a linkStyle in\n%s", out)
+	}
+}
+
+func TestLinesBackToEarlierPartsAreReversedForLayoutWithTheRealArrowheadKept(t *testing.T) {
+	out := drawing(t, "security", `
+parts: [{id: first, kind: code, label: First}, {id: last, kind: code, label: Last}]
+lines:
+  - {from: last, to: first, kind: data}
+  - {from: last, to: first, kind: start}
+  - {from: last, to: first, kind: refused}
+  - {from: last, to: first, kind: publish}
+  - {from: last, to: first, kind: tie}
+  - {from: last, to: first, kind: hidden}`)
+	has(t, out, "\n  first <--> last\n")
+	has(t, out, "\n  first <-.-> last\n")
+	has(t, out, "\n  first x--x last\n")
+	has(t, out, "\n  first <==> last\n")
+	has(t, out, "\n  first -.- last\n")
+	has(t, out, "\n  first ~~~ last\n")
+	has(t, out, "\n  linkStyle 0,1,2,3 marker-end:none")
+}
+
+func TestAReversedRedLineKeepsItsColourAndOnlyItsRealArrowhead(t *testing.T) {
+	out := drawing(t, "security", `
+parts: [{id: first, kind: code, label: First}, {id: last, kind: code, label: Last}]
+lines:
+  - {from: first, to: last, kind: hidden}
+  - {from: last, to: first, kind: data, label: back, breaks: true}
+  - {from: first, to: last, kind: data, breaks: true}`)
+	has(t, out, `first <-->|"back"| last`)
+	if !strings.HasSuffix(out, "\n  linkStyle 1 "+red+",marker-end:none\n  linkStyle 2 "+red) {
+		t.Errorf("the drawing ends\n%s", out[strings.LastIndex(out, "\n  linkStyle"):])
 	}
 }
 
@@ -141,7 +198,7 @@ func TestATriggerSitsInTheGroupOfWhatItStarts(t *testing.T) {
 parts: [{id: t, kind: trigger, label: "Thursday 19:00"}, {id: s, kind: ai, label: Plan, in: family}]
 lines: [{from: t, to: s, kind: start}]
 groups: [{id: family, label: family}]`)
-	has(t, out, "  subgraph family[\"family\"]\n    direction TB\n    t([\"Thursday 19:00\"])\n    s(\"<small style='color:#3d434f'>🤖</small><br>Plan\")\n  end")
+	has(t, out, "  subgraph family[\"family\"]\n    direction TB\n    t([\"Thursday 19#58;00\"])\n    s(\"<small style='color:rgb(61,67,79)'>🤖</small><br>Plan\")\n  end")
 }
 
 func TestATriggerPlacedByHandStaysPut(t *testing.T) {
@@ -157,7 +214,7 @@ func TestACommentSitsInTheGroupOfWhatItIsTiedTo(t *testing.T) {
 parts: [{id: s, kind: ai, label: Plan, in: g}, {id: n, kind: comment, label: An example}]
 lines: [{from: s, to: n, kind: tie}]
 groups: [{id: g, label: g}]`)
-	has(t, out, "    s(\"<small style='color:#3d434f'>🤖</small><br>Plan\")\n    n@{ shape: notch-rect, label: \"An example\" }\n  end")
+	has(t, out, "    s(\"<small style='color:rgb(61,67,79)'>🤖</small><br>Plan\")\n    n@{ shape: notch-rect, label: \"An example\" }\n  end")
 }
 
 func TestHiddenLinesDontPlaceATrigger(t *testing.T) {
@@ -183,20 +240,20 @@ groups: [{id: g, label: g}]`)
 func TestAStepsDeciderAndOperationAreAQuietLineAboveItsLabel(t *testing.T) {
 	for _, c := range []struct{ kind, who string }{{"ai", "🤖"}, {"code", "⚙️"}, {"person", "👤"}} {
 		out := drawing(t, "security", fmt.Sprintf(`parts: [{id: p, kind: %s, op: draft, label: 'Draft the "reply"'}]`, c.kind))
-		has(t, out, "\n  p(\"<small style='color:#3d434f'>"+c.who+" ✏️ draft</small><br>Draft the #quot;reply#quot;\")\n")
+		has(t, out, "\n  p(\"<small style='color:rgb(61,67,79)'>"+c.who+" ✏️ draft</small><br>Draft the #34;reply#34;\")\n")
 	}
 }
 
 func TestAStepWithNoOperationStillShowsWhoDecidesIt(t *testing.T) {
 	for _, c := range []struct{ kind, who string }{{"ai", "🤖"}, {"code", "⚙️"}, {"person", "👤"}} {
 		out := drawing(t, "security", fmt.Sprintf("parts: [{id: p, kind: %s, label: Step}]", c.kind))
-		has(t, out, "\n  p(\"<small style='color:#3d434f'>"+c.who+"</small><br>Step\")\n")
+		has(t, out, "\n  p(\"<small style='color:rgb(61,67,79)'>"+c.who+"</small><br>Step\")\n")
 	}
 }
 
 func TestAReviewIsARoundedBoxWithItsOwnQuietLineAboveItsLabel(t *testing.T) {
 	out := drawing(t, "security", `parts: [{id: p, kind: review, label: 'The "yes" to the reply'}]`)
-	has(t, out, "\n  p(\"<small style='color:#3d434f'>👤 ✅ review</small><br>The #quot;yes#quot; to the reply\")\n")
+	has(t, out, "\n  p(\"<small style='color:rgb(61,67,79)'>👤 ✅ review</small><br>The #34;yes#34; to the reply\")\n")
 }
 
 func TestEachOperationIsDrawnWithItsEmoji(t *testing.T) {
@@ -213,7 +270,7 @@ func TestEachOperationIsDrawnWithItsEmoji(t *testing.T) {
 		{"other", "❔"},
 	} {
 		out := drawing(t, "security", fmt.Sprintf("parts: [{id: p, kind: code, op: %s, label: Step}]", c.op))
-		has(t, out, "\n  p(\"<small style='color:#3d434f'>⚙️ "+c.emoji+" "+c.op+"</small><br>Step\")\n")
+		has(t, out, "\n  p(\"<small style='color:rgb(61,67,79)'>⚙️ "+c.emoji+" "+c.op+"</small><br>Step\")\n")
 	}
 }
 
@@ -253,19 +310,19 @@ config:
       bottom: 30
 ---
 flowchart TB
-  subgraph zCarers["carers: + June, Beth"]
+  subgraph zCarers["carers#58; #43; June#44; Beth"]
     direction TB
     cCar[("Carers notes")]
-    subgraph zFamily["family: parents, kids"]
+    subgraph zFamily["family#58; parents#44; kids"]
       direction TB
       tAsk(["Someone in the family chat asks what time swimming is"])
       cFam[("Family notes")]
-      sFind("<small style='color:#3d434f'>⚙️</small><br>Find the notes that speak to it")
-      sWord("<small style='color:#3d434f'>🤖</small><br>Word the answer from those notes alone")
+      sFind("<small style='color:rgb(61,67,79)'>⚙️</small><br>Find the notes that speak to it")
+      sWord("<small style='color:rgb(61,67,79)'>🤖</small><br>Word the answer from those notes alone")
       uChat@{ shape: win-pane, label: "Family chat" }
-      subgraph zNadia["nadia: Nadia"]
+      subgraph zNadia["nadia#58; Nadia"]
         direction TB
-        cNadia[("Nadia's own notes")]
+        cNadia[("Nadia#39;s own notes")]
       end
     end
   end
@@ -273,9 +330,9 @@ flowchart TB
   tAsk -.-> sFind
   cFam --> sFind
   cCar --> sFind
-  cNadia --x|"never read here"| sFind
+  sFind x--x|"never read here"| cNadia
   sFind --> sWord
-  sWord -->|"the answer, naming its notes"| uChat
+  sWord -->|"the answer#44; naming its notes"| uChat
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
   classDef con fill:#eceef2,stroke:#5d6472,color:#16171b
@@ -293,7 +350,8 @@ flowchart TB
   class sFind code
   style zCarers fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
   style zFamily fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
-  style zNadia fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f`
+  style zNadia fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
+  linkStyle 3 marker-end:none`
 
 func TestTheQuestionDrawsAsTheApprovedPageDrewIt(t *testing.T) {
 	if got := Draw(parsed(t, questionFile)); got != approved {

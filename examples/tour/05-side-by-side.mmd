@@ -8,21 +8,21 @@ config:
       bottom: 30
 ---
 flowchart TB
-  subgraph bakery["bakery: Jo, Ben, Lou"]
+  subgraph bakery["bakery#58; Jo#44; Ben#44; Lou"]
     direction TB
-    invoices[("The bakery's invoices")]
-    checklist[("Jo's checklist for chasing")]
-    chase("<small style='color:#3d434f'>🤖 ✏️ draft</small><br>Draft a reminder for each late invoice")
+    invoices[("The bakery#39;s invoices")]
+    checklist[("Jo#39;s checklist for chasing")]
+    chase("<small style='color:rgb(61,67,79)'>🤖 ✏️ draft</small><br>Draft a reminder for each late invoice")
   end
-  subgraph pottery["pottery: Jo, Kit"]
+  subgraph pottery["pottery#58; Jo#44; Kit"]
     direction TB
-    shop_notes[("The shop's notes")]
-    remind("<small style='color:#3d434f'>🤖 ✏️ draft</small><br>Draft a reminder for each late order")
+    shop_notes[("The shop#39;s notes")]
+    remind("<small style='color:rgb(61,67,79)'>🤖 ✏️ draft</small><br>Draft a reminder for each late order")
   end
 
   invoices --> chase
   checklist --> chase
-  checklist ==>|"the checklist, with no names in it"| shop_notes
+  checklist ==>|"the checklist#44; with no names in it"| shop_notes
   shop_notes --> remind
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b

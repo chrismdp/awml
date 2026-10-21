@@ -8,22 +8,22 @@ config:
       bottom: 30
 ---
 flowchart TB
-  subgraph flat["flat: Tom, Ana, Joe"]
+  subgraph flat["flat#58; Tom#44; Ana#44; Joe"]
     direction TB
-    ask(["Ana asks in the flat's chat when the boiler is serviced"])
+    ask(["Ana asks in the flat#39;s chat when the boiler is serviced"])
     flat_notes[("Flat notes")]
-    answer("<small style='color:#3d434f'>🤖 💬 answer</small><br>Answer from the flat's notes alone")
-    chat@{ shape: win-pane, label: "The flat's chat" }
-    subgraph tom["tom: Tom"]
+    answer("<small style='color:rgb(61,67,79)'>🤖 💬 answer</small><br>Answer from the flat#39;s notes alone")
+    chat@{ shape: win-pane, label: "The flat#39;s chat" }
+    subgraph tom["tom#58; Tom"]
       direction TB
-      tom_notes[("Tom's own notes")]
+      tom_notes[("Tom#39;s own notes")]
     end
   end
 
   ask -.-> answer
   flat_notes --> answer
-  tom_notes --x|"never read here"| answer
-  answer -->|"the answer, naming its notes"| chat
+  answer x--x|"never read here"| tom_notes
+  answer -->|"the answer#44; naming its notes"| chat
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
   classDef con fill:#eceef2,stroke:#5d6472,color:#16171b
@@ -40,3 +40,4 @@ flowchart TB
   class answer ai
   style flat fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
   style tom fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
+  linkStyle 2 marker-end:none

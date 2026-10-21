@@ -8,22 +8,22 @@ config:
       bottom: 30
 ---
 flowchart TB
-  subgraph wider["with grandma: + Grandma Rose"]
+  subgraph wider["with grandma#58; #43; Grandma Rose"]
     direction TB
-    tablet@{ shape: win-pane, label: "Grandma Rose's tablet" }
-    subgraph parents["parents: Mia, Dev"]
+    tablet@{ shape: win-pane, label: "Grandma Rose#39;s tablet" }
+    subgraph parents["parents#58; Mia#44; Dev"]
       direction TB
-      sun(["Sunday 18:00"])
-      calendar{{"The parents' calendar"}}
-      copy("<small style='color:#3d434f'>⚙️ 📥 bring-in</small><br>Copy the week's school pickups")
-      pickups[("This week's pickups")]
+      sun(["Sunday 18#58;00"])
+      calendar{{"The parents#39; calendar"}}
+      copy("<small style='color:rgb(61,67,79)'>⚙️ 📥 bring-in</small><br>Copy the week#39;s school pickups")
+      pickups[("This week#39;s pickups")]
     end
   end
 
   sun -.-> copy
   calendar --> copy
   copy --> pickups
-  pickups ==>|"standing rule: pickups to Grandma"| tablet
+  pickups ==>|"standing rule#58; pickups to Grandma"| tablet
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
   classDef con fill:#eceef2,stroke:#5d6472,color:#16171b

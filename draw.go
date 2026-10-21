@@ -10,6 +10,10 @@ import (
 func Draw(doc *Map) string {
 	groups, parts, lines := items(doc, "groups"), items(doc, "parts"), items(doc, "lines")
 	where := placed(parts, lines)
+	partOrder := map[string]int{}
+	for i, p := range parts {
+		partOrder[str(p, "id")] = i
+	}
 	out := append([]string{}, header...)
 
 	var emit func(parent, indent string)
@@ -32,11 +36,18 @@ func Draw(doc *Map) string {
 	emit("", "  ")
 	out = append(out, "")
 	for _, l := range lines {
+		from, to, arrow := str(l, "from"), str(l, "to"), arrows[str(l, "kind")]
+		if partOrder[from] > partOrder[to] {
+			from, to = to, from
+			if flipped := backwardsArrows[str(l, "kind")]; flipped != "" {
+				arrow = flipped
+			}
+		}
 		mid := ""
 		if str(l, "label") != "" {
 			mid = fmt.Sprintf(`|"%s"|`, text(str(l, "label")))
 		}
-		out = append(out, fmt.Sprintf("  %s %s%s %s", str(l, "from"), arrows[str(l, "kind")], mid, str(l, "to")))
+		out = append(out, fmt.Sprintf("  %s %s%s %s", from, arrow, mid, to))
 	}
 	out = append(out, defs)
 	for _, cls := range []string{"trig", "ctx", "con", "surf", "out", "ai", "code", "person", "uml", "gap"} {
@@ -57,12 +68,26 @@ func Draw(doc *Map) string {
 		}
 		out = append(out, fmt.Sprintf("  style %s %s", str(g, "id"), look))
 	}
-	// linkStyle counts every line, hidden ones too.
-	var reds []string
+	// linkStyle counts every line, hidden ones too. A backwards arrow is drawn with a head at both
+	// ends, then loses the head at its drawn end, leaving the one at the real target.
+	var backwards, redBackwards, reds []string
 	for i, l := range lines {
-		if l.get("breaks") == true {
+		back := partOrder[str(l, "from")] > partOrder[str(l, "to")] && backwardsArrows[str(l, "kind")] != ""
+		broken := l.get("breaks") == true
+		switch {
+		case back && broken:
+			redBackwards = append(redBackwards, fmt.Sprint(i))
+		case back:
+			backwards = append(backwards, fmt.Sprint(i))
+		case broken:
 			reds = append(reds, fmt.Sprint(i))
 		}
+	}
+	if backwards != nil {
+		out = append(out, fmt.Sprintf("  linkStyle %s marker-end:none", strings.Join(backwards, ",")))
+	}
+	if redBackwards != nil {
+		out = append(out, fmt.Sprintf("  linkStyle %s %s,marker-end:none", strings.Join(redBackwards, ","), red))
 	}
 	if reds != nil {
 		out = append(out, fmt.Sprintf("  linkStyle %s %s", strings.Join(reds, ","), red))
@@ -89,6 +114,10 @@ var classes = map[string]string{"trigger": "trig", "context": "ctx", "connector"
 	"ai": "ai", "code": "code", "person": "person", "review": "person", "fork": "uml", "comment": "gap"}
 
 var arrows = map[string]string{"start": "-.->", "data": "-->", "publish": "==>", "refused": "--x", "tie": "-.-", "hidden": "~~~"}
+
+// Mermaid's layout follows an edge's written direction. For a line back to an earlier part, draw
+// the edge in file order with two heads; linkStyle removes the head at the real source.
+var backwardsArrows = map[string]string{"start": "<-.->", "data": "<-->", "publish": "<==>", "refused": "x--x"}
 
 const defs = `  classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
@@ -117,7 +146,7 @@ var deciders = map[string]string{"ai": "🤖", "code": "⚙️", "person": "👤
 
 // A step's own line holds who decides it, then its operation's emoji and name if it has one,
 // smaller and softer than the label beneath it. A review's holds ✅ review, which no operation uses.
-const operation = "<small style='color:#3d434f'>%s</small><br>"
+const operation = "<small style='color:rgb(61,67,79)'>%s</small><br>"
 
 // label is a part's label as Mermaid reads it. A step's or a review's sits under its own line.
 func label(p *Map) string {
@@ -133,9 +162,19 @@ func label(p *Map) string {
 	return fmt.Sprintf(operation, who) + words
 }
 
-// text keeps a label inside its quotes: Mermaid ends a label at a double quote, and reads #quot; as one.
+// text keeps Mermaid from reading a label as Markdown or HTML. CommonMark syntax is made entirely
+// from ASCII punctuation, so entity-encoding every such mark leaves no syntax for its parser while
+// Mermaid still renders the original character. The operation HTML is added after this function.
 func text(s string) string {
-	return strings.ReplaceAll(s, `"`, "#quot;")
+	var out strings.Builder
+	for _, r := range s {
+		if r >= '!' && r <= '/' || r >= ':' && r <= '@' || r >= '[' && r <= '`' || r >= '{' && r <= '~' {
+			fmt.Fprintf(&out, "#%d;", r)
+		} else {
+			out.WriteRune(r)
+		}
+	}
+	return out.String()
 }
 
 // placed gives each part's group, "" for none. A trigger or comment with none sits in the group of

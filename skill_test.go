@@ -48,6 +48,10 @@ func TestTheGuideToDrawingByHandMatchesDraw(t *testing.T) {
 	for _, arrow := range arrows {
 		want = append(want, "`"+arrow+"`")
 	}
+	for _, arrow := range backwardsArrows {
+		want = append(want, "`"+arrow+"`")
+	}
+	want = append(want, "marker-end:none")
 	want = append(want, pastel...)
 	for op, emoji := range ops {
 		want = append(want, fmt.Sprintf("| %s | `%s` |", emoji, op))

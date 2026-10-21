@@ -8,16 +8,16 @@ config:
       bottom: 30
 ---
 flowchart TB
-  subgraph kemi["kemi: Kemi"]
+  subgraph kemi["kemi#58; Kemi"]
     direction TB
     arrives(["An email from the school arrives"])
-    sort("<small style='color:#3d434f'>🤖 🗂️ sort</small><br>Sort it: a date, a request, or neither")
-    learn("<small style='color:#3d434f'>🤖 🧠 learn</small><br>Take any date into Kemi's notes")
-    notes[("Kemi's notes")]
-    draft("<small style='color:#3d434f'>🤖 ✏️ draft</small><br>Draft a reply to any request")
+    sort("<small style='color:rgb(61,67,79)'>🤖 🗂️ sort</small><br>Sort it#58; a date#44; a request#44; or neither")
+    learn("<small style='color:rgb(61,67,79)'>🤖 🧠 learn</small><br>Take any date into Kemi#39;s notes")
+    notes[("Kemi#39;s notes")]
+    draft("<small style='color:rgb(61,67,79)'>🤖 ✏️ draft</small><br>Draft a reply to any request")
     drafts[("Drafts")]
-    file("<small style='color:#3d434f'>⚙️ 🛠️ do</small><br>File the email")
-    move>"Move it to the school folder: Allow"]
+    file("<small style='color:rgb(61,67,79)'>⚙️ 🛠️ do</small><br>File the email")
+    move>"Move it to the school folder#58; Allow"]
   end
 
   arrives -.-> sort

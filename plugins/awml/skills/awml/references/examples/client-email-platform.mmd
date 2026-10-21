@@ -8,35 +8,35 @@ config:
       bottom: 30
 ---
 flowchart TB
-  subgraph cowork["Claude Cowork, Mac mini"]
+  subgraph cowork["Claude Cowork#44; Mac mini"]
     direction TB
-    weekdays(["A scheduled task, weekdays 07:00"])
-    bring("<small style='color:#3d434f'>⚙️ 📥 bring-in</small><br>Bring in the inbox")
-    rules("<small style='color:#3d434f'>⚙️ 🗂️ sort</small><br>Sort by rule: is the sender a client?")
-    choose("<small style='color:#3d434f'>🤖 🗂️ sort</small><br>Choose the engagement the email belongs to")
-    learn("<small style='color:#3d434f'>🤖 🧠 learn</small><br>Update the engagement's project with what the email says")
-    draft("<small style='color:#3d434f'>🤖 ✏️ draft</small><br>Draft a reply")
+    weekdays(["A scheduled task#44; weekdays 07#58;00"])
+    bring("<small style='color:rgb(61,67,79)'>⚙️ 📥 bring-in</small><br>Bring in the inbox")
+    rules("<small style='color:rgb(61,67,79)'>⚙️ 🗂️ sort</small><br>Sort by rule#58; is the sender a client#63;")
+    choose("<small style='color:rgb(61,67,79)'>🤖 🗂️ sort</small><br>Choose the engagement the email belongs to")
+    learn("<small style='color:rgb(61,67,79)'>🤖 🧠 learn</small><br>Update the engagement#39;s project with what the email says")
+    draft("<small style='color:rgb(61,67,79)'>🤖 ✏️ draft</small><br>Draft a reply")
   end
   subgraph files["Synced Markdown notes"]
     direction TB
-    engagements[("The business's engagements")]
-    project[("The engagement's project")]
+    engagements[("The business#39;s engagements")]
+    project[("The engagement#39;s project")]
   end
-  subgraph phone["The consultant's phone"]
+  subgraph phone["The consultant#39;s phone"]
     direction TB
-    edit("<small style='color:#3d434f'>👤 🛠️ do</small><br>Edit the reply and send it")
+    edit("<small style='color:rgb(61,67,79)'>👤 🛠️ do</small><br>Edit the reply and send it")
   end
   subgraph gmail["Gmail"]
     direction TB
-    mailbox{{"The consultant's mailbox"}}
+    mailbox{{"The consultant#39;s mailbox"}}
     drafts[("Drafts")]
-    send>"Send the reply: Ask"]
+    send>"Send the reply#58; Ask"]
   end
 
   weekdays -.-> bring
   mailbox --> bring
   bring --> rules
-  rules ==>|"standing rule: a client's email"| choose
+  rules ==>|"standing rule#58; a client#39;s email"| choose
   engagements --> choose
   choose --> learn
   learn --> project
@@ -44,7 +44,7 @@ flowchart TB
   draft --> drafts
   drafts ==>|"the consultant takes the reply"| edit
   edit --> send
-  send --> mailbox
+  mailbox <--> send
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
   classDef con fill:#eceef2,stroke:#5d6472,color:#16171b
@@ -66,3 +66,4 @@ flowchart TB
   style files fill:#fbe9df,stroke:#ecc7b2,color:#16171b
   style phone fill:#efe6fa,stroke:#d3c2ea,color:#16171b
   style gmail fill:#fbf3d9,stroke:#e8d9a6,color:#16171b
+  linkStyle 11 marker-end:none

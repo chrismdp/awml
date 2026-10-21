@@ -8,19 +8,19 @@ config:
       bottom: 30
 ---
 flowchart TB
-  subgraph carers["carers: + June, Beth"]
+  subgraph carers["carers#58; #43; June#44; Beth"]
     direction TB
     carers_notes[("Carers notes")]
-    subgraph family["family: parents, kids"]
+    subgraph family["family#58; parents#44; kids"]
       direction TB
       ask(["Someone in the family chat asks what time swimming is"])
       family_notes[("Family notes")]
-      find("<small style='color:#3d434f'>⚙️ 💬 answer</small><br>Find the notes that speak to it")
-      word("<small style='color:#3d434f'>🤖 💬 answer</small><br>Word the answer from those notes alone")
+      find("<small style='color:rgb(61,67,79)'>⚙️ 💬 answer</small><br>Find the notes that speak to it")
+      word("<small style='color:rgb(61,67,79)'>🤖 💬 answer</small><br>Word the answer from those notes alone")
       chat@{ shape: win-pane, label: "Family chat" }
-      subgraph nadia["nadia: Nadia"]
+      subgraph nadia["nadia#58; Nadia"]
         direction TB
-        nadia_notes[("Nadia's own notes")]
+        nadia_notes[("Nadia#39;s own notes")]
       end
     end
   end
@@ -28,9 +28,9 @@ flowchart TB
   ask -.-> find
   family_notes --> find
   carers_notes --> find
-  nadia_notes --x|"never read here"| find
+  find x--x|"never read here"| nadia_notes
   find --> word
-  word -->|"the answer, naming its notes"| chat
+  word -->|"the answer#44; naming its notes"| chat
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
   classDef con fill:#eceef2,stroke:#5d6472,color:#16171b
@@ -49,3 +49,4 @@ flowchart TB
   style carers fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
   style family fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
   style nadia fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
+  linkStyle 3 marker-end:none

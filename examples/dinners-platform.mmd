@@ -8,30 +8,30 @@ config:
       bottom: 30
 ---
 flowchart TB
-  subgraph server["Server: claude-sonnet-4-5"]
+  subgraph server["Server#58; claude#45;sonnet#45;4#45;5"]
     direction TB
-    favourites[("Favourites, recipes and the shopping list")]
-    plan("<small style='color:#3d434f'>🤖</small><br>Plan next week's dinners")
+    favourites[("Favourites#44; recipes and the shopping list")]
+    plan("<small style='color:rgb(61,67,79)'>🤖</small><br>Plan next week#39;s dinners")
     mealplan[("Meal plan")]
-    fill("<small style='color:#3d434f'>⚙️ 🛠️ do</small><br>Fill the basket from the plan and the list")
-    copy("<small style='color:#3d434f'>⚙️ 📥 bring-in</small><br>Copy the pickups calendar")
+    fill("<small style='color:rgb(61,67,79)'>⚙️ 🛠️ do</small><br>Fill the basket from the plan and the list")
+    copy("<small style='color:rgb(61,67,79)'>⚙️ 📥 bring-in</small><br>Copy the pickups calendar")
     pickups[("Pickups")]
-    screen_gap@{ shape: notch-rect, label: "Missing from the design: no scheduled task keeps the screen current" }
-    scored@{ shape: notch-rect, label: "For example: scored against the plans the family kept" }
-    tried@{ shape: notch-rect, label: "For example: tried on a second model some weeks" }
+    screen_gap@{ shape: notch-rect, label: "Missing from the design#58; no scheduled task keeps the screen current" }
+    scored@{ shape: notch-rect, label: "For example#58; scored against the plans the family kept" }
+    tried@{ shape: notch-rect, label: "For example#58; tried on a second model some weeks" }
   end
   subgraph app["The family messaging app"]
     direction TB
     chat@{ shape: win-pane, label: "Family chat" }
-    approve("<small style='color:#3d434f'>👤 ✅ review</small><br>Owen's yes, in his private chat")
+    approve("<small style='color:rgb(61,67,79)'>👤 ✅ review</small><br>Owen#39;s yes#44; in his private chat")
   end
   subgraph supermarket["The supermarket"]
     direction TB
-    shop{{"Owen's supermarket account"}}
+    shop{{"Owen#39;s supermarket account"}}
   end
   subgraph calendars["The calendar"]
     direction TB
-    calendar{{"Nadia's calendar"}}
+    calendar{{"Nadia#39;s calendar"}}
   end
   subgraph wall["The kitchen screen"]
     direction TB
@@ -45,14 +45,14 @@ flowchart TB
   favourites --> fill
   fill -->|"fills the basket"| shop
   fill --> approve
-  approve -->|"[yes] checks out"| shop
-  calendar --> copy
+  approve -->|"#91;yes#93; checks out"| shop
+  copy <--> calendar
   copy --> pickups
   pickups --> screen
   mealplan --> screen
   screen_gap -.- screen
-  scored -.- plan
-  tried -.- plan
+  plan -.- scored
+  plan -.- tried
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
   classDef con fill:#eceef2,stroke:#5d6472,color:#16171b
@@ -75,3 +75,4 @@ flowchart TB
   style supermarket fill:#efe6fa,stroke:#d3c2ea,color:#16171b
   style calendars fill:#fbf3d9,stroke:#e8d9a6,color:#16171b
   style wall fill:#dff3ef,stroke:#b4ddd4,color:#16171b
+  linkStyle 8 marker-end:none

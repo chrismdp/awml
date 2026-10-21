@@ -43,9 +43,9 @@ A part is its id followed straight away by its node, with the label in place of 
 | `outside` | `out` | `>"label"]` |
 | `comment` | `gap` | `@{ shape: notch-rect, label: "label" }` |
 
-In every label, of a part, a group or a line, write each `"` as `#quot;`. A fork shows no label.
+In every label, of a part, a group or a line, write each ASCII punctuation mark as its decimal Mermaid entity: `@` as `#64;`, `.` as `#46;`, `"` as `#34;`, and so on. Leave letters, numbers, spaces and non-ASCII characters as written. This stops Mermaid reading email addresses, web addresses, lists or other Markdown instead of literal label text. A fork shows no label.
 
-The label of a step or a review starts with a line of its own saying who decides it, `<small style='color:#3d434f'>WHO</small><br>`, and then the label. `WHO` is 🤖 for `ai`, ⚙️ for `code` and 👤 for `person`. For a step with an `op`, add its emoji and its name, so an AI draft is `<small style='color:#3d434f'>🤖 ✏️ draft</small><br>`. For a review, `WHO` is `👤 ✅ review`.
+The label of a step or a review starts with a line of its own saying who decides it, `<small style='color:rgb(61,67,79)'>WHO</small><br>`, and then the label. `WHO` is 🤖 for `ai`, ⚙️ for `code` and 👤 for `person`. For a step with an `op`, add its emoji and its name, so an AI draft is `<small style='color:rgb(61,67,79)'>🤖 ✏️ draft</small><br>`. For a review, `WHO` is `👤 ✅ review`.
 
 | Emoji | `op` |
 |---|---|
@@ -62,16 +62,16 @@ The label of a step or a review starts with a line of its own saying who decides
 
 ## 3. The lines
 
-After the parts and groups, leave one empty line, then write each line in the file's order, indented two spaces: `from ARROW to`, or with a label, `from ARROW|"label"| to`.
+After the parts and groups, leave one empty line, then write each line in the file's order, indented two spaces: `from ARROW to`, or with a label, `from ARROW|"label"| to`. Find the position of each end in `parts`. When `from` comes after `to`, swap the written ends and use the backwards arrow in the table. For `tie` and `hidden`, which have no arrowhead, swap the ends but keep the same line.
 
-| Line `kind` | Arrow |
-|---|---|
-| `start` | `-.->` |
-| `data` | `-->` |
-| `publish` | `==>` |
-| `refused` | `--x` |
-| `tie` | `-.-` |
-| `hidden` | `~~~` |
+| Line `kind` | Arrow | Backwards arrow |
+|---|---|---|
+| `start` | `-.->` | `<-.->` |
+| `data` | `-->` | `<-->` |
+| `publish` | `==>` | `<==>` |
+| `refused` | `--x` | `x--x` |
+| `tie` | `-.-` | `-.-` |
+| `hidden` | `~~~` | `~~~` |
 
 ## 4. The colours
 
@@ -108,8 +108,10 @@ In the platform view, the first group takes the first of these, the second group
 6. `fill:#f6e3ea,stroke:#e3bccb`
 7. `fill:#e9f2dc,stroke:#c7dcae`
 
-Last, if any line has `breaks: true`, draw it red. Count every line from 0 in the file's order, hidden lines included, and write `  linkStyle 4,7 STYLE` with the numbers of the red lines and this `STYLE`:
+Last, style backwards arrowed lines and red lines. Count every line from 0 in the file's order, hidden lines included. For backwards `start`, `data`, `publish` and `refused` lines, write `  linkStyle 4,7 marker-end:none` with their numbers: this hides the spare head and leaves the head pointing at the real `to` part. For lines with `breaks: true`, write `  linkStyle 4,7 STYLE` with their numbers and this `STYLE`:
 
 ```
 stroke:#d0342c,stroke-width:2.5px,color:#b0271f
 ```
+
+When a line is both backwards and red, merge the two on one line: `  linkStyle 4 stroke:#d0342c,stroke-width:2.5px,color:#b0271f,marker-end:none`.

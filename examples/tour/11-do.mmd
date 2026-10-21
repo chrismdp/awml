@@ -8,19 +8,19 @@ config:
       bottom: 30
 ---
 flowchart TB
-  subgraph parents["parents: Mia, Dev"]
+  subgraph parents["parents#58; Mia#44; Dev"]
     direction TB
     done(["The window cleaner says the windows are done"])
-    settle("<small style='color:#3d434f'>⚙️ 🛠️ do</small><br>Settle the visit")
-    book>"Put the next visit in the parents' calendar: Allow"]
-    approve("<small style='color:#3d434f'>👤 ✅ review</small><br>Dev's yes to the exact payment")
-    pay>"Pay the window cleaner £20: Ask"]
+    settle("<small style='color:rgb(61,67,79)'>⚙️ 🛠️ do</small><br>Settle the visit")
+    book>"Put the next visit in the parents#39; calendar#58; Allow"]
+    approve("<small style='color:rgb(61,67,79)'>👤 ✅ review</small><br>Dev#39;s yes to the exact payment")
+    pay>"Pay the window cleaner £20#58; Ask"]
   end
 
   done -.-> settle
   settle --> book
   settle --> approve
-  approve -->|"[yes]"| pay
+  approve -->|"#91;yes#93;"| pay
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
   classDef con fill:#eceef2,stroke:#5d6472,color:#16171b

@@ -97,6 +97,23 @@ func TestASoundFileHasNoMistakes(t *testing.T) {
 	mistakes(t, parsed(t, good))
 }
 
+func TestLabelsThatMarkdownWouldRecogniseHaveNoMistakes(t *testing.T) {
+	mistakes(t, parsed(t, `
+awml: "0.2"
+title: Literal labels
+view: platform
+groups: [{id: group, label: '# Team'}]
+parts:
+  - {id: email, kind: trigger, label: noor@example.com, in: group}
+  - {id: web, kind: code, label: 'https://example.org/a', in: group}
+  - {id: list, kind: comment, label: '1. item - item', in: group}
+  - {id: quote, kind: surface, label: '# heading > quote', in: group}
+lines:
+  - {from: email, to: web, kind: start, label: '**strong**'}
+  - {from: list, to: quote, kind: tie}
+`))
+}
+
 func TestAnUnknownPartKind(t *testing.T) {
 	mistakes(t, changed(t, "parts.1.kind", "agent"), `part "plan" has unknown kind "agent"`)
 }

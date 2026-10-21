@@ -8,20 +8,20 @@ config:
       bottom: 30
 ---
 flowchart TB
-  subgraph ella["ella: Ella"]
+  subgraph ella["ella#58; Ella"]
     direction TB
-    fri(["Friday 16:00"])
-    write("<small style='color:#3d434f'>🤖 ✏️ draft</small><br>Draft the week's message to the parents")
-    ask("<small style='color:#3d434f'>⚙️ 🛠️ do</small><br>Ask Ella to send it")
-    approve("<small style='color:#3d434f'>👤 ✅ review</small><br>Ella's yes to the exact message")
-    send>"Send it to the parents: Ask"]
+    fri(["Friday 16#58;00"])
+    write("<small style='color:rgb(61,67,79)'>🤖 ✏️ draft</small><br>Draft the week#39;s message to the parents")
+    ask("<small style='color:rgb(61,67,79)'>⚙️ 🛠️ do</small><br>Ask Ella to send it")
+    approve("<small style='color:rgb(61,67,79)'>👤 ✅ review</small><br>Ella#39;s yes to the exact message")
+    send>"Send it to the parents#58; Ask"]
   end
 
   fri -.-> write
   write -->|"the draft"| ask
   ask --> approve
-  approve -->|"[yes]"| send
-  write -->|"sent without Ella's yes"| send
+  approve -->|"#91;yes#93;"| send
+  write -->|"sent without Ella#39;s yes"| send
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
   classDef con fill:#eceef2,stroke:#5d6472,color:#16171b
