@@ -57,11 +57,11 @@ In the security view, each scope is a dashed box, labelled with its name and mem
 
 **Where a part sits.** A context sits in the box of its scope. A step sits in the box of the scope it writes into, with the reviews and outside actions it leads to. A connector sits in the box of the scope its inputs take. A surface sits in the box of the scope its viewers make up.
 
-**Boxes inside boxes.** One box sits inside another only where every member of the inner scope is in the outer one. Otherwise they sit side by side. A family's scopes often nest: the parents' box sits inside the family's, which sits inside the box of the family and its carers. A consultant's client scope and their side venture's share only the consultant, so they sit side by side.
+**Boxes inside boxes.** One box sits inside another only where every member of the inner scope is in the outer one, and its terms are at least as strict. Otherwise they sit side by side. A family's scopes often nest: the parents' box sits inside the family's, which sits inside the box of the family and its carers. A consultant's client scope and their side venture's share only the consultant, so they sit side by side.
 
 **Reading.** A step reads from its own scope or a wider one, since everyone in a scope may see what a wider scope holds. A read from a narrower scope is one the design refuses, drawn as a line ending in a cross.
 
-**Moving content.** A move **narrows** only when every member of the target scope is in the source and the target's terms are at least as strict. Narrowing is routing, drawn as an ordinary line. Any other move adds a viewer or loosens the terms, which is **publishing**, drawn as a thick line. Publishing waits for a person's yes, unless a **standing rule** names that target for that kind of item, and the line's label then names the rule. Only the item crosses, never what lies behind it. Nothing reaches the public without a person's yes to that item, under any rule or standing approval.
+**Moving content.** A move **narrows** only when every member of the target scope is in the source and the target's terms are at least as strict. Narrowing is routing, drawn as an ordinary line. Any other move adds a viewer or loosens the terms, which is **publishing**, drawn as a thick line. On the drawing, a move into the box it starts in, or a box inside that one, narrows. A part drawn outside every box counts as wider than any of them. `awml check` reports a `data` line that moves anywhere else, which is publishing drawn as routing. Publishing waits for a person's yes, unless a **standing rule** names that target for that kind of item, and the line's label then names the rule. Only the item crosses, never what lies behind it. Nothing reaches the public without a person's yes to that item, under any rule or standing approval.
 
 ## Connectors
 
@@ -171,7 +171,7 @@ A drawing shows what each record should say, never what any record does say. A s
 
 ## The red line
 
-Where a live system does something its design doesn't allow, the line for it is drawn red, labelled with what is wrong. A red line is a finding about the live system, not part of the design, so `awml check` doesn't hold it to the operations' limits.
+Where a live system does something its design doesn't allow, the line for it is drawn red, labelled with what is wrong. A red line is a finding about the live system, not part of the design, so `awml check` doesn't hold it to the operations' limits or to the boxes it crosses.
 
 ## What AWML is not
 
@@ -205,4 +205,4 @@ The file needs `awml`, the version `"0.2"`; `title`, the workflow's name; `view`
 
 An id is letters, digits and underscores, starting with a letter, and no two are the same. Every id, label, kind and reference to an id is text. `awml` reads YAML 1.2, which reads `true`, `false`, numbers and dates such as `2026-10-20` as something other than text, so quote them. YAML 1.1, which many other tools read, also reads `yes`, `no`, `on` and `off` as true or false, and `19:00` as a number, so quoting those too keeps a file the same in every tool. `breaks` is `true` or `false`, unquoted. Parts are drawn in the order listed, and each group after the parts beside it.
 
-`awml check` reports a missing or unknown field, an unknown kind or view, an id used twice or badly written, a value YAML didn't read as text, a `breaks` that isn't true or false, a part or group in an unknown group, a group nested in itself, a line to or from an unknown part, a comment linked by anything but `tie`, a `tie` with no comment at either end, an unknown `op` or one on a part that isn't a step, and a step that does what its operation must not, as far as the drawing shows it.
+`awml check` reports a missing or unknown field, an unknown kind or view, an id used twice or badly written, a value YAML didn't read as text, a `breaks` that isn't true or false, a part or group in an unknown group, a group nested in itself, a line to or from an unknown part, a comment linked by anything but `tie`, a `tie` with no comment at either end, an unknown `op` or one on a part that isn't a step, a step that does what its operation must not, as far as the drawing shows it, and a `data` line in the security view that moves content anywhere but its own box or a box inside it.

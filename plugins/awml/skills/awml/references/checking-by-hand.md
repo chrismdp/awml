@@ -1,6 +1,6 @@
 # Checking a file by hand
 
-Use this only where `awml check` can't run, as in a chat with no shell. It covers what `awml check` reports, as the last paragraph of [The file format](spec.md#the-file-format) and the limits under [Operations](spec.md#operations) set it out. Work through every item for each file, list each mistake with the part or line it is in, fix them all, then go through the list again. When you're done, tell the person the file has been checked by hand and not by `awml check`, and that `awml check FILE` will confirm it.
+Use this only where `awml check` can't run, as in a chat with no shell. It covers what `awml check` reports, as the last paragraph of [The file format](spec.md#the-file-format), the limits under [Operations](spec.md#operations) and "Moving content" under [The security view](spec.md#the-security-view-who-may-see-each-part) set it out. Work through every item for each file, list each mistake with the part or line it is in, fix them all, then go through the list again. When you're done, tell the person the file has been checked by hand and not by `awml check`, and that `awml check FILE` will confirm it.
 
 ## The file
 
@@ -36,3 +36,9 @@ For these two, skip any line with `breaks: true`, and any `hidden`, `refused` or
 
 17. **Only a `do` step leads to an outside action.** For each `outside` part, walk back along the lines that lead into it. Pass through any review or fork and keep walking back from it. Every step you meet whose `op` is anything but `do` or `other` is a mistake, such as a `draft` step whose line reaches a send through a review. A step with no `op` is held to nothing.
 18. **An `answer` or `check` step never writes to a context.** No line runs from a step whose `op` is `answer` or `check` to a `context`.
+
+## Scopes
+
+Only for a file with `view: security`. Skip any line with `breaks: true`, and any line that isn't `data`.
+
+19. **Publishing isn't drawn as routing.** For each `data` line, find the box of the part at each end: the group its `in` names, or, for a trigger or comment with no `in`, the group of the part at the other end of its first line that isn't `hidden`. A part in no box sits outside every box, and counts as wider than any of them. The target's box must be the source's box, or sit inside it: follow the target's group's `in` upwards until you reach the source's group or run out. Any other `data` line is a mistake. It should be `publish`, or `refused` if the design refuses the read.

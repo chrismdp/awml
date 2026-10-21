@@ -158,7 +158,58 @@ func Check(doc any) []string {
 			errors = append(errors, fmt.Sprintf(`the tie from "%s" to "%s" has no comment at either end`, show(l.get("from")), show(l.get("to"))))
 		}
 	}
-	return append(errors, operations(parts, lines)...)
+	errors = append(errors, operations(parts, lines)...)
+	if file.get("view") == "security" {
+		errors = append(errors, scopes(groups, parts, lines)...)
+	}
+	return errors
+}
+
+// scopes holds each data line in the security view to the boxes it moves between. A move narrows
+// only into the box it starts in or one inside it, and narrowing is routing, drawn as an ordinary
+// line. Any other move adds viewers or loosens the terms, so it's publishing, or a read the design
+// refuses. A part in no box sits outside every box, so it's wider than any of them, and a trigger
+// with none is in the box of what it starts. A red line draws what a live system did, not the
+// design, so this rule doesn't hold it.
+func scopes(groups, parts, lines []*Map) []string {
+	parent := map[string]string{}
+	for _, g := range groups {
+		parent[str(g, "id")] = str(g, "in")
+	}
+	known := map[string]bool{}
+	for _, p := range parts {
+		known[str(p, "id")] = true
+	}
+	// inside is whether a box is the outer one or sits inside it. "" is outside every box, and seen
+	// stops a group nested in itself.
+	inside := func(box, outer string) bool {
+		for seen := map[string]bool{}; outer != "" && !seen[box]; box = parent[box] {
+			if box == outer {
+				return true
+			}
+			seen[box] = true
+		}
+		return outer == ""
+	}
+	where := placed(parts, lines)
+	var errors []string
+	for _, l := range lines {
+		from, to := str(l, "from"), str(l, "to")
+		if l.get("kind") != "data" || l.get("breaks") == true || !known[from] || !known[to] {
+			continue
+		}
+		source, target := where[from], where[to]
+		if inside(target, source) {
+			continue
+		}
+		into := fmt.Sprintf(`into group "%s", which isn't inside it`, target)
+		if target == "" {
+			into = "to the top level, outside every group"
+		}
+		errors = append(errors, fmt.Sprintf(`the line from "%s" to "%s" moves content from group "%s" %s: draw it as publish, or as refused if the design refuses the read`,
+			from, to, source, into))
+	}
+	return errors
 }
 
 // The operations a step may name, each with the emoji it is drawn with, and the kinds of part that

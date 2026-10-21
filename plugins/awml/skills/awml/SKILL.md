@@ -87,6 +87,8 @@ If you have no shell, or `awml` can't be installed, go through `references/check
 
 `awml check` reads one file at a time, so it can't see whether the two views agree. Compare them yourself: the same ids and lines in each, apart from any parts the platform view leaves out.
 
+In the security view, `awml check` also reports publishing drawn as routing: a `data` line into a box that isn't the source's or one inside it. It reads the boxes, not their labels, so it can't see a box drawn in the wrong place. Section 5 says what to look for yourself.
+
 ## 4. Draw
 
 - `awml draw standup-security.yaml` prints the file's Mermaid, which needs Mermaid 11.4.1 or later. Where the host renders Mermaid, show it in a `mermaid` code block.
@@ -100,7 +102,7 @@ Without `awml`, draw the Mermaid by hand with `references/drawing-by-hand.md`, a
 Drawing a workflow shows what a list of its tasks hides. Go through the drawing with the person and point out:
 
 - **Every publishing line.** For each thick line, say what crosses, from which scope to which, and who gains sight of it or which terms loosen. Say what releases it: a person's yes, as when it runs into a review or into their own step, or a standing rule its label names. A publishing line with neither is a finding. Nothing reaches the public without a person's yes to that item, under any rule.
-- **Publishing drawn as routing.** A `data` line is routing only when its target sits in the source's box or in a box inside it. Any other `data` line moves content to more people or under looser terms, so it should be a `publish` line, or a `refused` read.
+- **A box that hides publishing.** `awml check` reports publishing drawn as routing, but it trusts each box to sit in the right place, and only the labels and the design's terms show that. A box whose people are all in another, under looser terms, belongs beside it, never inside it. So look at each box inside another. If it adds anyone, or its terms are looser, it should sit beside the other, and a `data` line into it is really publishing. Drawn inside the business, the consultant's private scope would hide that taking the reply there loosens the terms it is kept under.
 - **Ask actions with nothing in front.** Each Ask action needs a review on the way to it, a person's own `do` step leading straight to it, or a standing approval named in its label, with a comment giving its kinds and limits. One with none of these is a finding.
 - **Allow actions that aren't.** An Allow action that can't be undone, is seen outside its scope or spends past a limit is really Ask.
 - **AI steps that could be code.** A blue AI step that does the same thing every time could be a green code step: cheaper to run, and tested once.
@@ -113,6 +115,7 @@ With the person's agreement, mark each gap in the files as a comment, as `"Missi
 ## Common mistakes
 
 - **A draft step leading to an outside action**, even through a review. `awml check` says `only a do step leads to an outside action`. Put a `do` step between the draft and the review, such as code that asks the person to send it, or make the person's own step `op: do` when they edit and send it themselves.
+- **Publishing drawn as routing.** A `data` line into a box that isn't the source's or one inside it moves content to more people or under looser terms. `awml check` says `draw it as publish, or as refused if the design refuses the read`. Make it a `publish` line, labelled with the standing rule or the yes that releases it, or a `refused` read. If the move really narrows, the target's box belongs inside the source's.
 - **A review used as a decision.** A review has one way out, labelled `"[yes]"`. Draw no `[no]` line and no second branch, since a review isn't a decision node. If a person changes the content, that is their own step, not a review.
 - **An `answer` or `check` step writing to a context.** They read contexts and speak on surfaces. A step that files what it found is a different step, such as `learn` or `sort`.
 - **Unquoted values YAML reads as something else.** A date or a number as a label gives `YAML read its label as …, not text: put it in quotes`. An unquoted label with `: ` in it isn't YAML at all, one with a comma is split in two and shows up as an unknown field, and an unquoted `[yes]` is read as a list. Quote every label.

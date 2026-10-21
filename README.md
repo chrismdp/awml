@@ -284,7 +284,7 @@ Where a live system does something its design doesn't allow, the line for it is 
 
 ![The club's Friday message, sent without a yes](examples/tour/06-red-line.svg)
 
-Here the design waits for Ella's yes to the exact message, but one week the live system sent the draft straight out. `awml check` doesn't hold a red line to the operations' rules, so the drawing can show exactly what went wrong.
+Here the design waits for Ella's yes to the exact message, but one week the live system sent the draft straight out. `awml check` doesn't hold a red line to the operations' rules or to the boxes it crosses, so the drawing can show exactly what went wrong.
 
 ## A tour of the gallery
 
@@ -420,7 +420,7 @@ Every id, label, kind and reference to an id is text. `awml` reads YAML 1.2, whi
 
 ### What `awml check` reports
 
-`awml check` reports a missing or unknown field, an unknown kind or view, an id used twice or badly written, a value YAML didn't read as text, a `breaks` that isn't true or false, a part or group in an unknown group, a group nested in itself, a line to or from an unknown part, a comment linked by anything but `tie`, a `tie` with no comment at either end, an unknown `op` or one on a part that isn't a step, and a step that does what its operation must never do, as far as the drawing shows it. [`SPEC.md`](SPEC.md) gives the exact rules.
+`awml check` reports a missing or unknown field, an unknown kind or view, an id used twice or badly written, a value YAML didn't read as text, a `breaks` that isn't true or false, a part or group in an unknown group, a group nested in itself, a line to or from an unknown part, a comment linked by anything but `tie`, a `tie` with no comment at either end, an unknown `op` or one on a part that isn't a step, a step that does what its operation must never do, as far as the drawing shows it, and a `data` line in the security view that moves content anywhere but its own box or a box inside it, which is publishing drawn as routing. [`SPEC.md`](SPEC.md) gives the exact rules.
 
 ### Examples to start from
 

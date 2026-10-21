@@ -367,3 +367,90 @@ func TestAnAnswerOrACheckNeverWritesToAContext(t *testing.T) {
 	mistakes(t, parsed(t, question+"  - { from: word, to: notes, kind: data, breaks: true }\n"))
 	mistakes(t, parsed(t, question+"  - { from: word, to: notes, kind: refused }\n"))
 }
+
+const scoped = `
+awml: "0.2"
+title: The family's dinners
+view: security
+groups:
+  - { id: carers, label: "carers: + June, Beth" }
+  - { id: family, label: "family: parents, kids", in: carers }
+  - { id: household, label: "household: parents", in: family }
+  - { id: club, label: "club: the kids, their coach" }
+parts:
+  - { id: thu, kind: trigger, label: "Thursday 19:00" }
+  - { id: plan, kind: ai, label: "Plan next week's dinners", in: family }
+  - { id: mealplan, kind: context, label: Meal plan, in: family }
+  - { id: screen, kind: surface, label: Kitchen screen, in: carers }
+  - { id: budget, kind: context, label: The food budget, in: household }
+  - { id: fixtures, kind: context, label: The club's fixtures, in: club }
+  - { id: site, kind: surface, label: The family's public page }
+  - { id: note, kind: comment, label: "For example: last week's plan", in: family }
+lines:
+  - { from: thu, to: plan, kind: start }
+  - { from: plan, to: mealplan, kind: data }
+`
+
+// withScopedLines is the scoped file with more lines.
+func withScopedLines(t *testing.T, lines ...string) *Map {
+	t.Helper()
+	src := scoped
+	for _, l := range lines {
+		src += "  - " + l + "\n"
+	}
+	return parsed(t, src)
+}
+
+func TestADataLineWithinOneBoxIsRouting(t *testing.T) {
+	mistakes(t, parsed(t, scoped))
+}
+
+func TestADataLineIntoABoxInsideItsOwnIsRouting(t *testing.T) {
+	mistakes(t, withScopedLines(t, "{ from: mealplan, to: budget, kind: data }", "{ from: screen, to: budget, kind: data }"))
+}
+
+func TestADataLineIntoAWiderBoxIsPublishing(t *testing.T) {
+	mistakes(t, withScopedLines(t, "{ from: mealplan, to: screen, kind: data }"),
+		`the line from "mealplan" to "screen" moves content from group "family" into group "carers", which isn't inside it: draw it as publish, or as refused if the design refuses the read`)
+}
+
+func TestADataLineFromANarrowerBoxIsPublishing(t *testing.T) {
+	mistakes(t, withScopedLines(t, "{ from: budget, to: plan, kind: data }"),
+		`the line from "budget" to "plan" moves content from group "household" into group "family", which isn't inside it: draw it as publish, or as refused if the design refuses the read`)
+}
+
+func TestADataLineIntoABoxSideBySideIsPublishing(t *testing.T) {
+	mistakes(t, withScopedLines(t, "{ from: fixtures, to: plan, kind: data }", "{ from: mealplan, to: fixtures, kind: data }"),
+		`the line from "fixtures" to "plan" moves content from group "club" into group "family", which isn't inside it: draw it as publish, or as refused if the design refuses the read`,
+		`the line from "mealplan" to "fixtures" moves content from group "family" into group "club", which isn't inside it: draw it as publish, or as refused if the design refuses the read`)
+}
+
+func TestOnlyADataLineIsHeldToItsScopes(t *testing.T) {
+	for _, kind := range []string{"start", "publish", "refused", "hidden"} {
+		t.Run(kind, func(t *testing.T) {
+			mistakes(t, withScopedLines(t, fmt.Sprintf("{ from: mealplan, to: screen, kind: %s }", kind)))
+		})
+	}
+	mistakes(t, withScopedLines(t, "{ from: note, to: screen, kind: tie }"))
+}
+
+func TestARedLineIsHeldToNoScope(t *testing.T) {
+	mistakes(t, withScopedLines(t, "{ from: mealplan, to: screen, kind: data, breaks: true }"))
+}
+
+func TestThePlatformViewIsHeldToNoScope(t *testing.T) {
+	src := strings.Replace(scoped, "view: security", "view: platform", 1) + "  - { from: mealplan, to: screen, kind: data }\n"
+	mistakes(t, parsed(t, src))
+}
+
+func TestATriggerWithNoGroupIsInTheBoxOfWhatItStarts(t *testing.T) {
+	mistakes(t, withScopedLines(t, "{ from: thu, to: budget, kind: data }"))
+	mistakes(t, withScopedLines(t, "{ from: thu, to: screen, kind: data }"),
+		`the line from "thu" to "screen" moves content from group "family" into group "carers", which isn't inside it: draw it as publish, or as refused if the design refuses the read`)
+}
+
+func TestThePageOutsideEveryBoxIsWiderThanAnyOfThem(t *testing.T) {
+	mistakes(t, withScopedLines(t, "{ from: site, to: mealplan, kind: data }", "{ from: site, to: budget, kind: data }"))
+	mistakes(t, withScopedLines(t, "{ from: mealplan, to: site, kind: data }"),
+		`the line from "mealplan" to "site" moves content from group "family" to the top level, outside every group: draw it as publish, or as refused if the design refuses the read`)
+}
