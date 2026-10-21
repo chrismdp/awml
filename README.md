@@ -15,6 +15,7 @@ A fictional family's dinners. On Thursday evening AI plans next week's dinners a
 - [Install](#install)
 - [Use it with Claude or ChatGPT](#use-it-with-claude-or-chatgpt)
 - [Why AWML](#why-awml)
+- [Drawing your own workflows](#drawing-your-own-workflows)
 - [Three layers, for one consultant](#three-layers-for-one-consultant)
 - [Reading a drawing](#reading-a-drawing)
 - [Operations](#operations)
@@ -70,6 +71,10 @@ Drawing a workflow gives you:
 - **Efficiency:** the same patterns of steps turn up again and again, so each can be optimised once.
 
 The thinking behind AWML is in [You Must Draw Your AI Workflow to Control It](https://www.chrismdp.com/awml/).
+
+## Drawing your own workflows
+
+If you already run AI routines, such as scheduled tasks, bots and automations, [`GUIDE.md`](GUIDE.md) turns them into AWML files, one workflow at a time. You trace real runs from their records, draw what the design allows, and mark in red what the runs did beyond it. The `awml` skill follows the same guide to find and trace a workflow you already run.
 
 ## Three layers, for one consultant
 

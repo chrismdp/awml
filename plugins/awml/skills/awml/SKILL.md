@@ -17,6 +17,8 @@ Each example's drawing sits beside it, with the same name ending `.mmd`.
 
 ## 1. Find out the workflow
 
+If the person already runs the workflow, as scheduled tasks, an agent or automations, find it and trace a real run with steps 1 to 4 of `references/guide.md` before you write anything. If they've named the workflow they want, that's the one step 3 picks. Wherever you can reach the live sources, such as the list of scheduled tasks, the scripts and the run records, read them yourself rather than asking the person. The guide's `SPEC.md` is `references/spec.md`, and its examples are in `references/examples/`.
+
 You need each of these, and each becomes part of the file:
 
 | Find out | It becomes |
@@ -87,7 +89,7 @@ If you have no shell, or `awml` can't be installed, go through `references/check
 
 `awml check` reads one file at a time, so it can't see whether the two views agree. Compare them yourself: the same ids and lines in each, apart from any parts the platform view leaves out.
 
-In the security view, `awml check` also reports publishing drawn as routing: a `data` line into a box that isn't the source's or one inside it. It reads the boxes, not their labels, so it can't see a box drawn in the wrong place. Section 5 says what to look for yourself.
+In the security view, `awml check` also reports publishing drawn as routing: a `data` line into a box that isn't the source's or one inside it. It reads the boxes, not their labels, so it can't see a box drawn in the wrong place. So look at each box inside another yourself: if it adds anyone, or its terms are looser, it belongs beside the other, and a `data` line into it is really publishing. Drawn inside the business, the consultant's private scope would hide that taking the reply there loosens the terms it is kept under.
 
 ## 4. Draw
 
@@ -99,14 +101,7 @@ Without `awml`, draw the Mermaid by hand with `references/drawing-by-hand.md`, a
 
 ## 5. Say what the drawing reveals
 
-Drawing a workflow shows what a list of its tasks hides. Go through the drawing with the person and point out:
-
-- **Every publishing line.** For each thick line, say what crosses, from which scope to which, and who gains sight of it or which terms loosen. Say what releases it: a person's yes, as when it runs into a review or into their own step, or a standing rule its label names. A publishing line with neither is a finding. Nothing reaches the public without a person's yes to that item, under any rule.
-- **A box that hides publishing.** `awml check` reports publishing drawn as routing, but it trusts each box to sit in the right place, and only the labels and the design's terms show that. A box whose people are all in another, under looser terms, belongs beside it, never inside it. So look at each box inside another. If it adds anyone, or its terms are looser, it should sit beside the other, and a `data` line into it is really publishing. Drawn inside the business, the consultant's private scope would hide that taking the reply there loosens the terms it is kept under.
-- **Ask actions with nothing in front.** Each Ask action needs a review on the way to it, a person's own `do` step leading straight to it, or a standing approval named in its label, with a comment giving its kinds and limits. One with none of these is a finding.
-- **Allow actions that aren't.** An Allow action that can't be undone, is seen outside its scope or spends past a limit is really Ask.
-- **AI steps that could be code.** A blue AI step that does the same thing every time could be a green code step: cheaper to run, and tested once.
-- **Gaps.** A surface nothing keeps current, a context nothing writes or nothing reads, a step nothing starts, a person's connector carrying work that must outlive their access, and, in the platform view, a machine holding content whose scope doesn't allow every company that processes content there.
+Drawing a workflow shows what a list of its tasks hides. Go through the drawing with the person, asking of it the questions in step 10 of `references/guide.md`, and of the trace too if you made one. For each publishing line, say what crosses, from which scope to which, and who gains sight of it or which terms loosen.
 
 Say too how the work is shared out: how many steps AI, code and a person each decide.
 

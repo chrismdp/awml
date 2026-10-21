@@ -8,12 +8,12 @@ import (
 	"testing"
 )
 
-// The skill travels without the repository, so it carries its own copies of the spec and of some
-// examples. Each must be the same, byte for byte, as its source.
+// The skill travels without the repository, so it carries its own copies of the spec, the guide and
+// some examples. Each must be the same, byte for byte, as its source.
 const skill = "plugins/awml/skills/awml"
 
 func TestTheSkillsCopiesAreCurrent(t *testing.T) {
-	copies := [][2]string{{"SPEC.md", "references/spec.md"}}
+	copies := [][2]string{{"SPEC.md", "references/spec.md"}, {"GUIDE.md", "references/guide.md"}}
 	for _, name := range []string{"client-email", "client-email-platform", "dinners-security", "dinners-platform"} {
 		for _, ext := range []string{".yaml", ".mmd"} {
 			copies = append(copies, [2]string{"examples/" + name + ext, "references/examples/" + name + ext})
