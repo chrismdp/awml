@@ -1,4 +1,5 @@
-# Builds awml for Linux, macOS and Windows, on amd64 and arm64, when a tag v* is pushed.
+# Builds awml for Linux, macOS and Windows, on amd64 and arm64, when a tag v* is pushed, and zips
+# the skill for people who upload it by hand.
 # Try it locally with: goreleaser release --snapshot --clean
 version: 2
 project_name: awml
@@ -20,6 +21,14 @@ archives:
         formats: [zip]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files: [README.md, SPEC.md, LICENSE]
+  # The skill on its own, with its folder awml/ at the top of the zip, as claude.ai expects.
+  - id: skill
+    meta: true
+    formats: [zip]
+    name_template: awml-skill
+    files:
+      - src: plugins/awml/skills/awml
+        dst: awml
 
 checksum:
   name_template: checksums.txt

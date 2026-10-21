@@ -1,0 +1,77 @@
+---
+config:
+  theme: default
+  flowchart:
+    useMaxWidth: false
+    subGraphTitleMargin:
+      top: 6
+      bottom: 30
+---
+flowchart TB
+  subgraph server["Server: claude-sonnet-4-5"]
+    direction TB
+    favourites[("Favourites, recipes and the shopping list")]
+    plan("<small style='color:#3d434f'>🤖</small><br>Plan next week's dinners")
+    mealplan[("Meal plan")]
+    fill("<small style='color:#3d434f'>⚙️ 🛠️ do</small><br>Fill the basket from the plan and the list")
+    copy("<small style='color:#3d434f'>⚙️ 📥 bring-in</small><br>Copy the pickups calendar")
+    pickups[("Pickups")]
+    screen_gap@{ shape: notch-rect, label: "Missing from the design: no scheduled task keeps the screen current" }
+    scored@{ shape: notch-rect, label: "For example: scored against the plans the family kept" }
+    tried@{ shape: notch-rect, label: "For example: tried on a second model some weeks" }
+  end
+  subgraph app["The family messaging app"]
+    direction TB
+    chat@{ shape: win-pane, label: "Family chat" }
+    approve("<small style='color:#3d434f'>👤 ✅ review</small><br>Owen's yes, in his private chat")
+  end
+  subgraph supermarket["The supermarket"]
+    direction TB
+    shop{{"Owen's supermarket account"}}
+  end
+  subgraph calendars["The calendar"]
+    direction TB
+    calendar{{"Nadia's calendar"}}
+  end
+  subgraph wall["The kitchen screen"]
+    direction TB
+    screen@{ shape: win-pane, label: "Kitchen screen" }
+  end
+
+  favourites --> plan
+  plan --> mealplan
+  mealplan -->|"posted"| chat
+  mealplan --> fill
+  favourites --> fill
+  fill -->|"fills the basket"| shop
+  fill --> approve
+  approve -->|"[yes] checks out"| shop
+  calendar --> copy
+  copy --> pickups
+  pickups --> screen
+  mealplan --> screen
+  screen_gap -.- screen
+  scored -.- plan
+  tried -.- plan
+  classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
+  classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
+  classDef con fill:#eceef2,stroke:#5d6472,color:#16171b
+  classDef surf fill:#ffffff,stroke:#2a2d35,stroke-width:1.5px,color:#16171b
+  classDef out fill:#fde4dc,stroke:#b5532f,color:#16171b
+  classDef ai fill:#cdd3fb,stroke:#3b4bb0,color:#16171b
+  classDef code fill:#c4e3d1,stroke:#2b7a4f,color:#16171b
+  classDef person fill:#f7d79a,stroke:#9a6100,color:#16171b
+  classDef uml fill:#16171b,stroke:#16171b,color:#16171b
+  classDef gap fill:#ffffff,stroke:#8a93a3,stroke-dasharray:4 3,color:#6b7280
+  class favourites,mealplan,pickups ctx
+  class shop,calendar con
+  class chat,screen surf
+  class plan ai
+  class fill,copy code
+  class approve person
+  class screen_gap,scored,tried gap
+  style server fill:#e3ebfa,stroke:#b9c8e8,color:#16171b
+  style app fill:#fbe9df,stroke:#ecc7b2,color:#16171b
+  style supermarket fill:#efe6fa,stroke:#d3c2ea,color:#16171b
+  style calendars fill:#fbf3d9,stroke:#e8d9a6,color:#16171b
+  style wall fill:#dff3ef,stroke:#b4ddd4,color:#16171b

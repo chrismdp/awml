@@ -1,0 +1,16 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "awml",
+  "description": "AWML, the Agentic Workflow Modelling Language: a skill to describe, check and draw agentic workflows.",
+  "owner": {
+    "name": "Chris Parsons"
+  },
+  "plugins": [
+    {
+      "name": "awml",
+      "source": "./plugins/awml",
+      "description": "Describe, check and draw agentic workflows in AWML, the Agentic Workflow Modelling Language.",
+      "category": "productivity"
+    }
+  ]
+}

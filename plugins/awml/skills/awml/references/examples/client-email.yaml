@@ -1,0 +1,39 @@
+# A client's email answered with a draft, by who may see each part. The email arrives in the
+# consultant's private mailbox, and a standing rule moves a client's email into the business. The
+# consultant edits the draft and sends it, which takes the reply back into the private mailbox.
+# Both thick lines are publishing: the first adds a viewer, the associate, and the second loosens
+# the terms, since the business keeps client work under the engagement's confidentiality terms,
+# which the consultant's own mailbox doesn't carry. The consultant, the associate and the client
+# are fictional.
+awml: "0.2"
+title: A client's email, answered with a draft
+view: security
+groups:
+  - { id: private, label: "private: the consultant" }
+  - { id: business, label: "business: the consultant, an associate" }
+parts:
+  - { id: mailbox, kind: connector, label: "The consultant's mailbox", in: private }
+  - { id: weekdays, kind: trigger, label: "Weekdays 07:00", in: private }
+  - { id: bring, kind: code, op: bring-in, label: "Bring in the inbox", in: private }
+  - { id: rules, kind: code, op: sort, label: "Sort by rule: is the sender a client?", in: private }
+  - { id: engagements, kind: context, label: "The business's engagements", in: business }
+  - { id: choose, kind: ai, op: sort, label: "Choose the engagement the email belongs to", in: business }
+  - { id: learn, kind: ai, op: learn, label: "Update the engagement's project with what the email says", in: business }
+  - { id: project, kind: context, label: "The engagement's project", in: business }
+  - { id: draft, kind: ai, op: draft, label: "Draft a reply", in: business }
+  - { id: drafts, kind: context, label: "Drafts", in: business }
+  - { id: edit, kind: person, op: do, label: "Edit the reply and send it", in: private }
+  - { id: send, kind: outside, label: "Send the reply: Ask", in: private }
+lines:
+  - { from: weekdays, to: bring, kind: start }
+  - { from: mailbox, to: bring, kind: data }
+  - { from: bring, to: rules, kind: data }
+  - { from: rules, to: choose, kind: publish, label: "standing rule: a client's email" }
+  - { from: engagements, to: choose, kind: data }
+  - { from: choose, to: learn, kind: data }
+  - { from: learn, to: project, kind: data }
+  - { from: project, to: draft, kind: data }
+  - { from: draft, to: drafts, kind: data }
+  - { from: drafts, to: edit, kind: publish, label: "the consultant takes the reply" }
+  - { from: edit, to: send, kind: data }
+  - { from: send, to: mailbox, kind: data }

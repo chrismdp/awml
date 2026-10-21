@@ -1,0 +1,13 @@
+{
+  "name": "awml",
+  "displayName": "AWML",
+  "version": "0.2.1",
+  "description": "Describe, check and draw agentic workflows in AWML, the Agentic Workflow Modelling Language: who decides each step, who may see each part, and what needs a person's yes.",
+  "author": {
+    "name": "Chris Parsons"
+  },
+  "homepage": "https://awml.io",
+  "repository": "https://github.com/chrismdp/awml",
+  "license": "MIT",
+  "keywords": ["awml", "workflow", "agentic", "ai", "diagram", "mermaid", "audit", "security"]
+}

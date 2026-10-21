@@ -1,0 +1,20 @@
+{
+  "name": "awml",
+  "interface": {
+    "displayName": "AWML"
+  },
+  "plugins": [
+    {
+      "name": "awml",
+      "source": {
+        "source": "local",
+        "path": "./plugins/awml"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

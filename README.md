@@ -13,6 +13,7 @@ A fictional family's dinners. On Thursday evening AI plans next week's dinners a
 ## Contents
 
 - [Install](#install)
+- [Use it with Claude or ChatGPT](#use-it-with-claude-or-chatgpt)
 - [Why AWML](#why-awml)
 - [Three layers, for one consultant](#three-layers-for-one-consultant)
 - [Reading a drawing](#reading-a-drawing)
@@ -39,6 +40,15 @@ go install github.com/chrismdp/awml/cmd/awml@latest
 ```
 
 This needs Go 1.22 or later, and puts `awml` in Go's own folder for commands, usually `~/go/bin`. Or download a binary for Linux, macOS or Windows from the [Releases page](https://github.com/chrismdp/awml/releases), unpack it and put `awml` on your path. [Using awml](#using-awml) covers the commands and the file format.
+
+## Use it with Claude or ChatGPT
+
+This repository is also a plugin with one skill, `awml`. The skill helps an AI assistant work out a workflow with you, write both views of it, check them and draw them.
+
+- **Claude Code:** run `/plugin marketplace add chrismdp/awml`, then `/plugin install awml@awml`. Then ask Claude to draw a workflow, or type `/awml:awml`.
+- **claude.ai and the Claude desktop app:** download `awml-skill.zip` from the [Releases page](https://github.com/chrismdp/awml/releases). Go to **Customize > Skills**, click **+**, then **Create skill**, then **Upload a skill**, and choose the zip. Skills need a Pro, Max, Team or Enterprise plan, with **Code execution and file creation** turned on in **Settings > Capabilities**. You can instead add the plugin in **Customize > Plugins**, under **Add > Add marketplace**, with `chrismdp/awml`.
+- **Codex:** run `codex plugin marketplace add chrismdp/awml`, then `codex plugin add awml@awml`, or install it from `/plugins` in the Codex CLI. Start a new session to use it.
+- **ChatGPT:** a workspace owner or admin can add the plugin for their workspace. In the Admin console, open **Plugins**, choose **Add**, then **Import marketplace**, and enter `https://github.com/chrismdp/awml`. OpenAI's help pages describe no way to add it to a single account.
 
 ## Why AWML
 

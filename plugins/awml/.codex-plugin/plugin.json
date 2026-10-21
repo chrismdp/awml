@@ -1,0 +1,26 @@
+{
+  "name": "awml",
+  "version": "0.2.1",
+  "description": "Describe, check and draw agentic workflows in AWML, the Agentic Workflow Modelling Language: who decides each step, who may see each part, and what needs a person's yes.",
+  "author": {
+    "name": "Chris Parsons"
+  },
+  "homepage": "https://awml.io",
+  "repository": "https://github.com/chrismdp/awml",
+  "license": "MIT",
+  "keywords": ["awml", "workflow", "agentic", "ai", "diagram", "mermaid", "audit", "security"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "AWML",
+    "shortDescription": "Describe, check and draw agentic workflows",
+    "longDescription": "Use AWML to describe an agentic workflow with you, write it as two small YAML files, one for who may see each part and one for where each part runs, check them with awml check, and draw them as Mermaid. It then points out what the drawing reveals, such as content published to a wider audience without a yes.",
+    "developerName": "Chris Parsons",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Read", "Write"],
+    "websiteURL": "https://awml.io",
+    "defaultPrompt": [
+      "Help me draw my AI workflow in AWML.",
+      "Check this AWML file and fix its mistakes."
+    ]
+  }
+}

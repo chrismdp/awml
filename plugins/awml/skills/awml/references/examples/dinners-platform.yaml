@@ -1,0 +1,41 @@
+# The family's dinners, by where each part runs. The family is fictional.
+awml: "0.2"
+title: The family's dinners
+view: platform
+groups:
+  - { id: server, label: "Server: claude-sonnet-4-5" }
+  - { id: app, label: "The family messaging app" }
+  - { id: supermarket, label: "The supermarket" }
+  - { id: calendars, label: "The calendar" }
+  - { id: wall, label: "The kitchen screen" }
+parts:
+  - { id: favourites, kind: context, label: "Favourites, recipes and the shopping list", in: server }
+  - { id: plan, kind: ai, label: "Plan next week's dinners", in: server }
+  - { id: mealplan, kind: context, label: "Meal plan", in: server }
+  - { id: fill, kind: code, op: do, label: "Fill the basket from the plan and the list", in: server }
+  - { id: copy, kind: code, op: bring-in, label: "Copy the pickups calendar", in: server }
+  - { id: pickups, kind: context, label: "Pickups", in: server }
+  - { id: screen_gap, kind: comment, label: "Missing from the design: no scheduled task keeps the screen current", in: server }
+  - { id: scored, kind: comment, label: "For example: scored against the plans the family kept", in: server }
+  - { id: tried, kind: comment, label: "For example: tried on a second model some weeks", in: server }
+  - { id: chat, kind: surface, label: "Family chat", in: app }
+  - { id: approve, kind: review, label: "Owen's yes, in his private chat", in: app }
+  - { id: shop, kind: connector, label: "Owen's supermarket account", in: supermarket }
+  - { id: calendar, kind: connector, label: "Nadia's calendar", in: calendars }
+  - { id: screen, kind: surface, label: "Kitchen screen", in: wall }
+lines:
+  - { from: favourites, to: plan, kind: data }
+  - { from: plan, to: mealplan, kind: data }
+  - { from: mealplan, to: chat, kind: data, label: posted }
+  - { from: mealplan, to: fill, kind: data }
+  - { from: favourites, to: fill, kind: data }
+  - { from: fill, to: shop, kind: data, label: fills the basket }
+  - { from: fill, to: approve, kind: data }
+  - { from: approve, to: shop, kind: data, label: "[yes] checks out" }
+  - { from: calendar, to: copy, kind: data }
+  - { from: copy, to: pickups, kind: data }
+  - { from: pickups, to: screen, kind: data }
+  - { from: mealplan, to: screen, kind: data }
+  - { from: screen_gap, to: screen, kind: tie }
+  - { from: scored, to: plan, kind: tie }
+  - { from: tried, to: plan, kind: tie }

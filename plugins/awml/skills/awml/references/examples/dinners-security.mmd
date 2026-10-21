@@ -1,0 +1,82 @@
+---
+config:
+  theme: default
+  flowchart:
+    useMaxWidth: false
+    subGraphTitleMargin:
+      top: 6
+      bottom: 30
+---
+flowchart TB
+  subgraph carers["carers: + June, Beth"]
+    direction TB
+    calendar{{"Nadia's calendar"}}
+    copy("<small style='color:#3d434f'>⚙️ 📥 bring-in</small><br>Copy the pickups calendar")
+    pickups[("Pickups")]
+    screen@{ shape: win-pane, label: "Kitchen screen" }
+    screen_gap@{ shape: notch-rect, label: "Missing from the design: no scheduled task keeps the screen current" }
+    subgraph family["family: parents, kids"]
+      direction TB
+      thu(["Thursday 19:00"])
+      sat(["Saturday 09:00"])
+      favourites[("Favourites, recipes and the shopping list")]
+      plan("<small style='color:#3d434f'>🤖</small><br>Plan next week's dinners")
+      mealplan[("Meal plan")]
+      chat@{ shape: win-pane, label: "Family chat" }
+      fill("<small style='color:#3d434f'>⚙️ 🛠️ do</small><br>Fill the basket from the plan and the list")
+      basket>"Fill the basket: Allow under £180"]
+      approve("<small style='color:#3d434f'>👤 ✅ review</small><br>Owen's yes to the exact basket")
+      checkout>"Check out: Ask"]
+      shop{{"Owen's supermarket account"}}
+      subgraph household["household: parents"]
+        direction TB
+        daily(["Every day 07:00"])
+        bank{{"Joint account, on Owen's consent"}}
+        match("<small style='color:#3d434f'>⚙️ 🔍 check</small><br>Match the account against the bills expected")
+        parents_chat@{ shape: win-pane, label: "Parents' chat" }
+      end
+    end
+  end
+
+  thu -.-> plan
+  favourites --> plan
+  plan --> mealplan
+  mealplan -->|"posted"| chat
+  sat -.-> fill
+  mealplan --> fill
+  favourites --> fill
+  fill --> basket
+  basket --> shop
+  basket --> approve
+  approve -->|"[yes]"| checkout
+  checkout --> shop
+  calendar --> copy
+  copy --> pickups
+  pickups --> screen
+  mealplan ==>|"standing rule: dinners to carers"| screen
+  screen_gap -.- screen
+  daily -.-> match
+  bank --> match
+  match --> parents_chat
+  classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
+  classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
+  classDef con fill:#eceef2,stroke:#5d6472,color:#16171b
+  classDef surf fill:#ffffff,stroke:#2a2d35,stroke-width:1.5px,color:#16171b
+  classDef out fill:#fde4dc,stroke:#b5532f,color:#16171b
+  classDef ai fill:#cdd3fb,stroke:#3b4bb0,color:#16171b
+  classDef code fill:#c4e3d1,stroke:#2b7a4f,color:#16171b
+  classDef person fill:#f7d79a,stroke:#9a6100,color:#16171b
+  classDef uml fill:#16171b,stroke:#16171b,color:#16171b
+  classDef gap fill:#ffffff,stroke:#8a93a3,stroke-dasharray:4 3,color:#6b7280
+  class thu,sat,daily trig
+  class pickups,favourites,mealplan ctx
+  class calendar,shop,bank con
+  class screen,chat,parents_chat surf
+  class basket,checkout out
+  class plan ai
+  class copy,fill,match code
+  class approve person
+  class screen_gap gap
+  style carers fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
+  style family fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
+  style household fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
