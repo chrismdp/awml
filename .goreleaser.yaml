@@ -20,7 +20,7 @@ archives:
       - goos: windows
         formats: [zip]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    files: [README.md, SPEC.md, LICENSE]
+    files: [README.md, SPEC.md, GUIDE.md, LICENSE]
   # The skill on its own, with its folder awml/ at the top of the zip, as claude.ai expects.
   - id: skill
     meta: true
