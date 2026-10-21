@@ -2,8 +2,9 @@ package awml
 
 import "strings"
 
-// Summary holds the things in a workflow that an inventory can count. Groups, parts and lines
-// that appear in both views are counted once within their kind of view.
+// Summary holds the things in a workflow that an inventory can count, and the names of its AI
+// steps, people, scopes and platforms. Groups, parts and lines that appear in both views are
+// counted and named once within their kind of view.
 type Summary struct {
 	Steps           StepCounts        `json:"steps"`
 	Operations      map[string]int    `json:"operations"`
@@ -18,6 +19,16 @@ type Summary struct {
 	PublishingLines PublishingSummary `json:"publishingLines"`
 	RefusedReads    int               `json:"refusedReads"`
 	RedLines        int               `json:"redLines"`
+	AISteps         []string          `json:"aiSteps"`
+	People          []PersonSummary   `json:"people"`
+	ScopeNames      []string          `json:"scopeNames"`
+	PlatformNames   []string          `json:"platformNames"`
+}
+
+// PersonSummary names a place where a person decides: a person step or a review.
+type PersonSummary struct {
+	Label string `json:"label"`
+	Kind  string `json:"kind"`
 }
 
 // StepCounts counts steps by who decides them.
@@ -58,8 +69,10 @@ func Summarise(docs ...*Map) Summary {
 			seenGroups[key] = true
 			if view == "security" {
 				out.Scopes++
+				out.ScopeNames = append(out.ScopeNames, scopeName(str(group, "label")))
 			} else if view == "platform" {
 				out.Platforms++
+				out.PlatformNames = append(out.PlatformNames, str(group, "label"))
 			}
 		}
 		for _, part := range items(doc, "parts") {
@@ -71,10 +84,12 @@ func Summarise(docs ...*Map) Summary {
 			switch kind := str(part, "kind"); kind {
 			case "ai":
 				out.Steps.AI++
+				out.AISteps = append(out.AISteps, str(part, "label"))
 			case "code":
 				out.Steps.Code++
 			case "person":
 				out.Steps.Person++
+				out.People = append(out.People, PersonSummary{Label: str(part, "label"), Kind: kind})
 			case "outside":
 				switch outsideTier(str(part, "label")) {
 				case "Allow":
@@ -88,6 +103,7 @@ func Summarise(docs ...*Map) Summary {
 				out.Triggers++
 			case "review":
 				out.Reviews++
+				out.People = append(out.People, PersonSummary{Label: str(part, "label"), Kind: kind})
 			case "context":
 				out.Contexts++
 			case "connector":
@@ -154,8 +170,21 @@ func TotalSummaries(summaries ...Summary) Summary {
 		out.PublishingLines.Labels = append(out.PublishingLines.Labels, s.PublishingLines.Labels...)
 		out.RefusedReads += s.RefusedReads
 		out.RedLines += s.RedLines
+		out.AISteps = append(out.AISteps, s.AISteps...)
+		out.People = append(out.People, s.People...)
+		out.ScopeNames = append(out.ScopeNames, s.ScopeNames...)
+		out.PlatformNames = append(out.PlatformNames, s.PlatformNames...)
 	}
 	return out
+}
+
+// scopeName reads a scope's name from its label, which gives the name before a colon and the
+// members after it, as in `family: parents, kids`.
+func scopeName(label string) string {
+	if name, _, found := strings.Cut(label, ":"); found {
+		return strings.TrimSpace(name)
+	}
+	return label
 }
 
 // outsideTier reads the tier after the last colon in the outside action's label. Text after the

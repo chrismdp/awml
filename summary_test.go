@@ -45,6 +45,8 @@ func TestSummariseEveryExample(t *testing.T) {
 				t.Fatal(err)
 			}
 			got := Summarise(parsed.(*Map))
+			// The lists of names have tests of their own below; this table checks the counts.
+			got.AISteps, got.People, got.ScopeNames, got.PlatformNames = nil, nil, nil, nil
 			if !reflect.DeepEqual(got, want) {
 				t.Errorf("Summarise() = %#v\nwant %#v", got, want)
 			}
@@ -60,6 +62,10 @@ func TestSummariseDeduplicatesTwoViewsOfOneWorkflow(t *testing.T) {
 		OutsideActions: TierCounts{Allow: 1, Ask: 1}, Triggers: 3, Reviews: 1, Contexts: 3,
 		Connectors: 3, Surfaces: 3, Scopes: 3, Platforms: 5,
 		PublishingLines: PublishingSummary{Count: 1, Labels: []string{"standing rule: dinners to carers"}},
+		AISteps:         []string{"Plan next week's dinners"},
+		People:          []PersonSummary{{Label: "Owen's yes to the exact basket", Kind: "review"}},
+		ScopeNames:      []string{"carers", "family", "household"},
+		PlatformNames:   []string{"Server: claude-sonnet-4-5", "The family messaging app", "The supermarket", "The calendar", "The kitchen screen"},
 	}
 	if got := Summarise(security, platform); !reflect.DeepEqual(got, want) {
 		t.Errorf("Summarise(two views) = %#v\nwant %#v", got, want)
@@ -74,6 +80,9 @@ func TestTotalSummariesAddsInventoryCounts(t *testing.T) {
 		Steps: StepCounts{AI: 2, Code: 1}, Operations: map[string]int{"answer": 1, "draft": 1, "do": 1},
 		OutsideActions: TierCounts{Ask: 1}, Triggers: 2, Reviews: 1, Contexts: 2,
 		Surfaces: 1, Scopes: 3, RefusedReads: 1, RedLines: 1,
+		AISteps:    []string{"Answer from the flat's notes alone", "Draft the week's message to the parents"},
+		People:     []PersonSummary{{Label: "Ella's yes to the exact message", Kind: "review"}},
+		ScopeNames: []string{"flat", "tom", "ella"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("TotalSummaries() = %#v\nwant %#v", got, want)
@@ -85,7 +94,7 @@ func TestSummaryHasStableJSONFieldNames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"steps":{"ai":0,"code":1,"person":0},"operations":{"do":1},"outsideActions":{"allow":1,"ask":1,"block":0},"triggers":1,"reviews":1,"contexts":0,"connectors":0,"surfaces":0,"scopes":1,"platforms":0,"publishingLines":{"count":0,"labels":null},"refusedReads":0,"redLines":0}`
+	want := `{"steps":{"ai":0,"code":1,"person":0},"operations":{"do":1},"outsideActions":{"allow":1,"ask":1,"block":0},"triggers":1,"reviews":1,"contexts":0,"connectors":0,"surfaces":0,"scopes":1,"platforms":0,"publishingLines":{"count":0,"labels":null},"refusedReads":0,"redLines":0,"aiSteps":null,"people":[{"label":"Dev's yes to the exact payment","kind":"review"}],"scopeNames":["parents"],"platformNames":null}`
 	if string(got) != want {
 		t.Errorf("JSON = %s\nwant %s", got, want)
 	}
@@ -116,6 +125,45 @@ parts:
 `)
 	if got, want := Summarise(doc).OutsideActions, (TierCounts{Allow: 1, Ask: 1, Block: 1}); got != want {
 		t.Errorf("outside actions = %#v, want %#v", got, want)
+	}
+}
+
+func TestSummariseListsTheAIStepsPeopleAndGroupsByName(t *testing.T) {
+	got := Summarise(readExample(t, "examples/client-email.yaml"))
+	if want := []string{"Choose the engagement the email belongs to", "Update the engagement's project with what the email says", "Draft a reply"}; !reflect.DeepEqual(got.AISteps, want) {
+		t.Errorf("AI steps = %q, want %q", got.AISteps, want)
+	}
+	if want := []PersonSummary{{Label: "Edit the reply and send it", Kind: "person"}}; !reflect.DeepEqual(got.People, want) {
+		t.Errorf("people = %#v, want %#v", got.People, want)
+	}
+	if want := []string{"private", "business"}; !reflect.DeepEqual(got.ScopeNames, want) {
+		t.Errorf("scope names = %q, want %q", got.ScopeNames, want)
+	}
+	if got.PlatformNames != nil {
+		t.Errorf("platform names = %q, want none from a security file", got.PlatformNames)
+	}
+}
+
+func TestSummariseListsPersonStepsAndReviewsInFileOrder(t *testing.T) {
+	got := Summarise(readExample(t, "examples/legend.yaml")).People
+	want := []PersonSummary{{Label: "A step decided by a person", Kind: "person"}, {Label: "A review: a person's yes", Kind: "review"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("people = %#v, want %#v", got, want)
+	}
+}
+
+func TestAScopeWithoutMembersIsNamedByItsWholeLabel(t *testing.T) {
+	doc := parsed(t, `
+awml: "0.2"
+title: Bare scope
+view: security
+groups:
+  - { id: team, label: "The team" }
+parts:
+  - { id: step, kind: code, label: "Do it", in: team }
+`)
+	if got, want := Summarise(doc).ScopeNames, []string{"The team"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("scope names = %q, want %q", got, want)
 	}
 }
 
