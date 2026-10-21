@@ -4,6 +4,8 @@ A person who builds AI routines one at a time ends up with scheduled tasks, bots
 
 The drawing shows what the person's written design and rules say should happen. The runs you trace show what did happen. Where a run did something the design doesn't allow, its line is drawn red. Where two written rules disagree, such as the person's design and an agent's own notes, draw the stricter one and ask the person which they meant.
 
+Draw one workflow at a time with the person, or a few that hand work to each other, each in its own conversation. Ask that workflow's questions while its trace is fresh, rather than collecting them across many workflows into one long list. Steps 1 and 2 can cover everything at once; steps 3 to 11 go one workflow at a time.
+
 Before step 5, read the [spec](SPEC.md) and the [example](examples) nearest your workflow. Steps 5 to 9 use their words.
 
 1. **List everything that runs.** Every scheduled task, cron job, bot, Cowork or Codex task and automation. Include work that starts when something arrives, such as a message, a forwarded email or a hand-off from another task, and any schedule kept inside a note. Read the places they live, not your memory: the live list of scheduled tasks, the automation tool's dashboard, the scripts each one calls, and every script that starts it. Write one line per job: what starts it, how often it ran last month, what it leaves behind, which model and company it uses, with any fallback, and where its records are. Give every time on one clock, read from the scheduler's own settings. List what's switched off, and anything the notes describe that nothing runs: both are findings.

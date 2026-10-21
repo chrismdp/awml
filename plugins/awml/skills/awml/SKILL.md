@@ -32,7 +32,7 @@ You need each of these, and each becomes part of the file:
 | Who may see what: each group of people, its members, and which companies may process its content | a scope, which is a group in the security view |
 | Where each part runs: the machines and services, the model each uses, and when each machine is on | a platform, which is a group in the platform view |
 
-Start from what the person has already told you. Infer what you reasonably can, ask only for what's still missing, and say plainly what you inferred so they can correct it. A first draft they can react to often gets better answers than a long list of questions, so ask a few questions at most before you write one.
+Start from what the person has already told you. Infer what you reasonably can, ask only for what's still missing, and say plainly what you inferred so they can correct it. A first draft they can react to often gets better answers than a long list of questions, so ask a few questions at most before you write one. If they run several workflows, draw one with them at a time, or a few that hand work to each other, each in its own conversation, and ask that workflow's questions as you reach them, never as one long list across workflows.
 
 Some judgements need care:
 
