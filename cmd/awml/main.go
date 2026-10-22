@@ -49,7 +49,13 @@ options:
   -h, --help  show this help message and exit
   --implementation ID  draw one implementation
 `},
-	"convert": {"usage: awml convert [-h] SECURITY PLATFORM\n", "\nJoin a legacy security and platform pair into one 0.4 file.\n"},
+	"convert": {"usage: awml convert [-h] [--implementation ID] SECURITY PLATFORM\n", `
+Join a legacy security and platform pair into one 0.4 file.
+
+options:
+  -h, --help  show this help message and exit
+  --implementation ID  name the implementation (default: default)
+`},
 	"page": {"usage: awml page [-h] -o OUT files [files ...]\n", `
 positional arguments:
   files
@@ -137,13 +143,13 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 				fmt.Fprint(stdout, commands[command].usage+commands[command].help)
 			}
 			return 0
-		case flags && (command == "draw" || command == "fit") && a == "--implementation":
+		case flags && (command == "draw" || command == "fit" || command == "convert") && a == "--implementation":
 			if i+1 == len(args) || strings.HasPrefix(args[i+1], "-") {
 				return fail(commands[command].usage, "awml "+command, "argument --implementation: expected one argument")
 			}
 			i++
 			implementation = args[i]
-		case flags && (command == "draw" || command == "fit") && strings.HasPrefix(a, "--implementation="):
+		case flags && (command == "draw" || command == "fit" || command == "convert") && strings.HasPrefix(a, "--implementation="):
 			implementation = strings.TrimPrefix(a, "--implementation=")
 		case flags && a == "--registry":
 			if i+1 == len(args) || (strings.HasPrefix(args[i+1], "-") && args[i+1] != "-") {
@@ -332,7 +338,11 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 0
 	}
 	if command == "convert" {
-		converted, err := awml.Convert(docs[0], docs[1])
+		name := implementation
+		if name == "" {
+			name = "default"
+		}
+		converted, err := awml.ConvertWithImplementation(docs[0], docs[1], name)
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1

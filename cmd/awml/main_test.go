@@ -327,6 +327,64 @@ func TestPageWritesNothingWhenAFileHasMistakes(t *testing.T) {
 	}
 }
 
+func TestConvertWritesAHandWrittenFileAndNamesItsImplementation(t *testing.T) {
+	security := write(t, "security.yaml", `# A bakery plans tomorrow's loaves. The bakery is fictional.
+awml: "0.3"
+title: Tomorrow's loaves
+view: security
+groups:
+  - { id: "bakery", label: "bakery: Jo, Kit", processing: { anthropic: any } }
+parts:
+  - { id: morning, kind: "trigger", label: "Tomorrow 07:00", wait: "PT1H" }
+  - { id: "plan", kind: ai, op: "draft", label: "Plan a \"special\" loaf \\ batch", in: bakery }
+  - { id: notes, kind: context, label: "Notes", at: "notes/bread", in: bakery }
+lines:
+  - { from: morning, to: "plan", kind: "start" }
+  - { from: plan, to: notes, kind: data, label: "yes" }
+`)
+	platform := write(t, "platform.yaml", `# It runs in the bakery office.
+awml: "0.3"
+title: Tomorrow's loaves
+view: platform
+groups:
+  - { id: laptop, label: "Laptop: always on" }
+parts:
+  - { id: morning, kind: trigger, label: "Tomorrow 07:00", wait: PT1H }
+  - { id: "plan", kind: ai, op: draft, label: "Plan a \"special\" loaf \\ batch", in: laptop }
+  - { id: notes, kind: context, label: "Notes", at: notes/bread, in: laptop }
+  - { id: key, kind: comment, label: "The key: read only", in: laptop }
+lines:
+  - { from: morning, to: plan, kind: start }
+  - { from: plan, to: notes, kind: data, label: "yes" }
+  - { from: key, to: plan, kind: tie }
+`)
+	r := awmlRun("convert", "--implementation", "office", security, platform)
+	want := `# A bakery plans tomorrow's loaves. The bakery is fictional.
+# It runs in the bakery office.
+awml: "0.4"
+title: Tomorrow's loaves
+scopes:
+  - { id: bakery, label: "bakery: Jo, Kit", processing: { anthropic: any } }
+parts:
+  - { id: morning, kind: trigger, label: "Tomorrow 07:00", wait: PT1H }
+  - { id: plan, kind: ai, op: draft, label: "Plan a \"special\" loaf \\ batch", in: bakery }
+  - { id: notes, kind: context, label: "Notes", at: notes/bread, in: bakery }
+lines:
+  - { from: morning, to: plan, kind: start }
+  - { from: plan, to: notes, kind: data, label: "yes" }
+implementations:
+  office:
+    label: Default
+    blocks:
+      - { id: laptop, label: "Laptop: always on", parts: [plan, notes] }
+    comments:
+      - { id: key, label: "The key: read only", in: laptop, ties: [plan] }
+`
+	if r != (result{0, want, ""}) {
+		t.Errorf("convert gave %+v\nwant stdout:\n%s", r, want)
+	}
+}
+
 func TestTheOutputMayComeFirstOrBeJoinedToItsFlag(t *testing.T) {
 	a := write(t, "a.yaml", good)
 	dir := t.TempDir()

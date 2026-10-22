@@ -225,7 +225,7 @@ The consultant's email, through both lenses:
 <tr><th>The security view</th><th>The platform view</th></tr>
 <tr>
 <td valign="top"><img src="examples/client-email.svg" width="416" alt="A client's email, by who may see each part"></td>
-<td valign="top"><img src="examples/client-email-default.svg" width="353" alt="A client's email, by where each part runs"></td>
+<td valign="top"><img src="examples/client-email-office.svg" width="353" alt="A client's email, by where each part runs"></td>
 </tr>
 </table>
 
@@ -284,7 +284,7 @@ Whose access it is matters, because a connector speaks with that access.
 
 In the platform view, each platform is a tinted block, and each part sits in the block of the platform it runs on or lives in. A **platform** is a machine or service that brings its own surfaces, its own **harness** (the program that runs each step and calls a model) and its own models, and often its own triggers: Claude Cowork on a Mac mini, a mail service or a phone. So a trigger sits in the block of the platform that fires it, and a model on its own isn't a platform: it's a choice a platform makes. A **machine** is anywhere the system's tools run that shares one set of access: a server, a laptop, or a sandbox on either.
 
-![The family's dinners, by where each part runs](examples/dinners-default.svg)
+![The family's dinners, by where each part runs](examples/dinners-home.svg)
 
 A block is labelled with what an **implementation** chose there, such as the model it runs, and with when the machine is on, if that isn't always, as in `Noor's laptop: on some evenings`. Work for a machine that is off waits for it. An implementation is one running system built from a design, and each draws its own platform view, with the same parts in different blocks.
 
@@ -391,7 +391,7 @@ Drawing bin day shows what a list of its tasks hides: nothing posts the bin day 
 
 The family's photos run on two machines: a server that never stops, and Noor's laptop, which is on only some evenings. The photos wait on the server until the laptop can sort them.
 
-![The family's photos, on a server and a laptop](examples/tour/09-platform-view-default.svg)
+![The family's photos, on a server and a laptop](examples/tour/09-platform-view-home.svg)
 
 ## Improving one step at a time
 
@@ -418,7 +418,7 @@ AWML isn't a visual workflow tool, where the diagram is the program and drawing 
 awml check examples/question.yaml        # report mistakes; exits 1 on any
 awml fit examples/client-email.yaml examples/platforms/*.yaml
 awml draw examples/question.yaml         # print the Mermaid
-awml draw --implementation default examples/dinners.yaml
+awml draw --implementation home examples/dinners.yaml
 awml page examples/dinners.yaml -o dinners.html
 awml summary examples/dinners.yaml --json
 awml login
@@ -431,7 +431,7 @@ awml pull family/dinners@1 -o dinners
 - `awml draw` prints the security view's Mermaid. Add `--implementation ID` for a platform view. It refuses a file with mistakes, and prints them instead.
 - `awml page` writes one standalone HTML page with the security view then every implementation, each with a heading. Several files appear in the order given. The page takes their shared title, or Workflows when they differ.
 - `awml summary` counts the scopes, platforms, parts and lines in one workflow. It includes platforms from every implementation and counts the design once. `--json` prints the registry's JSON form.
-- `awml convert security.yaml platform.yaml` joins a matching 0.3 or 0.2 pair into one 0.4 file, printed to standard output. It keeps the security design and turns platform groups into blocks of the `default` implementation. YAML comments move to the top. The canonical labels, part order and triggers may change the old platform drawing.
+- `awml convert security.yaml platform.yaml` joins a matching 0.3 or 0.2 pair into one 0.4 file, printed to standard output. It keeps the security design and turns platform groups into blocks of the `default` implementation. Add `--implementation ID` to name the implementation. YAML comments move to the top. The canonical labels, part order and triggers may change the old platform drawing.
 - `awml login` saves an API token for the registry. `awml push` checks and uploads a workflow, and `awml pull` downloads the latest or a numbered version. A 0.4 file travels in the API's security field, with no platform file, and is downloaded as `security.yaml`. Legacy pairs still work. The commands use `https://awml.io` unless `--registry` or `AWML_REGISTRY_URL` says otherwise. Add `--private` to the first push of a private organisation workflow.
 
 For example, the client email workflow can run on the scheduled scripts platform, while the other descriptions show why they don't fit:

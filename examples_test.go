@@ -96,6 +96,32 @@ func TestEachExampleIsSoundAndItsDrawingsAreCurrent(t *testing.T) {
 	}
 }
 
+func TestEachExampleIsWrittenInTheHouseStyle(t *testing.T) {
+	for _, path := range append(examples(t), platformExamples(t)...) {
+		t.Run(path, func(t *testing.T) {
+			src, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			value, err := Parse(src)
+			if err != nil {
+				t.Fatal(err)
+			}
+			doc, ok := value.(*Map)
+			if !ok {
+				t.Fatalf("example is %T, not a mapping", value)
+			}
+			got, err := Marshal(doc)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(got) != string(src) {
+				t.Errorf("Marshal changed %s\ngot:\n%s\nwant:\n%s", path, got, src)
+			}
+		})
+	}
+}
+
 func TestEachPlatformExampleIsSound(t *testing.T) {
 	for _, path := range platformExamples(t) {
 		t.Run(path, func(t *testing.T) {

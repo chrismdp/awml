@@ -31,7 +31,7 @@ for (const path of top.sort()) {
     const report = api.fit([source, ...descriptionSources]);
     assert.equal(api.fitJSON([source, ...descriptionSources]) + "\n",
       runNative(["fit", "--json", relative, ...descriptions], report.gaps.length ? 1 : 0), `${relative}: design fit`);
-    for (const [, implementation] of (source.split("implementations:\n")[1] || "").matchAll(/^(?:  |    )(\w+):\s*$/gm)) {
+    for (const [, implementation] of (source.split("implementations:\n")[1] || "").matchAll(/^  (\w+):\s*$/gm)) {
       assert.equal(api.draw(source, implementation) + "\n",
         runNative(["draw", "--implementation", implementation, relative]), `${relative}: ${implementation} Mermaid`);
       const fit = api.fit([source, ...descriptionSources], implementation);

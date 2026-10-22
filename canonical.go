@@ -262,6 +262,15 @@ func appendUnique(existing []string, added ...string) []string {
 
 // Convert joins a matching legacy pair. The security view supplies the design's wording and order.
 func Convert(security, platform *Map) (*Map, error) {
+	return convert(security, platform, "default")
+}
+
+// ConvertWithImplementation joins a matching legacy pair and names its implementation.
+func ConvertWithImplementation(security, platform *Map, implementation string) (*Map, error) {
+	return convert(security, platform, implementation)
+}
+
+func convert(security, platform *Map, name string) (*Map, error) {
 	for _, doc := range []*Map{security, platform} {
 		if mistakes := Check(doc); len(mistakes) != 0 {
 			return nil, fmt.Errorf("%s", strings.Join(mistakes, "\n"))
@@ -354,7 +363,7 @@ func Convert(security, platform *Map) (*Map, error) {
 		impl.set("comments", comments)
 	}
 	implementations := &Map{}
-	implementations.set("default", impl)
+	implementations.set(name, impl)
 	out.set("implementations", implementations)
 	if mistakes := Check(out); len(mistakes) > 0 {
 		return nil, fmt.Errorf("%s", strings.Join(mistakes, "\n"))

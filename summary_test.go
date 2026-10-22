@@ -55,7 +55,7 @@ func TestSummariseEveryExample(t *testing.T) {
 func TestSummariseDeduplicatesTwoViewsOfOneWorkflow(t *testing.T) {
 	file := readExample(t, "examples/dinners.yaml")
 	security, _ := View(file, "")
-	platform, _ := View(file, "default")
+	platform, _ := View(file, "home")
 	want := Summary{
 		Steps: StepCounts{AI: 1, Code: 3}, Operations: map[string]int{"bring-in": 1, "do": 1, "check": 1},
 		OutsideActions: TierCounts{Allow: 1, Ask: 1}, Triggers: 3, Reviews: 1, Contexts: 3,
