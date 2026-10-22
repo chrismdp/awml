@@ -95,7 +95,11 @@ func judge(security, placement *Map, descriptions []*Map) (results []FitResult, 
 			continue
 		}
 		if !ok {
-			gaps = append(gaps, fmt.Sprintf(`group "%s" names platform "%s", but its description wasn't given`, groupID, platformID))
+			gap := fmt.Sprintf(`group "%s" names platform "%s", but its description wasn't given`, groupID, platformID)
+			if registeredPlatform.MatchString(platformID) {
+				gap += ": pull it with awml pull " + platformID
+			}
+			gaps = append(gaps, gap)
 			continue
 		}
 		var own, visible []*Map
