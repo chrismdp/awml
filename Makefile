@@ -1,4 +1,7 @@
-.PHONY: wasm test-wasm test-workerd
+.PHONY: wasm test-wasm test-workerd references
+
+REFERENCES := plugins/awml/skills/awml/references
+REFERENCE_EXAMPLES := client-email dinners question tour/09-platform-view
 
 AWML_GO := $(wildcard *.go) $(wildcard cmd/awml-wasm/*.go) go.mod go.sum
 
@@ -21,3 +24,16 @@ test-wasm: wasm
 
 test-workerd: wasm
 	bash scripts/test-workerd.sh
+
+# The skill carries copies of the spec, the guide and some examples, each with its implementations'
+# drawings, so it works without the repository.
+references:
+	mkdir -p $(REFERENCES)
+	cp SPEC.md $(REFERENCES)/spec.md
+	cp GUIDE.md $(REFERENCES)/guide.md
+	for name in $(REFERENCE_EXAMPLES); do \
+		mkdir -p "$(REFERENCES)/examples/$$(dirname $$name)"; \
+		for file in examples/$$name.yaml examples/$$name.mmd examples/$$name-*.mmd; do \
+			if test -f "$$file"; then cp "$$file" "$(REFERENCES)/$$file"; fi; \
+		done; \
+	done

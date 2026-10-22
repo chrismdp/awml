@@ -40,7 +40,7 @@ go run ./cmd/awml check examples/*.yaml examples/tour/*.yaml examples/platforms/
 make test-wasm
 ```
 
-- **The tests check that the skill's copies match their sources.** `SPEC.md` is copied to `plugins/awml/skills/awml/references/spec.md`, `GUIDE.md` to `references/guide.md`, and four examples to `references/examples/`. Copy them again whenever a source changes.
+- **The tests check that the skill's copies match their sources.** `SPEC.md` is copied to `plugins/awml/skills/awml/references/spec.md`, `GUIDE.md` to `references/guide.md`, and four examples to `references/examples/`. Run `make references` whenever a source changes.
 - **`references/drawing-by-hand.md` must match what `awml draw` writes,** and a test checks it.
 - **When `awml draw`'s output changes, redraw every example** with `examples/render.sh`. It needs Node and a Chrome. Point `PUPPETEER_EXECUTABLE_PATH` at the Chrome if Puppeteer can't find one.
 - **The drawings use Inter, from `examples/fonts`.** Mermaid sizes each box by measuring its text in the Chrome that draws it, so that Chrome must have Inter. On Linux the script arranges this. On a Mac, install `examples/fonts/Inter-Regular.ttf` first. Each SVG carries the font, so it fits wherever it's viewed.

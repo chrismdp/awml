@@ -7,7 +7,8 @@ it, then read AGENTS.md and follow it, and read SPEC.md before changing anything
 - For a `spec` issue, build what the maintainer decided in their comments. If they haven't said
   which option they chose, change nothing, and say so in the message.
 - Test first: write a failing test for each behaviour before the code that passes it.
-- Keep the skill's copies of SPEC.md, GUIDE.md and the examples in step, as AGENTS.md says.
+- Keep the skill's copies of SPEC.md, GUIDE.md and the examples in step: run `make references`
+  after changing any source it copies.
 - Run every check AGENTS.md lists until they all pass. If `awml draw`'s output changes, say in the
   message that the examples need redrawing with examples/render.sh, rather than editing the SVGs.
 - Don't commit, push or open anything. Leave the change in the working tree. A later job applies

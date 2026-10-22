@@ -1,0 +1,4 @@
+# The skill's copies of the spec, the guide and some examples. make references writes them.
+plugins/awml/skills/awml/references/spec.md linguist-generated=true
+plugins/awml/skills/awml/references/guide.md linguist-generated=true
+plugins/awml/skills/awml/references/examples/** linguist-generated=true
