@@ -439,9 +439,9 @@ jobs:
             echo "The old head was \`$HEAD_SHA\`. To put the branch back:"
             echo
             echo "\`git push --force origin $HEAD_SHA:$BRANCH\`"
-          } > "$RUNNER_TEMP/resolve/comment.md"
+          } > "$RUNNER_TEMP/comment.md"
           gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
-            --body-file "$RUNNER_TEMP/resolve/comment.md"
+            --body-file "$RUNNER_TEMP/comment.md"
 
       - name: Comment when resolution failed
         if: ${{ failure() }}
