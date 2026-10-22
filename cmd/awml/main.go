@@ -262,15 +262,15 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 				return 1
 			}
 		}
-		lines, gaps := awml.Fit(docs[0], placement, docs[start:])
-		output := lines
+		report := awml.Judge(docs[0], placement, docs[start:])
+		output := awml.FitLines(report.Results)
 		code := 0
-		if len(gaps) != 0 {
-			output = gaps
+		if len(report.Gaps) != 0 {
+			output = report.Gaps
 			code = 1
 		}
 		if jsonOutput {
-			if err := json.NewEncoder(stdout).Encode(output); err != nil {
+			if err := json.NewEncoder(stdout).Encode(report); err != nil {
 				fmt.Fprintf(stderr, "awml fit: can't write its output: %s\n", err)
 				return 1
 			}

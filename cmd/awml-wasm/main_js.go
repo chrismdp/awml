@@ -77,11 +77,7 @@ func main() {
 				return errorJSON("fit takes only platform descriptions after its views")
 			}
 		}
-		lines, gaps := awml.Fit(docs[0], placement, docs[start:])
-		if len(gaps) != 0 {
-			lines = gaps
-		}
-		encoded, err := json.Marshal(lines)
+		encoded, err := json.Marshal(awml.Judge(docs[0], placement, docs[start:]))
 		if err != nil {
 			return errorJSON(err.Error())
 		}

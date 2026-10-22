@@ -7,10 +7,49 @@ import (
 	"time"
 )
 
-// Fit judges a security view against platform descriptions, either as whole-workflow candidates
-// or in the placement drawn by a platform view. The documents must have passed Check. Gaps mean
-// the placement could not be judged.
+// FitResult is the verdict on one platform, or on one block of a drawn placement: whether it was
+// judged, whether the workflow fits, every reason it doesn't, and the companies each AI step there
+// may use. It is what `awml fit --json` prints for each platform.
+type FitResult struct {
+	Platform string              `json:"platform"`
+	Judged   bool                `json:"judged"`
+	Fits     bool                `json:"fits"`
+	Reasons  []string            `json:"reasons"`
+	Models   map[string][]string `json:"models"`
+	steps    []string
+}
+
+// FitReport is the whole of `awml fit --json`: a result for each platform, or the gaps that kept
+// the workflow from being judged.
+type FitReport struct {
+	Results []FitResult `json:"results"`
+	Gaps    []string    `json:"gaps"`
+}
+
+// Fit judges a security view against platform descriptions and gives the lines `awml fit` prints.
+// Gaps mean the placement could not be judged.
 func Fit(security, placement *Map, descriptions []*Map) (lines, gaps []string) {
+	results, gaps := judge(security, placement, descriptions)
+	if len(gaps) != 0 {
+		return nil, gaps
+	}
+	return FitLines(results), nil
+}
+
+// Judge judges a security view against platform descriptions, either as whole-workflow candidates
+// or in the placement drawn by a platform view. The documents must have passed Check.
+func Judge(security, placement *Map, descriptions []*Map) FitReport {
+	results, gaps := judge(security, placement, descriptions)
+	if results == nil {
+		results = []FitResult{}
+	}
+	if gaps == nil {
+		gaps = []string{}
+	}
+	return FitReport{Results: results, Gaps: gaps}
+}
+
+func judge(security, placement *Map, descriptions []*Map) (results []FitResult, gaps []string) {
 	model := newFitModel(security)
 	if gaps = model.gaps(); len(gaps) != 0 {
 		return nil, gaps
@@ -27,13 +66,12 @@ func Fit(security, placement *Map, descriptions []*Map) (lines, gaps []string) {
 	if len(gaps) != 0 {
 		return nil, gaps
 	}
-	var results []fitResult
 	if placement == nil {
 		for _, description := range descriptions {
 			platform := readFitPlatform(description)
 			results = append(results, judgePlatform(platform.id, platform, model, model.parts, model.parts))
 		}
-		return formatFit(results), nil
+		return results, nil
 	}
 
 	groups := items(placement, "groups")
@@ -46,7 +84,7 @@ func Fit(security, placement *Map, descriptions []*Map) (lines, gaps []string) {
 	for _, group := range groups {
 		groupID, platformID := str(group, "id"), str(group, "platform")
 		if platformID == "" {
-			results = append(results, fitResult{name: groupID, messages: []string{"not judged: no platform"}})
+			results = append(results, FitResult{Platform: groupID, Reasons: []string{}, Models: map[string][]string{}})
 			continue
 		}
 		platform, ok := described[platformID]
@@ -69,7 +107,7 @@ func Fit(security, placement *Map, descriptions []*Map) (lines, gaps []string) {
 	if len(gaps) != 0 {
 		return nil, gaps
 	}
-	return formatFit(results), nil
+	return results, nil
 }
 
 type fitModel struct {
@@ -164,13 +202,8 @@ func textList(value any) []string {
 	return result
 }
 
-type fitResult struct {
-	name     string
-	messages []string
-}
-
-func judgePlatform(name string, platform fitPlatform, model fitModel, own, visible []*Map) fitResult {
-	result := fitResult{name: name}
+func judgePlatform(name string, platform fitPlatform, model fitModel, own, visible []*Map) FitResult {
+	result := FitResult{Platform: name, Judged: true, Reasons: []string{}, Models: map[string][]string{}}
 
 	// Rule 1: each trigger belongs to its own platform, including one placed by its first line.
 	for _, part := range own {
@@ -184,7 +217,7 @@ func judgePlatform(name string, platform fitPlatform, model fitModel, own, visib
 		waitText := str(securityPart, "wait")
 		wait, _ := duration(waitText)
 		if wait < platform.off {
-			result.messages = append(result.messages, fmt.Sprintf("no: %s may wait %s, but the platform may be off for %s", str(part, "id"), waitText, platform.offText))
+			result.Reasons = append(result.Reasons, fmt.Sprintf("%s may wait %s, but the platform may be off for %s", str(part, "id"), waitText, platform.offText))
 		}
 	}
 
@@ -202,13 +235,12 @@ func judgePlatform(name string, platform fitPlatform, model fitModel, own, visib
 			key := company + "\x00" + scope
 			if !seenExposure[key] {
 				seenExposure[key] = true
-				result.messages = append(result.messages, fmt.Sprintf("no: %s's agents run here, and %s doesn't allow %s", company, scope, company))
+				result.Reasons = append(result.Reasons, fmt.Sprintf("%s's agents run here, and %s doesn't allow %s", company, scope, company))
 			}
 		}
 	}
 
 	// Rule 3: each AI step has at least one reachable, allowed company.
-	aiCompanies := map[string][]string{}
 	for _, part := range own {
 		securityPart := model.byID[str(part, "id")]
 		if securityPart == nil || str(securityPart, "kind") != "ai" {
@@ -216,9 +248,9 @@ func judgePlatform(name string, platform fitPlatform, model fitModel, own, visib
 		}
 		companies := model.companiesFor(model.where[str(part, "id")], str(securityPart, "op"), platform)
 		if len(companies) == 0 {
-			result.messages = append(result.messages, fmt.Sprintf("no: %s has no company it may use", str(part, "id")))
+			result.Reasons = append(result.Reasons, fmt.Sprintf("%s has no company it may use", str(part, "id")))
 		} else {
-			aiCompanies[str(part, "id")] = companies
+			result.Models[str(part, "id")] = companies
 		}
 	}
 
@@ -230,7 +262,7 @@ func judgePlatform(name string, platform fitPlatform, model fitModel, own, visib
 		}
 		at := str(securityPart, "at")
 		if !holds(platform.holds, at) {
-			result.messages = append(result.messages, fmt.Sprintf("no: %s is kept at %s, which the platform doesn't hold", str(part, "id"), at))
+			result.Reasons = append(result.Reasons, fmt.Sprintf("%s is kept at %s, which the platform doesn't hold", str(part, "id"), at))
 		}
 	}
 
@@ -253,13 +285,16 @@ func judgePlatform(name string, platform fitPlatform, model fitModel, own, visib
 			} else if len(platform.agents) > 1 {
 				who = naturalList(platform.agents) + " agents"
 			}
-			result.messages = append(result.messages, fmt.Sprintf("no: %s %s, which %s would carry out", naturalList(code), predicate, who))
+			result.Reasons = append(result.Reasons, fmt.Sprintf("%s %s, which %s would carry out", naturalList(code), predicate, who))
 		}
 	}
 
-	if len(result.messages) == 0 {
-		result.messages = []string{fitMessage(own, aiCompanies)}
+	for _, part := range own {
+		if _, ok := result.Models[str(part, "id")]; ok {
+			result.steps = append(result.steps, str(part, "id"))
+		}
 	}
+	result.Fits = len(result.Reasons) == 0
 	return result
 }
 
@@ -309,19 +344,15 @@ func holds(roots []string, path string) bool {
 	return false
 }
 
-func fitMessage(parts []*Map, companies map[string][]string) string {
+func fitMessage(result FitResult) string {
 	type choice struct {
 		companies string
 		steps     []string
 	}
 	var choices []choice
 	byCompanies := map[string]int{}
-	for _, part := range parts {
-		id := str(part, "id")
-		allowed, ok := companies[id]
-		if !ok {
-			continue
-		}
+	for _, id := range result.steps {
+		allowed := result.Models[id]
 		key := strings.Join(allowed, " or ")
 		position, found := byCompanies[key]
 		if !found {
@@ -351,17 +382,30 @@ func within(group, outer string, parents map[string]string) bool {
 	return false
 }
 
-func formatFit(results []fitResult) []string {
+// FitLines gives the lines `awml fit` prints for each result: one that names the companies each AI
+// step may use where the workflow fits, and one for each reason where it doesn't.
+func FitLines(results []FitResult) []string {
 	width := 0
 	for _, result := range results {
-		if len(result.name) > width {
-			width = len(result.name)
+		if len(result.Platform) > width {
+			width = len(result.Platform)
 		}
 	}
 	var lines []string
 	for _, result := range results {
-		for i, message := range result.messages {
-			name := result.name
+		var messages []string
+		switch {
+		case !result.Judged:
+			messages = []string{"not judged: no platform"}
+		case result.Fits:
+			messages = []string{fitMessage(result)}
+		default:
+			for _, reason := range result.Reasons {
+				messages = append(messages, "no: "+reason)
+			}
+		}
+		for i, message := range messages {
+			name := result.Platform
 			if i > 0 {
 				name = ""
 			}
