@@ -1,5 +1,6 @@
-# Vets and tests the code, and checks every example, on every push. It runs on the oldest Go that
-# go.mod allows, and on the newest.
+# Runs every check from AGENTS.md on every push: it vets and tests the code, checks every example,
+# and checks that the WebAssembly build gives the same answers as the CLI. It runs on the oldest Go
+# that go.mod allows, and on the newest.
 name: CI
 
 on: [push]
@@ -15,6 +16,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - run: go vet ./...
       - run: go test ./...
-      - run: go run ./cmd/awml check examples/*.yaml examples/tour/*.yaml
+      - run: go run ./cmd/awml check examples/*.yaml examples/tour/*.yaml examples/platforms/*.yaml
+      - run: make test-wasm
