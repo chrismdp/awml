@@ -134,7 +134,7 @@ func TestTheOldNamesForViewsAndKindsAreUnknown(t *testing.T) {
 }
 
 func TestAnUnknownVersion(t *testing.T) {
-	mistakes(t, changed(t, "awml", "2"), `awml must be "0.2", not "2"`)
+	mistakes(t, changed(t, "awml", "2"), `awml must be "0.2" or "0.3", not "2"`)
 }
 
 func TestAPartInAnUnknownGroup(t *testing.T) {
@@ -198,7 +198,7 @@ func TestTheVersionMayBeWrittenAsANumber(t *testing.T) {
 }
 
 func TestAFileInTheOldVersionIsRefused(t *testing.T) {
-	mistakes(t, changed(t, "awml", "0.1"), `awml must be "0.2", not "0.1"`)
+	mistakes(t, changed(t, "awml", "0.1"), `awml must be "0.2" or "0.3", not "0.1"`)
 }
 
 func TestAnUnknownField(t *testing.T) {
@@ -215,7 +215,7 @@ func TestNotAFileOfParts(t *testing.T) {
 
 func TestEveryMistakeIsReportedAtOnce(t *testing.T) {
 	mistakes(t, changed(t, "awml", "2", "lines.1.to", "plann"),
-		`awml must be "0.2", not "2"`, `the line from "plan" to "plann" ends at unknown part "plann"`)
+		`awml must be "0.2" or "0.3", not "2"`, `the line from "plan" to "plann" ends at unknown part "plann"`)
 }
 
 func TestAValueYAMLReadsAsTrueMustBeQuoted(t *testing.T) {

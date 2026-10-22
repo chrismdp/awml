@@ -18,16 +18,17 @@ func main() {
 	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
 
-const usage = "usage: awml [-h] [--registry URL] {draw,page,check,summary,login,push,pull} ...\n"
+const usage = "usage: awml [-h] [--registry URL] {draw,page,check,fit,summary,login,push,pull} ...\n"
 
 const help = usage + `
 Draw agentic workflows written in AWML.
 
 positional arguments:
-  {draw,page,check,summary,login,push,pull}
+  {draw,page,check,fit,summary,login,push,pull}
     draw             print a file's Mermaid
     page             write one HTML page that draws each file
     check            report a file's structural mistakes
+    fit              judge where a workflow can run
     summary          count the parts and lines in one workflow
     login            save a registry API token
     push             push a new workflow version
@@ -60,6 +61,16 @@ positional arguments:
 
 options:
   -h, --help  show this help message and exit
+`},
+	"fit": {"usage: awml fit [-h] [--json] SECURITY {DESC... | PLATFORM_VIEW DESC...}\n", `
+positional arguments:
+  SECURITY
+  DESC
+  PLATFORM_VIEW
+
+options:
+  -h, --help  show this help message and exit
+  --json      print JSON
 `},
 	"summary": {"usage: awml summary [-h] [--json] files [files ...]\n", `
 positional arguments:
@@ -146,7 +157,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		case flags && (command == "page" || command == "pull") && strings.HasPrefix(a, "-o") && !strings.HasPrefix(a, "--"):
 			v := strings.TrimPrefix(a, "-o")
 			out = &v
-		case flags && command == "summary" && a == "--json":
+		case flags && (command == "summary" || command == "fit") && a == "--json":
 			jsonOutput = true
 		case flags && command == "push" && a == "--private":
 			private = true
@@ -154,7 +165,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			unknown = append(unknown, a)
 		case command == "":
 			if _, ok := commands[a]; !ok {
-				return fail(usage, "awml", fmt.Sprintf("argument command: invalid choice: '%s' (choose from 'draw', 'page', 'check', 'summary', 'login', 'push', 'pull')", a))
+				return fail(usage, "awml", fmt.Sprintf("argument command: invalid choice: '%s' (choose from 'draw', 'page', 'check', 'fit', 'summary', 'login', 'push', 'pull')", a))
 			}
 			command = a
 		default:
@@ -166,7 +177,9 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	var missing []string
 	if len(files) == 0 && command != "login" {
-		missing = append(missing, map[string]string{"draw": "file", "page": "files", "check": "files", "summary": "files", "push": "owner/slug, files", "pull": "owner/slug[@n]"}[command])
+		missing = append(missing, map[string]string{"draw": "file", "page": "files", "check": "files", "fit": "SECURITY, DESC", "summary": "files", "push": "owner/slug, files", "pull": "owner/slug[@n]"}[command])
+	} else if command == "fit" && len(files) == 1 {
+		missing = append(missing, "DESC")
 	}
 	if command == "page" && out == nil {
 		missing = append(missing, "-o/--out")
@@ -228,6 +241,46 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, awml.Draw(docs[0]))
 		return 0
 	}
+	if command == "fit" {
+		if strField(docs[0], "view") != "security" {
+			fmt.Fprintf(stderr, "%s: must be a security view\n", files[0])
+			return 1
+		}
+		var placement *awml.Map
+		start := 1
+		if strField(docs[1], "view") == "platform" {
+			placement = docs[1]
+			start = 2
+		}
+		if start == len(docs) {
+			fmt.Fprintf(stderr, "awml fit: no platform descriptions were given\n")
+			return 1
+		}
+		for i := start; i < len(docs); i++ {
+			if _, ok := docs[i].Get("platform"); !ok {
+				fmt.Fprintf(stderr, "%s: must be a platform description\n", files[i])
+				return 1
+			}
+		}
+		lines, gaps := awml.Fit(docs[0], placement, docs[start:])
+		output := lines
+		code := 0
+		if len(gaps) != 0 {
+			output = gaps
+			code = 1
+		}
+		if jsonOutput {
+			if err := json.NewEncoder(stdout).Encode(output); err != nil {
+				fmt.Fprintf(stderr, "awml fit: can't write its output: %s\n", err)
+				return 1
+			}
+		} else {
+			for _, line := range output {
+				fmt.Fprintln(stdout, line)
+			}
+		}
+		return code
+	}
 	if command == "summary" {
 		summary := awml.Summarise(docs...)
 		if jsonOutput {
@@ -245,6 +298,12 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+func strField(doc *awml.Map, field string) string {
+	value, _ := doc.Get(field)
+	text, _ := value.(string)
+	return text
 }
 
 func printSummary(out io.Writer, s awml.Summary) {

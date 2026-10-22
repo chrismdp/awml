@@ -41,6 +41,52 @@ func main() {
 		}
 		return string(encoded)
 	})
+	expose("__awmlFit", func(args []js.Value) string {
+		var sources []string
+		if err := json.Unmarshal([]byte(args[0].String()), &sources); err != nil {
+			return errorJSON(err.Error())
+		}
+		if len(sources) < 2 {
+			return errorJSON("fit needs a security view and at least one platform description")
+		}
+		docs := make([]*awml.Map, 0, len(sources))
+		for _, source := range sources {
+			doc, err := awml.Parse([]byte(source))
+			if err != nil {
+				return errorJSON("isn't YAML: " + strings.Join(strings.Fields(err.Error()), " "))
+			}
+			if errors := awml.Check(doc); len(errors) != 0 {
+				return errorJSON(strings.Join(errors, "\n"))
+			}
+			docs = append(docs, doc.(*awml.Map))
+		}
+		if field(docs[0], "view") != "security" {
+			return errorJSON("the first file must be a security view")
+		}
+		var placement *awml.Map
+		start := 1
+		if field(docs[1], "view") == "platform" {
+			placement = docs[1]
+			start = 2
+		}
+		if start == len(docs) {
+			return errorJSON("no platform descriptions were given")
+		}
+		for _, doc := range docs[start:] {
+			if _, ok := doc.Get("platform"); !ok {
+				return errorJSON("fit takes only platform descriptions after its views")
+			}
+		}
+		lines, gaps := awml.Fit(docs[0], placement, docs[start:])
+		if len(gaps) != 0 {
+			lines = gaps
+		}
+		encoded, err := json.Marshal(lines)
+		if err != nil {
+			return errorJSON(err.Error())
+		}
+		return string(encoded)
+	})
 	expose("__awmlDraw", func(args []js.Value) string {
 		doc, err := awml.Parse([]byte(args[0].String()))
 		if err != nil || len(awml.Check(doc)) != 0 {
@@ -49,6 +95,12 @@ func main() {
 		return awml.Draw(doc.(*awml.Map))
 	})
 	select {}
+}
+
+func field(doc *awml.Map, name string) string {
+	value, _ := doc.Get(name)
+	text, _ := value.(string)
+	return text
 }
 
 func expose(name string, call func([]js.Value) string) {

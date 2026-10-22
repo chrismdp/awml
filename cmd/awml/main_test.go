@@ -110,6 +110,83 @@ func TestCheckReportsAMissingFile(t *testing.T) {
 	}
 }
 
+func TestFitPrintsPlainAndJSONResults(t *testing.T) {
+	security := write(t, "security.yaml", `
+awml: "0.3"
+title: Reply
+view: security
+groups: [{id: business, label: business, processing: {anthropic: any}}]
+parts:
+  - {id: draft, kind: ai, op: draft, label: Draft, in: business}
+`)
+	platform := write(t, "worker.yaml", `
+awml: "0.3"
+platform: {id: worker, label: Worker}
+off_for_up_to: PT0S
+steps: code
+agents: []
+calls: [anthropic]
+holds: []
+`)
+	plain := awmlRun("fit", security, platform)
+	if plain != (result{0, "worker  fits: draft may use anthropic\n", ""}) {
+		t.Errorf("plain fit gave %+v", plain)
+	}
+	json := awmlRun("fit", "--json", security, platform)
+	if json != (result{0, `["worker  fits: draft may use anthropic"]` + "\n", ""}) {
+		t.Errorf("JSON fit gave %+v", json)
+	}
+}
+
+func TestFitFailsForAGapOrTheWrongKindsOfFile(t *testing.T) {
+	security := write(t, "security.yaml", `
+awml: "0.3"
+title: Reply
+view: security
+groups: [{id: business, label: business}]
+parts: [{id: draft, kind: ai, op: draft, label: Draft, in: business}]
+`)
+	platform := write(t, "worker.yaml", goodPlatformForCommand)
+	if r := awmlRun("fit", security, platform); r.code != 1 || r.stdout != `group "business" has no processing`+"\n" {
+		t.Errorf("gap fit gave %+v", r)
+	}
+	view := write(t, "view.yaml", strings.Replace(good, "view: security", "view: platform", 1))
+	if r := awmlRun("fit", view, platform); r.code != 1 || !strings.Contains(r.stderr, "must be a security view") {
+		t.Errorf("wrong-view fit gave %+v", r)
+	}
+}
+
+func TestFitJudgesAPlatformView(t *testing.T) {
+	security := write(t, "security.yaml", `
+awml: "0.3"
+title: Reply
+view: security
+groups: [{id: business, label: business, processing: {anthropic: any}}]
+parts: [{id: draft, kind: ai, op: draft, label: Draft, in: business}]
+`)
+	placement := write(t, "placement.yaml", `
+awml: "0.3"
+title: Reply placement
+view: platform
+groups: [{id: box, label: Box, platform: worker}]
+parts: [{id: draft, kind: ai, op: draft, label: Draft, in: box}]
+`)
+	platform := write(t, "worker.yaml", goodPlatformForCommand)
+	if r := awmlRun("fit", security, placement, platform); r != (result{0, "box  fits: draft may use anthropic\n", ""}) {
+		t.Errorf("placement fit gave %+v", r)
+	}
+}
+
+const goodPlatformForCommand = `
+awml: "0.3"
+platform: {id: worker, label: Worker}
+off_for_up_to: PT0S
+steps: code
+agents: []
+calls: [anthropic]
+holds: []
+`
+
 func TestSummaryPrintsJSONForOneOrBothViews(t *testing.T) {
 	security := write(t, "security.yaml", good)
 	platform := write(t, "platform.yaml", strings.Replace(good, "view: security", "view: platform", 1))
@@ -181,7 +258,7 @@ func TestTheOutputMayComeFirstOrBeJoinedToItsFlag(t *testing.T) {
 
 func TestHelpIsPrintedAndSucceeds(t *testing.T) {
 	r := awmlRun("-h")
-	if r.code != 0 || !strings.HasPrefix(r.stdout, "usage: awml [-h] [--registry URL] {draw,page,check,summary,login,push,pull} ...\n\nDraw agentic workflows written in AWML.\n") {
+	if r.code != 0 || !strings.HasPrefix(r.stdout, "usage: awml [-h] [--registry URL] {draw,page,check,fit,summary,login,push,pull} ...\n\nDraw agentic workflows written in AWML.\n") {
 		t.Errorf("-h gave %+v", r)
 	}
 	if r := awmlRun("page", "--help"); r.code != 0 || !strings.HasPrefix(r.stdout, "usage: awml page [-h] -o OUT files [files ...]\n") {
@@ -194,10 +271,10 @@ func TestAMistakeInTheCommandShowsHowToUseIt(t *testing.T) {
 		args []string
 		want string
 	}{
-		{nil, "usage: awml [-h] [--registry URL] {draw,page,check,summary,login,push,pull} ...\nawml: error: the following arguments are required: command\n"},
-		{[]string{"drew", "a.yaml"}, "usage: awml [-h] [--registry URL] {draw,page,check,summary,login,push,pull} ...\nawml: error: argument command: invalid choice: 'drew' (choose from 'draw', 'page', 'check', 'summary', 'login', 'push', 'pull')\n"},
+		{nil, "usage: awml [-h] [--registry URL] {draw,page,check,fit,summary,login,push,pull} ...\nawml: error: the following arguments are required: command\n"},
+		{[]string{"drew", "a.yaml"}, "usage: awml [-h] [--registry URL] {draw,page,check,fit,summary,login,push,pull} ...\nawml: error: argument command: invalid choice: 'drew' (choose from 'draw', 'page', 'check', 'fit', 'summary', 'login', 'push', 'pull')\n"},
 		{[]string{"draw"}, "usage: awml draw [-h] file\nawml draw: error: the following arguments are required: file\n"},
-		{[]string{"draw", "a.yaml", "b.yaml"}, "usage: awml [-h] [--registry URL] {draw,page,check,summary,login,push,pull} ...\nawml: error: unrecognized arguments: b.yaml\n"},
+		{[]string{"draw", "a.yaml", "b.yaml"}, "usage: awml [-h] [--registry URL] {draw,page,check,fit,summary,login,push,pull} ...\nawml: error: unrecognized arguments: b.yaml\n"},
 		{[]string{"check"}, "usage: awml check [-h] files [files ...]\nawml check: error: the following arguments are required: files\n"},
 		{[]string{"page", "a.yaml"}, "usage: awml page [-h] -o OUT files [files ...]\nawml page: error: the following arguments are required: -o/--out\n"},
 		{[]string{"page", "a.yaml", "-o"}, "usage: awml page [-h] -o OUT files [files ...]\nawml page: error: argument -o/--out: expected one argument\n"},
