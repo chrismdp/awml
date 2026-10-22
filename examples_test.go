@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -93,6 +94,18 @@ func TestEachExampleIsSoundAndItsDrawingsAreCurrent(t *testing.T) {
 				t.Errorf("%s.svg isn't an SVG", stem)
 			}
 		})
+	}
+}
+
+// The Mermaid CLI takes any Mermaid 11, so a new release could redraw every example unless
+// render.sh pins Mermaid itself.
+func TestRenderPinsMermaid(t *testing.T) {
+	src, err := os.ReadFile("examples/render.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`npx -y -p @mermaid-js/mermaid-cli@\d+\.\d+\.\d+ -p mermaid@\d+\.\d+\.\d+ mmdc `).Match(src) {
+		t.Error("render.sh doesn't pin both mermaid-cli and mermaid to exact versions")
 	}
 }
 
