@@ -15,6 +15,7 @@ flowchart TB
     library{{"Sam#39;s library account"}}
     renew("<small style='color:rgb(61,67,79)'>⚙️ 🛠️ do</small><br>Renew each book due back this week")
     action>"Renew the book#58; Ask#44; under Sam#39;s standing approval"]
+    report("<small style='color:rgb(61,67,79)'>⚙️ 🛠️ do</small><br>List the renewal and how to undo it")
     list@{ shape: win-pane, label: "Sam#39;s list" }
     terms@{ shape: notch-rect, label: "Standing approval from Sam#58; renewals only#44; up to six a week" }
   end
@@ -23,7 +24,8 @@ flowchart TB
   library -->|"books due back"| renew
   renew --> action
   library <--> action
-  renew -->|"each renewal#44; and how to undo it"| list
+  action --> report
+  report --> list
   action -.- terms
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
@@ -39,7 +41,7 @@ flowchart TB
   class library con
   class list surf
   class action out
-  class renew code
+  class renew,report code
   class terms gap
   style sam fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
   linkStyle 3 marker-end:none

@@ -1,5 +1,5 @@
-# A do step. One of its outside actions just happens, because it's Allow and can be undone, and the
-# other waits for a yes, because it's Ask. The parents and the window cleaner are fictional.
+# Two do steps. One outside action just happens, because it's Allow and can be undone, and the other
+# waits for a yes, because it's Ask. The parents and the window cleaner are fictional.
 awml: "0.2"
 title: The window cleaner's visit
 view: security
@@ -7,12 +7,16 @@ groups:
   - { id: parents, label: "parents: Mia, Dev" }
 parts:
   - { id: done, kind: trigger, label: "The window cleaner says the windows are done" }
-  - { id: settle, kind: code, op: do, label: "Settle the visit", in: parents }
+  - { id: split, kind: fork, in: parents }
+  - { id: book_next, kind: code, op: do, label: "Book the next visit", in: parents }
   - { id: book, kind: outside, label: "Put the next visit in the parents' calendar: Allow", in: parents }
+  - { id: make_payment, kind: code, op: do, label: "Make the £20 payment", in: parents }
   - { id: approve, kind: review, label: "Dev's yes to the exact payment", in: parents }
   - { id: pay, kind: outside, label: "Pay the window cleaner £20: Ask", in: parents }
 lines:
-  - { from: done, to: settle, kind: start }
-  - { from: settle, to: book, kind: data }
-  - { from: settle, to: approve, kind: data }
+  - { from: done, to: split, kind: start }
+  - { from: split, to: book_next, kind: data }
+  - { from: book_next, to: book, kind: data }
+  - { from: split, to: make_payment, kind: data }
+  - { from: make_payment, to: approve, kind: data }
   - { from: approve, to: pay, kind: data, label: "[yes]" }

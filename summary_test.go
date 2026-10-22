@@ -29,8 +29,8 @@ func TestSummariseEveryExample(t *testing.T) {
 		"examples/tour/08-gap.yaml":               {Steps: StepCounts{Code: 1}, Operations: map[string]int{"bring-in": 1}, Triggers: 1, Contexts: 1, Connectors: 1, Surfaces: 1, Scopes: 1},
 		"examples/tour/09-platform-view.yaml":     {Steps: StepCounts{AI: 1, Code: 1}, Operations: map[string]int{"bring-in": 1, "sort": 1}, Triggers: 1, Contexts: 2, Platforms: 2},
 		"examples/tour/10-operations.yaml":        {Steps: StepCounts{AI: 3, Code: 1}, Operations: map[string]int{"sort": 1, "learn": 1, "draft": 1, "do": 1}, OutsideActions: TierCounts{Allow: 1}, Triggers: 1, Contexts: 2, Scopes: 1},
-		"examples/tour/11-do.yaml":                {Steps: StepCounts{Code: 1}, Operations: map[string]int{"do": 1}, OutsideActions: TierCounts{Allow: 1, Ask: 1}, Triggers: 1, Reviews: 1, Scopes: 1},
-		"examples/tour/12-standing-approval.yaml": {Steps: StepCounts{Code: 1}, Operations: map[string]int{"do": 1}, OutsideActions: TierCounts{Ask: 1}, Triggers: 1, Connectors: 1, Surfaces: 1, Scopes: 1},
+		"examples/tour/11-do.yaml":                {Steps: StepCounts{Code: 2}, Operations: map[string]int{"do": 2}, OutsideActions: TierCounts{Allow: 1, Ask: 1}, Triggers: 1, Reviews: 1, Scopes: 1},
+		"examples/tour/12-standing-approval.yaml": {Steps: StepCounts{Code: 2}, Operations: map[string]int{"do": 2}, OutsideActions: TierCounts{Ask: 1}, Triggers: 1, Connectors: 1, Surfaces: 1, Scopes: 1},
 		"examples/tour/13-check-by-code.yaml":     {Steps: StepCounts{Code: 1}, Operations: map[string]int{"check": 1}, Triggers: 1, Contexts: 1, Connectors: 1, Surfaces: 1, Scopes: 1},
 	}
 
@@ -94,7 +94,7 @@ func TestSummaryHasStableJSONFieldNames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"steps":{"ai":0,"code":1,"person":0},"operations":{"do":1},"outsideActions":{"allow":1,"ask":1,"block":0},"triggers":1,"reviews":1,"contexts":0,"connectors":0,"surfaces":0,"scopes":1,"platforms":0,"publishingLines":{"count":0,"labels":null},"refusedReads":0,"redLines":0,"aiSteps":null,"people":[{"label":"Dev's yes to the exact payment","kind":"review"}],"scopeNames":["parents"],"platformNames":null}`
+	want := `{"steps":{"ai":0,"code":2,"person":0},"operations":{"do":2},"outsideActions":{"allow":1,"ask":1,"block":0},"triggers":1,"reviews":1,"contexts":0,"connectors":0,"surfaces":0,"scopes":1,"platforms":0,"publishingLines":{"count":0,"labels":null},"refusedReads":0,"redLines":0,"aiSteps":null,"people":[{"label":"Dev's yes to the exact payment","kind":"review"}],"scopeNames":["parents"],"platformNames":null}`
 	if string(got) != want {
 		t.Errorf("JSON = %s\nwant %s", got, want)
 	}

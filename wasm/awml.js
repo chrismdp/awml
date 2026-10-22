@@ -32,6 +32,9 @@ async function start(source) {
     check(sourceText) {
       return JSON.parse(globalThis.__awmlCheck(sourceText));
     },
+    warnings(sourceText) {
+      return JSON.parse(globalThis.__awmlWarnings(sourceText));
+    },
     summaryJSON(sourceTexts) {
       const sources = Array.isArray(sourceTexts) ? sourceTexts : [sourceTexts];
       for (const sourceText of sources) {
