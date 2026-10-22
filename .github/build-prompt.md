@@ -1,8 +1,11 @@
 You are building the change that one issue of the AWML repository asks for. The maintainer added
-the `build` label, which says they want it built now.
+the `build` label, or one of the repository's own workflows started the build, which says it is
+wanted now.
 
 The issue, with only the comments of the repository's own people, is in BUILD_DIR/issue.md. Read
 it, then read AGENTS.md and follow it, and read SPEC.md before changing anything it describes.
+If issue.md ends with a section saying the last try failed, your job is to make a change that
+passes where that try failed, not to start over without a reason.
 
 - For a `spec` issue, build what the maintainer decided in their comments. If they haven't said
   which option they chose, change nothing, and say so in the message.
