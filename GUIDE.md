@@ -30,15 +30,16 @@ Before step 5, read the [spec](SPEC.md) and the [example](examples) nearest your
     1. What does each red line show the live system doing, and which instruction asked for it?
     2. Does every publishing line have a person's yes or a standing rule? Does anything reach the public without a person's yes to that item? Did the people whose words move agree?
     3. Is each yes given to the exact content, and recorded where the next step can check it?
-    4. Does every Ask action have a review in front of it, a person's own `do` step, or a standing approval named on it, with limits, whose actions are listed for that person with how to undo them?
-    5. Is each Allow action really Allow? One that can't be undone, is seen outside its scope or spends past a limit is Ask.
-    6. Which step takes in text from strangers, and what can it reach?
-    7. If a step fails halfway, what has already changed outside, and does a later run notice?
-    8. Could any AI step be code? Look at a few weeks of its records: does it give the same answer to the same kind of input?
-    9. Is any surface, note or prompt left with nothing keeping it current, any context that nothing writes or nothing reads, or any step that nothing starts?
-    10. Does any work that must outlive a person rest on that person's connector?
-    11. Does any machine hold something that a company processing content there may not see?
-    12. Does every step leave a record that survives a restart, on one clock?
+    4. Does any check rely on a mark written by the step it checks, such as a draft that says it was checked?
+    5. Does every Ask action have a review in front of it, a person's own `do` step, or a standing approval named on it, with limits, whose actions are listed for that person with how to undo them?
+    6. Is each Allow action really Allow? One that can't be undone, is seen outside its scope or spends past a limit is Ask.
+    7. Which step takes in text from strangers, and what can it reach?
+    8. If a step fails halfway, what has already changed outside, and does a later run notice?
+    9. Could any AI step be code? Look at a few weeks of its records: does it give the same answer to the same kind of input?
+    10. Is any surface, note or prompt left with nothing keeping it current, any context that nothing writes or nothing reads, or any step that nothing starts?
+    11. Does any work that must outlive a person rest on that person's connector?
+    12. Does any machine hold something that a company processing content there may not see?
+    13. Does every step leave a record that survives a restart, on one clock?
 
 11. **Act on each finding.** Take each finding, with its evidence, to the person who answers for the workflow. They decide whether to change the live system. Until it changes, the drawing keeps the finding: a red line for something the live system did, a comment for a gap. When a fix lands, take the red line away.
 
