@@ -5,7 +5,7 @@ Use this only where `awml check` can't run, as in a chat with no shell. It cover
 ## The file
 
 1. The file is one YAML mapping with `awml`, `title` and `parts`, and may have `scopes`, `lines` and `implementations`. It has no other field.
-2. `awml` is `"0.4"`, in quotes. There is no `view`.
+2. `awml` is `"0.5"`, in quotes. There is no `view`.
 3. `parts`, and `scopes` and `lines` where given, are lists, and each item in them is a mapping.
 
 ## Scopes and parts
@@ -13,7 +13,7 @@ Use this only where `awml check` can't run, as in a chat with no shell. It cover
 4. Each scope has `id` and `label`, and may have `in` and `processing`. Nothing else.
 5. Each part has `id`, `kind` and `label`, and may have `in`, `op`, `wait` and `at`. A fork needn't have a label. Nothing else.
 6. Each id is letters, digits and underscores, starting with a letter: `meal_plan`, never `meal-plan` or `2nd_plan`. No id is used twice, across scopes, parts, blocks and implementation comments.
-7. Each part's `kind` is one of `trigger`, `ai`, `code`, `person`, `review`, `fork`, `context`, `connector`, `surface`, `outside` and `comment`.
+7. Each part's `kind` is one of `trigger`, `ai`, `code`, `person`, `review`, `approval`, `fork`, `context`, `connector`, `surface`, `outside` and `comment`.
 8. A design part or scope's `in` names a scope. Follow each scope's `in` upwards: it never comes back to the scope it started from.
 9. Only an `ai`, `code` or `person` part has an `op`, and the `op` is one of `bring-in`, `sort`, `learn`, `prepare`, `check`, `reflect`, `draft`, `do`, `answer` and `other`.
 
@@ -30,18 +30,21 @@ Use this only where `awml check` can't run, as in a chat with no shell. It cover
 15. Every `title`, `id`, `label`, `kind`, `in`, `from`, `to` and `op` is text. YAML reads some bare values as something else, so each of these is in double quotes: `true` and `false`, numbers such as `12` or `0.5`, and dates such as `2026-10-20`. Quote `yes`, `no`, `on`, `off` and times such as `19:00` too, which YAML 1.1 tools misread.
 16. The file is YAML that reads at all. In the `{ id: …, label: … }` form the examples use, a comma ends a value and `: ` starts a new one, so quote any label with a comma, a colon followed by a space, a `#`, or a first character of `[`, `{`, `&`, `*`, `!`, `|`, `>`, `'`, `"`, `%` or `@`. `[yes]` is always quoted.
 
-## Operations
+## Operations and tiers
 
-For these two, skip any line with `breaks: true`, and any `hidden`, `refused` or `tie` line: only `start`, `data` and `publish` lines lead anywhere.
+For these, skip any line with `breaks: true`, and any `hidden`, `refused` or `tie` line: only `start`, `data` and `publish` lines lead anywhere.
 
-17. **Only a `do` step leads to an outside action.** For each `outside` part, walk back along the lines that lead into it. Pass through any review or fork and keep walking back from it. Every step you meet whose `op` is anything but `do` or `other` is a mistake, such as a `draft` step whose line reaches a send through a review. A step with no `op` is held to nothing.
+17. **Only a `do` step leads to an outside action.** For each `outside` part, walk back along the lines that lead into it. Pass through any review, standing approval or fork and keep walking back from it. Every step you meet whose `op` is anything but `do` or `other` is a mistake, such as a `draft` step whose line reaches a send through a review. A step with no `op` is held to nothing.
 18. **An `answer` or `check` step never writes to a context.** No line runs from a step whose `op` is `answer` or `check` to a `context`.
+19. **Each outside action's label gives its tier.** The first word after the label's last colon is `Allow`, `Ask` or `Block`, as in `"Send the mail: Ask"` or `"Fill the basket: Allow under £180"`.
+20. **Each tier agrees with what stands in front of it.** For each `outside` part, find the parts whose lines lead into it, passing back through any fork. For an Ask action, each of them is a `review`, an `approval` or a `person` step. For an Allow action, none of them is a `review` or an `approval`. For a Block action, there are none.
+21. **Each standing approval lists its actions.** A line leads from each `approval` part straight to a `surface`.
 
 ## Scopes
 
 Check the design's scopes. Skip any line with `breaks: true`, and any line that isn't `data`.
 
-19. **Publishing isn't drawn as routing.** For each `data` line, find the box of the part at each end: the group its `in` names, or, for a trigger or comment with no `in`, the group of the part at the other end of its first line that isn't `hidden`. A part in no box sits outside every box, and counts as wider than any of them. The target's box must be the source's box, or sit inside it: follow the target's group's `in` upwards until you reach the source's group or run out. Any other `data` line is a mistake. It should be `publish`, or `refused` if the design refuses the read.
+22. **Publishing isn't drawn as routing.** For each `data` line, find the box of the part at each end: the group its `in` names, or, for a trigger or comment with no `in`, the group of the part at the other end of its first line that isn't `hidden`. A part in no box sits outside every box, and counts as wider than any of them. The target's box must be the source's box, or sit inside it: follow the target's group's `in` upwards until you reach the source's group or run out. Any other `data` line is a mistake. It should be `publish`, or `refused` if the design refuses the read.
 
 ## Placement and fit fields
 

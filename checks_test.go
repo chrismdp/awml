@@ -23,7 +23,7 @@ func checkResult(t *testing.T, report CheckReport, id string) CheckResult {
 
 func source(file, text string) Source { return Source{File: file, Text: []byte(text)} }
 
-const soundWorkflow = `awml: "0.4"
+const soundWorkflow = `awml: "0.5"
 title: Dinners
 scopes:
   - { id: family, label: "family: parents, kids", processing: any }
@@ -59,7 +59,7 @@ func TestTheChecksKeepTheirIDsAndTheSpecsOrder(t *testing.T) {
 		"file.yaml", "file.version", "fields.known", "kinds.known", "ids.unique", "ids.written",
 		"values.text", "lines.breaks", "references.known", "nesting.acyclic", "comments.tie-only",
 		"ties.comment", "ops.known", "operations.only-do-acts", "operations.answer-check-read-only",
-		"lines.data-narrows", "processing.written", "processing.nested", "processing.scopes-only",
+		"tiers.written", "tiers.shape", "approvals.listed", "lines.data-narrows", "processing.written", "processing.nested", "processing.scopes-only",
 		"platform.blocks-only", "wait.duration", "at.path", "placement.once", "placement.complete",
 		"warn.do-by-code", "warn.one-change", "description.values", "description.ids",
 		"views.same-parts", "views.same-lines",
@@ -332,6 +332,22 @@ implementations:
   away:
     label: Away
     blocks: 3
+`,
+		"tiers": `awml: "0.5"
+title: Tiers
+parts:
+  - { id: d, kind: code, op: do, label: D }
+  - { id: ok, kind: approval, label: OK }
+  - { id: o, kind: outside, label: O }
+  - { id: a, kind: outside, label: "A: Allow" }
+  - { id: k, kind: outside, label: "K: Ask" }
+  - { id: b, kind: outside, label: "B: Block" }
+lines:
+  - { from: d, to: ok, kind: data }
+  - { from: ok, to: a, kind: data }
+  - { from: d, to: k, kind: data }
+  - { from: d, to: b, kind: data }
+  - { from: d, to: o, kind: data }
 `,
 		"canonical lists":           "awml: \"0.4\"\ntitle: x\nparts: [3]\nimplementations: 3\n",
 		"canonical implementations": "awml: \"0.4\"\ntitle: x\nparts: []\nimplementations: 3\n",

@@ -1,5 +1,5 @@
 # A fork: one input, and two steps that work on it side by side. The family is fictional.
-awml: "0.4"
+awml: "0.5"
 title: The school newsletter
 scopes:
   - { id: family, label: "family: Mia, Dev, the children" }

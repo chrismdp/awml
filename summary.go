@@ -25,7 +25,8 @@ type Summary struct {
 	PlatformNames   []string          `json:"platformNames"`
 }
 
-// PersonSummary names a place where a person decides: a person step or a review.
+// PersonSummary names a place where a person decides: a person step, a review or a standing
+// approval.
 type PersonSummary struct {
 	Label string `json:"label"`
 	Kind  string `json:"kind"`
@@ -104,6 +105,8 @@ func Summarise(docs ...*Map) Summary {
 				out.Triggers++
 			case "review":
 				out.Reviews++
+				out.People = append(out.People, PersonSummary{Label: str(part, "label"), Kind: kind})
+			case "approval":
 				out.People = append(out.People, PersonSummary{Label: str(part, "label"), Kind: kind})
 			case "context":
 				out.Contexts++

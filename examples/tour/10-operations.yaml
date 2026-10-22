@@ -1,5 +1,5 @@
 # One step in each of four operations, so each one's emoji and name show. Kemi is fictional.
-awml: "0.4"
+awml: "0.5"
 title: An email from the school
 scopes:
   - { id: kemi, label: "kemi: Kemi" }

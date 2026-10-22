@@ -29,6 +29,7 @@ You need each of these, and each becomes part of the file:
 | The outside services it reaches, and whose access each one is | a `connector`, labelled with whose it is |
 | Where people see the results, such as a chat, a list or a screen | a `surface` |
 | What it changes in the world, and the tier of each change | an `outside` action, its label ending with its tier, as `"Send the reply: Ask"` |
+| Who said yes once to a task's actions, to which kinds and within what limits | an `approval`, labelled with whose it is and its limits |
 | Who may see what: each group of people, its members, and which companies may process its content | a scope in `scopes` |
 | Where each part runs: the machines and services, the model each uses, and when each machine is on | a block in an implementation |
 
@@ -37,7 +38,7 @@ Start from what the person has already told you. Infer what you reasonably can, 
 Some judgements need care:
 
 - **Code or AI.** A step is code if it gives the same output for the same input every time, such as copying, filtering by a rule or matching against a list. It's AI if it makes a judgement call. If you can't tell, ask.
-- **Allow or Ask.** An action is Allow only if it can be undone when it's taken, is seen only within its scope, and stays within the design's spending limits. Anything else is Ask, unless it is blocked. A send to a person, a payment and anything public are never Allow, and no standing approval covers them.
+- **Allow or Ask.** An action is Allow only if it can be undone when it's taken, is seen only within its scope, and stays within the design's spending limits. Anything else is Ask, unless it is blocked. A send to a person, a payment and anything public are never Allow, and no standing approval covers them. An Ask action needs a person in front of it in the drawing: a `review`, an `approval` or the person's own `do` step.
 - **Delivery isn't an outside action.** Posting to a shared surface for the people it serves, such as the family chat, is a `data` line to a `surface`, with no flag and no review.
 - **Scopes.** Name each with its members, as `family: parents, kids`, or with `+` and the people it adds to the scope inside it, as `carers: + June, Beth`. Ask which companies may process a scope's content where it matters, as for something told in confidence.
 - **Names.** Use the names the person uses. If the files will be shared or published, ask whether to use roles or made-up names instead.
@@ -46,7 +47,7 @@ Some judgements need care:
 
 Write the design first, then add its implementations in the same file. Name it after the workflow, as `standup.yaml`, and save it where the person keeps their work. In a chat with no files, give it in a `yaml` code block.
 
-Start with a comment saying what the file shows, then `awml: "0.4"`, `title`, `scopes`, `parts` and `lines`. Write the parts in the order the work flows. Quote every label. Ids are short words joined by underscores, such as `meal_plan`. Give each step an `op` where one fits, using the spec's table of operations for what each produces and must not do. A scope's `processing`, a trigger's `wait` and a context's `at` let `awml fit` judge where the design can run.
+Start with a comment saying what the file shows, then `awml: "0.5"`, `title`, `scopes`, `parts` and `lines`. Write the parts in the order the work flows. Quote every label. Ids are short words joined by underscores, such as `meal_plan`. Give each step an `op` where one fits, using the spec's table of operations for what each produces and must not do. A scope's `processing`, a trigger's `wait` and a context's `at` let `awml fit` judge where the design can run.
 
 Add `implementations` as a map of ids to entries with a `label` and `blocks`. Each block has `id`, `label` and `parts`, a list of design part ids; it may have `platform` and `in`, its parent block. Every part except a trigger or comment needs exactly one block per implementation. Keep the design's parts and lines once. An implementation may add `comments`, each with `id`, `label`, `in`, its block, and `ties`, the design part ids it explains. Scope, part, block and comment ids must be unique across the file.
 
@@ -54,6 +55,7 @@ Add `implementations` as a map of ids to entries with a `label` and `blocks`. Ea
 
 - A context sits in its scope's box, and a surface in the box of the scope its viewers make up.
 - A step sits in the box of the scope it writes into, with the reviews and outside actions it leads to.
+- A standing approval sits in the box of the scope of the person who gives it.
 - A connector sits in the box of the scope its inputs take: who could see what it brings in.
 - One box goes inside another only when every member of the inner scope is in the outer one, and its terms are at least as strict. Otherwise the boxes sit side by side.
 - A trigger or comment may have no `in`, and is then drawn beside what it starts or explains.
@@ -65,11 +67,12 @@ Choose each line's kind by what it does:
 - `publish` moves content into a wider scope: a box it isn't already inside, or one with looser terms. Label it with the standing rule that allows it and whose words it moves, who must have agreed to that target, as `"co-op notes, under the bakery's rule, for customers who ticked the box"`, or say what yes releases it, as `"the consultant takes the reply"`.
 - `refused` is a read from a narrower scope that the design refuses, with a label such as `never read here`.
 - The one line out of each review is labelled `"[yes]"`.
+- A standing approval sits between the `do` step and the actions it covers, with a `data` line to the surface where each action is listed with how to undo it.
 - `tie` links a comment to what it explains, and `hidden` only steers the layout.
 
 **In the platform view**, each implementation block is a platform: a machine or service that brings its own surfaces, harness and models, and often its own triggers.
 
-- Each part sits in the block of the platform it runs on or lives in. A trigger sits where it is fired, a context where its notes are kept, a connector in the block of the service it reaches, and a review where the person gives their yes.
+- Each part sits in the block of the platform it runs on or lives in. A trigger sits where it is fired, a context where its notes are kept, a connector in the block of the service it reaches, a review where the person gives their yes, and a standing approval where its limits are kept.
 - Label each block with what the implementation chose there, such as its model, and when the machine is on, if that isn't always: `"Server: claude-sonnet-4-5"`, `"Noor's laptop: on some evenings"`.
 - A model on its own isn't a platform: it's a choice a platform makes.
 
@@ -112,6 +115,7 @@ The files stay where the person keeps their work; if they want to share the work
 
 - **A draft step leading to an outside action**, even through a review. `awml check` says `only a do step leads to an outside action`. Put a `do` step between the draft and the review, such as code that asks the person to send it, or make the person's own step `op: do` when they edit and send it themselves.
 - **Publishing drawn as routing.** A `data` line into a box that isn't the source's or one inside it moves content to more people or under looser terms. `awml check` says `draw it as publish, or as refused if the design refuses the read`. Make it a `publish` line, labelled with the standing rule or the yes that releases it, or a `refused` read. If the move really narrows, the target's box belongs inside the source's.
+- **An Ask action with nobody in front of it.** `awml check` says `no person in between`. Put a review or a standing approval between the `do` step and the action, or make the person's own step take it. A standing approval only named in the action's label or a comment doesn't count.
 - **A review used as a decision.** A review has one way out, labelled `"[yes]"`. Draw no `[no]` line and no second branch, since a review isn't a decision node. If a person changes the content, that is their own step, not a review.
 - **An `answer` or `check` step writing to a context.** They read contexts and speak on surfaces. A step that files what it found is a different step, such as `learn` or `sort`.
 - **Unquoted values YAML reads as something else.** A date or a number as a label gives `YAML read its label as …, not text: put it in quotes`. An unquoted label with `: ` in it isn't YAML at all, one with a comma is split in two and shows up as an unknown field, and an unquoted `[yes]` is read as a list. Quote every label.

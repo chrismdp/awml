@@ -135,11 +135,12 @@ The operating model has little to do with AI: it's how work is organised, whoeve
 - A **trigger** is a pink pill. It starts the workflow: a time, such as `Weekdays 07:00`, or an event, such as someone asking in a chat or an email arriving.
 - A **step** is a rounded box: one piece of work, with the colour and emoji of who decides it.
 - A **review** is an amber rounded box, like a step, with `👤 ✅ review` above its label: a person's yes to exact content before it goes ahead. Its one way out is a line with the guard `[yes]`.
+- A **standing approval** is an amber rounded box too, with `👤 📜 standing approval` above its label: a person's yes given once to named kinds of action, within limits.
 - A **fork** is a black bar, where work splits to run side by side.
 - A **context** is a pale blue cylinder: the notes a step may read or write, kept as one folder.
 - A **connector** is a grey hexagon: someone's access to an outside service, such as a calendar, a mailbox or a bank account.
 - A **surface** is a white window box: where people meet the system's work, such as a chat, a list on their phone or a screen on a wall.
-- An **outside action** is a coral flag: something that changes the world outside the system, such as sending an email or paying a bill. Its label ends with its [tier](#tiers-and-yeses), such as `Send the reply: Ask`.
+- An **outside action** is a coral flag: something that changes the world outside the system, such as sending an email or paying a bill. Its label gives its [tier](#tiers-and-yeses) after its last colon, such as `Send the reply: Ask`.
 - A **comment** is a dashed box with a cut corner. It points out a gap, or gives an example of what a part could carry, and is tied to what it explains.
 
 Posting on a shared surface to the people it serves is delivery, not an outside action, so a family chat needs no flag and no review.
@@ -192,7 +193,7 @@ A `do` step should be code acting on what an earlier step decided. An AI or a ru
 
 A drawing can show some of these limits, and `awml check` holds every step to them:
 
-- **Only a `do` step leads to an outside action**, by a line straight to it or through a review or a fork. A draft step never leads to an outside action, even through a review: a draft goes to a `do` step that asks to send it, or to a person's own `do` step.
+- **Only a `do` step leads to an outside action**, by a line straight to it or through a review, a standing approval or a fork. A draft step never leads to an outside action, even through a review: a draft goes to a `do` step that asks to send it, or to a person's own `do` step.
 - **An `answer` step and a `check` step never write to a context.** They read contexts, and speak on surfaces.
 - **An `op` names one of the ten,** and only a step names one.
 
@@ -243,6 +244,7 @@ In the security view, each scope is a dashed box, labelled with its name and mem
 
 - A **context** sits in the box of its scope.
 - A **step** sits in the box of the scope it writes into, with the reviews and outside actions it leads to.
+- A **standing approval** sits in the box of the scope of the person who gives it.
 - A **connector** sits in the box of the scope its inputs take, so a connector only the parents may use sits in the parents' box, and nothing outside that box can read through it.
 - A **surface** sits in the box of the scope its viewers make up.
 
@@ -299,9 +301,11 @@ Every outside action has a **tier**.
 
 | Tier | When it applies | Drawn as |
 |---|---|---|
-| **Allow** | The action can be undone when it's taken, is seen only within its scope, and stays within the design's spending limits: a note, a draft, a label, an entry in a person's own calendar | A flag a step leads to directly: it just happens |
-| **Ask** | Any other action that isn't blocked, and any the design marks Ask because the person who answers for it would be surprised | A flag with a review on the way to it, or one a person's own `do` step leads straight to: it waits for a yes, unless a standing approval covers it |
+| **Allow** | The action can be undone when it's taken, is seen only within its scope, and stays within the design's spending limits: a note, a draft, a label, an entry in a person's own calendar | A flag steps lead to with no review or standing approval in front of it: it just happens |
+| **Ask** | Any other action that isn't blocked, and any the design marks Ask because the person who answers for it would be surprised | A flag with a person on every way to it: a review, a standing approval, or a person's own `do` step leading straight to it. It waits for a yes, or goes under a standing approval |
 | **Block** | Never, whatever anyone says | Never a line. A flag with nothing leading to it may name it, and a line into one is red |
+
+The tier follows from the drawing's shape: wherever a tier says a person decides, the drawing shows them. `awml check` reports an Ask action with no person on one of its ways in, an Allow action behind a review or a standing approval, and a line that isn't red into a Block action.
 
 A **yes** is an approver's yes to one action and its exact content, shown with what it's for: the work it serves, why now, what started it and what it drew on. A yes to "send the reply" in general is no yes at all. Any change to the content after the yes, a fix included, needs a new yes.
 
@@ -313,11 +317,11 @@ An **approver** is a role, such as the approver of sends, held by one or more pe
 
 Asking for a yes to every small, reversible action soon trains people to say yes without looking. A **standing approval** is the way out. The person who answers for a scheduled task approves it once to take named kinds of action that can be undone, within limits such as how many and how often, so each item doesn't wait for a yes. Each action under it is recorded and listed for that person, with how to undo it. One that acts in someone else's name needs their yes too, and ends when their access does. Nothing that can't be undone goes this way, such as a send to a person or a payment, and nothing that reaches the public.
 
-A standing approval is drawn on the outside action it covers: the label names it, and a comment tied to the flag gives its kinds and limits. The file format needs no field of its own for one.
+A standing approval is a part of its own, in the box of the person who gives it, between the `do` step and the Ask actions it covers. Its label says whose it is and gives its kinds and limits. A line from it goes to the surface where each action is listed with how to undo it, and `awml check` reports one without. No drawing shows whether an action can be undone, so that stays for its readers to judge.
 
 ![Library renewals under a standing approval](examples/tour/12-standing-approval.svg)
 
-Here Sam approved the morning renewals once, for renewals only and up to six a week.
+Here Sam approved the morning renewals once, for renewals only and up to six a week, and each renewal is listed on Sam's list.
 
 ## Records
 
@@ -433,7 +437,7 @@ awml pull family/dinners@1 -o dinners
 - `awml page` writes one standalone HTML page with the security view then every implementation, each with a heading. Several files appear in the order given. The page takes their shared title, or Workflows when they differ.
 - `awml summary` counts the scopes, platforms, parts and lines in one workflow. It includes platforms from every implementation and counts the design once. `--json` prints the registry's JSON form.
 - `awml convert security.yaml platform.yaml` joins a matching 0.3 or 0.2 pair into one 0.4 file, printed to standard output. It keeps the security design and turns platform groups into blocks of the `default` implementation. Add `--implementation ID` to name the implementation. YAML comments move to the top. The canonical labels, part order and triggers may change the old platform drawing.
-- `awml login` saves an API token for the registry. `awml push` checks and uploads one 0.4 file in the API's workflow field. `awml pull` downloads the latest or a numbered version as `<slug>.yaml`. It still downloads an older pair as `security.yaml` and `platform.yaml`. The commands use `https://awml.io` unless `--registry` or `AWML_REGISTRY_URL` says otherwise. Add `--private` to the first push of a private organisation workflow.
+- `awml login` saves an API token for the registry. `awml push` checks and uploads one 0.4 or 0.5 file in the API's workflow field. `awml pull` downloads the latest or a numbered version as `<slug>.yaml`. It still downloads an older pair as `security.yaml` and `platform.yaml`. The commands use `https://awml.io` unless `--registry` or `AWML_REGISTRY_URL` says otherwise. Add `--private` to the first push of a private organisation workflow.
 
 For example, the client email workflow can run on the scheduled scripts platform, while the other descriptions show why they don't fit:
 
@@ -461,7 +465,7 @@ npx -y @mermaid-js/mermaid-cli@11.4.1 -b white -i my-workflow.mmd -o my-workflow
 One file holds one workflow and its implementations:
 
 ```yaml
-awml: "0.4"
+awml: "0.5"
 title: The family's dinners
 scopes:
   - { id: carers, label: "carers: + June, Beth" }
@@ -483,13 +487,13 @@ implementations:
       - { id: phone, label: Family phone, parts: [chat] }
 ```
 
-- The file needs `awml`, the version `"0.4"`; `title`, the workflow's name; and `parts`. It may have `scopes`, `lines` and `implementations`. Versions `"0.3"` and `"0.2"` still read as before, with `groups` and `view`.
+- The file needs `awml`, the version `"0.5"`; `title`, the workflow's name; and `parts`. It may have `scopes`, `lines` and `implementations`. Version `"0.4"` still reads as before, with no standing approval and no check of its tiers, and versions `"0.3"` and `"0.2"` with `groups` and `view`.
 - A **scope** has an `id` and a `label`, and may have `in`, the id of its parent scope, and `processing`, the companies it allows.
 - A **part** has an `id`, a `kind` and a `label`, which a fork doesn't need. Its `in` names its scope. A step may have `op`, a trigger `wait`, and a context `at`.
 - An **implementation** has an id in the `implementations` map, a `label` and `blocks`. Each block has an `id`, a `label` and `parts`, the ids it holds. It may have `in`, its parent block, and `platform`, a platform description id. Every part except a trigger or comment needs exactly one block per implementation.
 - An implementation may have **comments**, each with `id`, `label`, `in`, its block, and `ties`, a list of design part ids. These comments appear only in its platform view.
 - A **line** has `from` and `to`, the ids of two parts, and a `kind`. It may have a `label`, and `breaks: true` to draw it red.
-- The part kinds are `trigger`, `ai`, `code`, `person`, `review`, `fork`, `context`, `connector`, `surface`, `outside` and `comment`. The line kinds are `start`, `data`, `publish`, `refused`, `tie` and `hidden`.
+- The part kinds are `trigger`, `ai`, `code`, `person`, `review`, `approval`, `fork`, `context`, `connector`, `surface`, `outside` and `comment`. The line kinds are `start`, `data`, `publish`, `refused`, `tie` and `hidden`.
 - An id is letters, digits and underscores, starting with a letter, and scope, part, block and comment ids are unique across the file. Implementation ids have their own namespace.
 - Parts are drawn in the design's order, and each scope or block after the parts beside it. Unplaced triggers and design comments are drawn beside the other end of their first visible line. A `hidden` line steers the layout when Mermaid puts something in an awkward place.
 
@@ -497,7 +501,7 @@ Every id, label, kind and reference to an id is text. `awml` reads YAML 1.2, whi
 
 ### What `awml check` reports
 
-`awml check` reports structural mistakes, invalid operations and publishing drawn as routing. It also checks each implementation's block references, nesting and placement, and its comments' ties. It warns when AI decides a `do` step or one `do` step leads to more than one change. Warnings leave the exit status alone. [`SPEC.md`](SPEC.md) gives the exact rules, including the checks for older view pairs.
+`awml check` reports structural mistakes, invalid operations, tiers that disagree with the drawing and publishing drawn as routing. It also checks each implementation's block references, nesting and placement, and its comments' ties. It warns when AI decides a `do` step or one `do` step leads to more than one change. Warnings leave the exit status alone. [`SPEC.md`](SPEC.md) gives the exact rules, including the checks for older view pairs.
 
 ### Examples to start from
 
@@ -511,6 +515,6 @@ Besides the gallery, [`examples/`](examples) has three workflows to start from: 
 
 ## Status and licence
 
-Draft 0.4. The notation and the file format may still change.
+Draft 0.5. The notation and the file format may still change.
 
 MIT. See `LICENSE`.

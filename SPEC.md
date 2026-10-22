@@ -1,6 +1,6 @@
 # AWML: the Agentic Workflow Modelling Language
 
-Draft 0.4, 22 October 2026.
+Draft 0.5, 22 October 2026.
 
 AWML describes agentic work as diagrams, written as YAML files and drawn with Mermaid.
 
@@ -21,6 +21,7 @@ One canonical file holds the workflow's design and any **implementations**, the 
 | Step decided by code | `code` | A rounded box, with ⚙️ and its operation above its label | Green `#c4e3d1` | Action |
 | Step decided by a person | `person` | A rounded box, with 👤 and its operation above its label | Amber `#f7d79a` | Action |
 | Review | `review` | A rounded box, with 👤 ✅ review above its label, left by `[yes]` | Amber `#f7d79a` | Action, whose one way out is guarded by `[yes]`, so not a decision node |
+| Standing approval | `approval` | A rounded box, with 👤 📜 standing approval above its label | Amber `#f7d79a` | Action, like a review |
 | Fork | `fork` | A black bar | Black `#16171b` | Fork node |
 | Context | `context` | A cylinder | Pale blue `#e2eef9` | Data store node |
 | Connector | `connector` | A hexagon | Grey `#eceef2` | None |
@@ -28,9 +29,9 @@ One canonical file holds the workflow's design and any **implementations**, the 
 | Outside action | `outside` | A flag, with its tier | Coral `#fde4dc` | Send signal action |
 | Comment | `comment` | A dashed box with a cut corner | White | Comment |
 
-A **trigger** starts a workflow: a time, or an event such as someone asking in a chat. A **step** is one piece of work, drawn with the colour and emoji of who decides it: AI, code (which does the same thing every time) or a person. A **review** is a person's yes to exact content before it goes ahead. A **fork** is where work splits to run side by side. A **context** is the notes a step may read or write, kept as one folder. A **connector** is someone's access to an outside service, such as a calendar or a bank account. A **surface** is where people meet the system's work: a chat, a list on their phone, a screen on a wall. An **outside action** changes something outside the system, and its label ends with its tier. A **comment** marks a gap, or gives an example of what a part could carry.
+A **trigger** starts a workflow: a time, or an event such as someone asking in a chat. A **step** is one piece of work, drawn with the colour and emoji of who decides it: AI, code (which does the same thing every time) or a person. A **review** is a person's yes to exact content before it goes ahead. A **standing approval** is a person's yes given once to named kinds of action, within limits. A **fork** is where work splits to run side by side. A **context** is the notes a step may read or write, kept as one folder. A **connector** is someone's access to an outside service, such as a calendar or a bank account. A **surface** is where people meet the system's work: a chat, a list on their phone, a screen on a wall. An **outside action** changes something outside the system, and its label ends with its tier. A **comment** marks a gap, or gives an example of what a part could carry.
 
-The emoji say what the colours say, for a reader who can't tell the colours apart and on a page printed without them: 🤖 is AI, ⚙️ code and 👤 a person, on every step and review. Code is a gear rather than a computer, because a computer reads as a machine, and machines such as a laptop or a server are what the platform view shows.
+The emoji say what the colours say, for a reader who can't tell the colours apart and on a page printed without them: 🤖 is AI, ⚙️ code and 👤 a person, on every step, review and standing approval. Code is a gear rather than a computer, because a computer reads as a machine, and machines such as a laptop or a server are what the platform view shows.
 
 UML has nothing for a connector or a surface, so those two shapes are AWML's own.
 
@@ -55,7 +56,7 @@ A **scope** is a set of people. Everything belongs to one scope, which says who 
 
 In the security view, each scope is a dashed box, labelled with its name and members, such as `family: parents, kids`, or with `+` and the people it adds to the scope inside it, such as `carers: + June, Beth`.
 
-**Where a part sits.** A context sits in the box of its scope. A step sits in the box of the scope it writes into, with the reviews and outside actions it leads to. A connector sits in the box of the scope its inputs take. A surface sits in the box of the scope its viewers make up.
+**Where a part sits.** A context sits in the box of its scope. A step sits in the box of the scope it writes into, with the reviews and outside actions it leads to. A standing approval sits in the box of the scope of the person who gives it. A connector sits in the box of the scope its inputs take. A surface sits in the box of the scope its viewers make up.
 
 **Boxes inside boxes.** One box sits inside another only where every member of the inner scope is in the outer one, and its terms are at least as strict. Otherwise they sit side by side. A family's scopes often nest: the parents' box sits inside the family's, which sits inside the box of the family and its carers. A consultant's client scope and their side venture's share only the consultant, so they sit side by side.
 
@@ -147,14 +148,15 @@ worker            no: engagements is kept at notes/engagements, which the platfo
 
 ## Tiers and yeses
 
-Each outside action has a **tier**, which ends its label, as in `Send the mail: Ask`.
+Each outside action has a **tier**, which follows the last colon in its label, as in `Send the mail: Ask`.
 
 | Tier | When it applies | Drawn as |
 |---|---|---|
-| **Allow** | The action can be undone when it is taken, is seen only within its scope, and stays within the design's spending limits: a note, a draft, a label, an entry in a person's own calendar | A flag a step leads to directly: it just happens |
-| **Ask** | Any other action that isn't blocked, and any the design marks Ask because the person who answers for it would be surprised | A flag with a review on the way to it, or one a person's own `do` step leads straight to: it waits for a yes, unless a standing approval covers it |
+| **Allow** | The action can be undone when it is taken, is seen only within its scope, and stays within the design's spending limits: a note, a draft, a label, an entry in a person's own calendar | A flag steps lead to with no review or standing approval in front of it: it just happens |
+| **Ask** | Any other action that isn't blocked, and any the design marks Ask because the person who answers for it would be surprised | A flag with a person on every way to it: a review, a standing approval, or a person's own `do` step leading straight to it. It waits for a yes, or goes under a standing approval |
 | **Block** | Never, whatever anyone says | Never a line. A flag with nothing leading to it may name it, and a line into one is red |
 
+The tier follows from the drawing's shape: wherever a tier says a person decides, the drawing shows them. A way to an action is a line that leads to it, followed back through any fork to the part it comes from. `awml check` reports an Ask action that any part but a review, a standing approval or a person's own step leads to, an Allow action with a review or standing approval in front of it, and any line but a red one into a Block action.
 
 A **yes** is an approver's yes to one action and its exact content, shown with what it is for: the work it serves, why now, what started it and what it drew on. Any change to the content after the yes, a fix included, needs a new yes. An **approver** is a role, such as the approver of sends, held by one or more people. A rare, high-stakes kind of action may need a yes from two approvers, two people in two roles, to the same content, drawn as two reviews in a row, and kept for few kinds.
 
@@ -164,7 +166,7 @@ When a person does a `do` step themselves, as when the consultant edits the repl
 
 A **standing approval** lets the runs of one scheduled task take named kinds of action that can be undone, within limits such as how many and how often, without a yes to each one. The person who answers for the task gives it once. Each action under it is recorded and listed for that person with how to undo it. One that acts in someone else's name needs their yes too, and ends when their access does. Nothing that can't be undone goes this way, such as a send to a person or a payment, and nothing that reaches the public.
 
-A standing approval is drawn on the outside action it covers: the label names it, as in `Renew the book: Ask, under Sam's standing approval`, and a comment tied to the flag gives its kinds and limits. The file format needs no field for one, since a drawing can show no more of it than that.
+A standing approval is a part of its own, drawn in the box of the person who gives it. Its label says whose it is and gives its kinds and limits, as in `Sam's standing approval: renewals only, up to six a week`. The `do` step leads to it, and it leads to each outside action it covers, which is Ask. A line from it goes to the surface where each action is listed with how to undo it, and `awml check` reports a standing approval with no such line. Whether an action can be undone is something no drawing shows, so the readers judge that.
 
 ## Operations
 
@@ -186,7 +188,7 @@ A `do` step should be code acting on what an earlier step decided. An AI or a ru
 
 A drawing can show some of these limits, and `awml check` holds each step to those:
 
-- **Only a `do` step leads to an outside action**, by a line straight to it or through a review or a fork. A draft goes to a `do` step, which asks to send it, and a person's yes releases the send, or to a person's own `do` step, which is their yes. A draft step never leads to an outside action, even through a review.
+- **Only a `do` step leads to an outside action**, by a line straight to it or through a review, a standing approval or a fork. A draft goes to a `do` step, which asks to send it, and a person's yes releases the send, or to a person's own `do` step, which is their yes. A draft step never leads to an outside action, even through a review.
 - **An `answer` step and a `check` step never write to a context.** They read contexts, and speak on surfaces.
 
 A line leads somewhere when it starts something, moves data or publishes. A hidden line, a refused read and a tie lead nowhere. The other limits, such as deciding for a person or making up an aim, are about what happens inside a step, which no drawing shows, so its readers judge those.
@@ -213,7 +215,7 @@ Two `do` steps, each making one change. The Allow action can be undone, so it ju
 
 <img src="examples/tour/12-standing-approval.svg" width="410" alt="Standing approval">
 
-A person approves a scheduled task once to take named kinds of action that can be undone, within limits, so each item doesn't wait for a yes. Use it for small, frequent actions that a yes each time would only slow down. Nothing that can't be undone and nothing public goes this way.
+A person approves a scheduled task once to take named kinds of action that can be undone, within limits, so each item doesn't wait for a yes. The standing approval stands between the `do` step and the action, and lists each action on the person's surface. Use it for small, frequent actions that a yes each time would only slow down. Nothing that can't be undone and nothing public goes this way.
 
 ### Answer from the notes
 
@@ -254,7 +256,7 @@ AWML runs nothing and grants nothing. In a workflow tool such as n8n, the diagra
 One YAML file holds one workflow's design and any implementations. It has no `view`.
 
 ```yaml
-awml: "0.4"
+awml: "0.5"
 title: The family's dinners
 scopes:
   - { id: carers, label: "carers: + June, Beth", processing: any }
@@ -275,7 +277,7 @@ implementations:
       - { id: keys, label: "The server also holds the rota app's key", in: server, ties: [plan] }
 ```
 
-The file needs `awml`, the version `"0.4"`; `title`, the workflow's name; and `parts`. It may have `scopes`, `lines` and `implementations`.
+The file needs `awml`, the version `"0.5"`; `title`, the workflow's name; and `parts`. It may have `scopes`, `lines` and `implementations`.
 
 - A **scope** has an `id` and a `label`, and may have `in`, the id of the scope it sits inside, and `processing`: `any`, `none`, or a map from company ids to `any` or a list of operations.
 - A **part** has an `id`, a `kind` and a `label`, which a fork doesn't need and never shows. It may have `in`, the id of its scope. A step, `ai`, `code` or `person`, may have `op`, its operation. A trigger may have `wait`, an ISO 8601 duration such as `PT5M`. A context may have `at`, a path such as `notes/projects`.
@@ -286,14 +288,14 @@ The file needs `awml`, the version `"0.4"`; `title`, the workflow's name; and `p
 
 An id is letters, digits and underscores, starting with a letter. Scope, part, block and comment ids are unique across the file. Implementation ids have their own namespace. Every id, label, kind and reference to an id is text. `awml` reads YAML 1.2, which reads `true`, `false`, numbers and dates such as `2026-10-20` as something other than text, so quote them. YAML 1.1, which many other tools read, also reads `yes`, `no`, `on` and `off` as true or false, and `19:00` as a number, so quoting those too keeps a file the same in every tool. `breaks` is `true` or `false`, unquoted. The drawing keeps the parts in the order the file lists them, and draws each scope or block after the parts beside it. List the parts in the order the work flows, with its triggers first. A block's `parts` list chooses placement, not drawing order.
 
-`awml check` applies the security rules to the design and the platform rules to each implementation. It reports a missing or unknown field, an unknown kind, an id used twice or badly written, a value YAML didn't read as text, a `breaks` that isn't true or false, an unknown scope, part or block reference, a scope or block nested in itself, a comment linked by anything but `tie`, a `tie` with no comment at either end, an unknown `op` or one on a part that isn't a step, a step that does what its operation must not, as far as the drawing shows it, a `data` line that moves content anywhere but its own scope or a scope inside it, a `processing` that isn't `any`, `none` or a map of company ids to `any` or known operations, an inner scope's `processing` that allows a company or operation its outer scope doesn't, `processing` on a block, `platform` on a scope, a `wait` that isn't a duration or is on a part that isn't a trigger, and an `at` that isn't a path or is on a part that isn't a context. It also reports a part placed twice in an implementation or left unplaced when it needs a block. It warns when AI decides a `do` step or one `do` step leads to more than one change. Warnings leave the exit status alone. Messages for rules shared with older files keep their wording, including the word group for a scope or block.
+`awml check` applies the security rules to the design and the platform rules to each implementation. It reports a missing or unknown field, an unknown kind, an id used twice or badly written, a value YAML didn't read as text, a `breaks` that isn't true or false, an unknown scope, part or block reference, a scope or block nested in itself, a comment linked by anything but `tie`, a `tie` with no comment at either end, an unknown `op` or one on a part that isn't a step, a step that does what its operation must not, as far as the drawing shows it, an outside action whose label gives no tier after its last colon, a tier that disagrees with what stands in front of the action, a standing approval with no line to a surface, a `data` line that moves content anywhere but its own scope or a scope inside it, a `processing` that isn't `any`, `none` or a map of company ids to `any` or known operations, an inner scope's `processing` that allows a company or operation its outer scope doesn't, `processing` on a block, `platform` on a scope, a `wait` that isn't a duration or is on a part that isn't a trigger, and an `at` that isn't a path or is on a part that isn't a context. It also reports a part placed twice in an implementation or left unplaced when it needs a block. It warns when AI decides a `do` step or one `do` step leads to more than one change. Warnings leave the exit status alone. Messages for rules shared with older files keep their wording, including the word group for a scope or block.
 
-A **platform description** is a file of its own. It needs `awml`, the version `"0.3"` or `"0.4"`; `platform`, with an `id`, written like a company id, and a `label`; `off_for_up_to`, an ISO 8601 duration; `steps`, `code` or `agent`; `agents`, a list of company ids, which may be empty; `calls`, a list of company ids or `any`; and `holds`, a list of paths, which may be empty. It has no workflow fields. `awml check` reports a missing or unknown field, a value of the wrong kind and a company id or path badly written. A company id is lower-case letters, digits and hyphens, starting with a letter. A path is names of letters, digits, dots, hyphens and underscores, joined by `/`, with no leading `/` and no `.` or `..` names.
+A **platform description** is a file of its own. It needs `awml`, the version `"0.3"`, `"0.4"` or `"0.5"`; `platform`, with an `id`, written like a company id, and a `label`; `off_for_up_to`, an ISO 8601 duration; `steps`, `code` or `agent`; `agents`, a list of company ids, which may be empty; `calls`, a list of company ids or `any`; and `holds`, a list of paths, which may be empty. It has no workflow fields. `awml check` reports a missing or unknown field, a value of the wrong kind and a company id or path badly written. A company id is lower-case letters, digits and hyphens, starting with a letter. A path is names of letters, digits, dots, hyphens and underscores, joined by `/`, with no leading `/` and no `.` or `..` names.
 
 `awml draw file.yaml` draws the security view. `awml draw --implementation ID file.yaml` draws one platform view. `awml page` draws the security view followed by every implementation, each with a heading. `awml summary` counts the workflow once and includes the platforms from all its implementations.
 
 `awml fit file.yaml DESC...` judges the design against platform descriptions. With `--implementation ID` it judges the chosen placement. It prints one line for each platform that fits, naming the companies each AI step may use there, and one line for each reason a platform doesn't fit, as in [Placing a workflow](#placing-a-workflow-where-it-can-run). It exits 0 when it could judge every platform, whether or not any fits, and 1 when a file has mistakes or the design has a gap. With `--json` it prints an object whose `results` hold one entry for each platform, or each block of an implementation: its `platform`, whether it was `judged`, whether the workflow `fits`, the `reasons` it doesn't, and in `models` the companies each AI step there may use. Its `gaps` list what kept the workflow from being judged.
 
-Files marked `"0.3"` or `"0.2"` keep their separate security and platform views, with `groups` and `view`, and are read as before. A 0.2 file may use none of the fields 0.3 added. Given a legacy pair with the same title, `awml check` compares parts by id and lines by their ends and kind, apart from comments and any trigger the platform view leaves out. Legacy `awml fit` still takes a security view followed by an optional platform view and the descriptions.
+Files marked `"0.4"` are read as before: they have no standing approval, and their tiers are only words in a label, which `awml check` doesn't read. Files marked `"0.3"` or `"0.2"` keep their separate security and platform views, with `groups` and `view`, and are read as before. A 0.2 file may use none of the fields 0.3 added. Given a legacy pair with the same title, `awml check` compares parts by id and lines by their ends and kind, apart from comments and any trigger the platform view leaves out. Legacy `awml fit` still takes a security view followed by an optional platform view and the descriptions.
 
 `awml convert [--implementation ID] SECURITY PLATFORM` prints one 0.4 file from a matching legacy pair. It refuses the same part and line differences as the comparison. The security view supplies the title, parts, lines and their order; platform groups become blocks in the named implementation, which is `default` when the option is absent, and platform-only comments become its comments. Clashing block and implementation comment ids gain a `block_` or `comment_` prefix until unique. YAML comments from both files are kept at the top. Conversion keeps the canonical design, so platform labels, layout and omitted triggers may change its drawing.

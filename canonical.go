@@ -5,9 +5,9 @@ import (
 	"strings"
 )
 
-// IsCanonical reports whether a document holds a 0.4 workflow.
+// IsCanonical reports whether a document holds a 0.4 or 0.5 workflow.
 func IsCanonical(doc *Map) bool {
-	return doc != nil && str(doc, "awml") == "0.4" && !doc.has("platform")
+	return doc != nil && isOneOf(doc.get("awml"), "0.4", "0.5") && !doc.has("platform")
 }
 
 // ImplementationIDs gives implementations in the order they were written.
@@ -33,7 +33,7 @@ func copyMap(source *Map, omit ...string) *Map {
 func View(doc *Map, implementation string) (*Map, error) {
 	if !IsCanonical(doc) {
 		if implementation != "" {
-			return nil, fmt.Errorf("--implementation needs a 0.4 workflow")
+			return nil, fmt.Errorf("--implementation needs a 0.4 or 0.5 workflow")
 		}
 		return doc, nil
 	}
@@ -106,7 +106,8 @@ func checkCanonical(file *Map) (mistakeList, bool) {
 			clean.set(key, security.get(key))
 		}
 	}
-	designErrors, stopped := checkDoc(clean)
+	format := str(file, "awml")
+	designErrors, stopped := checkView(clean, false, format)
 	errors = appendUnique(errors, designErrors...)
 	if !file.has("implementations") {
 		return errors, stopped
@@ -210,7 +211,7 @@ func checkCanonical(file *Map) (mistakeList, bool) {
 			seen[keyOf(value)] = true
 		}
 		platform, _ := View(file, name)
-		platformErrors, _ := checkView(platform, true)
+		platformErrors, _ := checkView(platform, true, format)
 		errors = appendUnique(errors, platformErrors...)
 	}
 	return errors, false

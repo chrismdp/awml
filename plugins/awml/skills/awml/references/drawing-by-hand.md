@@ -39,6 +39,7 @@ A part is its id followed straight away by its node, with the label in place of 
 | `code` | `code` | `("label")` |
 | `person` | `person` | `("label")` |
 | `review` | `person` | `("label")` |
+| `approval` | `person` | `("label")` |
 | `fork` | `uml` | `@{ shape: fork, label: "" }` |
 | `context` | `ctx` | `[("label")]` |
 | `connector` | `con` | `{{"label"}}` |
@@ -48,7 +49,7 @@ A part is its id followed straight away by its node, with the label in place of 
 
 In every label, of a part, a group or a line, write each ASCII punctuation mark as its decimal Mermaid entity: `@` as `#64;`, `.` as `#46;`, `"` as `#34;`, and so on. Leave letters, numbers, spaces and non-ASCII characters as written. This stops Mermaid reading email addresses, web addresses, lists or other Markdown instead of literal label text. A fork shows no label.
 
-The label of a step or a review starts with a line of its own saying who decides it, `<small style='color:rgb(61,67,79)'>WHO</small><br>`, and then the label. `WHO` is 🤖 for `ai`, ⚙️ for `code` and 👤 for `person`. For a step with an `op`, add its emoji and its name, so an AI draft is `<small style='color:rgb(61,67,79)'>🤖 ✏️ draft</small><br>`. For a review, `WHO` is `👤 ✅ review`.
+The label of a step, a review or a standing approval starts with a line of its own saying who decides it, `<small style='color:rgb(61,67,79)'>WHO</small><br>`, and then the label. `WHO` is 🤖 for `ai`, ⚙️ for `code` and 👤 for `person`. For a step with an `op`, add its emoji and its name, so an AI draft is `<small style='color:rgb(61,67,79)'>🤖 ✏️ draft</small><br>`. For a review, `WHO` is `👤 ✅ review`, and for a standing approval, `👤 📜 standing approval`.
 
 | Emoji | `op` |
 |---|---|

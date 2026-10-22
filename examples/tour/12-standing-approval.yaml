@@ -1,6 +1,6 @@
 # A standing approval. Sam approved the morning renewals once, so each renewal goes without a yes,
 # within the limits Sam set, and is listed for Sam afterwards. Sam is fictional.
-awml: "0.4"
+awml: "0.5"
 title: Renewing library books
 scopes:
   - { id: sam, label: "sam: Sam" }
@@ -8,15 +8,13 @@ parts:
   - { id: morning, kind: trigger, label: "Every morning 08:00" }
   - { id: library, kind: connector, label: "Sam's library account", in: sam }
   - { id: renew, kind: code, op: do, label: "Renew each book due back this week", in: sam }
-  - { id: action, kind: outside, label: "Renew the book: Ask, under Sam's standing approval", in: sam }
-  - { id: report, kind: code, op: do, label: "List the renewal and how to undo it", in: sam }
+  - { id: approval, kind: approval, label: "Sam's standing approval: renewals only, up to six a week", in: sam }
+  - { id: action, kind: outside, label: "Renew the book: Ask", in: sam }
   - { id: list, kind: surface, label: "Sam's list", in: sam }
-  - { id: terms, kind: comment, label: "Standing approval from Sam: renewals only, up to six a week" }
 lines:
   - { from: morning, to: renew, kind: start }
   - { from: library, to: renew, kind: data, label: books due back }
-  - { from: renew, to: action, kind: data }
+  - { from: renew, to: approval, kind: data }
+  - { from: approval, to: action, kind: data, label: "[within limits]" }
   - { from: action, to: library, kind: data }
-  - { from: action, to: report, kind: data }
-  - { from: report, to: list, kind: data }
-  - { from: terms, to: action, kind: tie }
+  - { from: approval, to: list, kind: data, label: "each renewal, with how to undo it" }

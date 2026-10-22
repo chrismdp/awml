@@ -14,6 +14,7 @@ flowchart TB
   code("<small style='color:rgb(61,67,79)'>⚙️</small><br>A step decided by code")
   person("<small style='color:rgb(61,67,79)'>👤</small><br>A step decided by a person")
   review("<small style='color:rgb(61,67,79)'>👤 ✅ review</small><br>A review#58; a person#39;s yes")
+  approval("<small style='color:rgb(61,67,79)'>👤 📜 standing approval</small><br>A standing approval#58; a person#39;s yes#44; given once")
   context[("A context#58; the notes in a folder")]
   connector{{"A connector#58; someone#39;s access to a service"}}
   fork@{ shape: fork, label: "" }
@@ -22,7 +23,8 @@ flowchart TB
   comment@{ shape: notch-rect, label: "A comment#44; tied to what it explains#58; the black bar is a fork#44; where work splits" }
 
   trigger ~~~ review
-  review ~~~ surface
+  review ~~~ approval
+  approval -->|"lists each action it covers"| surface
   ai ~~~ context
   context ~~~ outside
   code ~~~ connector
@@ -45,6 +47,6 @@ flowchart TB
   class outside out
   class ai ai
   class code code
-  class person,review person
+  class person,review,approval person
   class fork uml
   class comment gap

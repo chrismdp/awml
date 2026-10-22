@@ -63,12 +63,17 @@ func warningList(doc any) mistakeList {
 					continue
 				}
 				switch to.get("kind") {
-				case "review", "fork":
+				case "review", "approval", "fork":
 					if !seen[to] {
 						seen[to] = true
 						follow(to)
 					}
-				case "outside", "surface", "context":
+				case "surface", "context":
+					// A standing approval's surface lists what it covers, which is no change of the do step's.
+					if from.get("kind") != "approval" {
+						reached[to] = true
+					}
+				case "outside":
 					reached[to] = true
 				}
 			}
