@@ -85,6 +85,16 @@ An implementation's choices change how a step is done, never what it may do: the
 
 Which platforms could run a workflow is a separate question from which one it runs on. The design says what the workflow needs, a **platform description** says what one platform offers, and `awml fit` matches the two, giving the same answer every time. A person, or an agent working with them, writes the needs and describes their own machines. The matching is code. Choosing platforms that fit, adding an implementation and installing the workflow there is the person's call, and their agent's work.
 
+A security drawing on its own is easy to leave untested. Fitting a workflow to real platforms forces concrete choices. Each choice rules out more platforms and leads to the next:
+
+- A scope that allows only certain companies rules out a hosted runtime if its company would hold the data.
+- Local files rule out platforms that hold none.
+- If the builder must not reach the data, an ordinary container is no boundary when the builder's account can drive the container service, since that access is usually as good as full control of the machine. The runtime then needs its own operating system user, and the builder loses that access.
+- The runtime's credentials need their own OAuth project or app. Providers often carry earlier grants across clients in the same project.
+- The owner must deploy it with their privileges because the builder can no longer reach the runtime.
+
+This path is hardest when a builder can't see the data that the workflow handles. Examples include a consultant building for a client, a central team building for a department, and an AI agent building for a person. The fit makes the trade-off explicit so the owner can decide it. An owner can relax the boundary for data they already share with the builder, perhaps accepting one held only by instructions. That choice is a valid result of fitting the workflow, not a failure.
+
 **What a workflow needs.** Most of it is already in the drawing: the contexts, connectors and AI steps the workflow reaches. Three fields add the rest:
 
 - **Who may process it.** A scope's `processing` names the companies that may process its content, and for which operations. `{ anthropic: any, openai: [sort] }` lets Anthropic's models do anything in the scope and OpenAI's only sort. `any` lets every company in, and `none` keeps them all out, as for something told in confidence. A company is a short id, which only has to match the id the platform descriptions use. Where one company offers different terms, name the agreement instead, as in `openai-zero-retention`.
