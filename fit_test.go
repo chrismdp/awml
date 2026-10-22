@@ -124,3 +124,45 @@ lines:
 		t.Errorf("Fit gave\n%q\ngaps %q\nwant\n%q", got, gaps, want)
 	}
 }
+
+func TestFitReportsBlocksWithoutDescriptionsAsNotJudged(t *testing.T) {
+	placement := `
+awml: "0.3"
+title: Mail placement
+view: platform
+groups:
+  - {id: machine, label: Machine, platform: host}
+  - {id: phone, label: Phone}
+parts:
+  - {id: hourly, kind: trigger, label: Hourly}
+  - {id: bring, kind: code, op: bring-in, label: Bring in, in: machine}
+  - {id: mail, kind: connector, label: Mail, in: machine}
+  - {id: notes, kind: context, label: Notes, in: machine}
+  - {id: choose, kind: ai, op: sort, label: Choose, in: machine}
+lines:
+  - {from: hourly, to: bring, kind: start}
+  - {from: mail, to: bring, kind: data}
+  - {from: bring, to: choose, kind: publish}
+  - {from: notes, to: choose, kind: data}
+`
+	docs := fitDocs(t, fitSecurity, placement)
+	report := Judge(docs[0], docs[1], nil)
+	want := FitReport{
+		Results: []FitResult{
+			{Platform: "machine", Reasons: []string{`platform "host" wasn't described`}, Models: map[string][]string{}},
+			{Platform: "phone", Reasons: []string{}, Models: map[string][]string{}},
+		},
+		Gaps: []string{},
+	}
+	if !reflect.DeepEqual(report, want) {
+		t.Errorf("Judge gave\n%+v\nwant\n%+v", report, want)
+	}
+	lines := FitLines(report.Results)
+	wantLines := []string{
+		`machine  not judged: platform "host" wasn't described`,
+		"phone    not judged: no platform",
+	}
+	if !reflect.DeepEqual(lines, wantLines) {
+		t.Errorf("FitLines gave\n%q\nwant\n%q", lines, wantLines)
+	}
+}

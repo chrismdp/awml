@@ -9,7 +9,8 @@ import (
 
 // FitResult is the verdict on one platform, or on one block of a drawn placement: whether it was
 // judged, whether the workflow fits, every reason it doesn't, and the companies each AI step there
-// may use. It is what `awml fit --json` prints for each platform.
+// may use. A block that wasn't judged because no descriptions were given has that as its reason.
+// It is what `awml fit --json` prints for each platform.
 type FitResult struct {
 	Platform string              `json:"platform"`
 	Judged   bool                `json:"judged"`
@@ -89,6 +90,10 @@ func judge(security, placement *Map, descriptions []*Map) (results []FitResult, 
 			continue
 		}
 		platform, ok := described[platformID]
+		if !ok && len(descriptions) == 0 {
+			results = append(results, FitResult{Platform: groupID, Reasons: []string{fmt.Sprintf(`platform "%s" wasn't described`, platformID)}, Models: map[string][]string{}})
+			continue
+		}
 		if !ok {
 			gaps = append(gaps, fmt.Sprintf(`group "%s" names platform "%s", but its description wasn't given`, groupID, platformID))
 			continue
@@ -396,6 +401,8 @@ func FitLines(results []FitResult) []string {
 	for _, result := range results {
 		var messages []string
 		switch {
+		case !result.Judged && len(result.Reasons) != 0:
+			messages = []string{"not judged: " + result.Reasons[0]}
 		case !result.Judged:
 			messages = []string{"not judged: no platform"}
 		case result.Fits:
