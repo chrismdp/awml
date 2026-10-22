@@ -94,6 +94,55 @@ func TestCheckReportsEachMistakeAndFails(t *testing.T) {
 	}
 }
 
+func TestCheckComparesTwoViewsWithTheSameTitle(t *testing.T) {
+	securitySource := strings.Replace(good, "  - { from: thu, to: plan, kind: start }\n", "", 1)
+	security := write(t, "security.yaml", securitySource)
+	platform := write(t, "platform.yaml", strings.Replace(strings.Replace(securitySource, "view: security", "view: platform", 1),
+		"  - { id: plan, kind: ai, label: \"Plan next week's dinners\", in: family }\n", "", 1))
+	r := awmlRun("check", security, platform)
+	want := result{1, security + " and " + platform + `: part "plan" is in the security view but not the platform view` + "\n", ""}
+	if r != want {
+		t.Errorf("check gave %+v", r)
+	}
+}
+
+func TestCheckComparesOnlyOneSecurityAndOnePlatformViewOfATitle(t *testing.T) {
+	security := write(t, "security.yaml", good)
+	secondSecurity := write(t, "second-security.yaml", good)
+	platformSource := strings.Replace(good, "view: security", "view: platform", 1)
+	platform := write(t, "platform.yaml", platformSource)
+	r := awmlRun("check", security, secondSecurity, platform)
+	want := result{0, security + ": ok\n" + secondSecurity + ": ok\n" + platform + ": ok\n", ""}
+	if r != want {
+		t.Errorf("check gave %+v", r)
+	}
+}
+
+func TestCheckCountsAFaultyViewWhenDecidingWhetherATitleHasOnePair(t *testing.T) {
+	securitySource := strings.Replace(good, "  - { from: thu, to: plan, kind: start }\n", "", 1)
+	security := write(t, "security.yaml", securitySource)
+	faulty := write(t, "faulty-security.yaml", strings.Replace(securitySource, "in: family }", "in: unknown }", 1))
+	platformSource := strings.Replace(strings.Replace(securitySource, "view: security", "view: platform", 1),
+		"  - { id: plan, kind: ai, label: \"Plan next week's dinners\", in: family }\n", "", 1)
+	platform := write(t, "platform.yaml", platformSource)
+	r := awmlRun("check", security, faulty, platform)
+	want := result{1, security + ": ok\n" + faulty + `: part "plan" is in unknown group "unknown"` + "\n" + platform + ": ok\n", ""}
+	if r != want {
+		t.Errorf("check gave %+v", r)
+	}
+}
+
+func TestCheckDoesNotCompareDifferentTitles(t *testing.T) {
+	security := write(t, "security.yaml", good)
+	platformSource := strings.Replace(strings.Replace(good, "view: security", "view: platform", 1), "title: Dinners", "title: Lunches", 1)
+	platform := write(t, "platform.yaml", platformSource)
+	r := awmlRun("check", security, platform)
+	want := result{0, security + ": ok\n" + platform + ": ok\n", ""}
+	if r != want {
+		t.Errorf("check gave %+v", r)
+	}
+}
+
 func TestCheckReportsAFileThatIsntYAML(t *testing.T) {
 	f := write(t, "broken.yaml", "parts: [\n")
 	r := awmlRun("check", f)

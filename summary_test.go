@@ -15,7 +15,7 @@ func TestSummariseEveryExample(t *testing.T) {
 	cases := map[string]Summary{
 		"examples/client-email-platform.yaml":     {Steps: StepCounts{AI: 3, Code: 2, Person: 1}, Operations: map[string]int{"bring-in": 1, "sort": 2, "learn": 1, "draft": 1, "do": 1}, OutsideActions: TierCounts{Ask: 1}, Triggers: 1, Contexts: 3, Connectors: 1, Platforms: 4, PublishingLines: pubClient},
 		"examples/client-email.yaml":              {Steps: StepCounts{AI: 3, Code: 2, Person: 1}, Operations: map[string]int{"bring-in": 1, "sort": 2, "learn": 1, "draft": 1, "do": 1}, OutsideActions: TierCounts{Ask: 1}, Triggers: 1, Contexts: 3, Connectors: 1, Scopes: 2, PublishingLines: pubClient},
-		"examples/dinners-platform.yaml":          {Steps: StepCounts{AI: 1, Code: 2}, Operations: map[string]int{"bring-in": 1, "do": 1}, Reviews: 1, Contexts: 3, Connectors: 2, Surfaces: 2, Platforms: 5},
+		"examples/dinners-platform.yaml":          {Steps: StepCounts{AI: 1, Code: 3}, Operations: map[string]int{"bring-in": 1, "do": 1, "check": 1}, OutsideActions: TierCounts{Allow: 1, Ask: 1}, Reviews: 1, Contexts: 3, Connectors: 3, Surfaces: 3, Platforms: 6, PublishingLines: pubDinners},
 		"examples/dinners-security.yaml":          {Steps: StepCounts{AI: 1, Code: 3}, Operations: map[string]int{"bring-in": 1, "do": 1, "check": 1}, OutsideActions: TierCounts{Allow: 1, Ask: 1}, Triggers: 3, Reviews: 1, Contexts: 3, Connectors: 3, Surfaces: 3, Scopes: 3, PublishingLines: pubDinners},
 		"examples/legend.yaml":                    {Steps: StepCounts{AI: 1, Code: 1, Person: 1}, OutsideActions: TierCounts{Ask: 1}, Triggers: 1, Reviews: 1, Contexts: 1, Connectors: 1, Surfaces: 1},
 		"examples/question.yaml":                  {Steps: StepCounts{AI: 1, Code: 1}, Operations: map[string]int{"answer": 2}, Triggers: 1, Contexts: 3, Surfaces: 1, Scopes: 3, RefusedReads: 1},
@@ -60,12 +60,12 @@ func TestSummariseDeduplicatesTwoViewsOfOneWorkflow(t *testing.T) {
 	want := Summary{
 		Steps: StepCounts{AI: 1, Code: 3}, Operations: map[string]int{"bring-in": 1, "do": 1, "check": 1},
 		OutsideActions: TierCounts{Allow: 1, Ask: 1}, Triggers: 3, Reviews: 1, Contexts: 3,
-		Connectors: 3, Surfaces: 3, Scopes: 3, Platforms: 5,
+		Connectors: 3, Surfaces: 3, Scopes: 3, Platforms: 6,
 		PublishingLines: PublishingSummary{Count: 1, Labels: []string{"standing rule: dinners to carers"}},
 		AISteps:         []string{"Plan next week's dinners"},
 		People:          []PersonSummary{{Label: "Owen's yes to the exact basket", Kind: "review"}},
 		ScopeNames:      []string{"carers", "family", "household"},
-		PlatformNames:   []string{"Server: claude-sonnet-4-5", "The family messaging app", "The supermarket", "The calendar", "The kitchen screen"},
+		PlatformNames:   []string{"Server: claude-sonnet-4-5", "The family messaging app", "The supermarket", "The calendar", "The kitchen screen", "The bank"},
 	}
 	if got := Summarise(security, platform); !reflect.DeepEqual(got, want) {
 		t.Errorf("Summarise(two views) = %#v\nwant %#v", got, want)

@@ -419,7 +419,7 @@ awml push family/dinners examples/dinners-security.yaml examples/dinners-platfor
 awml pull family/dinners@1 -o dinners
 ```
 
-- `awml check` reads each file and prints `ok`, or one line for each mistake, and exits 1 if any file has one.
+- `awml check` checks each file and compares the two views of a workflow when both are given. It prints `ok`, or one line for each mistake, and exits 1 if it finds one.
 - `awml fit` judges a security view against platform descriptions, or judges a placement when a platform view comes between them. Add `--json` for the same lines as a JSON array.
 - `awml draw` prints a file's Mermaid. It refuses a file with mistakes, and prints them instead.
 - `awml page` writes one standalone HTML page that draws each file with Mermaid in the browser, in the order given. Each file gets its own heading, saying which view it is. The page takes the files' title when they all share one, as the two views of the family's dinners do, and is called Workflows when they don't.
@@ -481,7 +481,7 @@ Every id, label, kind and reference to an id is text. `awml` reads YAML 1.2, whi
 
 ### What `awml check` reports
 
-`awml check` reports a missing or unknown field, an unknown kind or view, an id used twice or badly written, a value YAML didn't read as text, a `breaks` that isn't true or false, a part or group in an unknown group, a group nested in itself, a line to or from an unknown part, a comment linked by anything but `tie`, a `tie` with no comment at either end, an unknown `op` or one on a part that isn't a step, a step that does what its operation must never do, as far as the drawing shows it, and a `data` line in the security view that moves content anywhere but its own box or a box inside it, which is publishing drawn as routing. [`SPEC.md`](SPEC.md) gives the exact rules.
+`awml check` reports a missing or unknown field, an unknown kind or view, an id used twice or badly written, a value YAML didn't read as text, a `breaks` that isn't true or false, a part or group in an unknown group, a group nested in itself, a line to or from an unknown part, a comment linked by anything but `tie`, a `tie` with no comment at either end, an unknown `op` or one on a part that isn't a step, a step that does what its operation must never do, as far as the drawing shows it, and a `data` line in the security view that moves content anywhere but its own box or a box inside it, which is publishing drawn as routing. Given both views of one workflow, it also reports a part or line in one view but not the other, apart from triggers and comments the platform view leaves out. [`SPEC.md`](SPEC.md) gives the exact rules.
 
 ### Examples to start from
 
