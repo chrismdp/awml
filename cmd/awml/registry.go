@@ -29,7 +29,9 @@ func registryURL(flag *string) string {
 }
 
 func login(stdin io.Reader, stdout, stderr io.Writer, registry string) int {
-	fmt.Fprint(stderr, "Token: ")
+	if isTerminal(stdin) {
+		fmt.Fprint(stderr, "Token: ")
+	}
 	token, err := bufio.NewReader(stdin).ReadString('\n')
 	if err != nil && err != io.EOF {
 		fmt.Fprintf(stderr, "awml login: can't read the token: %s\n", err)
@@ -197,19 +199,28 @@ func pull(name, dir, registry string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	var downloaded struct {
-		Number   int    `json:"number"`
-		Security string `json:"security"`
-		Platform string `json:"platform"`
+		Number int `json:"number"`
+		Files  struct {
+			Security string `json:"security"`
+			Platform string `json:"platform"`
+		} `json:"files"`
 	}
 	if err := json.NewDecoder(response.Body).Decode(&downloaded); err != nil {
 		fmt.Fprintf(stderr, "awml pull: the registry returned an unreadable version: %s\n", err)
+		return 1
+	}
+	if downloaded.Number != 0 {
+		version = downloaded.Number
+	}
+	if downloaded.Files.Security == "" && downloaded.Files.Platform == "" {
+		fmt.Fprintf(stderr, "awml pull: version %d of %s/%s came with no files\n", version, owner, slug)
 		return 1
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		fmt.Fprintf(stderr, "%s: can't be created: %s\n", dir, reason(err))
 		return 1
 	}
-	for filename, source := range map[string]string{"security.yaml": downloaded.Security, "platform.yaml": downloaded.Platform} {
+	for filename, source := range map[string]string{"security.yaml": downloaded.Files.Security, "platform.yaml": downloaded.Files.Platform} {
 		if source == "" {
 			continue
 		}
@@ -218,9 +229,6 @@ func pull(name, dir, registry string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "%s: can't be written: %s\n", path, reason(err))
 			return 1
 		}
-	}
-	if downloaded.Number != 0 {
-		version = downloaded.Number
 	}
 	fmt.Fprintf(stdout, "Pulled %s/%s version %d to %s\n", owner, slug, version, dir)
 	return 0
@@ -340,4 +348,15 @@ func writeCredentials(credentials map[string]string) error {
 		return err
 	}
 	return file.Close()
+}
+
+// isTerminal says whether input comes from a person at a terminal, so a prompt only shows for one
+// and a token piped in arrives silently.
+func isTerminal(input io.Reader) bool {
+	file, ok := input.(*os.File)
+	if !ok {
+		return false
+	}
+	info, err := file.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }

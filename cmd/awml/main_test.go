@@ -219,7 +219,7 @@ func TestADoubleDashEndsTheFlags(t *testing.T) {
 func TestLoginWritesCredentialsWithMode0600(t *testing.T) {
 	config := useTemporaryHome(t)
 	r := awmlRunInput("secret-token\n", "login", "--registry", "https://registry.example/")
-	if r != (result{0, "Logged in to https://registry.example\n", "Token: "}) {
+	if r != (result{0, "Logged in to https://registry.example\n", ""}) {
 		t.Fatalf("login gave %+v", r)
 	}
 	path := filepath.Join(config, "awml", "credentials")
@@ -305,7 +305,7 @@ func TestPullDownloadsAnExplicitVersion(t *testing.T) {
 		if r.URL.Path != "/api/v1/acme/mail/v/2" {
 			t.Errorf("path = %q", r.URL.Path)
 		}
-		fmt.Fprintf(w, `{"number":2,"security":%q,"platform":%q}`, good, strings.Replace(good, "view: security", "view: platform", 1))
+		fmt.Fprintf(w, `{"number":2,"files":{"security":%q,"platform":%q}}`, good, strings.Replace(good, "view: security", "view: platform", 1))
 	}))
 	defer server.Close()
 	loginForTest(t, server.URL, "pull-token")
@@ -325,13 +325,29 @@ func TestPullDownloadsAnExplicitVersion(t *testing.T) {
 	}
 }
 
+func TestPullFailsWhenTheVersionHasNoFiles(t *testing.T) {
+	useTemporaryHome(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"number":3,"files":{}}`)
+	}))
+	defer server.Close()
+	out := filepath.Join(t.TempDir(), "download")
+	r := awmlRun("pull", "acme/mail@3", "-o", out, "--registry", server.URL)
+	if r != (result{1, "", "awml pull: version 3 of acme/mail came with no files\n"}) {
+		t.Fatalf("pull gave %+v", r)
+	}
+	if _, err := os.Stat(out); !os.IsNotExist(err) {
+		t.Errorf("pull made %s, err %v", out, err)
+	}
+}
+
 func TestPullFindsTheLatestVersion(t *testing.T) {
 	useTemporaryHome(t)
 	var paths []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		paths = append(paths, r.URL.Path)
 		if strings.HasSuffix(r.URL.Path, "/v/4") {
-			fmt.Fprintf(w, `{"number":4,"security":%q}`, good)
+			fmt.Fprintf(w, `{"number":4,"files":{"security":%q}}`, good)
 			return
 		}
 		fmt.Fprint(w, `{"versions":[{"number":2},{"number":4},{"number":3}]}`)
@@ -353,7 +369,7 @@ func TestRegistryFlagIsHonoured(t *testing.T) {
 	calls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
-		fmt.Fprintf(w, `{"number":1,"security":%q}`, good)
+		fmt.Fprintf(w, `{"number":1,"files":{"security":%q}}`, good)
 	}))
 	defer server.Close()
 	out := filepath.Join(t.TempDir(), "out")
@@ -377,11 +393,11 @@ func TestAWMLRegistryURLEnvironmentIsHonoured(t *testing.T) {
 			fmt.Fprint(w, `{"owner":"acme","slug":"mail","number":1,"url":"/acme/mail/v/1"}`)
 			return
 		}
-		fmt.Fprintf(w, `{"number":1,"security":%q}`, good)
+		fmt.Fprintf(w, `{"number":1,"files":{"security":%q}}`, good)
 	}))
 	defer server.Close()
 	t.Setenv("AWML_REGISTRY_URL", server.URL+"/")
-	if r := awmlRunInput("env-token\n", "login"); r != (result{0, "Logged in to " + server.URL + "\n", "Token: "}) {
+	if r := awmlRunInput("env-token\n", "login"); r != (result{0, "Logged in to " + server.URL + "\n", ""}) {
 		t.Fatalf("login gave %+v", r)
 	}
 	if r := awmlRun("push", "acme/mail", write(t, "security.yaml", good)); r.code != 0 {
@@ -400,7 +416,7 @@ func TestTheRegistryFlagWinsOverAWMLRegistryURL(t *testing.T) {
 	useTemporaryHome(t)
 	t.Setenv("AWML_REGISTRY_URL", "https://registry.example")
 	r := awmlRunInput("token\n", "login", "--registry", "https://other.example")
-	if r != (result{0, "Logged in to https://other.example\n", "Token: "}) {
+	if r != (result{0, "Logged in to https://other.example\n", ""}) {
 		t.Fatalf("login gave %+v", r)
 	}
 }
