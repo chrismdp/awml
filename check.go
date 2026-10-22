@@ -30,7 +30,12 @@ func (m mistakeList) messages() []string {
 
 // checkDoc gives the mistakes in a document, and whether a broken list stopped the checks that
 // follow those of the file's own fields.
-func checkDoc(doc any) (mistakeList, bool) {
+func checkDoc(doc any) (mistakeList, bool) { return checkView(doc, false) }
+
+// checkView checks a document as checkDoc does. projected is whether it's a 0.4 file's platform
+// view, whose fields the file's own checks have already held under the names the file uses, so
+// they aren't reported again as a group's or a part's.
+func checkView(doc any, projected bool) (mistakeList, bool) {
 	file, ok := doc.(*Map)
 	if !ok {
 		return mistakeList{{"file.yaml", "the file must be a mapping of fields, starting with awml"}}, true
@@ -43,7 +48,12 @@ func checkDoc(doc any) (mistakeList, bool) {
 	}
 	var errors mistakeList
 	fileVersion := show(file.get("awml"))
-	fields("file", "the file", file, fileVersion, &errors)
+	checkFields := func(what, name string, item *Map) {
+		if !projected {
+			fields(what, name, item, fileVersion, &errors)
+		}
+	}
+	checkFields("file", "the file", file)
 	if file.has("awml") && fileVersion != "0.2" && fileVersion != "0.3" {
 		errors.add("file.version", fmt.Sprintf(`awml must be "0.2" or "0.3", not "%s"`, fileVersion))
 	}
@@ -102,12 +112,13 @@ func checkDoc(doc any) (mistakeList, bool) {
 
 	for _, g := range groups {
 		name := fmt.Sprintf(`group "%s"`, show(g.get("id")))
-		fields("group", name, g, fileVersion, &errors)
+		checkFields("group", name, g)
 		if in := g.get("in"); in != nil && !groupIDs[keyOf(in)] {
 			errors.add("references.known", fmt.Sprintf(`%s is in unknown group "%s"`, name, show(in)))
 		}
 		if fileVersion == "0.3" {
-			if g.has("processing") {
+			// A block's processing is already an unknown field of the block.
+			if g.has("processing") && !projected {
 				if file.get("view") != "security" {
 					errors.add("processing.scopes-only", name+" has processing, but only a group in the security view takes it")
 				} else {
@@ -148,7 +159,7 @@ func checkDoc(doc any) (mistakeList, bool) {
 
 	for _, p := range parts {
 		name := fmt.Sprintf(`part "%s"`, show(p.get("id")))
-		fields("part", name, p, fileVersion, &errors)
+		checkFields("part", name, p)
 		if p.has("kind") {
 			if k, ok := p.get("kind").(string); !ok || shapes[k] == "" {
 				errors.add("kinds.known", fmt.Sprintf(`%s has unknown kind "%s"`, name, show(p.get("kind"))))
@@ -185,7 +196,7 @@ func checkDoc(doc any) (mistakeList, bool) {
 		if l.has("from") && l.has("to") {
 			name = fmt.Sprintf(`the line from "%s" to "%s"`, show(l.get("from")), show(l.get("to")))
 		}
-		fields("line", name, l, fileVersion, &errors)
+		checkFields("line", name, l)
 		if b := l.get("breaks"); b != nil {
 			if _, ok := b.(bool); !ok {
 				errors.add("lines.breaks", fmt.Sprintf(`%s: breaks must be true or false, not "%s"`, name, show(b)))

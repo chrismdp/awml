@@ -210,7 +210,7 @@ func checkCanonical(file *Map) (mistakeList, bool) {
 			seen[keyOf(value)] = true
 		}
 		platform, _ := View(file, name)
-		platformErrors, _ := checkDoc(platform)
+		platformErrors, _ := checkView(platform, true)
 		errors = appendUnique(errors, platformErrors...)
 	}
 	return errors, false
