@@ -222,6 +222,7 @@ jobs:
           git -c core.hooksPath=/dev/null \
             -c http.https://github.com/.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" \
             push --force origin "HEAD:refs/heads/$BRANCH"
+          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
 
       - name: Open or update the pull request
         id: pull

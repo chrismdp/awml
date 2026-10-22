@@ -320,6 +320,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
+      actions: write
       contents: write
       pull-requests: write
     steps:
@@ -420,6 +421,7 @@ jobs:
               > "$RUNNER_TEMP/resolve-failure.txt"
             exit 1
           fi
+          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
 
       - name: Comment on the pull request
         env:

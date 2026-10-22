@@ -3,7 +3,10 @@
 # that go.mod allows, and on the newest.
 name: CI
 
-on: [push]
+on:
+  push:
+  # The factory starts this by hand, because pushes made with the Actions token start nothing.
+  workflow_dispatch:
 
 jobs:
   test:
