@@ -1,9 +1,8 @@
 # A draft, the owner's yes to the exact message, and the send. Ella runs a children's swimming club,
 # and is fictional.
-awml: "0.2"
+awml: "0.4"
 title: The club's Friday message
-view: security
-groups:
+scopes:
   - { id: ella, label: "ella: Ella" }
 parts:
   - { id: fri, kind: trigger, label: "Friday 16:00" }

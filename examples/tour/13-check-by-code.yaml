@@ -1,9 +1,8 @@
 # Check by code. Code matches the joint account against the bills expected and reports what's
 # missing or different. It reads and reports, and changes nothing. The parents are fictional.
-awml: "0.2"
+awml: "0.4"
 title: The morning bills check
-view: security
-groups:
+scopes:
   - { id: parents, label: "parents: Mia, Dev" }
 parts:
   - { id: daily, kind: trigger, label: "Every day 07:00" }

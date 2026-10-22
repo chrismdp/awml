@@ -8,6 +8,7 @@ import (
 // Draw turns an AWML document into Mermaid, so every drawing uses the same shapes and colours. The
 // document must have no mistakes: Check it first.
 func Draw(doc *Map) string {
+	doc, _ = View(doc, "")
 	groups, parts, lines := items(doc, "groups"), items(doc, "parts"), items(doc, "lines")
 	where := placed(parts, lines)
 	partOrder := map[string]int{}

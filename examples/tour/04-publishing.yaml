@@ -1,9 +1,8 @@
 # Publishing: a thick line out of the parents' scope into a wider one that adds a grandparent.
 # The family is fictional.
-awml: "0.2"
+awml: "0.4"
 title: The week's pickups, for Grandma
-view: security
-groups:
+scopes:
   - { id: wider, label: "with grandma: + Grandma Rose" }
   - { id: parents, label: "parents: Mia, Dev", in: wider }
 parts:

@@ -15,7 +15,12 @@ const skill = "plugins/awml/skills/awml"
 
 func TestTheSkillsCopiesAreCurrent(t *testing.T) {
 	copies := [][2]string{{"SPEC.md", "references/spec.md"}, {"GUIDE.md", "references/guide.md"}}
-	for _, name := range []string{"client-email", "client-email-platform", "dinners-security", "dinners-platform"} {
+	for _, name := range []string{"client-email", "dinners", "question", "tour/09-platform-view"} {
+		doc := readExample(t, "examples/"+name+".yaml")
+		for _, implementation := range ImplementationIDs(doc) {
+			stem := name + "-" + implementation + ".mmd"
+			copies = append(copies, [2]string{"examples/" + stem, "references/examples/" + stem})
+		}
 		for _, ext := range []string{".yaml", ".mmd"} {
 			copies = append(copies, [2]string{"examples/" + name + ext, "references/examples/" + name + ext})
 		}

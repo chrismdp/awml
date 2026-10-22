@@ -1,9 +1,8 @@
 # A standing approval. Sam approved the morning renewals once, so each renewal goes without a yes,
 # within the limits Sam set, and is listed for Sam afterwards. Sam is fictional.
-awml: "0.2"
+awml: "0.4"
 title: Renewing library books
-view: security
-groups:
+scopes:
   - { id: sam, label: "sam: Sam" }
 parts:
   - { id: morning, kind: trigger, label: "Every morning 08:00" }

@@ -1,8 +1,7 @@
 # A step a person does, which reaches them on their list. Ade is fictional.
-awml: "0.2"
+awml: "0.4"
 title: The car's MOT
-view: security
-groups:
+scopes:
   - { id: ade, label: "ade: Ade" }
 parts:
   - { id: monthly, kind: trigger, label: "The first of each month" }

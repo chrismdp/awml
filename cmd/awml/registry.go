@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/chrismdp/awml"
 )
 
 const defaultRegistry = "https://awml.io"
@@ -84,6 +86,13 @@ func push(name string, paths []string, private bool, registry string, stdout, st
 			continue
 		}
 		view, _ := doc.Get("view")
+		if awml.IsCanonical(doc) {
+			if len(paths) != 1 {
+				fmt.Fprintln(stderr, "awml push: a 0.4 workflow must be pushed on its own")
+				valid = false
+			}
+			view = "security"
+		}
 		switch view {
 		case "security":
 			if payload.Security != "" {

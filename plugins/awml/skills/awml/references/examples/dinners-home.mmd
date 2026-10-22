@@ -11,21 +11,24 @@ config:
 flowchart TB
   subgraph server["Server#58; claude#45;sonnet#45;4#45;5"]
     direction TB
+    thu(["Thursday 19#58;00"])
+    sat(["Saturday 09#58;00"])
+    daily(["Every day 07#58;00"])
+    copy("<small style='color:rgb(61,67,79)'>⚙️ 📥 bring-in</small><br>Copy the pickups calendar")
+    pickups[("Pickups")]
+    screen_gap@{ shape: notch-rect, label: "Missing from the design#58; no scheduled task keeps the screen current" }
     favourites[("Favourites#44; recipes and the shopping list")]
     plan("<small style='color:rgb(61,67,79)'>🤖</small><br>Plan next week#39;s dinners")
     mealplan[("Meal plan")]
     fill("<small style='color:rgb(61,67,79)'>⚙️ 🛠️ do</small><br>Fill the basket from the plan and the list")
-    copy("<small style='color:rgb(61,67,79)'>⚙️ 📥 bring-in</small><br>Copy the pickups calendar")
-    pickups[("Pickups")]
     match("<small style='color:rgb(61,67,79)'>⚙️ 🔍 check</small><br>Match the account against the bills expected")
-    screen_gap@{ shape: notch-rect, label: "Missing from the design#58; no scheduled task keeps the screen current" }
     scored@{ shape: notch-rect, label: "For example#58; scored against the plans the family kept" }
     tried@{ shape: notch-rect, label: "For example#58; tried on a second model some weeks" }
   end
   subgraph app["The family messaging app"]
     direction TB
-    approve("<small style='color:rgb(61,67,79)'>👤 ✅ review</small><br>Owen#39;s yes#44; in his private chat")
     chat@{ shape: win-pane, label: "Family chat" }
+    approve("<small style='color:rgb(61,67,79)'>👤 ✅ review</small><br>Owen#39;s yes to the exact basket")
     parents_chat@{ shape: win-pane, label: "Parents#39; chat" }
   end
   subgraph supermarket["The supermarket"]
@@ -47,9 +50,11 @@ flowchart TB
     bank{{"Joint account#44; on Owen#39;s consent"}}
   end
 
+  thu -.-> plan
   favourites --> plan
   plan --> mealplan
   mealplan -->|"posted"| chat
+  sat -.-> fill
   mealplan --> fill
   favourites --> fill
   fill --> basket
@@ -57,15 +62,16 @@ flowchart TB
   basket --> approve
   approve -->|"#91;yes#93;"| checkout
   checkout --> shop
-  copy <--> calendar
+  calendar --> copy
   copy --> pickups
   pickups --> screen
-  mealplan ==>|"standing rule#58; dinners to carers"| screen
-  screen_gap -.- screen
-  plan -.- scored
-  plan -.- tried
+  screen <==>|"standing rule#58; dinners to carers"| mealplan
+  screen -.- screen_gap
+  daily -.-> match
   bank --> match
   match --> parents_chat
+  plan -.- scored
+  plan -.- tried
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
   classDef con fill:#eceef2,stroke:#5d6472,color:#16171b
@@ -76,12 +82,13 @@ flowchart TB
   classDef person fill:#f7d79a,stroke:#9a6100,color:#16171b
   classDef uml fill:#16171b,stroke:#16171b,color:#16171b
   classDef gap fill:#ffffff,stroke:#8a93a3,stroke-dasharray:4 3,color:#6b7280
-  class favourites,mealplan,pickups ctx
-  class shop,bank,calendar con
-  class chat,parents_chat,screen surf
+  class thu,sat,daily trig
+  class pickups,favourites,mealplan ctx
+  class calendar,shop,bank con
+  class screen,chat,parents_chat surf
   class basket,checkout out
   class plan ai
-  class fill,copy,match code
+  class copy,fill,match code
   class approve person
   class screen_gap,scored,tried gap
   style server fill:#e3ebfa,stroke:#b9c8e8,color:#16171b
@@ -90,4 +97,4 @@ flowchart TB
   style calendars fill:#fbf3d9,stroke:#e8d9a6,color:#16171b
   style wall fill:#dff3ef,stroke:#b4ddd4,color:#16171b
   style banking fill:#f6e3ea,stroke:#e3bccb,color:#16171b
-  linkStyle 10 marker-end:none
+  linkStyle 15 marker-end:none

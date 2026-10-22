@@ -21,18 +21,19 @@ func main() {
 	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
 
-const usage = "usage: awml [-h] [--version] [--registry URL] {draw,page,check,fit,summary,login,push,pull} ...\n"
+const usage = "usage: awml [-h] [--version] [--registry URL] {draw,page,check,fit,summary,convert,login,push,pull} ...\n"
 
 const help = usage + `
 Draw agentic workflows written in AWML.
 
 positional arguments:
-  {draw,page,check,fit,summary,login,push,pull}
+  {draw,page,check,fit,summary,convert,login,push,pull}
     draw             print a file's Mermaid
     page             write one HTML page that draws each file
     check            report warnings, structural mistakes and differences between views
     fit              judge where a workflow can run
     summary          count the parts and lines in one workflow
+    convert          join a legacy pair into one 0.4 workflow
     login            save a registry API token
     push             push a new workflow version
     pull             download a workflow version
@@ -44,12 +45,20 @@ options:
 `
 
 var commands = map[string]struct{ usage, help string }{
-	"draw": {"usage: awml draw [-h] file\n", `
+	"draw": {"usage: awml draw [-h] [--implementation ID] file\n", `
 positional arguments:
   file
 
 options:
   -h, --help  show this help message and exit
+  --implementation ID  draw one implementation
+`},
+	"convert": {"usage: awml convert [-h] [--implementation ID] SECURITY PLATFORM\n", `
+Join a legacy security and platform pair into one 0.4 file.
+
+options:
+  -h, --help  show this help message and exit
+  --implementation ID  name the implementation (default: default)
 `},
 	"page": {"usage: awml page [-h] -o OUT files [files ...]\n", `
 positional arguments:
@@ -66,7 +75,7 @@ positional arguments:
 options:
   -h, --help  show this help message and exit
 `},
-	"fit": {"usage: awml fit [-h] [--json] SECURITY {DESC... | PLATFORM_VIEW DESC...}\n", `
+	"fit": {"usage: awml fit [-h] [--json] [--implementation ID] SECURITY {DESC... | PLATFORM_VIEW DESC...}\n", `
 positional arguments:
   SECURITY
   DESC
@@ -75,6 +84,7 @@ positional arguments:
 options:
   -h, --help  show this help message and exit
   --json      print JSON
+  --implementation ID  judge one implementation
 `},
 	"summary": {"usage: awml summary [-h] [--json] files [files ...]\n", `
 positional arguments:
@@ -120,6 +130,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	var command string
 	var files, unknown []string
 	var out *string
+	implementation := ""
 	jsonOutput := false
 	private := false
 	var registryFlag *string
@@ -139,6 +150,14 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 				fmt.Fprint(stdout, commands[command].usage+commands[command].help)
 			}
 			return 0
+		case flags && (command == "draw" || command == "fit" || command == "convert") && a == "--implementation":
+			if i+1 == len(args) || strings.HasPrefix(args[i+1], "-") {
+				return fail(commands[command].usage, "awml "+command, "argument --implementation: expected one argument")
+			}
+			i++
+			implementation = args[i]
+		case flags && (command == "draw" || command == "fit" || command == "convert") && strings.HasPrefix(a, "--implementation="):
+			implementation = strings.TrimPrefix(a, "--implementation=")
 		case flags && a == "--registry":
 			if i+1 == len(args) || (strings.HasPrefix(args[i+1], "-") && args[i+1] != "-") {
 				use, prog := usage, "awml"
@@ -172,7 +191,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			unknown = append(unknown, a)
 		case command == "":
 			if _, ok := commands[a]; !ok {
-				return fail(usage, "awml", fmt.Sprintf("argument command: invalid choice: '%s' (choose from 'draw', 'page', 'check', 'fit', 'summary', 'login', 'push', 'pull')", a))
+				return fail(usage, "awml", fmt.Sprintf("argument command: invalid choice: '%s' (choose from 'draw', 'page', 'check', 'fit', 'summary', 'convert', 'login', 'push', 'pull')", a))
 			}
 			command = a
 		default:
@@ -184,7 +203,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	var missing []string
 	if len(files) == 0 && command != "login" {
-		missing = append(missing, map[string]string{"draw": "file", "page": "files", "check": "files", "fit": "SECURITY, DESC", "summary": "files", "push": "owner/slug, files", "pull": "owner/slug[@n]"}[command])
+		missing = append(missing, map[string]string{"draw": "file", "page": "files", "check": "files", "fit": "SECURITY, DESC", "convert": "SECURITY, PLATFORM", "summary": "files", "push": "owner/slug, files", "pull": "owner/slug[@n]"}[command])
 	} else if command == "fit" && len(files) == 1 {
 		missing = append(missing, "DESC")
 	}
@@ -193,6 +212,9 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	if missing != nil {
 		return fail(commands[command].usage, "awml "+command, "the following arguments are required: "+strings.Join(missing, ", "))
+	}
+	if command == "convert" && len(files) != 2 {
+		return fail(commands[command].usage, "awml convert", "expected SECURITY and PLATFORM")
 	}
 	if command == "draw" && len(files) > 1 {
 		unknown = append(files[1:], unknown...)
@@ -314,17 +336,58 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if command == "draw" {
-		fmt.Fprintln(stdout, awml.Draw(docs[0]))
+		view, err := awml.View(docs[0], implementation)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		fmt.Fprintln(stdout, awml.Draw(view))
+		return 0
+	}
+	if command == "convert" {
+		name := implementation
+		if name == "" {
+			name = "default"
+		}
+		converted, err := awml.ConvertWithImplementation(docs[0], docs[1], name)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		data, err := awml.Marshal(converted)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		for _, path := range files {
+			src, _ := os.ReadFile(path)
+			comments, err := awml.Comments(src)
+			if err != nil {
+				fmt.Fprintln(stderr, err)
+				return 1
+			}
+			for _, comment := range comments {
+				fmt.Fprintln(stdout, comment)
+			}
+		}
+		fmt.Fprint(stdout, string(data))
 		return 0
 	}
 	if command == "fit" {
-		if strField(docs[0], "view") != "security" {
+		if !awml.IsCanonical(docs[0]) && strField(docs[0], "view") != "security" {
 			fmt.Fprintf(stderr, "%s: must be a security view\n", files[0])
 			return 1
 		}
 		var placement *awml.Map
 		start := 1
-		if strField(docs[1], "view") == "platform" {
+		if implementation != "" {
+			var err error
+			placement, err = awml.View(docs[0], implementation)
+			if err != nil {
+				fmt.Fprintln(stderr, err)
+				return 1
+			}
+		} else if !awml.IsCanonical(docs[0]) && strField(docs[1], "view") == "platform" {
 			placement = docs[1]
 			start = 2
 		}

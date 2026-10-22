@@ -9,7 +9,7 @@
     {
       "name": "awml",
       "source": "./plugins/awml",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "description": "Describe, check and draw agentic workflows in AWML, the Agentic Workflow Modelling Language.",
       "category": "productivity"
     }

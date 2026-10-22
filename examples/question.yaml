@@ -1,8 +1,7 @@
 # A question asked in the family chat, by who may see each part. The family is fictional.
-awml: "0.2"
+awml: "0.4"
 title: A question in the family chat
-view: security
-groups:
+scopes:
   - { id: carers, label: "carers: + June, Beth" }
   - { id: family, label: "family: parents, kids", in: carers }
   - { id: nadia, label: "nadia: Nadia", in: family }
