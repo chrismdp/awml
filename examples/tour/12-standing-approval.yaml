@@ -10,6 +10,7 @@ parts:
   - { id: library, kind: connector, label: "Sam's library account", in: sam }
   - { id: renew, kind: code, op: do, label: "Renew each book due back this week", in: sam }
   - { id: action, kind: outside, label: "Renew the book: Ask, under Sam's standing approval", in: sam }
+  - { id: report, kind: code, op: do, label: "List the renewal and how to undo it", in: sam }
   - { id: list, kind: surface, label: "Sam's list", in: sam }
   - { id: terms, kind: comment, label: "Standing approval from Sam: renewals only, up to six a week" }
 lines:
@@ -17,5 +18,6 @@ lines:
   - { from: library, to: renew, kind: data, label: books due back }
   - { from: renew, to: action, kind: data }
   - { from: action, to: library, kind: data }
-  - { from: renew, to: list, kind: data, label: "each renewal, and how to undo it" }
+  - { from: action, to: report, kind: data }
+  - { from: report, to: list, kind: data }
   - { from: terms, to: action, kind: tie }

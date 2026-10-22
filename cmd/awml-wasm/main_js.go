@@ -19,6 +19,11 @@ func main() {
 		encoded, _ := json.Marshal(errors)
 		return string(encoded)
 	})
+	expose("__awmlWarnings", func(args []js.Value) string {
+		warnings := warningsSource(args[0].String())
+		encoded, _ := json.Marshal(warnings)
+		return string(encoded)
+	})
 	expose("__awmlSummary", func(args []js.Value) string {
 		var sources []string
 		if err := json.Unmarshal([]byte(args[0].String()), &sources); err != nil {
@@ -115,6 +120,18 @@ func checkSource(source string) []string {
 		return []string{}
 	}
 	return errors
+}
+
+func warningsSource(source string) []string {
+	doc, err := awml.Parse([]byte(source))
+	if err != nil {
+		return []string{}
+	}
+	warnings := awml.Warnings(doc)
+	if warnings == nil {
+		return []string{}
+	}
+	return warnings
 }
 
 func errorJSON(message string) string {

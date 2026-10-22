@@ -56,6 +56,9 @@ func TestEachExampleIsSoundAndItsDrawingsAreCurrent(t *testing.T) {
 				t.Fatal(err)
 			}
 			mistakes(t, doc)
+			if got := Warnings(doc); len(got) != 0 {
+				t.Errorf("%s has warnings: %v", path, got)
+			}
 			stem := strings.TrimSuffix(path, ".yaml")
 			mmd, err := os.ReadFile(stem + ".mmd")
 			if err != nil {
