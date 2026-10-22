@@ -65,13 +65,15 @@ var (
 )
 
 // checkDefinition describes one check. early is whether it runs before a broken list stops the
-// rest, warn whether it warns rather than fails, and legacy03 whether a legacy view must be 0.3
-// for it to apply. none says why it was skipped when no file given is one it applies to.
+// rest, warn whether it warns rather than fails, legacy03 whether a legacy view must be 0.3 for it
+// to apply, and format05 whether only a 0.5 workflow is held to it. none says why it was skipped
+// when no file given is one it applies to.
 type checkDefinition struct {
 	id, name, about string
 	appliesTo       []string
 	early, warn     bool
 	legacy03        bool
+	format05        bool
 	none            string
 }
 
@@ -91,6 +93,9 @@ var checkDefinitions = []checkDefinition{
 	{id: "ops.known", name: "Every op is known and on a step", about: "An op is one of the operations the spec lists, on an ai, code or person step.", appliesTo: workflows},
 	{id: "operations.only-do-acts", name: "Only a do step leads to an outside action", about: "A step that leads to an outside action, straight or through a review or a fork, is a do step.", appliesTo: workflows},
 	{id: "operations.answer-check-read-only", name: "An answer or check step never writes to a context", about: "An answer step and a check step read contexts and speak on surfaces, but never write to a context.", appliesTo: workflows},
+	{id: "tiers.written", name: "Every outside action's label ends with its tier", about: "An outside action's label ends with Allow, Ask or Block after a colon.", appliesTo: []string{"workflow"}, format05: true, none: "no file given is a 0.5 workflow"},
+	{id: "tiers.shape", name: "Every tier agrees with what stands in front of it", about: "An Ask action has a review, a standing approval or a person's own step on every way in, an Allow action has no review or standing approval in front of it, and only red lines lead to a Block action.", appliesTo: []string{"workflow"}, format05: true, none: "no file given is a 0.5 workflow"},
+	{id: "approvals.listed", name: "Every standing approval lists its actions on a surface", about: "A standing approval leads to the surface where each action it covers is listed with how to undo it.", appliesTo: []string{"workflow"}, format05: true, none: "no file given is a 0.5 workflow"},
 	{id: "lines.data-narrows", name: "Every data line stays in its scope or narrows", about: "A data line moves content only within its scope or into one inside it, since any other move is publishing drawn as routing.", appliesTo: []string{"workflow", "security"}, none: "no file given is a workflow or a security view"},
 	{id: "processing.written", name: "Every processing is well written", about: "A scope's processing is any, none, or a map from company ids to any or a list of known operations.", appliesTo: []string{"workflow", "security"}, legacy03: true, none: "no file given is a 0.4 workflow or a 0.3 security view"},
 	{id: "processing.nested", name: "An inner scope allows no more processing than its outer one", about: "A scope inside another allows no company or operation that the outer scope doesn't.", appliesTo: []string{"workflow", "security"}, legacy03: true, none: "no file given is a 0.4 workflow or a 0.3 security view"},
@@ -222,7 +227,7 @@ func (definition checkDefinition) appliesToFile(file checkedSource) bool {
 		return isOneOf("security", definition.appliesTo...) && isOneOf("platform", definition.appliesTo...) &&
 			(!definition.legacy03 || file.version == "0.3")
 	}
-	if !isOneOf(file.view, definition.appliesTo...) {
+	if !isOneOf(file.view, definition.appliesTo...) || definition.format05 && file.version != "0.5" {
 		return false
 	}
 	return !definition.legacy03 || file.view == "workflow" || file.view == "platform-description" || file.version == "0.3"

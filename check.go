@@ -30,12 +30,13 @@ func (m mistakeList) messages() []string {
 
 // checkDoc gives the mistakes in a document, and whether a broken list stopped the checks that
 // follow those of the file's own fields.
-func checkDoc(doc any) (mistakeList, bool) { return checkView(doc, false) }
+func checkDoc(doc any) (mistakeList, bool) { return checkView(doc, false, "") }
 
-// checkView checks a document as checkDoc does. projected is whether it's a 0.4 file's platform
-// view, whose fields the file's own checks have already held under the names the file uses, so
-// they aren't reported again as a group's or a part's.
-func checkView(doc any, projected bool) (mistakeList, bool) {
+// checkView checks a document as checkDoc does. projected is whether it's a 0.4 or 0.5 file's
+// platform view, whose fields the file's own checks have already held under the names the file
+// uses, so they aren't reported again as a group's or a part's. format is the version of the file
+// a view was projected from, and "" for a legacy view.
+func checkView(doc any, projected bool, format string) (mistakeList, bool) {
 	file, ok := doc.(*Map)
 	if !ok {
 		return mistakeList{{"file.yaml", "the file must be a mapping of fields, starting with awml"}}, true
@@ -161,7 +162,8 @@ func checkView(doc any, projected bool) (mistakeList, bool) {
 		name := fmt.Sprintf(`part "%s"`, show(p.get("id")))
 		checkFields("part", name, p)
 		if p.has("kind") {
-			if k, ok := p.get("kind").(string); !ok || shapes[k] == "" {
+			// A standing approval is a part only from 0.5.
+			if k, ok := p.get("kind").(string); !ok || shapes[k] == "" || k == "approval" && format != "0.5" {
 				errors.add("kinds.known", fmt.Sprintf(`%s has unknown kind "%s"`, name, show(p.get("kind"))))
 			}
 		}
@@ -233,6 +235,9 @@ func checkView(doc any, projected bool) (mistakeList, bool) {
 		}
 	}
 	errors = append(errors, operations(parts, lines)...)
+	if format == "0.5" && file.get("view") == "security" {
+		errors = append(errors, tiers(parts, lines)...)
+	}
 	if file.get("view") == "security" {
 		errors = append(errors, scopes(groups, parts, lines)...)
 		if fileVersion == "0.3" {
@@ -413,9 +418,9 @@ func lineLeads(line *Map) bool {
 }
 
 // operations holds each step to what its op must not do, wherever the drawing shows it. Only a do
-// step leads to an outside action, directly or through a review or a fork, and an answer or check
-// step never writes to a context. A red line draws what a live system did, not the design, so
-// these rules don't hold it.
+// step leads to an outside action, directly or through a review, a standing approval or a fork,
+// and an answer or check step never writes to a context. A red line draws what a live system did,
+// not the design, so these rules don't hold it.
 func operations(parts, lines []*Map) mistakeList {
 	byID := map[any]*Map{}
 	for _, p := range parts {
@@ -446,7 +451,7 @@ func operations(parts, lines []*Map) mistakeList {
 				if !lineLeads(l) || from == nil || byID[keyOf(l.get("to"))] != to {
 					continue
 				}
-				if k := from.get("kind"); k == "review" || k == "fork" {
+				if k := from.get("kind"); k == "review" || k == "approval" || k == "fork" {
 					if !seen[from] {
 						back(from)
 					}
@@ -468,6 +473,74 @@ func operations(parts, lines []*Map) mistakeList {
 			a := map[string]string{"answer": "an", "check": "a"}[op]
 			errors.add("operations.answer-check-read-only", fmt.Sprintf(`part "%s" writes to context "%s", but its op is %s: %s %s step never writes to a context`,
 				show(from.get("id")), show(to.get("id")), op, a, op))
+		}
+	}
+	return errors
+}
+
+// tiers holds each outside action's tier to the shape in front of it. A way into an action is a
+// line that leads to it, followed back through forks. A review, a standing approval or a person's
+// own step puts a person on that way. An Ask action has a person on every way in, an Allow action
+// has no yes in front of it, and nothing leads to a Block action but a red line. A standing approval
+// also lists what it covers on a surface.
+func tiers(parts, lines []*Map) mistakeList {
+	byID := map[any]*Map{}
+	for _, p := range parts {
+		byID[keyOf(p.get("id"))] = p
+	}
+	var errors mistakeList
+	for _, out := range parts {
+		if out.get("kind") != "outside" {
+			continue
+		}
+		name := show(out.get("id"))
+		tier := outsideTier(str(out, "label"))
+		if tier == "" {
+			errors.add("tiers.written", fmt.Sprintf(`outside action "%s" has no tier: end its label with Allow, Ask or Block after a colon, as in "Send the mail: Ask"`, name))
+			continue
+		}
+		var ways []*Map
+		seen := map[*Map]bool{out: true}
+		var back func(to *Map)
+		back = func(to *Map) {
+			for _, l := range lines {
+				from := byID[keyOf(l.get("from"))]
+				if !lineLeads(l) || from == nil || byID[keyOf(l.get("to"))] != to || seen[from] {
+					continue
+				}
+				seen[from] = true
+				if from.get("kind") == "fork" {
+					back(from)
+				} else {
+					ways = append(ways, from)
+				}
+			}
+		}
+		back(out)
+		for _, from := range ways {
+			kind, id := from.get("kind"), show(from.get("id"))
+			switch {
+			case tier == "Ask" && !isOneOf(kind, "review", "approval", "person"):
+				errors.add("tiers.shape", fmt.Sprintf(`outside action "%s" is Ask, but part "%s" leads to it with no person in between: put a review or a standing approval in front of it, or have a person's own do step take it`, name, id))
+			case tier == "Allow" && isOneOf(kind, "review", "approval"):
+				what := map[any]string{"review": "review", "approval": "standing approval"}[kind]
+				errors.add("tiers.shape", fmt.Sprintf(`outside action "%s" is Allow, but %s "%s" stands in front of it: an Allow action just happens, so make it Ask or take the yes away`, name, what, id))
+			case tier == "Block":
+				errors.add("tiers.shape", fmt.Sprintf(`outside action "%s" is Block, but part "%s" leads to it: a blocked action is never taken, so a line into it is red`, name, id))
+			}
+		}
+	}
+	for _, approval := range parts {
+		if approval.get("kind") != "approval" {
+			continue
+		}
+		listed := false
+		for _, l := range lines {
+			to := byID[keyOf(l.get("to"))]
+			listed = listed || lineLeads(l) && byID[keyOf(l.get("from"))] == approval && to != nil && to.get("kind") == "surface"
+		}
+		if !listed {
+			errors.add("approvals.listed", fmt.Sprintf(`standing approval "%s" leads to no surface: draw a line from it to the surface where each action it covers is listed with how to undo it`, show(approval.get("id"))))
 		}
 	}
 	return errors

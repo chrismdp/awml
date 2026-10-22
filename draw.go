@@ -107,12 +107,13 @@ var shapes = map[string]string{
 	"code":      `("%s")`,
 	"person":    `("%s")`,
 	"review":    `("%s")`,                              // an action too, since its one way out is [yes]
+	"approval":  `("%s")`,                              // a standing approval: an action, like a review
 	"fork":      `@{ shape: fork, label: "" }%.0s`,     // fork node, which shows no label
 	"comment":   `@{ shape: notch-rect, label: "%s" }`, // comment
 }
 
 var classes = map[string]string{"trigger": "trig", "context": "ctx", "connector": "con", "surface": "surf", "outside": "out",
-	"ai": "ai", "code": "code", "person": "person", "review": "person", "fork": "uml", "comment": "gap"}
+	"ai": "ai", "code": "code", "person": "person", "review": "person", "approval": "person", "fork": "uml", "comment": "gap"}
 
 var arrows = map[string]string{"start": "-.->", "data": "-->", "publish": "==>", "refused": "--x", "tie": "-.-", "hidden": "~~~"}
 
@@ -144,13 +145,15 @@ var header = []string{"---", "config:", "  theme: default",
 
 // Who decides a step or review, as an emoji, so a reader needn't tell the colours apart. Code is a
 // gear rather than a computer, since a computer reads as a machine, which the platform view is about.
-var deciders = map[string]string{"ai": "🤖", "code": "⚙️", "person": "👤", "review": "👤"}
+var deciders = map[string]string{"ai": "🤖", "code": "⚙️", "person": "👤", "review": "👤", "approval": "👤"}
 
 // A step's own line holds who decides it, then its operation's emoji and name if it has one,
-// smaller and softer than the label beneath it. A review's holds ✅ review, which no operation uses.
+// smaller and softer than the label beneath it. A review's holds ✅ review, and a standing
+// approval's 📜 standing approval, which no operation uses.
 const operation = "<small style='color:rgb(61,67,79)'>%s</small><br>"
 
-// label is a part's label as Mermaid reads it. A step's or a review's sits under its own line.
+// label is a part's label as Mermaid reads it. A step's, a review's or a standing approval's sits
+// under its own line.
 func label(p *Map) string {
 	who, words := deciders[str(p, "kind")], text(str(p, "label"))
 	if who == "" {
@@ -158,6 +161,8 @@ func label(p *Map) string {
 	}
 	if str(p, "kind") == "review" {
 		who += " ✅ review"
+	} else if str(p, "kind") == "approval" {
+		who += " 📜 standing approval"
 	} else if op := str(p, "op"); op != "" {
 		who += " " + ops[op] + " " + op
 	}

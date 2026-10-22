@@ -1,6 +1,6 @@
 # A draft, the owner's yes to the exact message, and the send. Ella runs a children's swimming club,
 # and is fictional.
-awml: "0.4"
+awml: "0.5"
 title: The club's Friday message
 scopes:
   - { id: ella, label: "ella: Ella" }

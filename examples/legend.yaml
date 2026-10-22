@@ -1,5 +1,5 @@
 # Every kind of part, as a key to reading the drawings. The hidden lines only lay it out as a grid.
-awml: "0.4"
+awml: "0.5"
 title: The parts of a drawing
 parts:
   - { id: trigger, kind: trigger, label: "A trigger: a time or an event" }
@@ -7,6 +7,7 @@ parts:
   - { id: code, kind: code, label: "A step decided by code" }
   - { id: person, kind: person, label: "A step decided by a person" }
   - { id: review, kind: review, label: "A review: a person's yes" }
+  - { id: approval, kind: approval, label: "A standing approval: a person's yes, given once" }
   - { id: context, kind: context, label: "A context: the notes in a folder" }
   - { id: connector, kind: connector, label: "A connector: someone's access to a service" }
   - { id: fork, kind: fork }
@@ -15,7 +16,8 @@ parts:
   - { id: comment, kind: comment, label: "A comment, tied to what it explains: the black bar is a fork, where work splits" }
 lines:
   - { from: trigger, to: review, kind: hidden }
-  - { from: review, to: surface, kind: hidden }
+  - { from: review, to: approval, kind: hidden }
+  - { from: approval, to: surface, kind: data, label: "lists each action it covers" }
   - { from: ai, to: context, kind: hidden }
   - { from: context, to: outside, kind: hidden }
   - { from: code, to: connector, kind: hidden }

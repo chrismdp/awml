@@ -273,7 +273,7 @@ func writeBlockMap(out *strings.Builder, value *Map, indent int, root bool) {
 }
 
 func marshalKeys(value *Map, root bool) []string {
-	if !root || str(value, "awml") != "0.4" || value.has("platform") {
+	if !root || !IsCanonical(value) {
 		return value.Keys()
 	}
 	ordered := []string{"awml", "title", "scopes", "parts", "lines", "implementations"}
