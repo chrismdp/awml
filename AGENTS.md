@@ -1,0 +1,72 @@
+# Working on AWML
+
+This repo is AWML, the Agentic Workflow Modelling Language. It holds:
+- the spec, `SPEC.md`, which is the authority;
+- the guide to drawing the workflows you already run, `GUIDE.md`;
+- the Go package and the `awml` CLI;
+- its WebAssembly build;
+- the plugin and its skills;
+- the examples.
+
+Read `SPEC.md` before changing anything it describes.
+
+## This repo is public
+
+Everything here, including issues, pull requests and commit messages, is public. Never write in a real person's name, a client, a company or an agent from anyone's own setup, and never anything that would identify them. Examples are made up: a bakery, a family, a consultant. Use real companies and products only where the spec already does, such as Anthropic, OpenAI or Claude Cowork.
+
+Findings from real setups arrive as issues written in general terms. If a request carries the details of a real setup, keep them out of everything you write here and make up your own example.
+
+## Working through issues
+
+Work through the open issues one at a time. Their labels say what kind of work each one is.
+
+- **`spec` issues are design decisions, and they belong to the maintainer.** Read the issue and the parts of the spec it touches. Then reply on the issue with the options, what each would change in the spec and the CLI, and your recommendation, and wait for an answer before writing the change. Several decided issues can go in one pull request.
+- **`tool` and `guide` issues** that follow from what the spec already says can be built straight away.
+- **Each pull request says which issues it closes,** with `Closes #n`.
+- **Something new turns up while you work:** open an issue for it, rather than widening the change.
+
+## Writing
+
+The spec, guide and README use British English and plain words, with contractions where the spec uses them. Don't use dashes as punctuation, and say each thing once. The README leaves UML to the spec. When the spec changes, change the guide and the README to match in the same pull request.
+
+## Changes and checks
+
+Test first: write a failing test for each behaviour before the code that passes it. Every change passes all of these:
+
+```sh
+go test ./...
+go vet ./...
+go run ./cmd/awml check examples/*.yaml examples/tour/*.yaml examples/platforms/*.yaml
+make test-wasm
+```
+
+- **The tests check that the skill's copies match their sources.** `SPEC.md` is copied to `plugins/awml/skills/awml/references/spec.md`, `GUIDE.md` to `references/guide.md`, and four examples to `references/examples/`. Copy them again whenever a source changes.
+- **`references/drawing-by-hand.md` must match what `awml draw` writes,** and a test checks it.
+- **When `awml draw`'s output changes, redraw every example** with `examples/render.sh`. It needs Node and a Chrome. Point `PUPPETEER_EXECUTABLE_PATH` at the Chrome if Puppeteer can't find one.
+- **The drawings use Inter, from `examples/fonts`.** Mermaid sizes each box by measuring its text in the Chrome that draws it, so that Chrome must have Inter. On Linux the script arranges this. On a Mac, install `examples/fonts/Inter-Regular.ttf` first. Each SVG carries the font, so it fits wherever it's viewed.
+
+Commit messages say plainly what changed and why. Work in a git worktree, and remove it once the change has landed.
+
+## Versions and releases
+
+**The minor version is the file format's.** Files marked `awml: "0.3"` belong to releases 0.3.x.
+- A change to the file format or to the spec's rules is a minor release. The spec's header then says `Draft 0.x` with the date.
+- A fix, or a new command that leaves the format alone, is a patch.
+
+The version is written in four files, which the tests require to agree:
+- `.claude-plugin/marketplace.json`
+- `.agents/plugins/marketplace.json`
+- `plugins/awml/.claude-plugin/plugin.json`
+- `plugins/awml/.codex-plugin/plugin.json`
+
+To release:
+1. Bump all four files.
+2. Commit as `Release x.y.z: what it brings`, and push to `main`.
+3. Push an annotated tag `vx.y.z`. The Release workflow builds the binaries and the skill zip.
+4. Check that CI and the Release run both pass, and that the release has its files.
+
+## The registry depends on this package
+
+The AWML registry runs this package as WebAssembly: `check`, `summary`, `draw` and `fit`, through `cmd/awml-wasm` and `wasm/awml.js`. `wasm/parity.test.mjs` keeps them giving the same answers as the CLI.
+
+After a release that changes what any of them return, tell the registry on its own issue tracker, so it can update its copy of the engine.
