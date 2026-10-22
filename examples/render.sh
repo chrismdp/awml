@@ -6,6 +6,9 @@
 # by measuring its text in the Chrome that draws it, so that Chrome must have Inter: on Linux this
 # script points fontconfig at examples/fonts, and on a Mac you install Inter-Regular.ttf first.
 # Each SVG then carries the font itself, so it looks the same, and fits, wherever it's viewed.
+#
+# The Mermaid CLI takes any Mermaid 11, so Mermaid is pinned too: a new release would otherwise
+# change the drawings without anything here changing.
 set -eu
 cd "$(dirname "$0")/.."
 mkdir -p build/tmp
@@ -33,6 +36,6 @@ printf '@font-face{font-family:"Inter";font-style:normal;font-weight:400;src:url
   "$(base64 < examples/fonts/Inter-Regular.woff2 | tr -d '\n')" > "$tmp/inter.css"
 for f in examples/*.yaml examples/tour/*.yaml; do
   for drawing in $("$tmp/draw" "$f"); do
-  npx -y @mermaid-js/mermaid-cli@11.4.1 -q -p "$tmp/puppeteer.json" -C "$tmp/inter.css" -b white -i "$drawing" -o "${drawing%.mmd}.svg"
+  npx -y -p @mermaid-js/mermaid-cli@11.4.1 -p mermaid@11.17.2 mmdc -q -p "$tmp/puppeteer.json" -C "$tmp/inter.css" -b white -i "$drawing" -o "${drawing%.mmd}.svg"
   done
 done
