@@ -134,10 +134,15 @@ func printConvertAdvice(stderr io.Writer) {
 }
 
 func pull(name, dir, registry string, stdout, stderr io.Writer) int {
-	owner, slug, version, ok := pulledWorkflowName(name)
+	owner, slug, platform, version, ok := pulledName(name)
 	if !ok {
-		fmt.Fprintln(stderr, "awml pull: workflow must be owner/slug or owner/slug@n")
+		fmt.Fprintln(stderr, "awml pull: workflow must be owner/slug or owner/slug@n, or a platform owner/platforms/slug or owner/platforms/slug@n")
 		return 2
+	}
+	// A platform description lives beside the owner's workflows, under platforms.
+	base, pulled := apiURL(registry, owner, slug), owner+"/"+slug
+	if platform {
+		base, pulled = registry+"/api/v1/"+url.PathEscape(owner)+"/platforms/"+url.PathEscape(slug), owner+"/platforms/"+slug
 	}
 	token, err := credentialFor(registry)
 	if err != nil {
@@ -145,7 +150,7 @@ func pull(name, dir, registry string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if version == 0 {
-		response, err := request(http.MethodGet, apiURL(registry, owner, slug), token, nil)
+		response, err := request(http.MethodGet, base, token, nil)
 		if err != nil {
 			fmt.Fprintf(stderr, "awml pull: %s\n", err)
 			return 1
@@ -172,11 +177,15 @@ func pull(name, dir, registry string, stdout, stderr io.Writer) int {
 			}
 		}
 		if version == 0 {
-			fmt.Fprintln(stderr, "awml pull: the workflow has no versions")
+			if platform {
+				fmt.Fprintln(stderr, "awml pull: the platform has no versions")
+			} else {
+				fmt.Fprintln(stderr, "awml pull: the workflow has no versions")
+			}
 			return 1
 		}
 	}
-	endpoint := apiURL(registry, owner, slug) + "/v/" + strconv.Itoa(version)
+	endpoint := base + "/v/" + strconv.Itoa(version)
 	response, err := request(http.MethodGet, endpoint, token, nil)
 	if err != nil {
 		fmt.Fprintf(stderr, "awml pull: %s\n", err)
@@ -203,7 +212,11 @@ func pull(name, dir, registry string, stdout, stderr io.Writer) int {
 		version = downloaded.Number
 	}
 	if downloaded.Files.Workflow == "" && downloaded.Files.Security == "" && downloaded.Files.Platform == "" {
-		fmt.Fprintf(stderr, "awml pull: version %d of %s/%s came with no files\n", version, owner, slug)
+		fmt.Fprintf(stderr, "awml pull: version %d of %s came with no files\n", version, pulled)
+		return 1
+	}
+	if platform && downloaded.Files.Platform == "" {
+		fmt.Fprintf(stderr, "awml pull: version %d of %s came with no platform description\n", version, pulled)
 		return 1
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -211,7 +224,9 @@ func pull(name, dir, registry string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	files := map[string]string{slug + ".yaml": downloaded.Files.Workflow}
-	if downloaded.Files.Workflow == "" {
+	if platform {
+		files = map[string]string{slug + ".yaml": downloaded.Files.Platform}
+	} else if downloaded.Files.Workflow == "" {
 		files = map[string]string{"security.yaml": downloaded.Files.Security, "platform.yaml": downloaded.Files.Platform}
 	}
 	for filename, source := range files {
@@ -224,7 +239,7 @@ func pull(name, dir, registry string, stdout, stderr io.Writer) int {
 			return 1
 		}
 	}
-	fmt.Fprintf(stdout, "Pulled %s/%s version %d to %s\n", owner, slug, version, dir)
+	fmt.Fprintf(stdout, "Pulled %s version %d to %s\n", pulled, version, dir)
 	return 0
 }
 
@@ -233,17 +248,25 @@ func workflowName(name string) (string, string, bool) {
 	return owner, slug, ok && owner != "" && slug != "" && !strings.Contains(slug, "/")
 }
 
-func pulledWorkflowName(name string) (string, string, int, bool) {
-	workflow, rawVersion, hasVersion := strings.Cut(name, "@")
-	owner, slug, ok := workflowName(workflow)
+// pulledName reads owner/slug or owner/platforms/slug, either with an optional @n, and says
+// whether it names a platform description.
+func pulledName(name string) (string, string, bool, int, bool) {
+	named, rawVersion, hasVersion := strings.Cut(name, "@")
+	platform := false
+	if owner, rest, ok := strings.Cut(named, "/"); ok {
+		if slug, isPlatform := strings.CutPrefix(rest, "platforms/"); isPlatform {
+			named, platform = owner+"/"+slug, true
+		}
+	}
+	owner, slug, ok := workflowName(named)
 	if !ok {
-		return "", "", 0, false
+		return "", "", false, 0, false
 	}
 	if !hasVersion {
-		return owner, slug, 0, true
+		return owner, slug, platform, 0, true
 	}
 	version, err := strconv.Atoi(rawVersion)
-	return owner, slug, version, err == nil && version > 0
+	return owner, slug, platform, version, err == nil && version > 0
 }
 
 func apiURL(registry, owner, slug string) string {

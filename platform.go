@@ -19,7 +19,11 @@ func checkPlatformDescription(file *Map) mistakeList {
 			errors.add("description.values", "platform must be a mapping of fields")
 		} else {
 			fieldsExact("platform", platform, []string{"id", "label"}, nil, &errors)
-			if id, ok := platform.get("id").(string); ok && !companyID.MatchString(id) {
+			id, ok := platform.get("id").(string)
+			registered := file.get("awml") == "0.5"
+			if ok && registered && !companyID.MatchString(id) && !registeredPlatform.MatchString(id) {
+				errors.add("description.ids", fmt.Sprintf(`platform id "%s" must be lower-case letters, digits and hyphens, starting with a letter, or owner/platforms/slug for a registered platform`, id))
+			} else if ok && !registered && !companyID.MatchString(id) {
 				errors.add("description.ids", fmt.Sprintf(`platform id "%s" must be lower-case letters, digits and hyphens, starting with a letter`, id))
 			}
 		}

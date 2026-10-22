@@ -35,7 +35,8 @@ func checkDoc(doc any) (mistakeList, bool) { return checkView(doc, false, "") }
 // checkView checks a document as checkDoc does. projected is whether it's a 0.4 or 0.5 file's
 // platform view, whose fields the file's own checks have already held under the names the file
 // uses, so they aren't reported again as a group's or a part's. format is the version of the file
-// a view was projected from, and "" for a legacy view.
+// a view was projected from, and "" for a legacy view. In a 0.5 file, a block may name a
+// registered platform.
 func checkView(doc any, projected bool, format string) (mistakeList, bool) {
 	file, ok := doc.(*Map)
 	if !ok {
@@ -132,7 +133,9 @@ func checkView(doc any, projected bool, format string) (mistakeList, bool) {
 					errors.add("platform.blocks-only", name+" has a platform, but only a group in the platform view takes one")
 				} else if s, ok := g.get("platform").(string); !ok {
 					errors.add("values.text", fmt.Sprintf("%s: YAML read its platform as %s, not text: put it in quotes", name, show(g.get("platform"))))
-				} else if !companyID.MatchString(s) {
+				} else if format == "0.5" && !companyID.MatchString(s) && !registeredPlatform.MatchString(s) {
+					errors.add("ids.written", fmt.Sprintf(`%s: platform "%s" must be a company id, or owner/platforms/slug for a registered platform`, name, s))
+				} else if format != "0.5" && !companyID.MatchString(s) {
 					errors.add("ids.written", fmt.Sprintf(`%s: platform "%s" must be a company id`, name, s))
 				}
 			}
@@ -602,6 +605,9 @@ func fields(what, name string, item *Map, version string, errors *mistakeList) {
 }
 
 var companyID = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+
+// A platform published to the registry is named owner/platforms/slug, where 0.5 files allow it.
+var registeredPlatform = regexp.MustCompile(`^[a-z][a-z0-9-]*/platforms/[a-z][a-z0-9-]*$`)
 var pathName = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
 
 func validPath(path string) bool {

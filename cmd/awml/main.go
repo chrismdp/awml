@@ -35,7 +35,7 @@ positional arguments:
     convert          join a legacy pair into one 0.4 workflow
     login            save a registry API token
     push             push a new workflow version
-    pull             download a workflow version
+    pull             download a workflow or platform version
 
 options:
   -h, --help         show this help message and exit
@@ -111,7 +111,7 @@ options:
 `},
 	"pull": {"usage: awml pull [-h] [-o DIR] [--registry URL] owner/slug[@n]\n", `
 positional arguments:
-  owner/slug[@n]
+  owner/slug[@n]     a workflow, or owner/platforms/slug[@n] for a platform
 
 options:
   -h, --help         show this help message and exit
