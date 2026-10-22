@@ -22,6 +22,7 @@ Work through the open issues one at a time. Their labels say what kind of work e
 
 - **`spec` issues are design decisions, and they belong to the maintainer.** Read the issue and the parts of the spec it touches. Then reply on the issue with the options, what each would change in the spec and the CLI, and your recommendation, and wait for an answer before writing the change. Several decided issues can go in one pull request.
 - **`tool` and `guide` issues** that follow from what the spec already says can be built straight away.
+- **Build `tool` and `guide` issues, and decided `spec` ones, by adding the `build` label.** The build workflow drafts, checks and opens the pull request. Build by hand only a change the workflow can't push, which is a change under `.github/workflows/`.
 - **Each pull request says which issues it closes,** with `Closes #n`.
 - **Something new turns up while you work:** open an issue for it, rather than widening the change.
 
