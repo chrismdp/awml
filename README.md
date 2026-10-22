@@ -2,7 +2,7 @@
 
 Agentic work today is tangled up in the tools that run it, so it's hard to say what a workflow does, who may see each part of it, or how to change one piece without rebuilding the rest. AWML, the Agentic Workflow Modelling Language, describes a workflow in a small YAML file, apart from those tools, and draws it as a diagram through two lenses: who may see each part, and where each part runs. That lets you audit where content crosses to a wider audience, improve one step at a time, move a part to a better platform, and optimise the patterns that recur.
 
-The file lists the workflow's triggers, the steps that pass work along, the notes they read, and the surfaces and outside actions it ends in. AWML draws it with Mermaid, on the shapes of a UML activity diagram, and gives each step a colour and an emoji so you can see at a glance whether AI, code or a person decides it. A drawing runs nothing and grants nothing: it's the description a live system is checked against.
+The file lists the workflow's triggers, the steps that pass work along, the notes they read, and the surfaces and outside actions it ends in. AWML draws it with Mermaid and gives each step a colour and an emoji so you can see at a glance whether AI, code or a person decides it. A drawing runs nothing and grants nothing: it's the description a live system is checked against.
 
 ![A family's dinners, by who may see each part](examples/dinners-security.svg)
 
@@ -132,19 +132,17 @@ The operating model has little to do with AI: it's how work is organised, whoeve
 
 ![Every kind of part, laid out as a key](examples/legend.svg)
 
-Each shape means what it means in a UML activity diagram, so anyone who reads those can read these.
-
-- A **trigger** is a pink pill. It starts the workflow: a time, such as `Weekdays 07:00`, or an event, such as someone asking in a chat or an email arriving. In UML it's an accept time event or an accept event.
-- A **step** is a rounded box: one piece of work, with the colour and emoji of who decides it. In UML it's an action.
-- A **review** is an amber rounded box, like a step, with `👤 ✅ review` above its label: a person's yes to exact content before it goes ahead. Its one way out is a line with the guard `[yes]`, so in UML it's an action, not a decision node.
-- A **fork** is a black bar, where work splits to run side by side. In UML it's a fork node.
-- A **context** is a pale blue cylinder: the notes a step may read or write, kept as one folder. In UML it's a data store node.
+- A **trigger** is a pink pill. It starts the workflow: a time, such as `Weekdays 07:00`, or an event, such as someone asking in a chat or an email arriving.
+- A **step** is a rounded box: one piece of work, with the colour and emoji of who decides it.
+- A **review** is an amber rounded box, like a step, with `👤 ✅ review` above its label: a person's yes to exact content before it goes ahead. Its one way out is a line with the guard `[yes]`.
+- A **fork** is a black bar, where work splits to run side by side.
+- A **context** is a pale blue cylinder: the notes a step may read or write, kept as one folder.
 - A **connector** is a grey hexagon: someone's access to an outside service, such as a calendar, a mailbox or a bank account.
 - A **surface** is a white window box: where people meet the system's work, such as a chat, a list on their phone or a screen on a wall.
-- An **outside action** is a coral flag: something that changes the world outside the system, such as sending an email or paying a bill. Its label ends with its [tier](#tiers-and-yeses), such as `Send the reply: Ask`. In UML it's a send signal action.
-- A **comment** is a dashed box with a cut corner. It points out a gap, or gives an example of what a part could carry, and is tied to what it explains. In UML it's a comment.
+- An **outside action** is a coral flag: something that changes the world outside the system, such as sending an email or paying a bill. Its label ends with its [tier](#tiers-and-yeses), such as `Send the reply: Ask`.
+- A **comment** is a dashed box with a cut corner. It points out a gap, or gives an example of what a part could carry, and is tied to what it explains.
 
-UML has nothing for a connector or a surface, so those two shapes are AWML's own. Posting on a shared surface to the people it serves is delivery, not an outside action, so a family chat needs no flag and no review.
+Posting on a shared surface to the people it serves is delivery, not an outside action, so a family chat needs no flag and no review.
 
 ### Who decides each step
 
@@ -169,7 +167,7 @@ A workflow whose every step is green ⚙️ has no AI in it, even if AI helped b
 | `tie` | A dotted line | Links a comment to what it explains |
 | `hidden` | Nothing | Steers the layout only |
 
-A line may carry a label. Words in square brackets are a **guard**, the condition the line is taken on, as in UML. A line drawn red is a finding: see [The red line](#the-red-line).
+A line may carry a label. Words in square brackets are a **guard**, the condition the line is taken on. A line drawn red is a finding: see [The red line](#the-red-line).
 
 ## Operations
 
@@ -405,8 +403,6 @@ This only works if you understand the workflow, and if your platform lets you se
 ## What AWML is not
 
 AWML isn't a visual workflow tool, where the diagram is the program and drawing a line makes data flow. Every part and line in an AWML drawing is something the design names, so the drawing can be made from the design itself, and then it can't drift from it.
-
-AWML builds on UML's activity diagram rather than BPMN, which covers similar ground, because more engineers already read UML.
 
 ## Using awml
 
