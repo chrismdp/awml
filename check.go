@@ -13,6 +13,9 @@ func Check(doc any) []string {
 	if !ok {
 		return []string{"the file must be a mapping of fields, starting with awml"}
 	}
+	if IsCanonical(file) {
+		return checkCanonical(file)
+	}
 	if file.has("platform") {
 		return checkPlatformDescription(file)
 	}

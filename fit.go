@@ -50,6 +50,7 @@ func Judge(security, placement *Map, descriptions []*Map) FitReport {
 }
 
 func judge(security, placement *Map, descriptions []*Map) (results []FitResult, gaps []string) {
+	security, _ = View(security, "")
 	model := newFitModel(security)
 	if gaps = model.gaps(); len(gaps) != 0 {
 		return nil, gaps

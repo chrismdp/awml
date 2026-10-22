@@ -9,14 +9,11 @@ config:
       bottom: 30
 ---
 flowchart TB
-  subgraph server["Server#58; always on"]
+  subgraph family["family#58; parents#44; kids"]
     direction TB
     nightly(["Every night 23#58;00"])
     bring("<small style='color:rgb(61,67,79)'>⚙️ 📥 bring-in</small><br>Bring in the day#39;s photos from the family#39;s phones")
     new[("New photos")]
-  end
-  subgraph laptop["Noor#39;s laptop#58; a small model#44; on some evenings"]
-    direction TB
     sort("<small style='color:rgb(61,67,79)'>🤖 🗂️ sort</small><br>Sort them into albums")
     albums[("Albums")]
     wait@{ shape: notch-rect, label: "The laptop is off most days#44; so new photos wait on the server until it#39;s on" }
@@ -42,5 +39,4 @@ flowchart TB
   class sort ai
   class bring code
   class wait gap
-  style server fill:#e3ebfa,stroke:#b9c8e8,color:#16171b
-  style laptop fill:#fbe9df,stroke:#ecc7b2,color:#16171b
+  style family fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f

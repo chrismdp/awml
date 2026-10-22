@@ -1,19 +1,19 @@
 ---
 name: awml
-description: Describe, check and draw agentic and AI workflows in AWML, the Agentic Workflow Modelling Language. Works out the workflow with the person, writes its security view and platform view as AWML YAML files, checks them with awml check, draws them as Mermaid, and points out what the drawing reveals, such as content published to a wider audience without a yes. Use it whenever someone wants to describe, map, draw, diagram, document or audit an agentic workflow, an AI workflow, an AI agent's process or an automation that uses AI, even if they never say AWML. Also use it whenever they mention AWML or the awml command, or have an AWML YAML file to write, fix, check or explain.
+description: Describe, check and draw agentic and AI workflows in AWML, the Agentic Workflow Modelling Language. Works out the workflow with the person, writes its design and implementations in one AWML YAML file, checks it with awml check, draws them as Mermaid, and points out what the drawing reveals, such as content published to a wider audience without a yes. Use it whenever someone wants to describe, map, draw, diagram, document or audit an agentic workflow, an AI workflow, an AI agent's process or an automation that uses AI, even if they never say AWML. Also use it whenever they mention AWML or the awml command, or have an AWML YAML file to write, fix, check or explain.
 license: MIT
 ---
 
 # AWML
 
-AWML describes one workflow in two YAML files, one for each view, and draws them as Mermaid diagrams on the shapes of a UML activity diagram. A drawing runs nothing and grants nothing: it is the description a live system is checked against. Your job is to get the person's workflow into AWML correctly, then show them what the drawing reveals.
+AWML describes one workflow in one YAML file, with a design and its implementations, and draws its views as Mermaid diagrams on the shapes of a UML activity diagram. A drawing runs nothing and grants nothing: it is the description a live system is checked against. Your job is to get the person's workflow into AWML correctly, then show them what the drawing reveals.
 
 Before you write or fix a file, read `references/spec.md` in full. It is short, and it is the authority: wherever this skill and the spec differ, the spec is right. Then read the examples nearest the person's workflow, in both views:
 
-- `references/examples/client-email.yaml` and `client-email-platform.yaml`: a consultant's email, with two scopes side by side and a send the consultant does themselves.
-- `references/examples/dinners-security.yaml` and `dinners-platform.yaml`: a family's dinners and money, with nested scopes, a review before checkout, a standing rule and a gap.
+- `references/examples/client-email.yaml`: a consultant's email, with two scopes side by side and a send the consultant does themselves.
+- `references/examples/dinners.yaml`: a family's dinners and money, with nested scopes, a review before checkout, a standing rule and a gap.
 
-Each example's drawing sits beside it, with the same name ending `.mmd`.
+Each example's security drawing sits beside it as `.mmd`, and each implementation drawing adds `-ID.mmd`. The question in `references/examples/question.yaml` and photos in `references/examples/tour/09-platform-view.yaml` give smaller examples.
 
 ## 1. Find out the workflow
 
@@ -29,8 +29,8 @@ You need each of these, and each becomes part of the file:
 | The outside services it reaches, and whose access each one is | a `connector`, labelled with whose it is |
 | Where people see the results, such as a chat, a list or a screen | a `surface` |
 | What it changes in the world, and the tier of each change | an `outside` action, its label ending with its tier, as `"Send the reply: Ask"` |
-| Who may see what: each group of people, its members, and which companies may process its content | a scope, which is a group in the security view |
-| Where each part runs: the machines and services, the model each uses, and when each machine is on | a platform, which is a group in the platform view |
+| Who may see what: each group of people, its members, and which companies may process its content | a scope in `scopes` |
+| Where each part runs: the machines and services, the model each uses, and when each machine is on | a block in an implementation |
 
 Start from what the person has already told you. Infer what you reasonably can, ask only for what's still missing, and say plainly what you inferred so they can correct it. A first draft they can react to often gets better answers than a long list of questions, so ask a few questions at most before you write one. If they run several workflows, draw one with them at a time, or a few that hand work to each other, each in its own conversation, and ask that workflow's questions as you reach them, never as one long list across workflows.
 
@@ -42,15 +42,15 @@ Some judgements need care:
 - **Scopes.** Name each with its members, as `family: parents, kids`, or with `+` and the people it adds to the scope inside it, as `carers: + June, Beth`. Ask which companies may process a scope's content where it matters, as for something told in confidence.
 - **Names.** Use the names the person uses. If the files will be shared or published, ask whether to use roles or made-up names instead.
 
-## 2. Write the two views
+## 2. Write one workflow file
 
-Write the security view first, then the platform view. Name the files after the workflow, as `standup-security.yaml` and `standup-platform.yaml`, and save them where the person keeps their work. In a chat with no files, give each in a `yaml` code block.
+Write the design first, then add its implementations in the same file. Name it after the workflow, as `standup.yaml`, and save it where the person keeps their work. In a chat with no files, give it in a `yaml` code block.
 
-Both views hold the same parts, with the same ids, joined by the same lines, so the two can be read side by side. Only the groups and each part's `in` change. The platform view may leave out parts that don't help it, as it often leaves out triggers. Leave out their lines too, and where a part left out sat between two others, join those two directly, as the dinners' platform view joins the step that fills the basket straight to the supermarket account.
+Start with a comment saying what the file shows, then `awml: "0.4"`, `title`, `scopes`, `parts` and `lines`. Write the parts in the order the work flows. Quote every label. Ids are short words joined by underscores, such as `meal_plan`. Give each step an `op` where one fits, using the spec's table of operations for what each produces and must not do. A scope's `processing`, a trigger's `wait` and a context's `at` let `awml fit` judge where the design can run.
 
-Write each file as the examples are written: a comment saying what the file shows, then `awml: "0.2"`, `title`, `view`, `groups`, `parts` and `lines`, one `{ … }` item to a line, with the parts in the order the work flows. Quote every label. Ids are short words joined by underscores, such as `meal_plan`. Give each step an `op` where one fits, using the spec's table of operations for what each produces and must not do.
+Add `implementations` as a map of ids to entries with a `label` and `blocks`. Each block has `id`, `label` and `parts`, a list of design part ids; it may have `platform` and `in`, its parent block. Every part except a trigger or comment needs exactly one block per implementation. Keep the design's parts and lines once. An implementation may add `comments`, each with `id`, `label`, `in`, its block, and `ties`, the design part ids it explains. Scope, part, block and comment ids must be unique across the file.
 
-**In the security view**, each group is a scope. The spec's "Where a part sits" is the rule:
+**In the security view**, each scope is a box. The spec's "Where a part sits" is the rule:
 
 - A context sits in its scope's box, and a surface in the box of the scope its viewers make up.
 - A step sits in the box of the scope it writes into, with the reviews and outside actions it leads to.
@@ -67,7 +67,7 @@ Choose each line's kind by what it does:
 - The one line out of each review is labelled `"[yes]"`.
 - `tie` links a comment to what it explains, and `hidden` only steers the layout.
 
-**In the platform view**, each group is a platform: a machine or service that brings its own surfaces, harness and models, and often its own triggers.
+**In the platform view**, each implementation block is a platform: a machine or service that brings its own surfaces, harness and models, and often its own triggers.
 
 - Each part sits in the block of the platform it runs on or lives in. A trigger sits where it is fired, a context where its notes are kept, a connector in the block of the service it reaches, and a review where the person gives their yes.
 - Label each block with what the implementation chose there, such as its model, and when the machine is on, if that isn't always: `"Server: claude-sonnet-4-5"`, `"Noor's laptop: on some evenings"`.
@@ -77,25 +77,24 @@ Choose each line's kind by what it does:
 
 Check every file you write or change, and fix every mistake before you show a drawing.
 
-If you have a shell, see whether `awml` is there and which release it is with `awml --version`. If it isn't, tell the person you're installing it, then run `go install github.com/chrismdp/awml/cmd/awml@latest`, which needs Go 1.22 or later and puts `awml` in `~/go/bin`. Without Go, download the archive for the system from https://github.com/chrismdp/awml/releases/latest, unpack it and run the `awml` inside. Then check both files:
+If you have a shell, see whether `awml` is there and which release it is with `awml --version`. If it isn't, tell the person you're installing it, then run `go install github.com/chrismdp/awml/cmd/awml@latest`, which needs Go 1.22 or later and puts `awml` in `~/go/bin`. Without Go, download the archive for the system from https://github.com/chrismdp/awml/releases/latest, unpack it and run the `awml` inside. Then check the file:
 
 ```sh
-awml check standup-security.yaml standup-platform.yaml
+awml check standup.yaml
 ```
 
-It prints `ok` for each sound file, or one line for each mistake, naming the part or line it is in. Fix every one and run it again until both files print `ok`.
+It prints `ok` for each sound file, or one line for each mistake, naming the part or line it is in. Fix every one and run it again until the file prints `ok`.
 
 If you have no shell, or `awml` can't be installed, go through `references/checking-by-hand.md` for each file instead. Then say plainly that the files were checked by hand, not by `awml check`, and that `awml check` will confirm them.
-
-`awml check` reads one file at a time, so it can't see whether the two views agree. Compare them yourself: the same ids and lines in each, apart from any parts the platform view leaves out.
 
 In the security view, `awml check` also reports publishing drawn as routing: a `data` line into a box that isn't the source's or one inside it. It reads the boxes, not their labels, so it can't see a box drawn in the wrong place. So look at each box inside another yourself: if it adds anyone, or its terms are looser, it belongs beside the other, and a `data` line into it is really publishing. Drawn inside the business, the consultant's private scope would hide that taking the reply there loosens the terms it is kept under.
 
 ## 4. Draw
 
-- `awml draw standup-security.yaml` prints the file's Mermaid, which needs Mermaid 11.4.1 or later. Where the host renders Mermaid, show it in a `mermaid` code block.
-- `awml page standup-security.yaml standup-platform.yaml -o standup.html` writes one standalone HTML page with both views, to share or open in a browser.
-- For an SVG, save the Mermaid to `standup-security.mmd` and run `npx -y @mermaid-js/mermaid-cli@11.4.1 -b white -i standup-security.mmd -o standup-security.svg`, which needs Node.
+- `awml draw standup.yaml` prints the file's Mermaid, which needs Mermaid 11.4.1 or later. Where the host renders Mermaid, show it in a `mermaid` code block.
+- `awml draw --implementation ID standup.yaml` prints that implementation's platform view.
+- `awml page standup.yaml -o standup.html` writes one standalone HTML page with the security view and every implementation, to share or open in a browser.
+- For an SVG, save the Mermaid to `standup.mmd` and run `npx -y @mermaid-js/mermaid-cli@11.4.1 -b white -i standup.mmd -o standup.svg`, which needs Node.
 
 Without `awml`, draw the Mermaid by hand with `references/drawing-by-hand.md`, and say it was drawn by hand.
 

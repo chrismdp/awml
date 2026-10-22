@@ -1,8 +1,7 @@
 # A refused read: an answer that may not read one flatmate's own notes. The flatmates are fictional.
-awml: "0.2"
+awml: "0.4"
 title: A question in the flat's chat
-view: security
-groups:
+scopes:
   - { id: flat, label: "flat: Tom, Ana, Joe" }
   - { id: tom, label: "tom: Tom", in: flat }
 parts:

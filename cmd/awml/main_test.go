@@ -327,6 +327,64 @@ func TestPageWritesNothingWhenAFileHasMistakes(t *testing.T) {
 	}
 }
 
+func TestConvertWritesAHandWrittenFileAndNamesItsImplementation(t *testing.T) {
+	security := write(t, "security.yaml", `# A bakery plans tomorrow's loaves. The bakery is fictional.
+awml: "0.3"
+title: Tomorrow's loaves
+view: security
+groups:
+  - { id: "bakery", label: "bakery: Jo, Kit", processing: { anthropic: any } }
+parts:
+  - { id: morning, kind: "trigger", label: "Tomorrow 07:00", wait: "PT1H" }
+  - { id: "plan", kind: ai, op: "draft", label: "Plan a \"special\" loaf \\ batch", in: bakery }
+  - { id: notes, kind: context, label: "Notes", at: "notes/bread", in: bakery }
+lines:
+  - { from: morning, to: "plan", kind: "start" }
+  - { from: plan, to: notes, kind: data, label: "yes" }
+`)
+	platform := write(t, "platform.yaml", `# It runs in the bakery office.
+awml: "0.3"
+title: Tomorrow's loaves
+view: platform
+groups:
+  - { id: laptop, label: "Laptop: always on" }
+parts:
+  - { id: morning, kind: trigger, label: "Tomorrow 07:00", wait: PT1H }
+  - { id: "plan", kind: ai, op: draft, label: "Plan a \"special\" loaf \\ batch", in: laptop }
+  - { id: notes, kind: context, label: "Notes", at: notes/bread, in: laptop }
+  - { id: key, kind: comment, label: "The key: read only", in: laptop }
+lines:
+  - { from: morning, to: plan, kind: start }
+  - { from: plan, to: notes, kind: data, label: "yes" }
+  - { from: key, to: plan, kind: tie }
+`)
+	r := awmlRun("convert", "--implementation", "office", security, platform)
+	want := `# A bakery plans tomorrow's loaves. The bakery is fictional.
+# It runs in the bakery office.
+awml: "0.4"
+title: Tomorrow's loaves
+scopes:
+  - { id: bakery, label: "bakery: Jo, Kit", processing: { anthropic: any } }
+parts:
+  - { id: morning, kind: trigger, label: "Tomorrow 07:00", wait: PT1H }
+  - { id: plan, kind: ai, op: draft, label: "Plan a \"special\" loaf \\ batch", in: bakery }
+  - { id: notes, kind: context, label: "Notes", at: notes/bread, in: bakery }
+lines:
+  - { from: morning, to: plan, kind: start }
+  - { from: plan, to: notes, kind: data, label: "yes" }
+implementations:
+  office:
+    label: Default
+    blocks:
+      - { id: laptop, label: "Laptop: always on", parts: [plan, notes] }
+    comments:
+      - { id: key, label: "The key: read only", in: laptop, ties: [plan] }
+`
+	if r != (result{0, want, ""}) {
+		t.Errorf("convert gave %+v\nwant stdout:\n%s", r, want)
+	}
+}
+
 func TestTheOutputMayComeFirstOrBeJoinedToItsFlag(t *testing.T) {
 	a := write(t, "a.yaml", good)
 	dir := t.TempDir()
@@ -344,7 +402,7 @@ func TestTheOutputMayComeFirstOrBeJoinedToItsFlag(t *testing.T) {
 
 func TestHelpIsPrintedAndSucceeds(t *testing.T) {
 	r := awmlRun("-h")
-	if r.code != 0 || !strings.HasPrefix(r.stdout, "usage: awml [-h] [--version] [--registry URL] {draw,page,check,fit,summary,login,push,pull} ...\n\nDraw agentic workflows written in AWML.\n") || !strings.Contains(r.stdout, "  --version          show program's version number and exit\n") {
+	if r.code != 0 || !strings.HasPrefix(r.stdout, "usage: awml [-h] [--version] [--registry URL] {draw,page,check,fit,summary,convert,login,push,pull} ...\n\nDraw agentic workflows written in AWML.\n") || !strings.Contains(r.stdout, "  --version          show program's version number and exit\n") {
 		t.Errorf("-h gave %+v", r)
 	}
 	if r := awmlRun("page", "--help"); r.code != 0 || !strings.HasPrefix(r.stdout, "usage: awml page [-h] -o OUT files [files ...]\n") {
@@ -377,10 +435,10 @@ func TestAMistakeInTheCommandShowsHowToUseIt(t *testing.T) {
 		args []string
 		want string
 	}{
-		{nil, "usage: awml [-h] [--version] [--registry URL] {draw,page,check,fit,summary,login,push,pull} ...\nawml: error: the following arguments are required: command\n"},
-		{[]string{"drew", "a.yaml"}, "usage: awml [-h] [--version] [--registry URL] {draw,page,check,fit,summary,login,push,pull} ...\nawml: error: argument command: invalid choice: 'drew' (choose from 'draw', 'page', 'check', 'fit', 'summary', 'login', 'push', 'pull')\n"},
-		{[]string{"draw"}, "usage: awml draw [-h] file\nawml draw: error: the following arguments are required: file\n"},
-		{[]string{"draw", "a.yaml", "b.yaml"}, "usage: awml [-h] [--version] [--registry URL] {draw,page,check,fit,summary,login,push,pull} ...\nawml: error: unrecognized arguments: b.yaml\n"},
+		{nil, "usage: awml [-h] [--version] [--registry URL] {draw,page,check,fit,summary,convert,login,push,pull} ...\nawml: error: the following arguments are required: command\n"},
+		{[]string{"drew", "a.yaml"}, "usage: awml [-h] [--version] [--registry URL] {draw,page,check,fit,summary,convert,login,push,pull} ...\nawml: error: argument command: invalid choice: 'drew' (choose from 'draw', 'page', 'check', 'fit', 'summary', 'convert', 'login', 'push', 'pull')\n"},
+		{[]string{"draw"}, "usage: awml draw [-h] [--implementation ID] file\nawml draw: error: the following arguments are required: file\n"},
+		{[]string{"draw", "a.yaml", "b.yaml"}, "usage: awml [-h] [--version] [--registry URL] {draw,page,check,fit,summary,convert,login,push,pull} ...\nawml: error: unrecognized arguments: b.yaml\n"},
 		{[]string{"check"}, "usage: awml check [-h] files [files ...]\nawml check: error: the following arguments are required: files\n"},
 		{[]string{"page", "a.yaml"}, "usage: awml page [-h] -o OUT files [files ...]\nawml page: error: the following arguments are required: -o/--out\n"},
 		{[]string{"page", "a.yaml", "-o"}, "usage: awml page [-h] -o OUT files [files ...]\nawml page: error: argument -o/--out: expected one argument\n"},
@@ -618,5 +676,128 @@ func loginForTest(t *testing.T, registry, token string) {
 	t.Helper()
 	if r := awmlRunInput(token+"\n", "login", "--registry", registry); r.code != 0 {
 		t.Fatalf("login gave %+v", r)
+	}
+}
+
+const canonicalFile = `# Bakery workflow
+awml: "0.4"
+title: Bread
+scopes: [{id: bakery, label: Bakery, processing: any}]
+parts:
+  - {id: plan, kind: ai, label: Plan, in: bakery}
+implementations:
+  home:
+    label: At home
+    blocks: [{id: server, label: Server, platform: scripts, parts: [plan]}]
+`
+
+func TestCanonicalCommands(t *testing.T) {
+	path := write(t, "bread.yaml", canonicalFile)
+	desc := write(t, "scripts.yaml", `awml: "0.3"
+platform: {id: scripts, label: Scripts}
+off_for_up_to: PT0S
+steps: code
+agents: []
+calls: any
+holds: []
+`)
+	for _, args := range [][]string{{"check", path}, {"draw", path}, {"draw", "--implementation", "home", path}, {"fit", path, desc}, {"fit", "--implementation=home", path, desc}, {"summary", "--json", path}} {
+		got := awmlRun(args...)
+		if got.code != 0 {
+			t.Fatalf("%v: %+v", args, got)
+		}
+	}
+	for _, command := range []string{"draw", "fit"} {
+		args := []string{command, "--implementation", "missing", path}
+		if command == "fit" {
+			args = append(args, desc)
+		}
+		got := awmlRun(args...)
+		if got.code != 1 || !strings.Contains(got.stderr, `unknown implementation "missing"`) {
+			t.Fatalf("%+v", got)
+		}
+	}
+	page := filepath.Join(t.TempDir(), "bread.html")
+	if got := awmlRun("page", path, "-o", page); got.code != 0 {
+		t.Fatal(got)
+	}
+	data, _ := os.ReadFile(page)
+	if !strings.Contains(string(data), "At home") {
+		t.Fatal("missing implementation heading")
+	}
+}
+
+func TestConvertCommand(t *testing.T) {
+	security := write(t, "security.yaml", "# Keep this comment\n"+good)
+	platform := write(t, "platform.yaml", strings.Replace(good, "view: security", "view: platform", 1))
+	got := awmlRun("convert", security, platform)
+	if got.code != 0 || !strings.Contains(got.stdout, "# Keep this comment") || !strings.Contains(got.stdout, `awml: "0.4"`) {
+		t.Fatalf("%+v", got)
+	}
+	parsed, err := awml.Parse([]byte(got.stdout))
+	if err != nil || len(awml.Check(parsed)) > 0 {
+		t.Fatalf("%v %v", err, awml.Check(parsed))
+	}
+	platform = write(t, "bad-pair.yaml", strings.Replace(strings.Replace(good, "view: security", "view: platform", 1), "kind: ai", "kind: code", 1))
+	got = awmlRun("convert", security, platform)
+	if got.code != 1 || !strings.Contains(got.stderr, `has kind "code"`) {
+		t.Fatalf("%+v", got)
+	}
+}
+
+func TestCanonicalPushAndPull(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	var payload map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Error(err)
+			}
+			w.WriteHeader(http.StatusCreated)
+			fmt.Fprint(w, `{"number":1,"url":"http://example.test/bread"}`)
+		} else {
+			json.NewEncoder(w).Encode(map[string]any{"number": 1, "files": map[string]string{"security": canonicalFile}})
+		}
+	}))
+	defer server.Close()
+	if err := writeCredentials(map[string]string{server.URL: "test-token"}); err != nil {
+		t.Fatal(err)
+	}
+	path := write(t, "bread.yaml", canonicalFile)
+	if got := awmlRun("push", "--registry", server.URL, "bakery/bread", path); got.code != 0 {
+		t.Fatal(got)
+	}
+	if payload["security"] != canonicalFile || payload["platform"] != nil {
+		t.Fatalf("payload = %#v", payload)
+	}
+	dir := t.TempDir()
+	if got := awmlRun("pull", "--registry", server.URL, "bakery/bread@1", "-o", dir); got.code != 0 {
+		t.Fatal(got)
+	}
+	source, err := os.ReadFile(filepath.Join(dir, "security.yaml"))
+	if err != nil || string(source) != canonicalFile {
+		t.Fatalf("%s %v", source, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "platform.yaml")); !os.IsNotExist(err) {
+		t.Fatal("unexpected platform file")
+	}
+}
+
+func TestConvertCollectsInlineComments(t *testing.T) {
+	security := write(t, "security.yaml", strings.Replace(good, "title: Dinners", "title: Dinners # Dinner plans", 1))
+	platform := write(t, "platform.yaml", strings.Replace(good, "view: security", "view: platform", 1))
+	got := awmlRun("convert", security, platform)
+	if got.code != 0 || !strings.HasPrefix(got.stdout, "# Dinner plans\n") {
+		t.Fatalf("%+v", got)
+	}
+}
+
+func TestPushRefusesACanonicalFileWithALegacyPlatformFile(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	canonical := write(t, "bread.yaml", canonicalFile)
+	platform := write(t, "platform.yaml", strings.Replace(good, "view: security", "view: platform", 1))
+	got := awmlRun("push", "bakery/bread", canonical, platform)
+	if got.code != 1 || !strings.Contains(got.stderr, "a 0.4 workflow must be pushed on its own") {
+		t.Fatalf("%+v", got)
 	}
 }

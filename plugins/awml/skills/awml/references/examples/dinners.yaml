@@ -1,8 +1,9 @@
-# The family's dinners and money, by who may see each part. The family is fictional.
-awml: "0.2"
+# This workflow plans a family's dinners, fills its shopping basket, copies its pickups and checks
+# its bills. The file holds its design and its home implementation, which runs across a server,
+# family apps, services and a kitchen screen. The family is fictional.
+awml: "0.4"
 title: The family's dinners
-view: security
-groups:
+scopes:
   - { id: carers, label: "carers: + June, Beth" }
   - { id: family, label: "family: parents, kids", in: carers }
   - { id: household, label: "household: parents", in: family }
@@ -48,3 +49,16 @@ lines:
   - { from: daily, to: match, kind: start }
   - { from: bank, to: match, kind: data }
   - { from: match, to: parents_chat, kind: data }
+implementations:
+  home:
+    label: At home
+    blocks:
+      - { id: server, label: "Server: claude-sonnet-4-5", parts: [favourites, plan, mealplan, fill, copy, pickups, match, screen_gap] }
+      - { id: app, label: "The family messaging app", parts: [approve, chat, parents_chat] }
+      - { id: supermarket, label: "The supermarket", parts: [basket, checkout, shop] }
+      - { id: calendars, label: "The calendar", parts: [calendar] }
+      - { id: wall, label: "The kitchen screen", parts: [screen] }
+      - { id: banking, label: "The bank", parts: [bank] }
+    comments:
+      - { id: scored, label: "For example: scored against the plans the family kept", in: server, ties: [plan] }
+      - { id: tried, label: "For example: tried on a second model some weeks", in: server, ties: [plan] }

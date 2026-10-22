@@ -1,9 +1,8 @@
 # Two do steps. One outside action just happens, because it's Allow and can be undone, and the other
 # waits for a yes, because it's Ask. The parents and the window cleaner are fictional.
-awml: "0.2"
+awml: "0.4"
 title: The window cleaner's visit
-view: security
-groups:
+scopes:
   - { id: parents, label: "parents: Mia, Dev" }
 parts:
   - { id: done, kind: trigger, label: "The window cleaner says the windows are done" }

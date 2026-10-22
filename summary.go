@@ -55,6 +55,7 @@ type PublishingSummary struct {
 // as Draw does. A part id identifies the same part in both views; a line is the same when its
 // endpoints, kind and label are the same.
 func Summarise(docs ...*Map) Summary {
+	docs = workflowViews(docs)
 	var out Summary
 	seenParts := map[string]bool{}
 	seenLines := map[string]bool{}

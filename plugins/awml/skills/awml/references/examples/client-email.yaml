@@ -1,14 +1,9 @@
-# A client's email answered with a draft, by who may see each part. The email arrives in the
-# consultant's private mailbox, and a standing rule moves a client's email into the business. The
-# consultant edits the draft and sends it, which takes the reply back into the private mailbox.
-# Both thick lines are publishing: the first adds a viewer, the associate, and the second loosens
-# the terms, since the business keeps client work under the engagement's confidentiality terms,
-# which the consultant's own mailbox doesn't carry. The consultant, the associate and the client
-# are fictional.
-awml: "0.3"
+# This workflow drafts a reply to a client's email. The file holds its design and its office
+# implementation, which runs across a Mac mini, synced notes, a phone and Gmail. The consultant,
+# the associate and the client are fictional.
+awml: "0.4"
 title: A client's email, answered with a draft
-view: security
-groups:
+scopes:
   - { id: private, label: "private: the consultant", processing: any }
   - { id: business, label: "business: the consultant, an associate", processing: { anthropic: any } }
 parts:
@@ -34,6 +29,14 @@ lines:
   - { from: learn, to: project, kind: data }
   - { from: project, to: draft, kind: data }
   - { from: draft, to: drafts, kind: data }
-  - { from: drafts, to: edit, kind: publish, label: "the consultant takes the reply" }
+  - { from: drafts, to: edit, kind: publish, label: the consultant takes the reply }
   - { from: edit, to: send, kind: data }
   - { from: send, to: mailbox, kind: data }
+implementations:
+  office:
+    label: The consultant's office
+    blocks:
+      - { id: cowork, label: "Claude Cowork, Mac mini", parts: [weekdays, bring, rules, choose, learn, draft] }
+      - { id: files, label: "Synced Markdown notes", parts: [engagements, project] }
+      - { id: phone, label: "The consultant's phone", parts: [edit] }
+      - { id: gmail, label: "Gmail", parts: [mailbox, drafts, send] }

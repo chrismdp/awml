@@ -1,0 +1,20 @@
+awml: "0.4"
+title: Bread
+scopes:
+  - {id: bakery, label: Bakery, processing: any}
+parts:
+  - {id: morning, kind: trigger, label: Morning, wait: PT1H}
+  - {id: plan, kind: ai, label: Plan, in: bakery}
+  - {id: notes, kind: context, label: Notes, in: bakery, at: notes}
+  - {id: gap, kind: comment, label: Gap}
+lines:
+  - {from: morning, to: plan, kind: start}
+  - {from: plan, to: notes, kind: data}
+  - {from: gap, to: notes, kind: tie}
+implementations:
+  home:
+    label: At home
+    blocks:
+      - {id: server, label: Server, platform: scripts, parts: [plan, notes]}
+    comments:
+      - {id: keys, label: Keys, in: server, ties: [plan]}
