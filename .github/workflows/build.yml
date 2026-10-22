@@ -5,7 +5,9 @@
 # Only people with write access can add a label, so the label is the decision. Claude works in the
 # first job with a read-only token, sees only the issue and the comments of the repository's own
 # people, and hands back a patch. A second read-only job applies that patch and runs every check from
-# AGENTS.md. The write-capable job runs none of the proposed code. It judges a passing patch against
+# AGENTS.md. Both later jobs start from the commit of main the draft started from, so the patch still
+# applies when main moves during a long draft, and the pull request catches up like any other. The
+# write-capable job runs none of the proposed code. It judges a passing patch against
 # .github/build-rules.yml with the rule as it is on main, gives the token only to the steps that
 # push or use the GitHub API, and opens the pull request. A change that needs review stays open. A
 # straightforward change merges by itself, saying why and how to undo it, then starts the conflict
@@ -103,7 +105,7 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.sha }}
           persist-credentials: false
       - uses: actions/setup-go@v5
         with:
@@ -162,7 +164,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.sha }}
           persist-credentials: false
       - uses: actions/setup-go@v5
         with:
