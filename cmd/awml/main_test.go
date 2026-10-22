@@ -276,11 +276,31 @@ func TestTheOutputMayComeFirstOrBeJoinedToItsFlag(t *testing.T) {
 
 func TestHelpIsPrintedAndSucceeds(t *testing.T) {
 	r := awmlRun("-h")
-	if r.code != 0 || !strings.HasPrefix(r.stdout, "usage: awml [-h] [--registry URL] {draw,page,check,fit,summary,login,push,pull} ...\n\nDraw agentic workflows written in AWML.\n") {
+	if r.code != 0 || !strings.HasPrefix(r.stdout, "usage: awml [-h] [--version] [--registry URL] {draw,page,check,fit,summary,login,push,pull} ...\n\nDraw agentic workflows written in AWML.\n") || !strings.Contains(r.stdout, "  --version          show program's version number and exit\n") {
 		t.Errorf("-h gave %+v", r)
 	}
 	if r := awmlRun("page", "--help"); r.code != 0 || !strings.HasPrefix(r.stdout, "usage: awml page [-h] -o OUT files [files ...]\n") {
 		t.Errorf("page --help gave %+v", r)
+	}
+}
+
+func TestVersionPrintsTheReleaseVersion(t *testing.T) {
+	previous := version
+	version = "0.3.1"
+	t.Cleanup(func() { version = previous })
+
+	if r := awmlRun("--version"); r != (result{0, "awml 0.3.1\n", ""}) {
+		t.Errorf("--version gave %+v", r)
+	}
+}
+
+func TestVersionFallsBackToDev(t *testing.T) {
+	previous := version
+	version = ""
+	t.Cleanup(func() { version = previous })
+
+	if r := awmlRun("--version"); r != (result{0, "awml dev\n", ""}) {
+		t.Errorf("--version gave %+v", r)
 	}
 }
 
@@ -289,10 +309,10 @@ func TestAMistakeInTheCommandShowsHowToUseIt(t *testing.T) {
 		args []string
 		want string
 	}{
-		{nil, "usage: awml [-h] [--registry URL] {draw,page,check,fit,summary,login,push,pull} ...\nawml: error: the following arguments are required: command\n"},
-		{[]string{"drew", "a.yaml"}, "usage: awml [-h] [--registry URL] {draw,page,check,fit,summary,login,push,pull} ...\nawml: error: argument command: invalid choice: 'drew' (choose from 'draw', 'page', 'check', 'fit', 'summary', 'login', 'push', 'pull')\n"},
+		{nil, "usage: awml [-h] [--version] [--registry URL] {draw,page,check,fit,summary,login,push,pull} ...\nawml: error: the following arguments are required: command\n"},
+		{[]string{"drew", "a.yaml"}, "usage: awml [-h] [--version] [--registry URL] {draw,page,check,fit,summary,login,push,pull} ...\nawml: error: argument command: invalid choice: 'drew' (choose from 'draw', 'page', 'check', 'fit', 'summary', 'login', 'push', 'pull')\n"},
 		{[]string{"draw"}, "usage: awml draw [-h] file\nawml draw: error: the following arguments are required: file\n"},
-		{[]string{"draw", "a.yaml", "b.yaml"}, "usage: awml [-h] [--registry URL] {draw,page,check,fit,summary,login,push,pull} ...\nawml: error: unrecognized arguments: b.yaml\n"},
+		{[]string{"draw", "a.yaml", "b.yaml"}, "usage: awml [-h] [--version] [--registry URL] {draw,page,check,fit,summary,login,push,pull} ...\nawml: error: unrecognized arguments: b.yaml\n"},
 		{[]string{"check"}, "usage: awml check [-h] files [files ...]\nawml check: error: the following arguments are required: files\n"},
 		{[]string{"page", "a.yaml"}, "usage: awml page [-h] -o OUT files [files ...]\nawml page: error: the following arguments are required: -o/--out\n"},
 		{[]string{"page", "a.yaml", "-o"}, "usage: awml page [-h] -o OUT files [files ...]\nawml page: error: argument -o/--out: expected one argument\n"},

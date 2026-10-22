@@ -409,6 +409,7 @@ AWML isn't a visual workflow tool, where the diagram is the program and drawing 
 ### The commands
 
 ```sh
+awml --version                            # print the installed release
 awml check examples/question.yaml        # report mistakes; exits 1 on any
 awml fit examples/client-email.yaml examples/platforms/*.yaml
 awml draw examples/question.yaml         # print the Mermaid

@@ -77,7 +77,7 @@ Choose each line's kind by what it does:
 
 Check every file you write or change, and fix every mistake before you show a drawing.
 
-If you have a shell, see whether `awml` is there with `awml --help`. If it isn't, tell the person you're installing it, then run `go install github.com/chrismdp/awml/cmd/awml@latest`, which needs Go 1.22 or later and puts `awml` in `~/go/bin`. Without Go, download the archive for the system from https://github.com/chrismdp/awml/releases/latest, unpack it and run the `awml` inside. Then check both files:
+If you have a shell, see whether `awml` is there and which release it is with `awml --version`. If it isn't, tell the person you're installing it, then run `go install github.com/chrismdp/awml/cmd/awml@latest`, which needs Go 1.22 or later and puts `awml` in `~/go/bin`. Without Go, download the archive for the system from https://github.com/chrismdp/awml/releases/latest, unpack it and run the `awml` inside. Then check both files:
 
 ```sh
 awml check standup-security.yaml standup-platform.yaml

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"syscall"
@@ -14,11 +15,13 @@ import (
 	"github.com/chrismdp/awml"
 )
 
+var version string
+
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
 
-const usage = "usage: awml [-h] [--registry URL] {draw,page,check,fit,summary,login,push,pull} ...\n"
+const usage = "usage: awml [-h] [--version] [--registry URL] {draw,page,check,fit,summary,login,push,pull} ...\n"
 
 const help = usage + `
 Draw agentic workflows written in AWML.
@@ -36,6 +39,7 @@ positional arguments:
 
 options:
   -h, --help         show this help message and exit
+  --version          show program's version number and exit
   --registry URL     registry URL (default: AWML_REGISTRY_URL or https://awml.io)
 `
 
@@ -125,6 +129,9 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		switch {
 		case flags && a == "--":
 			flags = false
+		case flags && a == "--version":
+			fmt.Fprintf(stdout, "awml %s\n", currentVersion())
+			return 0
 		case flags && (a == "-h" || a == "--help"):
 			if command == "" {
 				fmt.Fprint(stdout, help)
@@ -298,6 +305,19 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+func currentVersion() string {
+	if version != "" {
+		return version
+	}
+	if info, ok := debug.ReadBuildInfo(); ok {
+		buildVersion := strings.TrimPrefix(info.Main.Version, "v")
+		if buildVersion != "" && buildVersion != "(devel)" {
+			return buildVersion
+		}
+	}
+	return "dev"
 }
 
 func strField(doc *awml.Map, field string) string {
