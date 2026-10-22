@@ -185,7 +185,7 @@ jobs:
 
   check:
     needs: [find, draft]
-    if: ${{ always() && needs.find.result == 'success' && needs.find.outputs.pulls != '[]' }}
+    if: ${{ !cancelled() && needs.find.result == 'success' && needs.find.outputs.pulls != '[]' }}
     strategy:
       fail-fast: false
       matrix:
@@ -312,7 +312,7 @@ jobs:
 
   push:
     needs: [find, check]
-    if: ${{ always() && needs.find.result == 'success' && needs.find.outputs.pulls != '[]' }}
+    if: ${{ !cancelled() && needs.find.result == 'success' && needs.find.outputs.pulls != '[]' }}
     strategy:
       fail-fast: false
       matrix:
