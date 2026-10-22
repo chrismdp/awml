@@ -6,17 +6,23 @@ import "fmt"
 // a sound security view followed by a sound platform view with the same title. Other documents do
 // not form a pair, so it reports nothing for them.
 func CompareViews(security, platform any) []string {
+	differences, _ := compareViews(security, platform)
+	return differences.messages()
+}
+
+// compareViews gives the differences between two views, and whether they formed a pair to compare.
+func compareViews(security, platform any) (mistakeList, bool) {
 	securityFile, securityOK := security.(*Map)
 	platformFile, platformOK := platform.(*Map)
 	if !securityOK || !platformOK || len(Check(securityFile)) != 0 || len(Check(platformFile)) != 0 ||
 		str(securityFile, "view") != "security" || str(platformFile, "view") != "platform" ||
 		str(securityFile, "title") != str(platformFile, "title") {
-		return nil
+		return nil, false
 	}
 
 	securityParts := partsByID(securityFile)
 	platformParts := partsByID(platformFile)
-	var mistakes []string
+	var mistakes mistakeList
 	for _, part := range items(platformFile, "parts") {
 		id := str(part, "id")
 		other := securityParts[id]
@@ -24,11 +30,11 @@ func CompareViews(security, platform any) []string {
 			if str(part, "kind") == "comment" {
 				continue
 			}
-			mistakes = append(mistakes, fmt.Sprintf(`part "%s" is in the platform view but not the security view`, id))
+			mistakes.add("views.same-parts", fmt.Sprintf(`part "%s" is in the platform view but not the security view`, id))
 			continue
 		}
 		if platformKind, securityKind := str(part, "kind"), str(other, "kind"); platformKind != securityKind {
-			mistakes = append(mistakes, fmt.Sprintf(`part "%s" has kind "%s" in the platform view but "%s" in the security view`,
+			mistakes.add("views.same-parts", fmt.Sprintf(`part "%s" has kind "%s" in the platform view but "%s" in the security view`,
 				id, platformKind, securityKind))
 		}
 	}
@@ -45,7 +51,7 @@ func CompareViews(security, platform any) []string {
 			omitted[id] = true
 			continue
 		}
-		mistakes = append(mistakes, fmt.Sprintf(`part "%s" is in the security view but not the platform view`, id))
+		mistakes.add("views.same-parts", fmt.Sprintf(`part "%s" is in the security view but not the platform view`, id))
 	}
 
 	securityLines := comparableLines(securityFile, omitted)
@@ -54,7 +60,7 @@ func CompareViews(security, platform any) []string {
 	for _, line := range items(securityFile, "lines") {
 		key, compare := comparableLine(line, omitted)
 		if compare && !platformLines[key] && !reported[key] {
-			mistakes = append(mistakes, lineDifference(key, "security", "platform"))
+			mistakes.add("views.same-lines", lineDifference(key, "security", "platform"))
 			reported[key] = true
 		}
 	}
@@ -62,11 +68,11 @@ func CompareViews(security, platform any) []string {
 	for _, line := range items(platformFile, "lines") {
 		key, compare := comparableLine(line, omitted)
 		if compare && !securityLines[key] && !reported[key] {
-			mistakes = append(mistakes, lineDifference(key, "platform", "security"))
+			mistakes.add("views.same-lines", lineDifference(key, "platform", "security"))
 			reported[key] = true
 		}
 	}
-	return mistakes
+	return mistakes, true
 }
 
 func partsByID(file *Map) map[string]*Map {

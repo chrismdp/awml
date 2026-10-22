@@ -7,6 +7,10 @@ import (
 
 // Warnings finds choices that are valid AWML but are usually better split into smaller steps.
 func Warnings(doc any) []string {
+	return warningList(doc).messages()
+}
+
+func warningList(doc any) mistakeList {
 	file, ok := doc.(*Map)
 	if !ok || file == nil || file.has("platform") {
 		return nil
@@ -36,14 +40,14 @@ func Warnings(doc any) []string {
 	for _, part := range parts {
 		byID[keyOf(part.get("id"))] = part
 	}
-	var warnings []string
+	var warnings mistakeList
 	for _, step := range parts {
 		if step.get("op") != "do" || !steps[str(step, "kind")] {
 			continue
 		}
 		id := show(step.get("id"))
 		if step.get("kind") == "ai" {
-			warnings = append(warnings, fmt.Sprintf(`step "%s" is a do step decided by AI: a do step should be code acting on what an earlier step decided`, id))
+			warnings.add("warn.do-by-code", fmt.Sprintf(`step "%s" is a do step decided by AI: a do step should be code acting on what an earlier step decided`, id))
 		}
 
 		reached := map[*Map]bool{}
@@ -89,7 +93,7 @@ func Warnings(doc any) []string {
 			changes++
 		}
 		if changes >= 2 {
-			warnings = append(warnings, fmt.Sprintf(`do step "%s" leads to %d changes (%s): each do step should make one`, id, changes, strings.Join(names, ", ")))
+			warnings.add("warn.one-change", fmt.Sprintf(`do step "%s" leads to %d changes (%s): each do step should make one`, id, changes, strings.Join(names, ", ")))
 		}
 	}
 	return warnings

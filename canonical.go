@@ -95,8 +95,8 @@ func View(doc *Map, implementation string) (*Map, error) {
 	return out, nil
 }
 
-func checkCanonical(file *Map) []string {
-	var errors []string
+func checkCanonical(file *Map) (mistakeList, bool) {
+	var errors mistakeList
 	fieldsExact("the file", file, []string{"awml", "title", "parts"}, []string{"scopes", "lines", "implementations"}, &errors)
 	security, _ := View(file, "")
 	// The outer schema was checked above. Keep the existing messages for all design rules.
@@ -106,28 +106,18 @@ func checkCanonical(file *Map) []string {
 			clean.set(key, security.get(key))
 		}
 	}
-	designErrors := Check(clean)
+	designErrors, stopped := checkDoc(clean)
 	errors = appendUnique(errors, designErrors...)
 	if !file.has("implementations") {
-		return errors
+		return errors, stopped
 	}
 	implementations, ok := file.get("implementations").(*Map)
 	if !ok {
-		return append(errors, "implementations must be a mapping of implementation ids")
+		return append(errors, mistake{"fields.known", "implementations must be a mapping of implementation ids"}), stopped
 	}
 	// Avoid projecting malformed design lists. Check has already explained those mistakes.
-	for _, key := range []string{"scopes", "parts", "lines"} {
-		if value := file.get(key); !empty(value) {
-			list, ok := value.([]any)
-			if !ok {
-				return errors
-			}
-			for _, item := range list {
-				if _, ok := item.(*Map); !ok {
-					return errors
-				}
-			}
-		}
+	if stopped {
+		return errors, true
 	}
 	knownParts := partsByID(file)
 	seen := map[any]bool{}
@@ -138,11 +128,11 @@ func checkCanonical(file *Map) []string {
 	}
 	for _, name := range implementations.Keys() {
 		if implementations.nonTextKeys[name] || !id.MatchString(name) {
-			errors = append(errors, fmt.Sprintf(`implementation id "%s" must be letters, digits and underscores, starting with a letter`, name))
+			errors.add("ids.written", fmt.Sprintf(`implementation id "%s" must be letters, digits and underscores, starting with a letter`, name))
 		}
 		impl, ok := implementations.get(name).(*Map)
 		if !ok {
-			errors = append(errors, fmt.Sprintf(`implementation "%s" must be a mapping of fields`, name))
+			errors.add("fields.known", fmt.Sprintf(`implementation "%s" must be a mapping of fields`, name))
 			continue
 		}
 		fieldsExact(fmt.Sprintf(`implementation "%s"`, name), impl, []string{"label", "blocks"}, []string{"comments"}, &errors)
@@ -160,52 +150,52 @@ func checkCanonical(file *Map) []string {
 			ids, ok := block.get("parts").([]any)
 			if !ok {
 				if block.has("parts") {
-					errors = append(errors, blockName+": parts must be a list")
+					errors.add("fields.known", blockName+": parts must be a list")
 				}
 				continue
 			}
 			for _, value := range ids {
 				partID, text := value.(string)
 				if !text {
-					errors = append(errors, fmt.Sprintf("%s: part id %s must be text: put it in quotes", blockName, show(value)))
+					errors.add("values.text", fmt.Sprintf("%s: part id %s must be text: put it in quotes", blockName, show(value)))
 					continue
 				}
 				if knownParts[partID] == nil {
-					errors = append(errors, fmt.Sprintf(`%s names unknown part "%s"`, blockName, partID))
+					errors.add("references.known", fmt.Sprintf(`%s names unknown part "%s"`, blockName, partID))
 					continue
 				}
 				if placedParts[partID] {
-					errors = append(errors, fmt.Sprintf(`part "%s" is placed twice in implementation "%s"`, partID, name))
+					errors.add("placement.once", fmt.Sprintf(`part "%s" is placed twice in implementation "%s"`, partID, name))
 				}
 				placedParts[partID] = true
 			}
 		}
 		for _, part := range items(file, "parts") {
 			if !placedParts[str(part, "id")] && !isOneOf(part.get("kind"), "trigger", "comment") {
-				errors = append(errors, fmt.Sprintf(`part "%s" is not placed in implementation "%s"`, str(part, "id"), name))
+				errors.add("placement.complete", fmt.Sprintf(`part "%s" is not placed in implementation "%s"`, str(part, "id"), name))
 			}
 		}
 		for _, comment := range comments {
 			commentName := fmt.Sprintf(`comment "%s"`, show(comment.get("id")))
 			fieldsExact(commentName, comment, []string{"id", "label", "in", "ties"}, nil, &errors)
 			if comment.has("in") && (comment.get("in") == nil || comment.get("in") == "") {
-				errors = append(errors, fmt.Sprintf(`part "%s" is in unknown group "%s"`, show(comment.get("id")), show(comment.get("in"))))
+				errors.add("references.known", fmt.Sprintf(`part "%s" is in unknown group "%s"`, show(comment.get("id")), show(comment.get("in"))))
 			}
 
 			ties, ok := comment.get("ties").([]any)
 			if !ok {
 				if comment.has("ties") {
-					errors = append(errors, commentName+": ties must be a list")
+					errors.add("fields.known", commentName+": ties must be a list")
 				}
 				continue
 			}
 			for _, target := range ties {
 				if _, ok := target.(string); !ok {
-					errors = append(errors, fmt.Sprintf("%s: tie id %s must be text: put it in quotes", commentName, show(target)))
+					errors.add("values.text", fmt.Sprintf("%s: tie id %s must be text: put it in quotes", commentName, show(target)))
 				}
 				// Implementation comments can only refer to design parts.
 				if knownParts[show(target)] == nil {
-					errors = appendUnique(errors, fmt.Sprintf(`the line from "%s" to "%s" ends at unknown part "%s"`, show(comment.get("id")), show(target), show(target)))
+					errors = appendUnique(errors, mistake{"references.known", fmt.Sprintf(`the line from "%s" to "%s" ends at unknown part "%s"`, show(comment.get("id")), show(target), show(target))})
 				}
 			}
 		}
@@ -215,40 +205,42 @@ func checkCanonical(file *Map) []string {
 				continue
 			}
 			if seen[keyOf(value)] {
-				errors = appendUnique(errors, fmt.Sprintf(`id "%s" is used twice`, show(value)))
+				errors = appendUnique(errors, mistake{"ids.unique", fmt.Sprintf(`id "%s" is used twice`, show(value))})
 			}
 			seen[keyOf(value)] = true
 		}
 		platform, _ := View(file, name)
-		errors = appendUnique(errors, Check(platform)...)
+		platformErrors, _ := checkDoc(platform)
+		errors = appendUnique(errors, platformErrors...)
 	}
-	return errors
+	return errors, false
 }
 
-func canonicalList(file *Map, key, singular string) ([]*Map, []string) {
+func canonicalList(file *Map, key, singular string) ([]*Map, mistakeList) {
 	if !file.has(key) {
 		return nil, nil
 	}
 	values, ok := file.get(key).([]any)
 	if !ok {
-		return nil, []string{key + " must be a list"}
+		return nil, mistakeList{{"fields.known", key + " must be a list"}}
 	}
 	var result []*Map
 	for _, value := range values {
 		item, ok := value.(*Map)
 		if !ok {
-			return nil, []string{"each " + singular + " must be a mapping of fields"}
+			return nil, mistakeList{{"fields.known", "each " + singular + " must be a mapping of fields"}}
 		}
 		result = append(result, item)
 	}
 	return result, nil
 }
 
-func appendUnique(existing []string, added ...string) []string {
+// appendUnique adds each mistake whose message isn't already there.
+func appendUnique(existing mistakeList, added ...mistake) mistakeList {
 	for _, message := range added {
 		found := false
 		for _, old := range existing {
-			if old == message {
+			if old.message == message.message {
 				found = true
 				break
 			}

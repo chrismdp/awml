@@ -170,6 +170,32 @@ func TestCheckReportsAFileThatIsntYAML(t *testing.T) {
 	}
 }
 
+func TestCheckJSONListsEveryCheckAndFailsLikeThePlainOutput(t *testing.T) {
+	previous := version
+	version = "0.4.1"
+	t.Cleanup(func() { version = previous })
+	g, b := write(t, "good.yaml", good), write(t, "bad.yaml", bad)
+	missing := filepath.Join(t.TempDir(), "none.yaml")
+	r := awmlRun("check", "--json", g, b, missing)
+	want, _ := json.Marshal(awml.CheckSources("0.4.1", []awml.Source{
+		{File: g, Text: []byte(good)},
+		{File: b, Text: []byte(bad)},
+		{File: missing, Unreadable: "can't be read: No such file or directory"},
+	}))
+	if r != (result{1, string(want) + "\n", ""}) {
+		t.Errorf("check --json gave %+v\nwant %s", r, want)
+	}
+	if r := awmlRun("check", g, "--json"); r.code != 0 || !strings.HasPrefix(r.stdout, `{"engine":"0.4.1","files":[{"file":"`+g+`","view":"security"}],"checks":[`) {
+		t.Errorf("check --json gave %+v", r)
+	}
+}
+
+func TestCheckHelpMentionsJSON(t *testing.T) {
+	if r := awmlRun("check", "-h"); r.code != 0 || !strings.HasPrefix(r.stdout, "usage: awml check [-h] [--json] files [files ...]\n") || !strings.Contains(r.stdout, "  --json      print every check and its result as JSON\n") {
+		t.Errorf("check -h gave %+v", r)
+	}
+}
+
 func TestCheckReportsAMissingFile(t *testing.T) {
 	f := filepath.Join(t.TempDir(), "none.yaml")
 	r := awmlRun("check", f)
@@ -439,7 +465,7 @@ func TestAMistakeInTheCommandShowsHowToUseIt(t *testing.T) {
 		{[]string{"drew", "a.yaml"}, "usage: awml [-h] [--version] [--registry URL] {draw,page,check,fit,summary,convert,login,push,pull} ...\nawml: error: argument command: invalid choice: 'drew' (choose from 'draw', 'page', 'check', 'fit', 'summary', 'convert', 'login', 'push', 'pull')\n"},
 		{[]string{"draw"}, "usage: awml draw [-h] [--implementation ID] file\nawml draw: error: the following arguments are required: file\n"},
 		{[]string{"draw", "a.yaml", "b.yaml"}, "usage: awml [-h] [--version] [--registry URL] {draw,page,check,fit,summary,convert,login,push,pull} ...\nawml: error: unrecognized arguments: b.yaml\n"},
-		{[]string{"check"}, "usage: awml check [-h] files [files ...]\nawml check: error: the following arguments are required: files\n"},
+		{[]string{"check"}, "usage: awml check [-h] [--json] files [files ...]\nawml check: error: the following arguments are required: files\n"},
 		{[]string{"page", "a.yaml"}, "usage: awml page [-h] -o OUT files [files ...]\nawml page: error: the following arguments are required: -o/--out\n"},
 		{[]string{"page", "a.yaml", "-o"}, "usage: awml page [-h] -o OUT files [files ...]\nawml page: error: argument -o/--out: expected one argument\n"},
 		{[]string{"page", "-o", "out.html"}, "usage: awml page [-h] -o OUT files [files ...]\nawml page: error: the following arguments are required: files\n"},

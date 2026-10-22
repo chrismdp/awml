@@ -35,6 +35,16 @@ async function start(source) {
     warnings(sourceText) {
       return JSON.parse(globalThis.__awmlWarnings(sourceText));
     },
+    // checksJSON takes files as { file, source } and lists every check, as awml check --json does.
+    checksJSON(files) {
+      const output = globalThis.__awmlChecks(JSON.stringify(Array.isArray(files) ? files : [files]));
+      const decoded = JSON.parse(output);
+      if (decoded.error) throw new Error(decoded.error);
+      return output;
+    },
+    checks(files) {
+      return JSON.parse(this.checksJSON(files));
+    },
     summaryJSON(sourceTexts) {
       const sources = Array.isArray(sourceTexts) ? sourceTexts : [sourceTexts];
       for (const sourceText of sources) {
