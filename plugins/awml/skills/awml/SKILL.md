@@ -62,7 +62,7 @@ Choose each line's kind by what it does:
 
 - `start` runs from a trigger to the step it starts.
 - `data` moves content within a scope, or into a narrower one.
-- `publish` moves content into a wider scope: a box it isn't already inside, or one with looser terms. Label it with the standing rule that allows it, as `"standing rule: dinners to carers"`, or say what yes releases it, as `"the consultant takes the reply"`.
+- `publish` moves content into a wider scope: a box it isn't already inside, or one with looser terms. Label it with the standing rule that allows it and whose words it moves, who must have agreed to that target, as `"co-op notes, under the bakery's rule, for customers who ticked the box"`, or say what yes releases it, as `"the consultant takes the reply"`.
 - `refused` is a read from a narrower scope that the design refuses, with a label such as `never read here`.
 - The one line out of each review is labelled `"[yes]"`.
 - `tie` links a comment to what it explains, and `hidden` only steers the layout.

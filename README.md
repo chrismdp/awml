@@ -265,7 +265,7 @@ Content moves between scopes in only two ways.
 - A move **narrows** when every member of the target scope is in the source, and the target's terms are at least as strict. Narrowing is routing: it shows content to fewer people, or to the same people more carefully, so it's drawn as an ordinary line.
 - Any other move adds a viewer or loosens the terms. That's **publishing**, drawn as a thick line so you notice it first.
 
-Publishing waits for a person's yes, unless a **standing rule** names that target for that kind of item, and then the thick line's label names the rule, as in `standing rule: dinners to carers`. Only the item crosses, never what lies behind it. Nothing reaches the public without a person's yes to that item, under any rule or approval.
+Publishing waits for a person's yes, unless a **standing rule** names that target for that kind of item. A standing rule moves only the words of people who agreed to that target, and the thick line's label names the rule and who they are, as in `co-op notes, under the bakery's rule, for customers who ticked the box`. Only the item crosses, never what lies behind it. Nothing reaches the public without a person's yes to that item, under any rule or approval.
 
 ## Connectors
 
