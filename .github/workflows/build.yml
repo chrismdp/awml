@@ -1,11 +1,15 @@
 # Builds the change an issue asks for when the maintainer adds the build label, and opens a pull
-# request for it. This is the workflow drawn at https://awml.io/chrismdp/issue-to-pull-request.
+# request for it. A change the build rule finds straightforward merges by itself. This is the
+# workflow drawn at https://awml.io/chrismdp/issue-to-pull-request.
 #
 # Only people with write access can add a label, so the label is the decision. Claude works in the
 # first job with a read-only token, sees only the issue and the comments of the repository's own
-# people, and hands back a patch. The second job, which Claude never runs in, applies the patch,
-# runs every check from AGENTS.md, and only then pushes a branch and opens the pull request. The
-# maintainer reviews and merges it.
+# people, and hands back a patch. A second read-only job applies that patch and runs every check from
+# AGENTS.md. The write-capable job runs none of the proposed code. It judges a passing patch against
+# .github/build-rules.yml with the rule as it is on main, gives the token only to the steps that
+# push or use the GitHub API, and opens the pull request. A change that needs review stays open. A
+# straightforward change merges by itself, saying why and how to undo it, then starts the conflict
+# rebase workflow, because a merge by the Actions token starts no other workflow.
 #
 # It needs a CLAUDE_CODE_OAUTH_TOKEN secret, made with `claude setup-token`, so the runs come out
 # of the maintainer's subscription rather than a metered API key.
@@ -82,54 +86,206 @@ jobs:
           path: |
             ${{ runner.temp }}/build/change.patch
             ${{ runner.temp }}/build/message.md
+            ${{ runner.temp }}/build/review.md
 
-  open:
+  check:
     needs: draft
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
     steps:
+      - name: Prepare the result
+        run: |
+          mkdir -p "$RUNNER_TEMP/result"
+          echo "The workflow failed before it could check the proposed change." \
+            > "$RUNNER_TEMP/result/result.txt"
+
       - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
       - uses: actions/setup-go@v5
         with:
           go-version: stable
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+
       - uses: actions/download-artifact@v4
         with:
           name: change
           path: ${{ runner.temp }}/change
 
       - name: Apply the change
-        run: git apply --index "$RUNNER_TEMP/change/change.patch"
+        run: |
+          if [ ! -s "$RUNNER_TEMP/change/change.patch" ]; then
+            echo "The draft job did not produce a patch." > "$RUNNER_TEMP/result/result.txt"
+            exit 1
+          fi
+          if ! git apply --index "$RUNNER_TEMP/change/change.patch"; then
+            echo "The proposed change could not be applied to main." \
+              > "$RUNNER_TEMP/result/result.txt"
+            exit 1
+          fi
 
       - name: Run the checks
         run: |
+          echo "The Go tests did not pass." > "$RUNNER_TEMP/result/result.txt"
           go test ./...
+          echo "Go vet did not pass." > "$RUNNER_TEMP/result/result.txt"
           go vet ./...
+          echo "The example checks did not pass." > "$RUNNER_TEMP/result/result.txt"
           go run ./cmd/awml check examples/*.yaml examples/tour/*.yaml examples/platforms/*.yaml
+          echo "The WebAssembly tests did not pass." > "$RUNNER_TEMP/result/result.txt"
           make test-wasm
+          echo pass > "$RUNNER_TEMP/result/result.txt"
 
-      - name: Push a branch and open the pull request
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: result
+          path: ${{ runner.temp }}/result
+
+  open:
+    needs: [draft, check]
+    if: ${{ always() && needs.draft.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: build-auto-merge
+      cancel-in-progress: false
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      # The rule and its settings come from main, before the change is applied, so the change
+      # can't alter how it's judged. This job builds and runs nothing else.
+      - name: Build the rule from main
+        run: |
+          go build -o "$RUNNER_TEMP/build-rule" ./internal/buildrule
+          cp .github/build-rules.yml "$RUNNER_TEMP/build-rules.yml"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: change
+          path: ${{ runner.temp }}/change
+      - uses: actions/download-artifact@v4
+        with:
+          name: result
+          path: ${{ runner.temp }}/result
+
+      - name: Read the check result
+        run: |
+          if [ ! -s "$RUNNER_TEMP/result/result.txt" ]; then
+            echo "The check job did not produce a result."
+            exit 1
+          fi
+          if [ "$(cat "$RUNNER_TEMP/result/result.txt")" != pass ]; then
+            cat "$RUNNER_TEMP/result/result.txt"
+            exit 1
+          fi
+
+      - name: Apply and commit the change
+        id: commit
         env:
-          GH_TOKEN: ${{ github.token }}
           ISSUE: ${{ github.event.issue.number }}
         run: |
+          git apply --index "$RUNNER_TEMP/change/change.patch"
+          "$RUNNER_TEMP/build-rule" -repo . -rules "$RUNNER_TEMP/build-rules.yml" \
+            -review "$RUNNER_TEMP/change/review.md" > "$RUNNER_TEMP/verdict.txt"
           message="$RUNNER_TEMP/change/message.md"
           [ -s "$message" ] || echo "Build #$ISSUE" > "$message"
-          title="$(head -n 1 "$message")"
           printf '\n\nCloses #%s\n' "$ISSUE" >> "$message"
+          cp "$message" "$RUNNER_TEMP/pull-request.md"
           branch="build/issue-$ISSUE"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$branch"
-          git commit -q -F "$message"
-          git push -f origin "$branch"
-          if gh pr view "$branch" >/dev/null 2>&1; then
-            gh pr edit "$branch" --title "$title" --body-file "$message"
+          git -c core.hooksPath=/dev/null commit -q -F "$message"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+      - name: Push the branch
+        env:
+          BRANCH: ${{ steps.commit.outputs.branch }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git -c core.hooksPath=/dev/null \
+            -c http.https://github.com/.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" \
+            push --force origin "HEAD:refs/heads/$BRANCH"
+
+      - name: Open or update the pull request
+        id: pull
+        env:
+          BRANCH: ${{ steps.commit.outputs.branch }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="$(head -n 1 "$RUNNER_TEMP/pull-request.md")"
+          if gh pr view "$BRANCH" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh pr edit "$BRANCH" --repo "$GITHUB_REPOSITORY" \
+              --title "$title" --body-file "$RUNNER_TEMP/pull-request.md"
           else
-            gh pr create --head "$branch" --title "$title" --body-file "$message"
+            gh pr create --repo "$GITHUB_REPOSITORY" --head "$BRANCH" \
+              --title "$title" --body-file "$RUNNER_TEMP/pull-request.md"
+          fi
+          number="$(gh pr view "$BRANCH" --repo "$GITHUB_REPOSITORY" --json number --jq .number)"
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+
+      - name: Review or merge the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.pull.outputs.number }}
+        run: |
+          verdict="$(head -n 1 "$RUNNER_TEMP/verdict.txt")"
+          tail -n +2 "$RUNNER_TEMP/verdict.txt" > "$RUNNER_TEMP/reasons.txt"
+          case "$verdict" in
+            review|straightforward)
+              ;;
+            *)
+              echo "The build rule gave an unknown verdict: $verdict"
+              exit 1
+              ;;
+          esac
+
+          if [ "$verdict" = review ]; then
+            {
+              cat "$RUNNER_TEMP/pull-request.md"
+              echo
+              echo "Needs your review because:"
+              echo
+              while IFS= read -r line; do
+                [ -n "$line" ] && printf -- '- %s\n' "$line"
+              done < "$RUNNER_TEMP/reasons.txt"
+            } > "$RUNNER_TEMP/review-pull-request.md"
+            gh pr edit "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+              --body-file "$RUNNER_TEMP/review-pull-request.md"
+            exit 0
+          fi
+
+          {
+            echo "Merged by itself, because the build rule found it straightforward."
+            echo
+            echo "The build rule called it straightforward because:"
+            echo
+            while IFS= read -r line; do
+              [ -n "$line" ] && printf -- '- %s\n' "$line"
+            done < "$RUNNER_TEMP/reasons.txt"
+            echo
+            echo "To undo it, use the Revert button on this pull request."
+          } > "$RUNNER_TEMP/merge.md"
+          gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --squash \
+            --body-file "$RUNNER_TEMP/merge.md"
+
+          if gh api "repos/$GITHUB_REPOSITORY/contents/.github/workflows/resolve.yml?ref=main" \
+            >/dev/null 2>&1; then
+            gh workflow run resolve.yml --repo "$GITHUB_REPOSITORY" --ref main
           fi
