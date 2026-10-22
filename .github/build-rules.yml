@@ -1,0 +1,3 @@
+# A build needs the maintainer's review if any of these hold. Otherwise it merges by itself.
+review_paths: [SPEC.md, AGENTS.md, .github/, go.mod, go.sum, .claude-plugin/, .agents/, plugins/awml/.claude-plugin/, plugins/awml/.codex-plugin/]
+max_changed_lines: 400
