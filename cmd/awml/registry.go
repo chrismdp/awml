@@ -16,8 +16,9 @@ import (
 
 const defaultRegistry = "https://awml.io"
 
+// The registry to use: --registry, else AWML_REGISTRY_URL, else awml.io.
 func registryURL(flag *string) string {
-	registry := os.Getenv("AWML_REGISTRY")
+	registry := os.Getenv("AWML_REGISTRY_URL")
 	if registry == "" {
 		registry = defaultRegistry
 	}

@@ -44,12 +44,52 @@ This needs Go 1.22 or later, and puts `awml` in Go's own folder for commands, us
 
 ## Use it with Claude or ChatGPT
 
-This repository is also a plugin with one skill, `awml`. The skill helps an AI assistant work out a workflow with you, write both views of it, check them and draw them.
+This repository is also a plugin with two skills. `awml` helps an AI assistant work out a workflow with you, write both views of it, check them and draw them, all on your machine. `awml-publish` is optional: see [Publishing to a registry](#publishing-to-a-registry).
 
 - **Claude Code:** run `/plugin marketplace add chrismdp/awml`, then `/plugin install awml@awml`. Then ask Claude to draw a workflow, or type `/awml:awml`.
 - **claude.ai and the Claude desktop app:** download `awml-skill.zip` from the [Releases page](https://github.com/chrismdp/awml/releases). Go to **Customize > Skills**, click **+**, then **Create skill**, then **Upload a skill**, and choose the zip. Skills need a Pro, Max, Team or Enterprise plan, with **Code execution and file creation** turned on in **Settings > Capabilities**. You can instead add the plugin in **Customize > Plugins**, under **Add > Add marketplace**, with `chrismdp/awml`.
 - **Codex:** run `codex plugin marketplace add chrismdp/awml`, then `codex plugin add awml@awml`, or install it from `/plugins` in the Codex CLI. Start a new session to use it.
 - **ChatGPT:** a workspace owner or admin can add the plugin for their workspace. In the Admin console, open **Plugins**, choose **Add**, then **Import marketplace**, and enter `https://github.com/chrismdp/awml`. OpenAI's help pages describe no way to add it to a single account.
+
+### Publishing to a registry
+
+A registry stores and draws AWML workflows, numbering each version. [awml.io](https://awml.io) is the public one, and a company can run its own. Installing the plugin connects to no registry. The `awml-publish` skill comes into play only when you ask your AI to publish or share a workflow. It comes with the plugin; `awml-skill.zip` on the Releases page holds only the `awml` skill.
+
+When you ask, the skill uses the registry's tools if your AI already has them. If not, it gives you one line to connect `https://awml.io/mcp` for your client, such as `claude mcp add --transport http awml https://awml.io/mcp` for Claude Code, or it publishes with `awml login` and `awml push`. Every call to a registry's MCP server needs you signed in, reading included. Public workflows stay readable without an account on the website and with `awml pull`.
+
+To use a registry of your own, set `AWML_REGISTRY_URL` to its address, such as `https://registry.example.com`. The skill and the `awml` command then use it in place of `https://awml.io`, and its MCP server is at `https://registry.example.com/mcp`. `--registry` names a registry for one command.
+
+### For admins
+
+To point everyone in a company at your own registry without changing the plugin, connect the registry for them and set `AWML_REGISTRY_URL`. When the registry's tools are already connected, the skill uses them and never asks which registry. Each person still signs in to the registry once, as themselves.
+
+**Claude Code.** In managed settings, `managedMcpServers` gives every user a remote MCP server alongside their own, and `env` sets environment variables for every session and the commands it runs. Put them in `managed-settings.json`, in `/Library/Application Support/ClaudeCode/` on macOS, `/etc/claude-code/` on Linux and WSL, or `C:\Program Files\ClaudeCode\` on Windows, or deliver them as server-managed settings from the claude.ai admin console:
+
+```json
+{
+  "managedMcpServers": {
+    "awml": { "type": "http", "url": "https://registry.example.com/mcp" }
+  },
+  "env": { "AWML_REGISTRY_URL": "https://registry.example.com" }
+}
+```
+
+`managedMcpServers` needs Claude Code v2.1.259 or later and an `https://` address. People sign in with `/mcp` the first time. To allow only the servers you list, deploy `managed-mcp.json` in the same folder instead, written like a project's `.mcp.json`. See [Control MCP server access for your organization](https://code.claude.com/docs/en/managed-mcp), [Deploy managed settings](https://code.claude.com/docs/en/managed-settings) and [Settings](https://code.claude.com/docs/en/settings).
+
+**Claude.ai and Claude Desktop, on a Team or Enterprise plan.** An owner adds the registry in **Organization settings > Connectors**: **Add**, then **Custom**, then **Web**, with the URL `https://registry.example.com/mcp`. Each member then connects it in **Customize > Connectors** and signs in. See [Get started with custom connectors using remote MCP](https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp).
+
+**Codex.** Managed defaults go in `/etc/codex/managed_config.toml` on Linux and macOS, or in the `config_toml_base64` key of the `com.openai.codex` domain through MDM on macOS, and apply when Codex starts. These lines connect the registry, with each person's token in `AWML_TOKEN`, and set `AWML_REGISTRY_URL` for the commands Codex runs:
+
+```toml
+[mcp_servers.awml]
+url = "https://registry.example.com/mcp"
+bearer_token_env_var = "AWML_TOKEN"
+
+[shell_environment_policy.set]
+AWML_REGISTRY_URL = "https://registry.example.com"
+```
+
+See [Managed configuration](https://learn.chatgpt.com/docs/enterprise/managed-configuration) and the [configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference.md).
 
 ## Why AWML
 
@@ -386,7 +426,7 @@ awml pull family/dinners@1 -o dinners
 - `awml draw` prints a file's Mermaid. It refuses a file with mistakes, and prints them instead.
 - `awml page` writes one standalone HTML page that draws each file with Mermaid in the browser, in the order given. Each file gets its own heading, saying which view it is. The page takes the files' title when they all share one, as the two views of the family's dinners do, and is called Workflows when they don't.
 - `awml summary` counts the scopes, platforms, triggers, steps and operations, reviews, contexts, connectors, surfaces, outside actions, publishing lines, refused reads and red lines in one workflow. Give it one view or both; `--json` prints the registry's JSON form.
-- `awml login` saves an API token for the registry. `awml push` checks one or two view files before uploading them, and `awml pull` downloads the latest or a numbered version. They use `https://awml.io` unless `--registry` or `AWML_REGISTRY` says otherwise. Add `--private` to the first push of a private organisation workflow.
+- `awml login` saves an API token for the registry. `awml push` checks one or two view files before uploading them, and `awml pull` downloads the latest or a numbered version. They use `https://awml.io` unless `--registry` or `AWML_REGISTRY_URL` says otherwise. Add `--private` to the first push of a private organisation workflow.
 
 The Mermaid works anywhere that draws Mermaid 11.4.1. To make an SVG, use the Mermaid CLI, which needs Node:
 

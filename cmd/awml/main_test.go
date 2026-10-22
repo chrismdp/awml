@@ -365,21 +365,43 @@ func TestRegistryFlagIsHonoured(t *testing.T) {
 	}
 }
 
-func TestAWMLRegistryEnvironmentIsHonoured(t *testing.T) {
+// An admin points everyone at their own registry with AWML_REGISTRY_URL, so login, push and pull
+// all use it without --registry.
+func TestAWMLRegistryURLEnvironmentIsHonoured(t *testing.T) {
 	useTemporaryHome(t)
-	calls := 0
+	var calls []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls++
+		calls = append(calls, r.Method+" "+r.URL.Path+" "+r.Header.Get("Authorization"))
+		if r.Method == http.MethodPost {
+			w.WriteHeader(http.StatusCreated)
+			fmt.Fprint(w, `{"owner":"acme","slug":"mail","number":1,"url":"/acme/mail/v/1"}`)
+			return
+		}
 		fmt.Fprintf(w, `{"number":1,"security":%q}`, good)
 	}))
 	defer server.Close()
-	t.Setenv("AWML_REGISTRY", server.URL)
-	out := filepath.Join(t.TempDir(), "out")
-	if r := awmlRun("pull", "acme/mail@1", "-o", out); r.code != 0 {
+	t.Setenv("AWML_REGISTRY_URL", server.URL+"/")
+	if r := awmlRunInput("env-token\n", "login"); r != (result{0, "Logged in to " + server.URL + "\n", "Token: "}) {
+		t.Fatalf("login gave %+v", r)
+	}
+	if r := awmlRun("push", "acme/mail", write(t, "security.yaml", good)); r.code != 0 {
+		t.Fatalf("push gave %+v", r)
+	}
+	if r := awmlRun("pull", "acme/mail@1", "-o", filepath.Join(t.TempDir(), "out")); r.code != 0 {
 		t.Fatalf("pull gave %+v", r)
 	}
-	if calls != 1 {
-		t.Errorf("registry got %d calls", calls)
+	want := []string{"POST /api/v1/acme/mail/versions Bearer env-token", "GET /api/v1/acme/mail/v/1 Bearer env-token"}
+	if !reflect.DeepEqual(calls, want) {
+		t.Errorf("registry got %q, want %q", calls, want)
+	}
+}
+
+func TestTheRegistryFlagWinsOverAWMLRegistryURL(t *testing.T) {
+	useTemporaryHome(t)
+	t.Setenv("AWML_REGISTRY_URL", "https://registry.example")
+	r := awmlRunInput("token\n", "login", "--registry", "https://other.example")
+	if r != (result{0, "Logged in to https://other.example\n", "Token: "}) {
+		t.Fatalf("login gave %+v", r)
 	}
 }
 
@@ -389,7 +411,7 @@ func useTemporaryHome(t *testing.T) string {
 	config := filepath.Join(root, "config")
 	t.Setenv("HOME", root)
 	t.Setenv("XDG_CONFIG_HOME", config)
-	t.Setenv("AWML_REGISTRY", "")
+	t.Setenv("AWML_REGISTRY_URL", "")
 	return config
 }
 

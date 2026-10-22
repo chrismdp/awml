@@ -107,6 +107,8 @@ Say too how the work is shared out: how many steps AI, code and a person each de
 
 With the person's agreement, mark each gap in the files as a comment, as `"Missing from the design: nothing keeps the screen current"`, tied to the part it is about, then check and draw again. A red line, `breaks: true`, is only for something a live system did that its design doesn't allow, found in its records. Never use one for a gap in the design.
 
+The files stay where the person keeps their work; if they want to share the workflow, the awml-publish skill can publish it.
+
 ## Common mistakes
 
 - **A draft step leading to an outside action**, even through a review. `awml check` says `only a do step leads to an outside action`. Put a `do` step between the draft and the review, such as code that asks the person to send it, or make the person's own step `op: do` when they edit and send it themselves.

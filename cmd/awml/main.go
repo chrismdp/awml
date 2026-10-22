@@ -35,7 +35,7 @@ positional arguments:
 
 options:
   -h, --help         show this help message and exit
-  --registry URL     registry URL (default: AWML_REGISTRY or https://awml.io)
+  --registry URL     registry URL (default: AWML_REGISTRY_URL or https://awml.io)
 `
 
 var commands = map[string]struct{ usage, help string }{
