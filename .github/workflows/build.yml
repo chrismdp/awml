@@ -1,0 +1,135 @@
+# Builds the change an issue asks for when the maintainer adds the build label, and opens a pull
+# request for it. This is the workflow drawn at https://awml.io/chrismdp/issue-to-pull-request.
+#
+# Only people with write access can add a label, so the label is the decision. Claude works in the
+# first job with a read-only token, sees only the issue and the comments of the repository's own
+# people, and hands back a patch. The second job, which Claude never runs in, applies the patch,
+# runs every check from AGENTS.md, and only then pushes a branch and opens the pull request. The
+# maintainer reviews and merges it.
+#
+# It needs a CLAUDE_CODE_OAUTH_TOKEN secret, made with `claude setup-token`, so the runs come out
+# of the maintainer's subscription rather than a metered API key.
+name: Build from an issue
+
+on:
+  issues:
+    types: [labeled]
+
+concurrency:
+  group: build-issue-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  draft:
+    if: github.event.label.name == 'build'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Bring in the issue and the comments of the repository's own people
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/build"
+          {
+            gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE" \
+              --jq '"# #\(.number): \(.title)\n\nLabels: \([.labels[].name] | join(", "))\n\n\(.body // "")\n"'
+            gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$ISSUE/comments" \
+              --jq '.[] | select(.author_association == "OWNER" or .author_association == "MEMBER" or .author_association == "COLLABORATOR")
+                    | "## Comment by \(.user.login), \(.created_at)\n\n\(.body)\n"'
+          } > "$RUNNER_TEMP/build/issue.md"
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Draft the change
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          BUILD_DIR: ${{ runner.temp }}/build
+        run: |
+          prompt="$(sed "s|BUILD_DIR|$BUILD_DIR|g" .github/build-prompt.md)"
+          claude -p "$prompt" --model opus --max-turns 200 --permission-mode acceptEdits \
+            --allowedTools "Read" "Edit" "Write" "Glob" "Grep" \
+              "Bash(go:*)" "Bash(gofmt:*)" "Bash(make:*)" "Bash(node:*)" \
+              "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" \
+              "Bash(ls:*)" "Bash(cp:*)" "Bash(mkdir:*)"
+
+      - name: Make the patch
+        run: |
+          git add -A
+          git diff --cached --binary > "$RUNNER_TEMP/build/change.patch"
+          if [ ! -s "$RUNNER_TEMP/build/change.patch" ]; then
+            echo "Claude changed nothing:"; cat "$RUNNER_TEMP/build/message.md" 2>/dev/null || true
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: change
+          path: |
+            ${{ runner.temp }}/build/change.patch
+            ${{ runner.temp }}/build/message.md
+
+  open:
+    needs: draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          name: change
+          path: ${{ runner.temp }}/change
+
+      - name: Apply the change
+        run: git apply --index "$RUNNER_TEMP/change/change.patch"
+
+      - name: Run the checks
+        run: |
+          go test ./...
+          go vet ./...
+          go run ./cmd/awml check examples/*.yaml examples/tour/*.yaml examples/platforms/*.yaml
+          make test-wasm
+
+      - name: Push a branch and open the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          message="$RUNNER_TEMP/change/message.md"
+          [ -s "$message" ] || echo "Build #$ISSUE" > "$message"
+          title="$(head -n 1 "$message")"
+          printf '\n\nCloses #%s\n' "$ISSUE" >> "$message"
+          branch="build/issue-$ISSUE"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git commit -q -F "$message"
+          git push -f origin "$branch"
+          if gh pr view "$branch" >/dev/null 2>&1; then
+            gh pr edit "$branch" --title "$title" --body-file "$message"
+          else
+            gh pr create --head "$branch" --title "$title" --body-file "$message"
+          fi
