@@ -1,6 +1,15 @@
 # Runs every check from AGENTS.md on every push: it vets and tests the code, checks every example,
 # and checks that the WebAssembly build gives the same answers as the CLI. It runs on the oldest Go
-# that go.mod allows, and on the newest.
+# that go.mod allows, and on the newest. The build workflow also starts it by dispatch after it
+# merges a change, because a merge by the Actions token starts no other workflow.
+#
+# When a check fails on main, a last job reports it. If an issue labelled failing-main is already
+# open, it adds this run to that issue and starts nothing, so a main that fails on several pushes
+# starts one build. Otherwise it opens an issue with the end of the failing output, labelled build
+# so it reads like any other build, and starts the build by dispatch, since a label added by the
+# Actions token starts nothing. The build retries and merges by the same rules as any other. The
+# report job checks out nothing and runs none of the code it reports on: it reads the failed jobs'
+# log with gh.
 name: CI
 
 on:
@@ -11,6 +20,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       matrix:
         go: ["1.22", stable]
@@ -26,3 +37,68 @@ jobs:
       - run: go test ./...
       - run: go run ./cmd/awml check examples/*.yaml examples/tour/*.yaml examples/platforms/*.yaml
       - run: make test-wasm
+
+  report:
+    needs: test
+    if: failure() && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: read
+      issues: write
+    steps:
+      - name: Report the failure on an issue, and start a build of a new one
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          here="$RUNNER_TEMP/report"
+          mkdir -p "$here"
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+          # The run is still going, so each failed job's log is read on its own. If gh won't show
+          # the failed steps of a job in a run that hasn't finished, the job's whole log stands in.
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" --paginate \
+            --jq '.jobs[] | select(.conclusion == "failure") | .id' > "$here/jobs.txt"
+          while IFS= read -r job; do
+            gh run view --repo "$GITHUB_REPOSITORY" --job "$job" --log-failed \
+              || gh api "repos/$GITHUB_REPOSITORY/actions/jobs/$job/logs"
+          done < "$here/jobs.txt" > "$here/log.txt"
+          tail -n 150 "$here/log.txt" > "$here/output.txt"
+
+          longest="$(grep -o '`*' "$here/output.txt" | awk '{ if (length($0) > m) m = length($0) } END { print m + 0 }')"
+          fence="$(printf '%*s' "$(( longest >= 3 ? longest + 1 : 3 ))" '' | tr ' ' '`')"
+          subject="$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA" --jq .commit.message | head -n 1)"
+          {
+            echo "The checks failed on main at $GITHUB_SHA, \"$subject\"."
+            echo
+            echo "The run: $run_url"
+            echo
+            echo "$fence"
+            cat "$here/output.txt"
+            echo "$fence"
+          } > "$here/failure.md"
+
+          open="$(gh issue list --repo "$GITHUB_REPOSITORY" --label failing-main --state open \
+            --json number --jq '.[0].number // empty')"
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --repo "$GITHUB_REPOSITORY" --body-file "$here/failure.md"
+            exit 0
+          fi
+
+          if [ "${#subject}" -gt 60 ]; then
+            subject="${subject:0:57}..."
+          fi
+          {
+            cat "$here/failure.md"
+            echo
+            echo "A build of this issue has started. A fix the build rule finds straightforward merges by itself."
+          } > "$here/issue.md"
+          if ! url="$(gh issue create --repo "$GITHUB_REPOSITORY" --title "Main is failing: $subject" \
+            --label failing-main --label tool --label build --body-file "$here/issue.md")"; then
+            echo "::error::Could not open an issue about the failing main. Check that the failing-main, tool and build labels exist."
+            exit 1
+          fi
+          number="${url##*/}"
+          echo "Opened $url"
+          gh workflow run build.yml --repo "$GITHUB_REPOSITORY" --ref main -f issue="$number"

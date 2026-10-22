@@ -11,7 +11,15 @@
 # .github/build-rules.yml with the rule as it is on main, gives the token only to the steps that
 # push or use the GitHub API, and opens the pull request. A change that needs review stays open. A
 # straightforward change merges by itself, saying why and how to undo it, then starts the conflict
-# rebase workflow, because a merge by the Actions token starts no other workflow.
+# rebase workflow and CI on main, because a merge by the Actions token starts no other workflow.
+#
+# Another workflow can start a build too, by dispatching this one with the issue's number, as CI
+# does when main fails. A build that fails its checks, or whose draft fails or runs out of time,
+# starts itself again by dispatch, up to three tries in all. Each try after the first brings in the
+# last try's result, with the end of the failing check's output, so Claude fixes what failed rather
+# than starting over. After the third try it comments on the issue with the reason instead. A draft
+# in which Claude changed nothing isn't tried again: it comments with Claude's message. The retry
+# job only reads results and calls the GitHub API, and runs nothing from the change.
 #
 # It needs a CLAUDE_CODE_OAUTH_TOKEN secret, made with `claude setup-token`, so the runs come out
 # of the maintainer's subscription rather than a metered API key.
@@ -20,20 +28,45 @@ name: Build from an issue
 on:
   issues:
     types: [labeled]
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: The number of the issue to build
+        required: true
+      attempt:
+        description: Which try this is, from 1 to 3
+        default: "1"
+      previous_run:
+        description: The run of the last try, whose result this try is told about
+        default: ""
 
 concurrency:
-  group: build-issue-${{ github.event.issue.number }}
+  group: build-issue-${{ inputs.issue || github.event.issue.number }}
   cancel-in-progress: true
+
+env:
+  ISSUE: ${{ inputs.issue || github.event.issue.number }}
+  ATTEMPT: ${{ inputs.attempt || '1' }}
+  PREVIOUS_RUN: ${{ inputs.previous_run }}
 
 jobs:
   draft:
-    if: github.event.label.name == 'build'
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'build'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
+      actions: read
       contents: read
       issues: read
+    outputs:
+      changed: ${{ steps.patch.outputs.changed }}
     steps:
+      - name: Check the inputs
+        run: |
+          case "$ISSUE" in ''|*[!0-9]*) echo "The issue must be a number: $ISSUE"; exit 1 ;; esac
+          case "$ATTEMPT" in [1-3]) ;; *) echo "The attempt must be 1, 2 or 3: $ATTEMPT"; exit 1 ;; esac
+          case "$PREVIOUS_RUN" in *[!0-9]*) echo "The previous run must be a number: $PREVIOUS_RUN"; exit 1 ;; esac
+
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
@@ -47,7 +80,6 @@ jobs:
       - name: Bring in the issue and the comments of the repository's own people
         env:
           GH_TOKEN: ${{ github.token }}
-          ISSUE: ${{ github.event.issue.number }}
         run: |
           mkdir -p "$RUNNER_TEMP/build"
           {
@@ -57,6 +89,33 @@ jobs:
               --jq '.[] | select(.author_association == "OWNER" or .author_association == "MEMBER" or .author_association == "COLLABORATOR")
                     | "## Comment by \(.user.login), \(.created_at)\n\n\(.body)\n"'
           } > "$RUNNER_TEMP/build/issue.md"
+
+      - name: Bring in why the last try failed
+        if: env.PREVIOUS_RUN != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          previous="$RUNNER_TEMP/previous"
+          if ! gh run download "$PREVIOUS_RUN" --repo "$GITHUB_REPOSITORY" -n result -D "$previous"; then
+            mkdir -p "$previous"
+            echo "The last try's draft failed or ran out of time, so its change was never checked." \
+              > "$previous/result.txt"
+          fi
+          {
+            echo "## The last try failed (attempt $((ATTEMPT - 1)) of 3)"
+            echo
+            cat "$previous/result.txt"
+            if [ -s "$previous/output.txt" ]; then
+              longest="$(grep -o '`*' "$previous/output.txt" | awk '{ if (length($0) > m) m = length($0) } END { print m + 0 }')"
+              fence="$(printf '%*s' "$(( longest >= 3 ? longest + 1 : 3 ))" '' | tr ' ' '`')"
+              echo
+              echo "The end of the failing check's output:"
+              echo
+              echo "$fence"
+              cat "$previous/output.txt"
+              echo "$fence"
+            fi
+          } >> "$RUNNER_TEMP/build/issue.md"
 
       - name: Install Claude Code
         run: npm install -g @anthropic-ai/claude-code
@@ -74,12 +133,15 @@ jobs:
               "Bash(ls:*)" "Bash(cp:*)" "Bash(mkdir:*)"
 
       - name: Make the patch
+        id: patch
         run: |
           git add -A
           git diff --cached --binary > "$RUNNER_TEMP/build/change.patch"
-          if [ ! -s "$RUNNER_TEMP/build/change.patch" ]; then
+          if [ -s "$RUNNER_TEMP/build/change.patch" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
             echo "Claude changed nothing:"; cat "$RUNNER_TEMP/build/message.md" 2>/dev/null || true
-            exit 1
+            echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
       - uses: actions/upload-artifact@v4
@@ -92,6 +154,7 @@ jobs:
 
   check:
     needs: draft
+    if: needs.draft.outputs.changed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -125,22 +188,31 @@ jobs:
             echo "The draft job did not produce a patch." > "$RUNNER_TEMP/result/result.txt"
             exit 1
           fi
-          if ! git apply --index "$RUNNER_TEMP/change/change.patch"; then
+          if ! git apply --index "$RUNNER_TEMP/change/change.patch" 2> "$RUNNER_TEMP/apply.log"; then
+            cat "$RUNNER_TEMP/apply.log"
             echo "The proposed change could not be applied to main." \
               > "$RUNNER_TEMP/result/result.txt"
+            tail -n 150 "$RUNNER_TEMP/apply.log" > "$RUNNER_TEMP/result/output.txt"
             exit 1
           fi
 
+      # Each check's output is kept, so that a failing one's last lines go into the result.
       - name: Run the checks
         run: |
-          echo "The Go tests did not pass." > "$RUNNER_TEMP/result/result.txt"
-          go test ./...
-          echo "Go vet did not pass." > "$RUNNER_TEMP/result/result.txt"
-          go vet ./...
-          echo "The example checks did not pass." > "$RUNNER_TEMP/result/result.txt"
-          go run ./cmd/awml check examples/*.yaml examples/tour/*.yaml examples/platforms/*.yaml
-          echo "The WebAssembly tests did not pass." > "$RUNNER_TEMP/result/result.txt"
-          make test-wasm
+          set -o pipefail
+          run_check() {
+            echo "$1" > "$RUNNER_TEMP/result/result.txt"
+            shift
+            if ! "$@" 2>&1 | tee "$RUNNER_TEMP/check.log"; then
+              tail -n 150 "$RUNNER_TEMP/check.log" > "$RUNNER_TEMP/result/output.txt"
+              exit 1
+            fi
+          }
+          run_check "The Go tests did not pass." go test ./...
+          run_check "Go vet did not pass." go vet ./...
+          run_check "The example checks did not pass." \
+            go run ./cmd/awml check examples/*.yaml examples/tour/*.yaml examples/platforms/*.yaml
+          run_check "The WebAssembly tests did not pass." make test-wasm
           echo pass > "$RUNNER_TEMP/result/result.txt"
 
       - uses: actions/upload-artifact@v4
@@ -151,7 +223,7 @@ jobs:
 
   open:
     needs: [draft, check]
-    if: ${{ always() && needs.draft.result == 'success' }}
+    if: ${{ always() && needs.draft.result == 'success' && needs.draft.outputs.changed == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     concurrency:
@@ -199,8 +271,6 @@ jobs:
 
       - name: Apply and commit the change
         id: commit
-        env:
-          ISSUE: ${{ github.event.issue.number }}
         run: |
           git apply --index "$RUNNER_TEMP/change/change.patch"
           "$RUNNER_TEMP/build-rule" -repo . -rules "$RUNNER_TEMP/build-rules.yml" \
@@ -292,3 +362,86 @@ jobs:
             >/dev/null 2>&1; then
             gh workflow run resolve.yml --repo "$GITHUB_REPOSITORY" --ref main
           fi
+          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref main
+
+  # Runs when the draft failed or ran out of time, or the checks didn't pass, but not when the whole
+  # run was cancelled because a newer build of the same issue replaced it. It checks out nothing and
+  # runs only gh.
+  retry:
+    needs: [draft, check, open]
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event.label.name == 'build') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: write
+      issues: write
+    steps:
+      - name: Try again, or say why the build failed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRAFT: ${{ needs.draft.result }}
+          CHANGED: ${{ needs.draft.outputs.changed }}
+        run: |
+          case "$ISSUE" in ''|*[!0-9]*) echo "The issue must be a number: $ISSUE"; exit 1 ;; esac
+          case "$ATTEMPT" in [1-3]) ;; *) echo "The attempt must be 1, 2 or 3: $ATTEMPT"; exit 1 ;; esac
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          here="$RUNNER_TEMP/retry"
+          mkdir -p "$here"
+
+          if [ "$DRAFT" = success ] && [ "$CHANGED" != true ]; then
+            gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" -n change -D "$here/change" || true
+            {
+              echo "The build changed nothing, so it won't be tried again. Claude said:"
+              echo
+              if [ -s "$here/change/message.md" ]; then
+                cat "$here/change/message.md"
+              else
+                echo "Nothing; it left no message."
+              fi
+              echo
+              echo "The run: $run_url"
+            } > "$here/comment.md"
+            gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body-file "$here/comment.md"
+            exit 0
+          fi
+
+          if [ "$DRAFT" = success ]; then
+            if gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" -n result -D "$here/result"; then
+              reason="$(cat "$here/result/result.txt" 2>/dev/null)"
+              [ -n "$reason" ] || reason="The check job did not produce a result."
+            else
+              reason="The check job did not produce a result."
+            fi
+            [ "$reason" = pass ] && exit 0
+          else
+            reason="The draft failed or ran out of time."
+          fi
+          echo "$reason"
+
+          if [ "$ATTEMPT" -lt 3 ]; then
+            gh workflow run build.yml --repo "$GITHUB_REPOSITORY" --ref main \
+              -f issue="$ISSUE" -f attempt="$((ATTEMPT + 1))" -f previous_run="$GITHUB_RUN_ID"
+            exit 0
+          fi
+
+          {
+            echo "The build failed three times, so it has stopped. The last try failed because:"
+            echo
+            echo "$reason"
+            if [ -s "$here/result/output.txt" ]; then
+              tail -n 50 "$here/result/output.txt" > "$here/output.txt"
+              longest="$(grep -o '`*' "$here/output.txt" | awk '{ if (length($0) > m) m = length($0) } END { print m + 0 }')"
+              fence="$(printf '%*s' "$(( longest >= 3 ? longest + 1 : 3 ))" '' | tr ' ' '`')"
+              echo
+              echo "The end of its output:"
+              echo
+              echo "$fence"
+              cat "$here/output.txt"
+              echo "$fence"
+            fi
+            echo
+            echo "The run: $run_url"
+            echo
+            echo "To start afresh, remove the build label and add it again."
+          } > "$here/comment.md"
+          gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body-file "$here/comment.md"
