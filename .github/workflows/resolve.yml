@@ -1,0 +1,472 @@
+# Resolves open pull requests that conflict when a commit lands on main. This is the workflow drawn
+# at https://awml.io/chrismdp/rebase-conflicting-pull-requests.
+#
+# Only pull requests from this repository and its own people are considered. Claude works with a
+# read-only token and returns the rebased branch as a bundle, so it never holds the credentials that
+# can push its change. The checks run in another job that can only read. A separate push job runs
+# nothing from the branch and force-pushes it only if the branch hasn't moved. The old commit stays
+# on GitHub and the comment names it, so the replacement can be undone with one push. Pushes made by
+# the Actions token don't start CI, so the read-only job's checks are the checks for the rebase.
+#
+# It needs the same CLAUDE_CODE_OAUTH_TOKEN secret as build.yml, made with `claude setup-token`, so
+# the runs come out of the maintainer's subscription rather than a metered API key.
+name: Rebase conflicting pull requests
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: resolve-main
+  cancel-in-progress: true
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      pulls: ${{ steps.find.outputs.pulls }}
+      main_sha: ${{ steps.find.outputs.main_sha }}
+    steps:
+      - name: Find conflicting pull requests
+        id: find
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pulls='[]'
+          while read -r number; do
+            mergeable=UNKNOWN
+            head_sha=
+            for attempt in 1 2 3 4 5; do
+              details="$(gh pr view "$number" --repo "$GITHUB_REPOSITORY" \
+                --json mergeable,headRefOid)"
+              mergeable="$(jq -r '.mergeable' <<< "$details")"
+              head_sha="$(jq -r '.headRefOid' <<< "$details")"
+              [ "$mergeable" != UNKNOWN ] && break
+              sleep 2
+            done
+            [ "$mergeable" = CONFLICTING ] || continue
+
+            pull="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$number")"
+            eligible="$(jq -r --arg repository "$GITHUB_REPOSITORY" '
+              .base.ref == "main" and
+              .head.repo.full_name == $repository and
+              ((.author_association == "OWNER" or
+                .author_association == "MEMBER" or
+                .author_association == "COLLABORATOR") or
+               .user.login == "github-actions[bot]")
+            ' <<< "$pull")"
+            [ "$eligible" = true ] || continue
+
+            branch="$(jq -r '.head.ref' <<< "$pull")"
+            pulls="$(jq -c --argjson number "$number" --arg branch "$branch" \
+              --arg head_sha "$head_sha" \
+              '. + [{number: $number, branch: $branch, head_sha: $head_sha}]' <<< "$pulls")"
+          done < <(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100" \
+            --jq '.[].number')
+
+          echo "pulls=$pulls" >> "$GITHUB_OUTPUT"
+          echo "main_sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+
+  draft:
+    needs: find
+    if: ${{ needs.find.outputs.pulls != '[]' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        pull: ${{ fromJSON(needs.find.outputs.pulls) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.pull.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Start the rebase and prepare its context
+        id: rebase
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAIN_SHA: ${{ needs.find.outputs.main_sha }}
+          PR_NUMBER: ${{ matrix.pull.number }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/resolve"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          pull="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")"
+          jq -r '"# " + .title + "\n\n" + (.body // "")' <<< "$pull" \
+            > "$RUNNER_TEMP/resolve/pull-request.md"
+          base="$(git merge-base HEAD "$MAIN_SHA")"
+          git log --oneline "$base"..HEAD > "$RUNNER_TEMP/resolve/branch-log.txt"
+          git log --oneline "$base".."$MAIN_SHA" > "$RUNNER_TEMP/resolve/main-log.txt"
+
+          if git rebase "$MAIN_SHA"; then
+            echo "Pull request #$PR_NUMBER no longer conflicts with main"
+            echo "conflicts=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "Rebased this pull request onto the latest main commit."
+              echo
+              echo "The earlier conflict had gone away, so no manual conflict resolution was needed."
+            } > "$RUNNER_TEMP/resolve/message.md"
+            exit 0
+          fi
+
+          git diff --name-only --diff-filter=U > "$RUNNER_TEMP/resolve/conflicted-files.txt"
+          if [ ! -s "$RUNNER_TEMP/resolve/conflicted-files.txt" ]; then
+            echo "The rebase failed without leaving conflicted files"
+            exit 1
+          fi
+          echo "conflicts=true" >> "$GITHUB_OUTPUT"
+
+      - name: Install Claude Code
+        if: ${{ steps.rebase.outputs.conflicts == 'true' }}
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Resolve the conflicts
+        if: ${{ steps.rebase.outputs.conflicts == 'true' }}
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          RESOLVE_DIR: ${{ runner.temp }}/resolve
+        run: |
+          prompt="$(sed "s|RESOLVE_DIR|$RESOLVE_DIR|g" .github/resolve-prompt.md)"
+          claude -p "$prompt" --model opus --max-turns 200 --permission-mode acceptEdits \
+            --allowedTools "Read" "Edit" "Write" "Glob" "Grep" \
+              "Bash(go:*)" "Bash(gofmt:*)" "Bash(make:*)" "Bash(node:*)" \
+              "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" \
+              "Bash(git add:*)" "Bash(git rebase:*)" "Bash(git show:*)" \
+              "Bash(git checkout:*)" \
+              "Bash(ls:*)" "Bash(cp:*)" "Bash(mkdir:*)"
+
+      - name: Make the bundle
+        env:
+          MAIN_SHA: ${{ needs.find.outputs.main_sha }}
+        run: |
+          if [ ! -s "$RUNNER_TEMP/resolve/message.md" ]; then
+            echo "Claude did not write message.md"
+            exit 1
+          fi
+          git_dir="$(git rev-parse --git-dir)"
+          if [ -d "$git_dir/rebase-merge" ] || [ -d "$git_dir/rebase-apply" ]; then
+            echo "Claude left a rebase in progress"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$MAIN_SHA" HEAD; then
+            echo "The rebased branch does not descend from main"
+            exit 1
+          fi
+          git bundle create "$RUNNER_TEMP/resolve/rebased.bundle" "$MAIN_SHA"..HEAD
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: resolve-${{ matrix.pull.number }}
+          path: ${{ runner.temp }}/resolve/rebased.bundle
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: resolve-note-${{ matrix.pull.number }}
+          path: ${{ runner.temp }}/resolve/message.md
+          if-no-files-found: ignore
+
+  check:
+    needs: [find, draft]
+    if: ${{ always() && needs.find.result == 'success' && needs.find.outputs.pulls != '[]' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        pull: ${{ fromJSON(needs.find.outputs.pulls) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Prepare the result
+        run: |
+          mkdir -p "$RUNNER_TEMP/result"
+          echo "The workflow failed before it could check the proposed resolution." \
+            > "$RUNNER_TEMP/result/result.txt"
+
+      - uses: actions/checkout@v4
+        id: checkout
+        with:
+          ref: ${{ needs.find.outputs.main_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v4
+        id: bundle
+        if: ${{ always() }}
+        continue-on-error: true
+        with:
+          name: resolve-${{ matrix.pull.number }}
+          path: ${{ runner.temp }}/draft
+
+      - uses: actions/download-artifact@v4
+        id: note
+        if: ${{ always() }}
+        continue-on-error: true
+        with:
+          name: resolve-note-${{ matrix.pull.number }}
+          path: ${{ runner.temp }}/note
+
+      - name: Verify and fetch the bundle
+        if: ${{ always() }}
+        env:
+          BUNDLE_OUTCOME: ${{ steps.bundle.outcome }}
+          CHECKOUT_OUTCOME: ${{ steps.checkout.outcome }}
+          MAIN_SHA: ${{ needs.find.outputs.main_sha }}
+          NOTE_OUTCOME: ${{ steps.note.outcome }}
+        run: |
+          if [ "$CHECKOUT_OUTCOME" != success ]; then
+            echo "The main commit could not be checked out." \
+              > "$RUNNER_TEMP/result/result.txt"
+            exit 1
+          fi
+          if [ "$BUNDLE_OUTCOME" != success ]; then
+            echo "The draft job did not produce a bundle for this pull request." \
+              > "$RUNNER_TEMP/result/result.txt"
+            exit 1
+          fi
+          if [ "$NOTE_OUTCOME" != success ] || [ ! -s "$RUNNER_TEMP/note/message.md" ]; then
+            echo "The draft job did not produce a resolution note for this pull request." \
+              > "$RUNNER_TEMP/result/result.txt"
+            exit 1
+          fi
+
+          bundle="$RUNNER_TEMP/draft/rebased.bundle"
+          if ! git bundle verify "$bundle"; then
+            echo "The rebased branch bundle could not be verified." \
+              > "$RUNNER_TEMP/result/result.txt"
+            exit 1
+          fi
+          if ! git fetch "$bundle" HEAD:refs/rebased; then
+            echo "The rebased branch could not be fetched from its bundle." \
+              > "$RUNNER_TEMP/result/result.txt"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$MAIN_SHA" refs/rebased; then
+            echo "The rebased branch does not descend from the main commit." \
+              > "$RUNNER_TEMP/result/result.txt"
+            exit 1
+          fi
+          workflow_files="$(git log --format= --name-only \
+            "$MAIN_SHA"..refs/rebased -- .github/workflows/ | sed '/^$/d')"
+          if [ -n "$workflow_files" ]; then
+            printf '%s\n' "$workflow_files"
+            echo "The rebased commits change a workflow file, which the Actions token cannot push. Rebase this pull request by hand." \
+              > "$RUNNER_TEMP/result/result.txt"
+            exit 1
+          fi
+          git checkout --detach refs/rebased
+          if git grep -nE '^(<<<<<<<|>>>>>>>)'; then
+            echo "The proposed resolution still contains conflict markers." \
+              > "$RUNNER_TEMP/result/result.txt"
+            exit 1
+          fi
+          echo "The repository checks did not all pass." > "$RUNNER_TEMP/result/result.txt"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run the checks
+        run: |
+          go test ./...
+          go vet ./...
+          go run ./cmd/awml check examples/*.yaml examples/tour/*.yaml examples/platforms/*.yaml
+          make test-wasm
+
+      - name: Record the successful result
+        run: echo pass > "$RUNNER_TEMP/result/result.txt"
+
+      - name: Keep the resolution note with the result
+        if: ${{ always() }}
+        run: |
+          if [ -s "$RUNNER_TEMP/note/message.md" ]; then
+            cat "$RUNNER_TEMP/note/message.md" > "$RUNNER_TEMP/result/message.md"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: resolve-result-${{ matrix.pull.number }}
+          path: ${{ runner.temp }}/result
+
+  push:
+    needs: [find, check]
+    if: ${{ always() && needs.find.result == 'success' && needs.find.outputs.pulls != '[]' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        pull: ${{ fromJSON(needs.find.outputs.pulls) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Prepare the failure reason
+        run: |
+          echo "The workflow failed before it could prepare a resolution." \
+            > "$RUNNER_TEMP/resolve-failure.txt"
+
+      - uses: actions/checkout@v4
+        id: checkout
+        with:
+          ref: ${{ needs.find.outputs.main_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v4
+        id: bundle
+        if: ${{ always() }}
+        continue-on-error: true
+        with:
+          name: resolve-${{ matrix.pull.number }}
+          path: ${{ runner.temp }}/draft
+
+      - uses: actions/download-artifact@v4
+        id: result
+        if: ${{ always() }}
+        continue-on-error: true
+        with:
+          name: resolve-result-${{ matrix.pull.number }}
+          path: ${{ runner.temp }}/result
+
+      - name: Read the check result
+        id: checked
+        if: ${{ always() }}
+        env:
+          CHECKOUT_OUTCOME: ${{ steps.checkout.outcome }}
+          RESULT_OUTCOME: ${{ steps.result.outcome }}
+        run: |
+          if [ "$CHECKOUT_OUTCOME" != success ]; then
+            echo "The main commit could not be checked out." \
+              > "$RUNNER_TEMP/resolve-failure.txt"
+            echo "passed=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          if [ "$RESULT_OUTCOME" != success ] || [ ! -s "$RUNNER_TEMP/result/result.txt" ]; then
+            echo "The check job did not produce a result for this pull request." \
+              > "$RUNNER_TEMP/resolve-failure.txt"
+            echo "passed=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          if [ "$(cat "$RUNNER_TEMP/result/result.txt")" != pass ]; then
+            cat "$RUNNER_TEMP/result/result.txt" > "$RUNNER_TEMP/resolve-failure.txt"
+            echo "passed=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          echo "passed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Verify and fetch the bundle
+        if: ${{ steps.checked.outputs.passed == 'true' }}
+        env:
+          BUNDLE_OUTCOME: ${{ steps.bundle.outcome }}
+          MAIN_SHA: ${{ needs.find.outputs.main_sha }}
+        run: |
+          if [ "$BUNDLE_OUTCOME" != success ]; then
+            echo "The draft job did not produce a bundle for this pull request." \
+              > "$RUNNER_TEMP/resolve-failure.txt"
+            exit 1
+          fi
+
+          bundle="$RUNNER_TEMP/draft/rebased.bundle"
+          if ! git bundle verify "$bundle"; then
+            echo "The rebased branch bundle could not be verified." \
+              > "$RUNNER_TEMP/resolve-failure.txt"
+            exit 1
+          fi
+          if ! git fetch "$bundle" HEAD:refs/rebased; then
+            echo "The rebased branch could not be fetched from its bundle." \
+              > "$RUNNER_TEMP/resolve-failure.txt"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$MAIN_SHA" refs/rebased; then
+            echo "The rebased branch does not descend from the main commit." \
+              > "$RUNNER_TEMP/resolve-failure.txt"
+            exit 1
+          fi
+
+      - name: Push the rebased branch
+        env:
+          BRANCH: ${{ matrix.pull.branch }}
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ matrix.pull.head_sha }}
+        run: |
+          if ! git -c core.hooksPath=/dev/null \
+            -c http.https://github.com/.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" \
+            push --force-with-lease="refs/heads/$BRANCH:$HEAD_SHA" origin \
+              "refs/rebased:refs/heads/$BRANCH"; then
+            echo "The branch moved while this ran; nothing was changed." \
+              > "$RUNNER_TEMP/resolve-failure.txt"
+            exit 1
+          fi
+
+      - name: Comment on the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ matrix.pull.branch }}
+          HEAD_SHA: ${{ matrix.pull.head_sha }}
+          PR_NUMBER: ${{ matrix.pull.number }}
+        run: |
+          {
+            echo "Rebased this pull request onto \`main\` and force-pushed the branch."
+            echo
+            cat "$RUNNER_TEMP/result/message.md"
+            echo
+            printf '[View the workflow run](%s/%s/actions/runs/%s)\n' \
+              "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
+            echo
+            echo "The old head was \`$HEAD_SHA\`. To put the branch back:"
+            echo
+            echo "\`git push --force origin $HEAD_SHA:$BRANCH\`"
+          } > "$RUNNER_TEMP/resolve/comment.md"
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+            --body-file "$RUNNER_TEMP/resolve/comment.md"
+
+      - name: Comment when resolution failed
+        if: ${{ failure() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ matrix.pull.number }}
+        run: |
+          reason="The workflow failed before it could prepare a resolution."
+          if [ -s "$RUNNER_TEMP/resolve-failure.txt" ]; then
+            reason="$(cat "$RUNNER_TEMP/resolve-failure.txt")"
+          fi
+          {
+            echo "The workflow couldn't resolve the conflicts with \`main\`. $reason"
+            echo
+            if [ ! -s "$RUNNER_TEMP/draft/rebased.bundle" ] && \
+              [ -s "$RUNNER_TEMP/result/message.md" ]; then
+              echo "Claude's note:"
+              echo
+              cat "$RUNNER_TEMP/result/message.md"
+              echo
+            fi
+            echo "A maintainer should resolve this pull request by hand."
+            echo
+            printf '[View the workflow run](%s/%s/actions/runs/%s)\n' \
+              "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
+          } > "$RUNNER_TEMP/resolve-failure-comment.md"
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+            --body-file "$RUNNER_TEMP/resolve-failure-comment.md"
