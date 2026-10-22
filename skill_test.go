@@ -3,6 +3,7 @@ package awml
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -14,6 +15,14 @@ import (
 const skill = "plugins/awml/skills/awml"
 
 func TestTheSkillsCopiesAreCurrent(t *testing.T) {
+	for _, stale := range staleCopies(t, ".") {
+		t.Error(stale)
+	}
+}
+
+// skillCopies gives each of the skill's copies as its source and its place in the repository.
+func skillCopies(t *testing.T) [][2]string {
+	t.Helper()
 	copies := [][2]string{{"SPEC.md", "references/spec.md"}, {"GUIDE.md", "references/guide.md"}}
 	for _, name := range []string{"client-email", "dinners", "question", "tour/09-platform-view"} {
 		doc := readExample(t, "examples/"+name+".yaml")
@@ -25,15 +34,77 @@ func TestTheSkillsCopiesAreCurrent(t *testing.T) {
 			copies = append(copies, [2]string{"examples/" + name + ext, "references/examples/" + name + ext})
 		}
 	}
-	for _, c := range copies {
-		src, dst := c[0], filepath.Join(skill, c[1])
-		want, err := os.ReadFile(src)
+	for i := range copies {
+		copies[i][1] = filepath.Join(skill, copies[i][1])
+	}
+	return copies
+}
+
+// staleCopies says which of the skill's copies under root differ from their sources.
+func staleCopies(t *testing.T, root string) []string {
+	t.Helper()
+	var stale []string
+	for _, c := range skillCopies(t) {
+		src, dst := c[0], c[1]
+		want, err := os.ReadFile(filepath.Join(root, src))
 		if err != nil {
 			t.Fatal(err)
 		}
-		got, err := os.ReadFile(dst)
+		got, err := os.ReadFile(filepath.Join(root, dst))
 		if err != nil || string(got) != string(want) {
-			t.Errorf("%s isn't the same as %s: copy it again with cp %s %s", dst, src, src, dst)
+			stale = append(stale, fmt.Sprintf("%s isn't the same as %s: copy it again with make references", dst, src))
+		}
+	}
+	return stale
+}
+
+// make references copies every source to its place, so a stale copy costs one command, and the
+// message that reports one names it.
+func TestMakeReferencesCopiesEverySource(t *testing.T) {
+	if _, err := exec.LookPath("make"); err != nil {
+		t.Skip("make isn't installed")
+	}
+	root := t.TempDir()
+	paths := []string{"Makefile"}
+	for _, c := range skillCopies(t) {
+		paths = append(paths, c[0])
+	}
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(filepath.Join(root, filepath.Dir(path)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, path), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	stale := staleCopies(t, root)
+	if len(stale) == 0 {
+		t.Fatal("found no stale copies where there are no copies at all")
+	}
+	for _, message := range stale {
+		if !strings.Contains(message, "make references") {
+			t.Errorf("the message for a stale copy doesn't name make references: %s", message)
+		}
+	}
+	if out, err := exec.Command("make", "-C", root, "references").CombinedOutput(); err != nil {
+		t.Fatalf("make references failed: %v\n%s", err, out)
+	}
+	for _, message := range staleCopies(t, root) {
+		t.Errorf("after make references, %s", message)
+	}
+}
+
+// GitHub collapses the copies in pull request diffs, so a change to a source shows up once.
+func TestTheSkillsCopiesAreMarkedGenerated(t *testing.T) {
+	attributes := readText(t, ".gitattributes")
+	for _, path := range []string{"references/spec.md", "references/guide.md", "references/examples/**"} {
+		line := skill + "/" + path + " linguist-generated=true"
+		if !strings.Contains(attributes, line) {
+			t.Errorf(".gitattributes doesn't mark %s as generated: want %q", path, line)
 		}
 	}
 }
