@@ -49,6 +49,9 @@ assert.deepEqual(api.check(canonicalSource), []);
 assert.equal(api.draw(canonicalSource, "home") + "\n", runNative(["draw", "--implementation", "home", canonicalPath]));
 assert.throws(() => api.draw(canonicalSource, "missing"), /unknown implementation/);
 assert.throws(() => api.fit([canonicalSource, ...descriptionSources], "missing"), /unknown implementation/);
+assert.equal(api.fitJSON([canonicalSource], "home") + "\n",
+  runNative(["fit", "--json", "--implementation", "home", canonicalPath]), "fit without descriptions");
+assert.deepEqual(api.fit([canonicalSource], "home").results.map((result) => result.judged), [false]);
 assert(api.check(canonicalSource.replace("parts: [plan, notes]", "parts: [plan]")).some((message) => message.includes('part "notes" is not placed')));
 
 const temporary = await mkdtemp(new URL("../build/parity-", import.meta.url));

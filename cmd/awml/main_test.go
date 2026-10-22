@@ -748,6 +748,20 @@ holds: []
 	}
 }
 
+func TestFitAnImplementationWithoutDescriptions(t *testing.T) {
+	path := write(t, "bread.yaml", canonicalFile)
+	if got := awmlRun("fit", "--implementation", "home", path); got != (result{0, `server  not judged: platform "scripts" wasn't described` + "\n", ""}) {
+		t.Errorf("fit without descriptions gave %+v", got)
+	}
+	want := `{"results":[{"platform":"server","judged":false,"fits":false,"reasons":["platform \"scripts\" wasn't described"],"models":{}}],"gaps":[]}` + "\n"
+	if got := awmlRun("fit", "--json", "--implementation", "home", path); got != (result{0, want, ""}) {
+		t.Errorf("fit --json without descriptions gave %+v", got)
+	}
+	if got := awmlRun("fit", path); got.code != 2 || !strings.Contains(got.stderr, "the following arguments are required: DESC") {
+		t.Errorf("design fit without descriptions gave %+v", got)
+	}
+}
+
 func TestConvertCommand(t *testing.T) {
 	security := write(t, "security.yaml", "# Keep this comment\n"+good)
 	platform := write(t, "platform.yaml", strings.Replace(good, "view: security", "view: platform", 1))

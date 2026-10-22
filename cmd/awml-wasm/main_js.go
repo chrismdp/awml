@@ -51,8 +51,8 @@ func main() {
 		if err := json.Unmarshal([]byte(args[0].String()), &sources); err != nil {
 			return errorJSON(err.Error())
 		}
-		if len(sources) < 2 {
-			return errorJSON("fit needs a security view and at least one platform description")
+		if len(sources) == 0 {
+			return errorJSON("fit needs a security view")
 		}
 		docs := make([]*awml.Map, 0, len(sources))
 		for _, source := range sources {
@@ -76,11 +76,11 @@ func main() {
 			if err != nil {
 				return errorJSON(err.Error())
 			}
-		} else if !awml.IsCanonical(docs[0]) && field(docs[1], "view") == "platform" {
+		} else if !awml.IsCanonical(docs[0]) && len(docs) > 1 && field(docs[1], "view") == "platform" {
 			placement = docs[1]
 			start = 2
 		}
-		if start == len(docs) {
+		if placement == nil && start == len(docs) {
 			return errorJSON("no platform descriptions were given")
 		}
 		for _, doc := range docs[start:] {

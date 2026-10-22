@@ -75,7 +75,7 @@ positional arguments:
 options:
   -h, --help  show this help message and exit
 `},
-	"fit": {"usage: awml fit [-h] [--json] [--implementation ID] SECURITY {DESC... | PLATFORM_VIEW DESC...}\n", `
+	"fit": {"usage: awml fit [-h] [--json] [--implementation ID] SECURITY [PLATFORM_VIEW] [DESC ...]\n", `
 positional arguments:
   SECURITY
   DESC
@@ -203,8 +203,12 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	var missing []string
 	if len(files) == 0 && command != "login" {
-		missing = append(missing, map[string]string{"draw": "file", "page": "files", "check": "files", "fit": "SECURITY, DESC", "convert": "SECURITY, PLATFORM", "summary": "files", "push": "owner/slug, file", "pull": "owner/slug[@n]"}[command])
-	} else if command == "fit" && len(files) == 1 {
+		fit := "SECURITY, DESC"
+		if implementation != "" {
+			fit = "SECURITY"
+		}
+		missing = append(missing, map[string]string{"draw": "file", "page": "files", "check": "files", "fit": fit, "convert": "SECURITY, PLATFORM", "summary": "files", "push": "owner/slug, file", "pull": "owner/slug[@n]"}[command])
+	} else if command == "fit" && len(files) == 1 && implementation == "" {
 		missing = append(missing, "DESC")
 	}
 	if command == "page" && out == nil {
@@ -387,11 +391,11 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 				fmt.Fprintln(stderr, err)
 				return 1
 			}
-		} else if !awml.IsCanonical(docs[0]) && strField(docs[1], "view") == "platform" {
+		} else if !awml.IsCanonical(docs[0]) && len(docs) > 1 && strField(docs[1], "view") == "platform" {
 			placement = docs[1]
 			start = 2
 		}
-		if start == len(docs) {
+		if placement == nil && start == len(docs) {
 			fmt.Fprintf(stderr, "awml fit: no platform descriptions were given\n")
 			return 1
 		}
