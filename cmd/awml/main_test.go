@@ -494,7 +494,7 @@ func TestPushRefusesABadFileWithoutAnHTTPCall(t *testing.T) {
 	}
 }
 
-func TestPushChecksThenSendsTheViewsAndToken(t *testing.T) {
+func TestPushChecksThenSendsTheWorkflowAndToken(t *testing.T) {
 	useTemporaryHome(t)
 	var gotPath, gotAuth string
 	var gotBody map[string]any
@@ -508,18 +508,39 @@ func TestPushChecksThenSendsTheViewsAndToken(t *testing.T) {
 	}))
 	defer server.Close()
 	loginForTest(t, server.URL, "push-token")
-	security := write(t, "security.yaml", good)
-	platformText := strings.Replace(good, "view: security", "view: platform", 1)
-	platform := write(t, "platform.yaml", platformText)
-	r := awmlRun("push", "acme/mail", security, platform, "--private", "--registry", server.URL)
+	workflow := write(t, "workflow.yaml", canonicalFile)
+	r := awmlRun("push", "acme/mail", workflow, "--private", "--registry", server.URL)
 	if r != (result{0, "Pushed acme/mail version 3: /acme/mail/v/3\n", ""}) {
 		t.Fatalf("push gave %+v", r)
 	}
 	if gotPath != "/api/v1/acme/mail/versions" || gotAuth != "Bearer push-token" {
 		t.Errorf("request path/auth = %q, %q", gotPath, gotAuth)
 	}
-	if gotBody["security"] != good || gotBody["platform"] != platformText || gotBody["visibility"] != "private" {
+	wantBody := map[string]any{"workflow": canonicalFile, "visibility": "private"}
+	if !reflect.DeepEqual(gotBody, wantBody) {
 		t.Errorf("body = %#v", gotBody)
+	}
+}
+
+func TestPushRefusesLegacyOrMultipleFilesWithoutAnHTTPCall(t *testing.T) {
+	useTemporaryHome(t)
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { calls++ }))
+	defer server.Close()
+	legacy := strings.Replace(good, `awml: "0.2"`, `awml: "0.3"`, 1)
+	security := write(t, "security.yaml", legacy)
+	platform := write(t, "platform.yaml", strings.Replace(legacy, "view: security", "view: platform", 1))
+
+	for _, files := range [][]string{{security}, {security, platform}} {
+		args := append([]string{"push", "acme/mail"}, files...)
+		args = append(args, "--registry", server.URL)
+		r := awmlRun(args...)
+		if r.code != 1 || !strings.Contains(r.stderr, "awml convert security.yaml platform.yaml > workflow.yaml") {
+			t.Errorf("push %v gave %+v", files, r)
+		}
+	}
+	if calls != 0 {
+		t.Errorf("server received %d calls", calls)
 	}
 }
 
@@ -527,12 +548,12 @@ func TestPushPrints422Errors(t *testing.T) {
 	useTemporaryHome(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnprocessableEntity)
-		fmt.Fprint(w, `{"errors":["security: a mistake","platform: another mistake"]}`)
+		fmt.Fprint(w, `{"errors":["workflow: a mistake"]}`)
 	}))
 	defer server.Close()
 	loginForTest(t, server.URL, "token")
-	r := awmlRun("push", "acme/mail", write(t, "security.yaml", good), "--registry", server.URL)
-	want := "security: a mistake\nplatform: another mistake\n"
+	r := awmlRun("push", "acme/mail", write(t, "workflow.yaml", canonicalFile), "--registry", server.URL)
+	want := "workflow: a mistake\n"
 	if r != (result{1, "", want}) {
 		t.Errorf("push gave %+v", r)
 	}
@@ -634,14 +655,14 @@ func TestAWMLRegistryURLEnvironmentIsHonoured(t *testing.T) {
 			fmt.Fprint(w, `{"owner":"acme","slug":"mail","number":1,"url":"/acme/mail/v/1"}`)
 			return
 		}
-		fmt.Fprintf(w, `{"number":1,"files":{"security":%q}}`, good)
+		fmt.Fprintf(w, `{"number":1,"files":{"workflow":%q}}`, canonicalFile)
 	}))
 	defer server.Close()
 	t.Setenv("AWML_REGISTRY_URL", server.URL+"/")
 	if r := awmlRunInput("env-token\n", "login"); r != (result{0, "Logged in to " + server.URL + "\n", ""}) {
 		t.Fatalf("login gave %+v", r)
 	}
-	if r := awmlRun("push", "acme/mail", write(t, "security.yaml", good)); r.code != 0 {
+	if r := awmlRun("push", "acme/mail", write(t, "workflow.yaml", canonicalFile)); r.code != 0 {
 		t.Fatalf("push gave %+v", r)
 	}
 	if r := awmlRun("pull", "acme/mail@1", "-o", filepath.Join(t.TempDir(), "out")); r.code != 0 {
@@ -756,7 +777,7 @@ func TestCanonicalPushAndPull(t *testing.T) {
 			w.WriteHeader(http.StatusCreated)
 			fmt.Fprint(w, `{"number":1,"url":"http://example.test/bread"}`)
 		} else {
-			json.NewEncoder(w).Encode(map[string]any{"number": 1, "files": map[string]string{"security": canonicalFile}})
+			json.NewEncoder(w).Encode(map[string]any{"number": 1, "files": map[string]string{"workflow": canonicalFile}})
 		}
 	}))
 	defer server.Close()
@@ -767,19 +788,21 @@ func TestCanonicalPushAndPull(t *testing.T) {
 	if got := awmlRun("push", "--registry", server.URL, "bakery/bread", path); got.code != 0 {
 		t.Fatal(got)
 	}
-	if payload["security"] != canonicalFile || payload["platform"] != nil {
+	if !reflect.DeepEqual(payload, map[string]any{"workflow": canonicalFile}) {
 		t.Fatalf("payload = %#v", payload)
 	}
 	dir := t.TempDir()
 	if got := awmlRun("pull", "--registry", server.URL, "bakery/bread@1", "-o", dir); got.code != 0 {
 		t.Fatal(got)
 	}
-	source, err := os.ReadFile(filepath.Join(dir, "security.yaml"))
+	source, err := os.ReadFile(filepath.Join(dir, "bread.yaml"))
 	if err != nil || string(source) != canonicalFile {
 		t.Fatalf("%s %v", source, err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "platform.yaml")); !os.IsNotExist(err) {
-		t.Fatal("unexpected platform file")
+	for _, name := range []string{"security.yaml", "platform.yaml"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); !os.IsNotExist(err) {
+			t.Fatalf("unexpected %s", name)
+		}
 	}
 }
 
@@ -797,7 +820,7 @@ func TestPushRefusesACanonicalFileWithALegacyPlatformFile(t *testing.T) {
 	canonical := write(t, "bread.yaml", canonicalFile)
 	platform := write(t, "platform.yaml", strings.Replace(good, "view: security", "view: platform", 1))
 	got := awmlRun("push", "bakery/bread", canonical, platform)
-	if got.code != 1 || !strings.Contains(got.stderr, "a 0.4 workflow must be pushed on its own") {
+	if got.code != 1 || !strings.Contains(got.stderr, "awml convert security.yaml platform.yaml > workflow.yaml") {
 		t.Fatalf("%+v", got)
 	}
 }

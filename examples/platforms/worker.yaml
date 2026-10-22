@@ -1,4 +1,4 @@
-awml: "0.3"
+awml: "0.4"
 platform: { id: worker, label: "A code worker" }
 off_for_up_to: PT0S
 steps: code
