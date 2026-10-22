@@ -99,10 +99,10 @@ options:
   -h, --help      show this help message and exit
   --registry URL  registry URL
 `},
-	"push": {"usage: awml push [-h] [--private] [--registry URL] owner/slug files [files ...]\n", `
+	"push": {"usage: awml push [-h] [--private] [--registry URL] owner/slug file\n", `
 positional arguments:
   owner/slug
-  files
+  file
 
 options:
   -h, --help      show this help message and exit
@@ -203,7 +203,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	var missing []string
 	if len(files) == 0 && command != "login" {
-		missing = append(missing, map[string]string{"draw": "file", "page": "files", "check": "files", "fit": "SECURITY, DESC", "convert": "SECURITY, PLATFORM", "summary": "files", "push": "owner/slug, files", "pull": "owner/slug[@n]"}[command])
+		missing = append(missing, map[string]string{"draw": "file", "page": "files", "check": "files", "fit": "SECURITY, DESC", "convert": "SECURITY, PLATFORM", "summary": "files", "push": "owner/slug, file", "pull": "owner/slug[@n]"}[command])
 	} else if command == "fit" && len(files) == 1 {
 		missing = append(missing, "DESC")
 	}
@@ -226,7 +226,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		unknown = append(files[1:], unknown...)
 	}
 	if command == "push" && len(files) == 1 {
-		return fail(commands[command].usage, "awml push", "the following arguments are required: files")
+		return fail(commands[command].usage, "awml push", "the following arguments are required: file")
 	}
 	if unknown != nil {
 		return fail(usage, "awml", "unrecognized arguments: "+strings.Join(unknown, " "))

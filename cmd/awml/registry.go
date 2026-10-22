@@ -12,8 +12,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-
-	"github.com/chrismdp/awml"
 )
 
 const defaultRegistry = "https://awml.io"
@@ -64,55 +62,33 @@ func push(name string, paths []string, private bool, registry string, stdout, st
 		fmt.Fprintln(stderr, "awml push: workflow must be owner/slug")
 		return 2
 	}
-	payload := struct {
-		Security   string `json:"security,omitempty"`
-		Platform   string `json:"platform,omitempty"`
-		Visibility string `json:"visibility,omitempty"`
-	}{}
-	valid := true
-	for _, path := range paths {
-		doc, errs := read(path)
-		for _, message := range errs {
-			fmt.Fprintf(stderr, "%s: %s\n", path, message)
-		}
-		if len(errs) != 0 {
-			valid = false
-			continue
-		}
-		src, err := os.ReadFile(path)
-		if err != nil {
-			fmt.Fprintf(stderr, "%s: can't be read: %s\n", path, reason(err))
-			valid = false
-			continue
-		}
-		view, _ := doc.Get("view")
-		if awml.IsCanonical(doc) {
-			if len(paths) != 1 {
-				fmt.Fprintln(stderr, "awml push: a 0.4 workflow must be pushed on its own")
-				valid = false
-			}
-			view = "security"
-		}
-		switch view {
-		case "security":
-			if payload.Security != "" {
-				fmt.Fprintln(stderr, "awml push: two security views were given")
-				valid = false
-			} else {
-				payload.Security = string(src)
-			}
-		case "platform":
-			if payload.Platform != "" {
-				fmt.Fprintln(stderr, "awml push: two platform views were given")
-				valid = false
-			} else {
-				payload.Platform = string(src)
-			}
-		}
-	}
-	if !valid {
+	if len(paths) != 1 {
+		printConvertAdvice(stderr)
 		return 1
 	}
+	payload := struct {
+		Workflow   string `json:"workflow"`
+		Visibility string `json:"visibility,omitempty"`
+	}{}
+	path := paths[0]
+	doc, errs := read(path)
+	for _, message := range errs {
+		fmt.Fprintf(stderr, "%s: %s\n", path, message)
+	}
+	if len(errs) != 0 {
+		return 1
+	}
+	format, _ := doc.Get("awml")
+	if format != "0.4" {
+		printConvertAdvice(stderr)
+		return 1
+	}
+	src, err := os.ReadFile(path)
+	if err != nil {
+		fmt.Fprintf(stderr, "%s: can't be read: %s\n", path, reason(err))
+		return 1
+	}
+	payload.Workflow = string(src)
 	if private {
 		payload.Visibility = "private"
 	}
@@ -151,6 +127,10 @@ func push(name string, paths []string, private bool, registry string, stdout, st
 	}
 	fmt.Fprintf(stdout, "Pushed %s version %d: %s\n", name, pushed.Number, pushed.URL)
 	return 0
+}
+
+func printConvertAdvice(stderr io.Writer) {
+	fmt.Fprintln(stderr, "awml push: push one 0.4 file; convert an old pair with awml convert security.yaml platform.yaml > workflow.yaml")
 }
 
 func pull(name, dir, registry string, stdout, stderr io.Writer) int {
@@ -210,6 +190,7 @@ func pull(name, dir, registry string, stdout, stderr io.Writer) int {
 	var downloaded struct {
 		Number int `json:"number"`
 		Files  struct {
+			Workflow string `json:"workflow"`
 			Security string `json:"security"`
 			Platform string `json:"platform"`
 		} `json:"files"`
@@ -221,7 +202,7 @@ func pull(name, dir, registry string, stdout, stderr io.Writer) int {
 	if downloaded.Number != 0 {
 		version = downloaded.Number
 	}
-	if downloaded.Files.Security == "" && downloaded.Files.Platform == "" {
+	if downloaded.Files.Workflow == "" && downloaded.Files.Security == "" && downloaded.Files.Platform == "" {
 		fmt.Fprintf(stderr, "awml pull: version %d of %s/%s came with no files\n", version, owner, slug)
 		return 1
 	}
@@ -229,7 +210,11 @@ func pull(name, dir, registry string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "%s: can't be created: %s\n", dir, reason(err))
 		return 1
 	}
-	for filename, source := range map[string]string{"security.yaml": downloaded.Files.Security, "platform.yaml": downloaded.Files.Platform} {
+	files := map[string]string{slug + ".yaml": downloaded.Files.Workflow}
+	if downloaded.Files.Workflow == "" {
+		files = map[string]string{"security.yaml": downloaded.Files.Security, "platform.yaml": downloaded.Files.Platform}
+	}
+	for filename, source := range files {
 		if source == "" {
 			continue
 		}

@@ -43,9 +43,15 @@ Ask both at once:
 
 ## 4. Check, then publish
 
-For a 0.4 workflow, run `check` with the canonical file as `security` and no `platform`. For a legacy pair, pass the security and platform files in those fields. Fix every mistake it gives, and check again until it says `No mistakes.`
+Use one 0.4 file. If the workflow is still a legacy pair, convert it first:
 
-Then run `publish` with the owner, the slug, the same file fields and, for the first version only, `visibility`. If it refuses, say what it said and fix what you can: a mistake in a file, an owner the person can't publish to, or private for anything but an organisation.
+```sh
+awml convert security.yaml platform.yaml > workflow.yaml
+```
+
+Run `check` with the file as `workflow`. Fix every mistake it gives, and check again until it says `No mistakes.`
+
+Then run `publish` with the owner, the slug, the same `workflow` file and, for the first version only, `visibility`. If it refuses, say what it said and fix what you can: a mistake in the file, an owner the person can't publish to, or private for anything but an organisation.
 
 Show the person the page it gives back, such as `https://awml.io/acme/client-email`, and the version number.
 
