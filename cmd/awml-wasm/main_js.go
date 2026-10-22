@@ -13,7 +13,32 @@ import (
 
 var callbacks []js.Func
 
+// version is the release, when the build names it, as the awml command's does.
+var version string
+
 func main() {
+	expose("__awmlChecks", func(args []js.Value) string {
+		var files []struct {
+			File   string `json:"file"`
+			Source string `json:"source"`
+		}
+		if err := json.Unmarshal([]byte(args[0].String()), &files); err != nil {
+			return errorJSON(err.Error())
+		}
+		sources := make([]awml.Source, 0, len(files))
+		for _, file := range files {
+			sources = append(sources, awml.Source{File: file.File, Text: []byte(file.Source)})
+		}
+		engine := version
+		if engine == "" {
+			engine = awml.BuildVersion()
+		}
+		encoded, err := json.Marshal(awml.CheckSources(engine, sources))
+		if err != nil {
+			return errorJSON(err.Error())
+		}
+		return string(encoded)
+	})
 	expose("__awmlCheck", func(args []js.Value) string {
 		errors := checkSource(args[0].String())
 		encoded, _ := json.Marshal(errors)

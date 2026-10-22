@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"runtime/debug"
 	"sort"
 	"strings"
 	"syscall"
@@ -68,12 +67,13 @@ options:
   -h, --help         show this help message and exit
   -o OUT, --out OUT
 `},
-	"check": {"usage: awml check [-h] files [files ...]\n", `
+	"check": {"usage: awml check [-h] [--json] files [files ...]\n", `
 positional arguments:
   files
 
 options:
   -h, --help  show this help message and exit
+  --json      print every check and its result as JSON
 `},
 	"fit": {"usage: awml fit [-h] [--json] [--implementation ID] SECURITY [PLATFORM_VIEW] [DESC ...]\n", `
 positional arguments:
@@ -183,7 +183,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		case flags && (command == "page" || command == "pull") && strings.HasPrefix(a, "-o") && !strings.HasPrefix(a, "--"):
 			v := strings.TrimPrefix(a, "-o")
 			out = &v
-		case flags && (command == "summary" || command == "fit") && a == "--json":
+		case flags && (command == "summary" || command == "fit" || command == "check") && a == "--json":
 			jsonOutput = true
 		case flags && command == "push" && a == "--private":
 			private = true
@@ -251,6 +251,9 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return pull(files[0], dir, registry, stdout, stderr)
 	}
 
+	if command == "check" && jsonOutput {
+		return checkJSON(files, stdout, stderr)
+	}
 	if command == "check" {
 		type checkedFile struct {
 			path     string
@@ -258,35 +261,12 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			errs     []string
 			warnings []string
 		}
-		type viewsOfTitle struct {
-			security []int
-			platform []int
-		}
 		checked := make([]checkedFile, 0, len(files))
-		byTitle := map[string]*viewsOfTitle{}
-		var titleOrder []string
+		docs := make([]*awml.Map, 0, len(files))
 		for _, path := range files {
 			doc, errs := read(path)
 			checked = append(checked, checkedFile{path, doc, errs, awml.Warnings(doc)})
-			if doc == nil {
-				continue
-			}
-			view := strField(doc, "view")
-			if view != "security" && view != "platform" {
-				continue
-			}
-			title := strField(doc, "title")
-			views := byTitle[title]
-			if views == nil {
-				views = &viewsOfTitle{}
-				byTitle[title] = views
-				titleOrder = append(titleOrder, title)
-			}
-			if view == "security" {
-				views.security = append(views.security, len(checked)-1)
-			} else {
-				views.platform = append(views.platform, len(checked)-1)
-			}
+			docs = append(docs, doc)
 		}
 
 		type comparison struct {
@@ -296,12 +276,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 		var comparisons []comparison
 		failedComparison := make([]bool, len(checked))
-		for _, title := range titleOrder {
-			views := byTitle[title]
-			if len(views.security) != 1 || len(views.platform) != 1 {
-				continue
-			}
-			security, platform := views.security[0], views.platform[0]
+		for _, pair := range awml.ViewPairs(docs) {
+			security, platform := pair[0], pair[1]
 			mistakes := awml.CompareViews(checked[security].doc, checked[platform].doc)
 			if len(mistakes) == 0 {
 				continue
@@ -443,17 +419,36 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	return 0
 }
 
+// checkJSON prints every check and its result as JSON, and fails as the plain output does: when
+// any check finds a mistake.
+func checkJSON(files []string, stdout, stderr io.Writer) int {
+	sources := make([]awml.Source, 0, len(files))
+	for _, path := range files {
+		src, err := os.ReadFile(path)
+		if err != nil {
+			sources = append(sources, awml.Source{File: path, Unreadable: "can't be read: " + reason(err)})
+			continue
+		}
+		sources = append(sources, awml.Source{File: path, Text: src})
+	}
+	report := awml.CheckSources(currentVersion(), sources)
+	if err := json.NewEncoder(stdout).Encode(report); err != nil {
+		fmt.Fprintf(stderr, "awml check: can't write its output: %s\n", err)
+		return 1
+	}
+	for _, check := range report.Checks {
+		if check.Result == "fail" {
+			return 1
+		}
+	}
+	return 0
+}
+
 func currentVersion() string {
 	if version != "" {
 		return version
 	}
-	if info, ok := debug.ReadBuildInfo(); ok {
-		buildVersion := strings.TrimPrefix(info.Main.Version, "v")
-		if buildVersion != "" && buildVersion != "(devel)" {
-			return buildVersion
-		}
-	}
-	return "dev"
+	return awml.BuildVersion()
 }
 
 func strField(doc *awml.Map, field string) string {

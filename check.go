@@ -9,27 +9,49 @@ import (
 
 // Check finds the structural mistakes in an AWML document: what would draw wrongly, or not at all.
 func Check(doc any) []string {
+	found, _ := checkDoc(doc)
+	return found.messages()
+}
+
+// mistake is one thing Check reports, with the id of the check that found it.
+type mistake struct{ check, message string }
+
+type mistakeList []mistake
+
+func (m *mistakeList) add(check, message string) { *m = append(*m, mistake{check, message}) }
+
+func (m mistakeList) messages() []string {
+	var messages []string
+	for _, found := range m {
+		messages = append(messages, found.message)
+	}
+	return messages
+}
+
+// checkDoc gives the mistakes in a document, and whether a broken list stopped the checks that
+// follow those of the file's own fields.
+func checkDoc(doc any) (mistakeList, bool) {
 	file, ok := doc.(*Map)
 	if !ok {
-		return []string{"the file must be a mapping of fields, starting with awml"}
+		return mistakeList{{"file.yaml", "the file must be a mapping of fields, starting with awml"}}, true
 	}
 	if IsCanonical(file) {
 		return checkCanonical(file)
 	}
 	if file.has("platform") {
-		return checkPlatformDescription(file)
+		return checkPlatformDescription(file), false
 	}
-	var errors []string
+	var errors mistakeList
 	fileVersion := show(file.get("awml"))
 	fields("file", "the file", file, fileVersion, &errors)
 	if file.has("awml") && fileVersion != "0.2" && fileVersion != "0.3" {
-		errors = append(errors, fmt.Sprintf(`awml must be "0.2" or "0.3", not "%s"`, fileVersion))
+		errors.add("file.version", fmt.Sprintf(`awml must be "0.2" or "0.3", not "%s"`, fileVersion))
 	}
 	if file.has("view") && !isOneOf(file.get("view"), "security", "platform") {
-		errors = append(errors, fmt.Sprintf(`view must be "security" or "platform", not "%s"`, show(file.get("view"))))
+		errors.add("file.version", fmt.Sprintf(`view must be "security" or "platform", not "%s"`, show(file.get("view"))))
 	}
 	var lists [3][]*Map
-	var broken []string
+	var broken mistakeList
 	for n, kw := range [3][2]string{{"groups", "group"}, {"parts", "part"}, {"lines", "line"}} {
 		items := file.get(kw[0])
 		if empty(items) {
@@ -37,13 +59,13 @@ func Check(doc any) []string {
 		}
 		list, ok := items.([]any)
 		if !ok {
-			broken = append(broken, kw[0]+" must be a list")
+			broken.add("fields.known", kw[0]+" must be a list")
 			continue
 		}
 		for _, item := range list {
 			m, ok := item.(*Map)
 			if !ok {
-				broken = append(broken, fmt.Sprintf("each %s must be a mapping of fields", kw[1]))
+				broken.add("fields.known", fmt.Sprintf("each %s must be a mapping of fields", kw[1]))
 				break
 			}
 			lists[n] = append(lists[n], m)
@@ -51,7 +73,7 @@ func Check(doc any) []string {
 	}
 	// Past here every list is sound, or each line would report a part it can't find.
 	if broken != nil {
-		return append(errors, broken...)
+		return append(errors, broken...), true
 	}
 	groups, parts, lines := lists[0], lists[1], lists[2]
 
@@ -62,11 +84,11 @@ func Check(doc any) []string {
 			continue
 		}
 		if seen[keyOf(i)] {
-			errors = append(errors, fmt.Sprintf(`id "%s" is used twice`, show(i)))
+			errors.add("ids.unique", fmt.Sprintf(`id "%s" is used twice`, show(i)))
 		}
 		seen[keyOf(i)] = true
 		if s, ok := i.(string); ok && !id.MatchString(s) {
-			errors = append(errors, fmt.Sprintf(`id "%s" must be letters, digits and underscores, starting with a letter`, s))
+			errors.add("ids.written", fmt.Sprintf(`id "%s" must be letters, digits and underscores, starting with a letter`, s))
 		}
 	}
 	groupIDs := map[any]bool{}
@@ -82,12 +104,12 @@ func Check(doc any) []string {
 		name := fmt.Sprintf(`group "%s"`, show(g.get("id")))
 		fields("group", name, g, fileVersion, &errors)
 		if in := g.get("in"); in != nil && !groupIDs[keyOf(in)] {
-			errors = append(errors, fmt.Sprintf(`%s is in unknown group "%s"`, name, show(in)))
+			errors.add("references.known", fmt.Sprintf(`%s is in unknown group "%s"`, name, show(in)))
 		}
 		if fileVersion == "0.3" {
 			if g.has("processing") {
 				if file.get("view") != "security" {
-					errors = append(errors, name+" has processing, but only a group in the security view takes it")
+					errors.add("processing.scopes-only", name+" has processing, but only a group in the security view takes it")
 				} else {
 					_, processingErrors := readProcessing(g.get("processing"), name)
 					errors = append(errors, processingErrors...)
@@ -95,11 +117,11 @@ func Check(doc any) []string {
 			}
 			if g.has("platform") {
 				if file.get("view") != "platform" {
-					errors = append(errors, name+" has a platform, but only a group in the platform view takes one")
+					errors.add("platform.blocks-only", name+" has a platform, but only a group in the platform view takes one")
 				} else if s, ok := g.get("platform").(string); !ok {
-					errors = append(errors, fmt.Sprintf("%s: YAML read its platform as %s, not text: put it in quotes", name, show(g.get("platform"))))
+					errors.add("values.text", fmt.Sprintf("%s: YAML read its platform as %s, not text: put it in quotes", name, show(g.get("platform"))))
 				} else if !companyID.MatchString(s) {
-					errors = append(errors, fmt.Sprintf(`%s: platform "%s" must be a company id`, name, s))
+					errors.add("ids.written", fmt.Sprintf(`%s: platform "%s" must be a company id`, name, s))
 				}
 			}
 		}
@@ -116,7 +138,7 @@ func Check(doc any) []string {
 				break
 			}
 			if keyOf(at) == self {
-				errors = append(errors, fmt.Sprintf(`group "%s" is nested in itself`, show(g.get("id"))))
+				errors.add("nesting.acyclic", fmt.Sprintf(`group "%s" is nested in itself`, show(g.get("id"))))
 				break
 			}
 			path[keyOf(at)] = true
@@ -129,31 +151,31 @@ func Check(doc any) []string {
 		fields("part", name, p, fileVersion, &errors)
 		if p.has("kind") {
 			if k, ok := p.get("kind").(string); !ok || shapes[k] == "" {
-				errors = append(errors, fmt.Sprintf(`%s has unknown kind "%s"`, name, show(p.get("kind"))))
+				errors.add("kinds.known", fmt.Sprintf(`%s has unknown kind "%s"`, name, show(p.get("kind"))))
 			}
 		}
 		if in := p.get("in"); in != nil && !groupIDs[keyOf(in)] {
-			errors = append(errors, fmt.Sprintf(`%s is in unknown group "%s"`, name, show(in)))
+			errors.add("references.known", fmt.Sprintf(`%s is in unknown group "%s"`, name, show(in)))
 		}
 		if op := p.get("op"); op != nil {
 			if k, _ := p.get("kind").(string); !steps[k] {
-				errors = append(errors, name+" has an op, but only an ai, code or person step takes one")
+				errors.add("ops.known", name+" has an op, but only an ai, code or person step takes one")
 			} else if s, _ := op.(string); ops[s] == "" {
-				errors = append(errors, fmt.Sprintf(`%s has unknown op "%s"`, name, show(op)))
+				errors.add("ops.known", fmt.Sprintf(`%s has unknown op "%s"`, name, show(op)))
 			}
 		}
 		if fileVersion == "0.3" && p.has("wait") {
 			if p.get("kind") != "trigger" {
-				errors = append(errors, name+" has a wait, but only a trigger takes one")
+				errors.add("wait.duration", name+" has a wait, but only a trigger takes one")
 			} else if wait, ok := p.get("wait").(string); !ok || !validDuration(wait) {
-				errors = append(errors, fmt.Sprintf(`%s: wait must be an ISO 8601 duration using weeks, days, hours, minutes or seconds, not "%s"`, name, show(p.get("wait"))))
+				errors.add("wait.duration", fmt.Sprintf(`%s: wait must be an ISO 8601 duration using weeks, days, hours, minutes or seconds, not "%s"`, name, show(p.get("wait"))))
 			}
 		}
 		if fileVersion == "0.3" && p.has("at") {
 			if p.get("kind") != "context" {
-				errors = append(errors, name+" has an at, but only a context takes one")
+				errors.add("at.path", name+" has an at, but only a context takes one")
 			} else if at, ok := p.get("at").(string); !ok || !validPath(at) {
-				errors = append(errors, fmt.Sprintf(`%s: at must be a path, not "%s"`, name, show(p.get("at"))))
+				errors.add("at.path", fmt.Sprintf(`%s: at must be a path, not "%s"`, name, show(p.get("at"))))
 			}
 		}
 	}
@@ -166,12 +188,12 @@ func Check(doc any) []string {
 		fields("line", name, l, fileVersion, &errors)
 		if b := l.get("breaks"); b != nil {
 			if _, ok := b.(bool); !ok {
-				errors = append(errors, fmt.Sprintf(`%s: breaks must be true or false, not "%s"`, name, show(b)))
+				errors.add("lines.breaks", fmt.Sprintf(`%s: breaks must be true or false, not "%s"`, name, show(b)))
 			}
 		}
 		for _, end := range [2][2]string{{"from", "starts"}, {"to", "ends"}} {
 			if _, ok := kinds[keyOf(l.get(end[0]))]; l.has(end[0]) && !ok {
-				errors = append(errors, fmt.Sprintf(`%s %s at unknown part "%s"`, name, end[1], show(l.get(end[0]))))
+				errors.add("references.known", fmt.Sprintf(`%s %s at unknown part "%s"`, name, end[1], show(l.get(end[0]))))
 			}
 		}
 		kind := l.get("kind")
@@ -180,7 +202,7 @@ func Check(doc any) []string {
 		}
 		k, ok := kind.(string)
 		if !ok || arrows[k] == "" {
-			errors = append(errors, fmt.Sprintf(`%s has unknown kind "%s"`, name, show(kind)))
+			errors.add("kinds.known", fmt.Sprintf(`%s has unknown kind "%s"`, name, show(kind)))
 			continue
 		}
 		var comments []any
@@ -192,11 +214,11 @@ func Check(doc any) []string {
 		// A hidden line only steers the layout, so it links nothing.
 		if k != "tie" && k != "hidden" {
 			for _, c := range comments {
-				errors = append(errors, fmt.Sprintf(`comment "%s" is linked by a %s line: a comment takes only tie`, show(c), k))
+				errors.add("comments.tie-only", fmt.Sprintf(`comment "%s" is linked by a %s line: a comment takes only tie`, show(c), k))
 			}
 		}
 		if k == "tie" && len(comments) == 0 {
-			errors = append(errors, fmt.Sprintf(`the tie from "%s" to "%s" has no comment at either end`, show(l.get("from")), show(l.get("to"))))
+			errors.add("ties.comment", fmt.Sprintf(`the tie from "%s" to "%s" has no comment at either end`, show(l.get("from")), show(l.get("to"))))
 		}
 	}
 	errors = append(errors, operations(parts, lines)...)
@@ -206,7 +228,7 @@ func Check(doc any) []string {
 			errors = append(errors, nestedProcessing(groups)...)
 		}
 	}
-	return errors
+	return errors, false
 }
 
 type processingTerms struct {
@@ -220,7 +242,7 @@ type operationTerms struct {
 	ops map[string]bool
 }
 
-func readProcessing(value any, name string) (processingTerms, []string) {
+func readProcessing(value any, name string) (processingTerms, mistakeList) {
 	terms := processingTerms{companies: map[string]operationTerms{}, valid: true}
 	if value == "any" {
 		terms.all = true
@@ -232,15 +254,15 @@ func readProcessing(value any, name string) (processingTerms, []string) {
 	mapping, ok := value.(*Map)
 	if !ok {
 		terms.valid = false
-		return terms, []string{name + ": processing must be any, none or a map from company ids to any or operations"}
+		return terms, mistakeList{{"processing.written", name + ": processing must be any, none or a map from company ids to any or operations"}}
 	}
-	var errors []string
+	var errors mistakeList
 	for _, company := range mapping.Keys() {
 		if mapping.nonTextKeys[company] {
-			errors = append(errors, fmt.Sprintf(`%s: processing company "%s" must be text: put it in quotes`, name, company))
+			errors.add("processing.written", fmt.Sprintf(`%s: processing company "%s" must be text: put it in quotes`, name, company))
 			terms.valid = false
 		} else if !companyID.MatchString(company) {
-			errors = append(errors, fmt.Sprintf(`%s: processing company "%s" must be lower-case letters, digits and hyphens, starting with a letter`, name, company))
+			errors.add("processing.written", fmt.Sprintf(`%s: processing company "%s" must be lower-case letters, digits and hyphens, starting with a letter`, name, company))
 			terms.valid = false
 		}
 		value := mapping.get(company)
@@ -250,7 +272,7 @@ func readProcessing(value any, name string) (processingTerms, []string) {
 		}
 		list, ok := value.([]any)
 		if !ok {
-			errors = append(errors, fmt.Sprintf(`%s: processing for "%s" must be any or a list of operations`, name, company))
+			errors.add("processing.written", fmt.Sprintf(`%s: processing for "%s" must be any or a list of operations`, name, company))
 			terms.valid = false
 			continue
 		}
@@ -258,7 +280,7 @@ func readProcessing(value any, name string) (processingTerms, []string) {
 		for _, item := range list {
 			op, ok := item.(string)
 			if !ok || ops[op] == "" {
-				errors = append(errors, fmt.Sprintf(`%s: processing for "%s" has unknown operation "%s"`, name, company, show(item)))
+				errors.add("processing.written", fmt.Sprintf(`%s: processing for "%s" has unknown operation "%s"`, name, company, show(item)))
 				terms.valid = false
 				continue
 			}
@@ -269,12 +291,12 @@ func readProcessing(value any, name string) (processingTerms, []string) {
 	return terms, errors
 }
 
-func nestedProcessing(groups []*Map) []string {
+func nestedProcessing(groups []*Map) mistakeList {
 	byID := map[string]*Map{}
 	for _, group := range groups {
 		byID[str(group, "id")] = group
 	}
-	var errors []string
+	var errors mistakeList
 	for _, inner := range groups {
 		outer := byID[str(inner, "in")]
 		if outer == nil || !inner.has("processing") {
@@ -291,7 +313,7 @@ func nestedProcessing(groups []*Map) []string {
 		}
 		innerName, outerName := str(inner, "id"), str(outer, "id")
 		if inside.all {
-			errors = append(errors, fmt.Sprintf(`group "%s" allows any company to process any operation, but outer group "%s" doesn't`, innerName, outerName))
+			errors.add("processing.nested", fmt.Sprintf(`group "%s" allows any company to process any operation, but outer group "%s" doesn't`, innerName, outerName))
 			continue
 		}
 		for _, company := range sortedCompanyKeys(inside.companies) {
@@ -301,15 +323,15 @@ func nestedProcessing(groups []*Map) []string {
 			}
 			if in.all {
 				if len(out.ops) == 0 {
-					errors = append(errors, fmt.Sprintf(`group "%s" allows %s to process any operation, but outer group "%s" doesn't allow %s`, innerName, company, outerName, company))
+					errors.add("processing.nested", fmt.Sprintf(`group "%s" allows %s to process any operation, but outer group "%s" doesn't allow %s`, innerName, company, outerName, company))
 				} else {
-					errors = append(errors, fmt.Sprintf(`group "%s" allows %s to process any operation, but outer group "%s" allows it only for %s`, innerName, company, outerName, naturalList(sortedKeys(out.ops))))
+					errors.add("processing.nested", fmt.Sprintf(`group "%s" allows %s to process any operation, but outer group "%s" allows it only for %s`, innerName, company, outerName, naturalList(sortedKeys(out.ops))))
 				}
 				continue
 			}
 			for _, op := range sortedKeys(in.ops) {
 				if !out.ops[op] {
-					errors = append(errors, fmt.Sprintf(`group "%s" allows %s to %s, but outer group "%s" doesn't`, innerName, company, op, outerName))
+					errors.add("processing.nested", fmt.Sprintf(`group "%s" allows %s to %s, but outer group "%s" doesn't`, innerName, company, op, outerName))
 				}
 			}
 		}
@@ -323,7 +345,7 @@ func nestedProcessing(groups []*Map) []string {
 // refuses. A part in no box sits outside every box, so it's wider than any of them, and a trigger
 // with none is in the box of what it starts. A red line draws what a live system did, not the
 // design, so this rule doesn't hold it.
-func scopes(groups, parts, lines []*Map) []string {
+func scopes(groups, parts, lines []*Map) mistakeList {
 	parent := map[string]string{}
 	for _, g := range groups {
 		parent[str(g, "id")] = str(g, "in")
@@ -344,7 +366,7 @@ func scopes(groups, parts, lines []*Map) []string {
 		return outer == ""
 	}
 	where := placed(parts, lines)
-	var errors []string
+	var errors mistakeList
 	for _, l := range lines {
 		from, to := str(l, "from"), str(l, "to")
 		if l.get("kind") != "data" || l.get("breaks") == true || !known[from] || !known[to] {
@@ -358,7 +380,7 @@ func scopes(groups, parts, lines []*Map) []string {
 		if target == "" {
 			into = "to the top level, outside every group"
 		}
-		errors = append(errors, fmt.Sprintf(`the line from "%s" to "%s" moves content from group "%s" %s: draw it as publish, or as refused if the design refuses the read`,
+		errors.add("lines.data-narrows", fmt.Sprintf(`the line from "%s" to "%s" moves content from group "%s" %s: draw it as publish, or as refused if the design refuses the read`,
 			from, to, source, into))
 	}
 	return errors
@@ -383,7 +405,7 @@ func lineLeads(line *Map) bool {
 // step leads to an outside action, directly or through a review or a fork, and an answer or check
 // step never writes to a context. A red line draws what a live system did, not the design, so
 // these rules don't hold it.
-func operations(parts, lines []*Map) []string {
+func operations(parts, lines []*Map) mistakeList {
 	byID := map[any]*Map{}
 	for _, p := range parts {
 		byID[keyOf(p.get("id"))] = p
@@ -399,7 +421,7 @@ func operations(parts, lines []*Map) []string {
 		}
 		return op
 	}
-	var errors []string
+	var errors mistakeList
 	for _, out := range parts {
 		if out.get("kind") != "outside" {
 			continue
@@ -419,7 +441,7 @@ func operations(parts, lines []*Map) []string {
 					}
 				} else if op := opOf(from); op != "" && op != "do" && !reported[from] {
 					reported[from] = true
-					errors = append(errors, fmt.Sprintf(`part "%s" leads to outside action "%s", but its op is %s: only a do step leads to an outside action`,
+					errors.add("operations.only-do-acts", fmt.Sprintf(`part "%s" leads to outside action "%s", but its op is %s: only a do step leads to an outside action`,
 						show(from.get("id")), show(out.get("id")), op))
 				}
 			}
@@ -433,7 +455,7 @@ func operations(parts, lines []*Map) []string {
 		}
 		if op := opOf(from); op == "answer" || op == "check" {
 			a := map[string]string{"answer": "an", "check": "a"}[op]
-			errors = append(errors, fmt.Sprintf(`part "%s" writes to context "%s", but its op is %s: %s %s step never writes to a context`,
+			errors.add("operations.answer-check-read-only", fmt.Sprintf(`part "%s" writes to context "%s", but its op is %s: %s %s step never writes to a context`,
 				show(from.get("id")), show(to.get("id")), op, a, op))
 		}
 	}
@@ -459,7 +481,7 @@ var textFields = map[string]bool{"title": true, "view": true, "id": true, "label
 var id = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`)
 
 // fields reports what an item lacks, what it has that it shouldn't, and what YAML didn't read as text.
-func fields(what, name string, item *Map, version string, errors *[]string) {
+func fields(what, name string, item *Map, version string, errors *mistakeList) {
 	need, may := setOf(fieldSets[what][0]), setOf(fieldSets[what][1])
 	if version == "0.3" {
 		for _, field := range fields03[what] {
@@ -479,18 +501,18 @@ func fields(what, name string, item *Map, version string, errors *[]string) {
 	}
 	sort.Strings(missing)
 	for _, f := range missing {
-		*errors = append(*errors, fmt.Sprintf("%s has no %s", name, f))
+		errors.add("fields.known", fmt.Sprintf("%s has no %s", name, f))
 	}
 	for _, f := range item.Keys() {
 		if !need[f] && !may[f] {
-			*errors = append(*errors, fmt.Sprintf(`%s has unknown field "%s"`, name, f))
+			errors.add("fields.known", fmt.Sprintf(`%s has unknown field "%s"`, name, f))
 		}
 	}
 	// YAML reads true and false, numbers and dates as something other than text.
 	for _, f := range item.Keys() {
 		v := item.get(f)
 		if _, ok := v.(string); textFields[f] && v != nil && !ok {
-			*errors = append(*errors, fmt.Sprintf("%s: YAML read its %s as %s, not text: put it in quotes", name, f, show(v)))
+			errors.add("values.text", fmt.Sprintf("%s: YAML read its %s as %s, not text: put it in quotes", name, f, show(v)))
 		}
 	}
 }
