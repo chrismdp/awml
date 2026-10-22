@@ -133,8 +133,23 @@ holds: []
 		t.Errorf("plain fit gave %+v", plain)
 	}
 	json := awmlRun("fit", "--json", security, platform)
-	if json != (result{0, `["worker  fits: draft may use anthropic"]` + "\n", ""}) {
+	want := `{"results":[{"platform":"worker","judged":true,"fits":true,"reasons":[],"models":{"draft":["anthropic"]}}],"gaps":[]}`
+	if json != (result{0, want + "\n", ""}) {
 		t.Errorf("JSON fit gave %+v", json)
+	}
+	cowork := write(t, "cowork.yaml", `
+awml: "0.3"
+platform: {id: cowork, label: Cowork}
+off_for_up_to: PT0S
+steps: agent
+agents: [openai]
+calls: any
+holds: []
+`)
+	no := awmlRun("fit", "--json", security, cowork)
+	wantNo := `{"results":[{"platform":"cowork","judged":true,"fits":false,"reasons":["openai's agents run here, and business doesn't allow openai"],"models":{"draft":["anthropic"]}}],"gaps":[]}`
+	if no != (result{0, wantNo + "\n", ""}) {
+		t.Errorf("JSON fit for a platform that doesn't fit gave %+v", no)
 	}
 }
 
@@ -149,6 +164,9 @@ parts: [{id: draft, kind: ai, op: draft, label: Draft, in: business}]
 	platform := write(t, "worker.yaml", goodPlatformForCommand)
 	if r := awmlRun("fit", security, platform); r.code != 1 || r.stdout != `group "business" has no processing`+"\n" {
 		t.Errorf("gap fit gave %+v", r)
+	}
+	if r := awmlRun("fit", "--json", security, platform); r.code != 1 || r.stdout != `{"results":[],"gaps":["group \"business\" has no processing"]}`+"\n" {
+		t.Errorf("gap fit as JSON gave %+v", r)
 	}
 	view := write(t, "view.yaml", strings.Replace(good, "view: security", "view: platform", 1))
 	if r := awmlRun("fit", view, platform); r.code != 1 || !strings.Contains(r.stderr, "must be a security view") {
