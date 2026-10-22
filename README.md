@@ -410,6 +410,7 @@ AWML isn't a visual workflow tool, where the diagram is the program and drawing 
 
 ```sh
 awml check examples/question.yaml        # report mistakes; exits 1 on any
+awml fit examples/client-email.yaml examples/platforms/*.yaml
 awml draw examples/question.yaml         # print the Mermaid
 awml page examples/dinners-security.yaml examples/dinners-platform.yaml -o dinners.html
 awml summary examples/dinners-security.yaml --json
@@ -419,10 +420,23 @@ awml pull family/dinners@1 -o dinners
 ```
 
 - `awml check` reads each file and prints `ok`, or one line for each mistake, and exits 1 if any file has one.
+- `awml fit` judges a security view against platform descriptions, or judges a placement when a platform view comes between them. Add `--json` for the same lines as a JSON array.
 - `awml draw` prints a file's Mermaid. It refuses a file with mistakes, and prints them instead.
 - `awml page` writes one standalone HTML page that draws each file with Mermaid in the browser, in the order given. Each file gets its own heading, saying which view it is. The page takes the files' title when they all share one, as the two views of the family's dinners do, and is called Workflows when they don't.
 - `awml summary` counts the scopes, platforms, triggers, steps and operations, reviews, contexts, connectors, surfaces, outside actions, publishing lines, refused reads and red lines in one workflow. Give it one view or both; `--json` prints the registry's JSON form.
 - `awml login` saves an API token for the registry. `awml push` checks one or two view files before uploading them, and `awml pull` downloads the latest or a numbered version. They use `https://awml.io` unless `--registry` or `AWML_REGISTRY_URL` says otherwise. Add `--private` to the first push of a private organisation workflow.
+
+For example, the client email workflow can run on the scheduled scripts platform, while the other descriptions show why they don't fit:
+
+```text
+$ awml fit examples/client-email.yaml examples/platforms/cowork-mac-mini.yaml examples/platforms/scripts-mac-mini.yaml examples/platforms/codex-laptop.yaml examples/platforms/worker.yaml
+cowork-mac-mini   no: bring and rules are code steps, which anthropic's agent would carry out
+scripts-mac-mini  fits: choose, learn and draft may use anthropic
+codex-laptop      no: weekdays may wait PT2H, but the platform may be off for P14D
+                  no: openai's agents run here, and business doesn't allow openai
+worker            no: engagements is kept at notes/engagements, which the platform doesn't hold
+                  no: project is kept at notes/projects, which the platform doesn't hold
+```
 
 The Mermaid works anywhere that draws Mermaid 11.4.1. To make an SVG, use the Mermaid CLI, which needs Node:
 
@@ -438,7 +452,7 @@ npx -y @mermaid-js/mermaid-cli@11.4.1 -b white -i my-workflow.mmd -o my-workflow
 One file holds one view of one workflow:
 
 ```yaml
-awml: "0.2"
+awml: "0.3"
 title: The family's dinners
 view: security      # or: platform
 groups:
@@ -455,9 +469,9 @@ lines:
   - { from: plan, to: chat, kind: data, label: posted }
 ```
 
-- The file needs `awml`, the version `"0.2"`; `title`, the workflow's name; `view`, `security` or `platform`; and `parts`. It may have `groups` and `lines`.
-- A **group** is a scope in a security view, or a platform in a platform view. Each has an `id` and a `label`, and may have `in`, the id of the group it sits inside.
-- A **part** has an `id`, a `kind` and a `label`, which a fork doesn't need. It may have `in`, the id of its group. A step, `ai`, `code` or `person`, may have `op`, its operation, such as `op: draft`.
+- The file needs `awml`, the version `"0.3"`; `title`, the workflow's name; `view`, `security` or `platform`; and `parts`. It may have `groups` and `lines`. Version `"0.2"` remains valid without the 0.3 fields.
+- A **group** is a scope in a security view, or a platform in a platform view. Each has an `id` and a `label`, and may have `in`, the id of the group it sits inside. A security group may have `processing`; a platform group may name a platform description with `platform`.
+- A **part** has an `id`, a `kind` and a `label`, which a fork doesn't need. It may have `in`, the id of its group. A step, `ai`, `code` or `person`, may have `op`, its operation, such as `op: draft`. A trigger may have `wait`, and a context may have `at`.
 - A **line** has `from` and `to`, the ids of two parts, and a `kind`. It may have a `label`, and `breaks: true` to draw it red.
 - The part kinds are `trigger`, `ai`, `code`, `person`, `review`, `fork`, `context`, `connector`, `surface`, `outside` and `comment`. The line kinds are `start`, `data`, `publish`, `refused`, `tie` and `hidden`.
 - An id is letters, digits and underscores, starting with a letter, and no two are the same.
@@ -481,6 +495,6 @@ Besides the gallery, [`examples/`](examples) has three workflows to start from: 
 
 ## Status and licence
 
-Draft 0.2. The notation and the file format may still change.
+Draft 0.3. The notation and the file format may still change.
 
 MIT. See `LICENSE`.

@@ -21,6 +21,15 @@ func examples(t *testing.T) []string {
 	return paths
 }
 
+func platformExamples(t *testing.T) []string {
+	t.Helper()
+	paths, err := filepath.Glob("examples/platforms/*.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return paths
+}
+
 func TestThereAreExamples(t *testing.T) {
 	var names []string
 	for _, p := range examples(t) {
@@ -60,5 +69,65 @@ func TestEachExampleIsSoundAndItsDrawingsAreCurrent(t *testing.T) {
 				t.Errorf("%s.svg isn't an SVG", stem)
 			}
 		})
+	}
+}
+
+func TestEachPlatformExampleIsSound(t *testing.T) {
+	for _, path := range platformExamples(t) {
+		t.Run(path, func(t *testing.T) {
+			src, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			doc, err := Parse(src)
+			if err != nil {
+				t.Fatal(err)
+			}
+			mistakes(t, doc)
+		})
+	}
+}
+
+func TestClientEmailFitMatchesTheSpecExample(t *testing.T) {
+	read := func(path string) *Map {
+		t.Helper()
+		src, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		doc, err := Parse(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if errors := Check(doc); len(errors) != 0 {
+			t.Fatalf("%s: %v", path, errors)
+		}
+		return doc.(*Map)
+	}
+	security := read("examples/client-email.yaml")
+	var platforms []*Map
+	for _, path := range []string{"cowork-mac-mini", "scripts-mac-mini", "codex-laptop", "worker"} {
+		platforms = append(platforms, read("examples/platforms/"+path+".yaml"))
+	}
+	lines, gaps := Fit(security, nil, platforms)
+	if len(gaps) != 0 {
+		t.Fatalf("fit gaps: %v", gaps)
+	}
+	want := `cowork-mac-mini   no: bring and rules are code steps, which anthropic's agent would carry out
+scripts-mac-mini  fits: choose, learn and draft may use anthropic
+codex-laptop      no: weekdays may wait PT2H, but the platform may be off for P14D
+                  no: openai's agents run here, and business doesn't allow openai
+worker            no: engagements is kept at notes/engagements, which the platform doesn't hold
+                  no: project is kept at notes/projects, which the platform doesn't hold`
+	got := strings.Join(lines, "\n")
+	if got != want {
+		t.Errorf("fit gave\n%s\nwant\n%s", got, want)
+	}
+	spec, err := os.ReadFile("SPEC.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(spec), want) {
+		t.Error("SPEC.md doesn't contain the client email fit output")
 	}
 }

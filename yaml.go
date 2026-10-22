@@ -15,8 +15,9 @@ import (
 // A Map is a YAML mapping that keeps its keys in the order the file gives them, so mistakes are
 // reported in the order they were written.
 type Map struct {
-	keys []string
-	vals map[string]any
+	keys        []string
+	vals        map[string]any
+	nonTextKeys map[string]bool
 }
 
 // Keys gives the mapping's keys in the file's order.
@@ -45,6 +46,7 @@ func (m *Map) set(key string, v any) {
 		m.keys = append(m.keys, key)
 	}
 	m.vals[key] = v
+	delete(m.nonTextKeys, key)
 }
 
 // Parse reads one YAML document into plain values: text, numbers, true and false, dates, null,
@@ -110,7 +112,7 @@ func value(n *yaml.Node, open map[*yaml.Node]bool) (any, error) {
 // mapping reads a mapping. A merge key (<<) brings in another mapping's keys first, so the
 // mapping's own keys win, and of several merged mappings the first wins.
 func mapping(n *yaml.Node, open map[*yaml.Node]bool) (*Map, error) {
-	var merged, own [][2]any
+	var merged, own [][3]any
 	for i := 0; i+1 < len(n.Content); i += 2 {
 		k, v := n.Content[i], n.Content[i+1]
 		if k.ShortTag() == "!!merge" {
@@ -128,7 +130,7 @@ func mapping(n *yaml.Node, open map[*yaml.Node]bool) (*Map, error) {
 					return nil, fmt.Errorf("line %d: a merge (<<) takes only mappings", k.Line)
 				}
 				for _, key := range m.keys {
-					merged = append(merged, [2]any{key, m.vals[key]})
+					merged = append(merged, [3]any{key, m.vals[key], !m.nonTextKeys[key]})
 				}
 			}
 			continue
@@ -141,11 +143,15 @@ func mapping(n *yaml.Node, open map[*yaml.Node]bool) (*Map, error) {
 		if err != nil {
 			return nil, err
 		}
-		own = append(own, [2]any{show(key), val})
+		_, textKey := key.(string)
+		own = append(own, [3]any{show(key), val, textKey})
 	}
-	m := &Map{vals: map[string]any{}}
+	m := &Map{vals: map[string]any{}, nonTextKeys: map[string]bool{}}
 	for _, kv := range append(merged, own...) {
 		m.set(kv[0].(string), kv[1])
+		if !kv[2].(bool) {
+			m.nonTextKeys[kv[0].(string)] = true
+		}
 	}
 	return m, nil
 }

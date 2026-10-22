@@ -1,0 +1,7 @@
+awml: "0.3"
+platform: { id: cowork-mac-mini, label: "Claude Cowork on a Mac mini" }
+off_for_up_to: PT0S
+steps: agent
+agents: [anthropic]
+calls: any
+holds: [notes]

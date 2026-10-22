@@ -31,7 +31,17 @@ const badSource = await readFile(badPath, "utf8");
 const badErrors = api.check(badSource).map((message) => `${badRelative}: ${message}\n`).join("");
 assert.equal(badErrors, runNative(["check", badRelative], 1), "invalid file: check messages");
 
-console.log(`Node wasm parity: ${passed} examples passed (check, summary, Mermaid); invalid check messages passed`);
+const fitPaths = [
+  "examples/client-email.yaml",
+  "examples/platforms/cowork-mac-mini.yaml",
+  "examples/platforms/scripts-mac-mini.yaml",
+  "examples/platforms/codex-laptop.yaml",
+  "examples/platforms/worker.yaml",
+];
+const fitSources = await Promise.all(fitPaths.map((path) => readFile(new URL(`../${path}`, import.meta.url), "utf8")));
+assert.equal(api.fitJSON(fitSources) + "\n", runNative(["fit", "--json", ...fitPaths]), "fit JSON");
+
+console.log(`Node wasm parity: ${passed} examples passed (check, summary, Mermaid); invalid check messages and fit passed`);
 
 async function yamlFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });

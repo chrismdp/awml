@@ -5,21 +5,21 @@
 # the terms, since the business keeps client work under the engagement's confidentiality terms,
 # which the consultant's own mailbox doesn't carry. The consultant, the associate and the client
 # are fictional.
-awml: "0.2"
+awml: "0.3"
 title: A client's email, answered with a draft
 view: security
 groups:
-  - { id: private, label: "private: the consultant" }
-  - { id: business, label: "business: the consultant, an associate" }
+  - { id: private, label: "private: the consultant", processing: any }
+  - { id: business, label: "business: the consultant, an associate", processing: { anthropic: any } }
 parts:
   - { id: mailbox, kind: connector, label: "The consultant's mailbox", in: private }
-  - { id: weekdays, kind: trigger, label: "Weekdays 07:00", in: private }
+  - { id: weekdays, kind: trigger, label: "Weekdays 07:00", wait: PT2H, in: private }
   - { id: bring, kind: code, op: bring-in, label: "Bring in the inbox", in: private }
   - { id: rules, kind: code, op: sort, label: "Sort by rule: is the sender a client?", in: private }
-  - { id: engagements, kind: context, label: "The business's engagements", in: business }
+  - { id: engagements, kind: context, label: "The business's engagements", at: notes/engagements, in: business }
   - { id: choose, kind: ai, op: sort, label: "Choose the engagement the email belongs to", in: business }
   - { id: learn, kind: ai, op: learn, label: "Update the engagement's project with what the email says", in: business }
-  - { id: project, kind: context, label: "The engagement's project", in: business }
+  - { id: project, kind: context, label: "The engagement's project", at: notes/projects, in: business }
   - { id: draft, kind: ai, op: draft, label: "Draft a reply", in: business }
   - { id: drafts, kind: context, label: "Drafts", in: business }
   - { id: edit, kind: person, op: do, label: "Edit the reply and send it", in: private }

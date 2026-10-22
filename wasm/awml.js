@@ -46,6 +46,20 @@ async function start(source) {
     summary(sourceTexts) {
       return JSON.parse(this.summaryJSON(sourceTexts));
     },
+    fitJSON(sourceTexts) {
+      const sources = Array.isArray(sourceTexts) ? sourceTexts : [sourceTexts];
+      for (const sourceText of sources) {
+        const errors = this.check(sourceText);
+        if (errors.length) throw new Error(errors.join("\n"));
+      }
+      const output = globalThis.__awmlFit(JSON.stringify(sources));
+      const decoded = JSON.parse(output);
+      if (decoded.error) throw new Error(decoded.error);
+      return output;
+    },
+    fit(sourceTexts) {
+      return JSON.parse(this.fitJSON(sourceTexts));
+    },
     draw(sourceText) {
       const errors = this.check(sourceText);
       if (errors.length) throw new Error(errors.join("\n"));
