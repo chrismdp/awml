@@ -369,6 +369,13 @@ var ops = map[string]string{
 }
 var steps = setOf([]string{"ai", "code", "person"})
 
+// lineLeads is whether a line starts something, moves data or publishes. A red line is a finding
+// about a live system, not part of the design.
+func lineLeads(line *Map) bool {
+	kind := line.get("kind")
+	return (kind == "start" || kind == "data" || kind == "publish") && line.get("breaks") != true
+}
+
 // operations holds each step to what its op must not do, wherever the drawing shows it. Only a do
 // step leads to an outside action, directly or through a review or a fork, and an answer or check
 // step never writes to a context. A red line draws what a live system did, not the design, so
@@ -389,12 +396,6 @@ func operations(parts, lines []*Map) []string {
 		}
 		return op
 	}
-	// moves is whether a line takes work on: a hidden line steers the layout and a refused one never
-	// happens.
-	moves := func(l *Map) bool {
-		k := l.get("kind")
-		return (k == "start" || k == "data" || k == "publish") && l.get("breaks") != true
-	}
 	var errors []string
 	for _, out := range parts {
 		if out.get("kind") != "outside" {
@@ -406,7 +407,7 @@ func operations(parts, lines []*Map) []string {
 			seen[to] = true
 			for _, l := range lines {
 				from := byID[keyOf(l.get("from"))]
-				if !moves(l) || from == nil || byID[keyOf(l.get("to"))] != to {
+				if !lineLeads(l) || from == nil || byID[keyOf(l.get("to"))] != to {
 					continue
 				}
 				if k := from.get("kind"); k == "review" || k == "fork" {
@@ -424,7 +425,7 @@ func operations(parts, lines []*Map) []string {
 	}
 	for _, l := range lines {
 		from, to := byID[keyOf(l.get("from"))], byID[keyOf(l.get("to"))]
-		if !moves(l) || from == nil || to == nil || to.get("kind") != "context" {
+		if !lineLeads(l) || from == nil || to == nil || to.get("kind") != "context" {
 			continue
 		}
 		if op := opOf(from); op == "answer" || op == "check" {

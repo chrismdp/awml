@@ -30,7 +30,7 @@ positional arguments:
   {draw,page,check,fit,summary,login,push,pull}
     draw             print a file's Mermaid
     page             write one HTML page that draws each file
-    check            report structural mistakes and differences between views
+    check            report warnings, structural mistakes and differences between views
     fit              judge where a workflow can run
     summary          count the parts and lines in one workflow
     login            save a registry API token
@@ -227,9 +227,10 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	if command == "check" {
 		type checkedFile struct {
-			path string
-			doc  *awml.Map
-			errs []string
+			path     string
+			doc      *awml.Map
+			errs     []string
+			warnings []string
 		}
 		type viewsOfTitle struct {
 			security []int
@@ -240,7 +241,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		var titleOrder []string
 		for _, path := range files {
 			doc, errs := read(path)
-			checked = append(checked, checkedFile{path, doc, errs})
+			checked = append(checked, checkedFile{path, doc, errs, awml.Warnings(doc)})
 			if doc == nil {
 				continue
 			}
@@ -285,6 +286,9 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 		code := 0
 		for i, file := range checked {
+			for _, warning := range file.warnings {
+				fmt.Fprintf(stdout, "%s: warning: %s\n", file.path, warning)
+			}
 			if len(file.errs) == 0 {
 				if !failedComparison[i] {
 					fmt.Fprintf(stdout, "%s: ok\n", file.path)

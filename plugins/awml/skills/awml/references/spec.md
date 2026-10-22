@@ -172,12 +172,16 @@ A step's colour and its decider's emoji say who decides it. A step may also name
 | 🛠️ Do | `do` | What should change, in the world or in a piece of work? | The change, within its tier | Act without the yes its tier needs, or replace something without keeping what was there |
 | 💬 Answer | `answer` | What do we know about this? | An answer from the notes, naming them | Act, or change a note |
 
+A `do` step should be code acting on what an earlier step decided. An AI or a rule turns the input into a score or a choice, and the `do` step acts on it with thresholds, lookups and templates. Each step does one job. A `do` step changes one thing. Filing an item, labelling it and telling a person are three `do` steps after one `sort`.
+
 A drawing can show some of these limits, and `awml check` holds each step to those:
 
 - **Only a `do` step leads to an outside action**, by a line straight to it or through a review or a fork. A draft goes to a `do` step, which asks to send it, and a person's yes releases the send, or to a person's own `do` step, which is their yes. A draft step never leads to an outside action, even through a review.
 - **An `answer` step and a `check` step never write to a context.** They read contexts, and speak on surfaces.
 
 A line leads somewhere when it starts something, moves data or publishes. A hidden line, a refused read and a tie lead nowhere. The other limits, such as deciding for a person or making up an aim, are about what happens inside a step, which no drawing shows, so its readers judge those.
+
+`awml check` warns when a `do` step is decided by AI or leads to more than one change. Each outside action and surface it leads to is one change. All the contexts it leads to together are one change, since writing the item, a seen list and other state into the system's own notes is one job. These warnings use the same meaning of leads and ignore red lines. They don't make the check fail.
 
 ## Patterns
 
@@ -193,7 +197,7 @@ A `draft` step writes the content, a `do` step asks to send it, a person says ye
 
 <img src="examples/tour/11-do.svg" width="360" alt="Do">
 
-A `do` step whose outside action either just happens, because it is Allow and can be undone, or waits for a yes, because it is Ask. A person's own `do` step is their yes, so an Ask action straight after one needs no review. Use it for any change in the world, or in the state of a piece of work.
+Two `do` steps, each making one change. The Allow action can be undone, so it just happens. The Ask action waits for a yes. A person's own `do` step is their yes, so an Ask action straight after one needs no review. Use a `do` step for any change in the world, or in the state of a piece of work.
 
 ### Standing approval
 
@@ -222,6 +226,8 @@ Content moving into a wider scope, drawn as a thick line, which waits for a pers
 ## Records
 
 Every step leaves one **record** each time it runs: what started it, what decided it (code, a model with its instructions and exact version, or a person), what it drew on, what it made and what it cost. Records are only ever added to, and only the system writes them.
+
+A step's own record of its run is its record, written by the system, so it isn't drawn as a context. A log or state that a later step reads back is a context.
 
 A drawing shows what each record should say, never what any record does say. A step's lines show what it may draw on, its colour and emoji who decides it, and its operation what kind of work it does, so a record naming other sources, another kind of decider or other work is a finding. A drawing can't show whether a step ran, which model version decided it, what it cost or what it really read. Those are in the records.
 
@@ -261,7 +267,7 @@ The file needs `awml`, the version `"0.3"`; `title`, the workflow's name; `view`
 
 An id is letters, digits and underscores, starting with a letter, and no two are the same. Every id, label, kind and reference to an id is text. `awml` reads YAML 1.2, which reads `true`, `false`, numbers and dates such as `2026-10-20` as something other than text, so quote them. YAML 1.1, which many other tools read, also reads `yes`, `no`, `on` and `off` as true or false, and `19:00` as a number, so quoting those too keeps a file the same in every tool. `breaks` is `true` or `false`, unquoted. The drawing keeps the parts in the order the file lists them, and draws each group after the parts beside it. List the parts in the order the work flows, with its triggers first.
 
-`awml check` reports a missing or unknown field, an unknown kind or view, an id used twice or badly written, a value YAML didn't read as text, a `breaks` that isn't true or false, a part or group in an unknown group, a group nested in itself, a line to or from an unknown part, a comment linked by anything but `tie`, a `tie` with no comment at either end, an unknown `op` or one on a part that isn't a step, a step that does what its operation must not, as far as the drawing shows it, a `data` line in the security view that moves content anywhere but its own box or a box inside it, a `processing` that isn't `any`, `none` or a map of company ids to `any` or known operations, an inner group's `processing` that allows a company or operation its outer group doesn't, `processing` on a group in the platform view, `platform` on a group in the security view, a `wait` that isn't a duration or is on a part that isn't a trigger, and an `at` that isn't a path or is on a part that isn't a context. Given both views of one workflow, it also reports a part or line in one view but not the other, apart from triggers and comments the platform view leaves out.
+`awml check` reports a missing or unknown field, an unknown kind or view, an id used twice or badly written, a value YAML didn't read as text, a `breaks` that isn't true or false, a part or group in an unknown group, a group nested in itself, a line to or from an unknown part, a comment linked by anything but `tie`, a `tie` with no comment at either end, an unknown `op` or one on a part that isn't a step, a step that does what its operation must not, as far as the drawing shows it, a `data` line in the security view that moves content anywhere but its own box or a box inside it, a `processing` that isn't `any`, `none` or a map of company ids to `any` or known operations, an inner group's `processing` that allows a company or operation its outer group doesn't, `processing` on a group in the platform view, `platform` on a group in the security view, a `wait` that isn't a duration or is on a part that isn't a trigger, and an `at` that isn't a path or is on a part that isn't a context. Given both views of one workflow, it also reports a part or line in one view but not the other, apart from triggers and comments the platform view leaves out. It warns when AI decides a `do` step or one `do` step leads to more than one change. Warnings leave the exit status alone.
 
 A **platform description** is a file of its own. It needs `awml`, the version `"0.3"`; `platform`, with an `id`, written like a company id, and a `label`; `off_for_up_to`, an ISO 8601 duration; `steps`, `code` or `agent`; `agents`, a list of company ids, which may be empty; `calls`, a list of company ids or `any`; and `holds`, a list of paths, which may be empty. It has no `title`, `view`, `groups`, `parts` or `lines`. `awml check` reports a missing or unknown field, a value of the wrong kind and a company id or path badly written. A company id is lower-case letters, digits and hyphens, starting with a letter. A path is names of letters, digits, dots, hyphens and underscores, joined by `/`, with no leading `/` and no `.` or `..` names.
 

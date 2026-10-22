@@ -85,6 +85,25 @@ func TestCheckPassesASoundFile(t *testing.T) {
 	}
 }
 
+func TestCheckPrintsWarningsBeforeOkWithoutFailing(t *testing.T) {
+	src := strings.Replace(good, "kind: ai, label:", "kind: ai, op: do, label:", 1)
+	f := write(t, "warning.yaml", src)
+	want := f + `: warning: step "plan" is a do step decided by AI: a do step should be code acting on what an earlier step decided` + "\n" + f + ": ok\n"
+	if r := awmlRun("check", f); r != (result{0, want, ""}) {
+		t.Errorf("check gave %+v", r)
+	}
+}
+
+func TestCheckPrintsWarningsBeforeMistakesAndStillFailsForTheMistakes(t *testing.T) {
+	src := strings.Replace(bad, "kind: ai, label:", "kind: ai, op: do, label:", 1)
+	f := write(t, "warning-and-mistake.yaml", src)
+	want := f + `: warning: step "plan" is a do step decided by AI: a do step should be code acting on what an earlier step decided` + "\n" +
+		f + `: the line from "thu" to "plann" ends at unknown part "plann"` + "\n"
+	if r := awmlRun("check", f); r != (result{1, want, ""}) {
+		t.Errorf("check gave %+v", r)
+	}
+}
+
 func TestCheckReportsEachMistakeAndFails(t *testing.T) {
 	g, b := write(t, "good.yaml", good), write(t, "bad.yaml", bad)
 	r := awmlRun("check", g, b)

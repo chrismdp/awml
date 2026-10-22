@@ -188,6 +188,8 @@ Besides who decides it, a step may name its **operation**, the kind of work it d
 | 💬 | Answer | `answer` | What do we know about this? | An answer from the notes, naming them | Act, or change a note |
 | ❔ | Other | `other` | Work that fits none of the nine | Whatever it is for | Nothing AWML checks |
 
+A `do` step should be code acting on what an earlier step decided. An AI or a rule turns the input into a score or a choice, and the `do` step acts on it with thresholds, lookups and templates. Each step does one job. A `do` step changes one thing. Filing an item, labelling it and telling a person are three `do` steps after one `sort`.
+
 A drawing can show some of these limits, and `awml check` holds every step to them:
 
 - **Only a `do` step leads to an outside action**, by a line straight to it or through a review or a fork. A draft step never leads to an outside action, even through a review: a draft goes to a `do` step that asks to send it, or to a person's own `do` step.
@@ -195,6 +197,8 @@ A drawing can show some of these limits, and `awml check` holds every step to th
 - **An `op` names one of the ten,** and only a step names one.
 
 A line leads somewhere when it starts something, moves data or publishes. A hidden line, a refused read and a tie lead nowhere. A step marked `other`, or with no `op` at all, is held to none of these rules.
+
+`awml check` warns when a `do` step is decided by AI or leads to more than one change. Each outside action and surface is one change, while all the contexts together are one change. Red lines don't count, and warnings don't make the check fail.
 
 The other limits, such as never deciding for a person, are about what happens inside a step, which no drawing shows, so the people who read it judge them.
 
@@ -319,6 +323,8 @@ Here Sam approved the morning renewals once, for renewals only and up to six a w
 
 Every step leaves one **record** each time it runs: what started it, what decided it (code, a model with its instructions and exact version, or a person), what it drew on, what it made and what it cost. Records are only ever added to, and only the system writes them.
 
+A step's own record of its run is its record, written by the system, so it isn't drawn as a context. A log or state that a later step reads back is a context.
+
 A drawing shows what each record should say, never what any record does say, so a record that names other sources, another kind of decider or other work than the drawing shows is a finding. Only the records show whether a step ran, which model version decided it, what it cost and what it really read.
 
 ## The red line
@@ -339,9 +345,9 @@ AI drafts the swimming club's Friday message to the parents. A `do` step asks El
 
 ![The club's Friday message: a draft, Ella's yes and the send](examples/tour/01-draft-and-send.svg)
 
-### A do step
+### Do steps
 
-A `do` step settles the window cleaner's visit. Putting the next visit in the parents' calendar can be undone, so it's Allow and just happens. Paying is Ask, so it waits for Dev's yes to the exact payment. Use it for any change in the world, or in the state of a piece of work.
+Two `do` steps settle the window cleaner's visit, one change each. Putting the next visit in the parents' calendar can be undone, so it's Allow and just happens. Paying is Ask, so it waits for Dev's yes to the exact payment. Use a `do` step for any change in the world, or in the state of a piece of work.
 
 ![The window cleaner's visit: one Allow action and one Ask action](examples/tour/11-do.svg)
 
@@ -420,7 +426,7 @@ awml push family/dinners examples/dinners-security.yaml examples/dinners-platfor
 awml pull family/dinners@1 -o dinners
 ```
 
-- `awml check` checks each file and compares the two views of a workflow when both are given. It prints `ok`, or one line for each mistake, and exits 1 if it finds one.
+- `awml check` checks each file and compares the two views of a workflow when both are given. It prints each warning before `ok` or the mistakes, and exits 1 only if it finds a mistake.
 - `awml fit` judges a security view against platform descriptions, or judges a placement when a platform view comes between them. Add `--json` for the same lines as a JSON array.
 - `awml draw` prints a file's Mermaid. It refuses a file with mistakes, and prints them instead.
 - `awml page` writes one standalone HTML page that draws each file with Mermaid in the browser, in the order given. Each file gets its own heading, saying which view it is. The page takes the files' title when they all share one, as the two views of the family's dinners do, and is called Workflows when they don't.
@@ -482,7 +488,7 @@ Every id, label, kind and reference to an id is text. `awml` reads YAML 1.2, whi
 
 ### What `awml check` reports
 
-`awml check` reports a missing or unknown field, an unknown kind or view, an id used twice or badly written, a value YAML didn't read as text, a `breaks` that isn't true or false, a part or group in an unknown group, a group nested in itself, a line to or from an unknown part, a comment linked by anything but `tie`, a `tie` with no comment at either end, an unknown `op` or one on a part that isn't a step, a step that does what its operation must never do, as far as the drawing shows it, and a `data` line in the security view that moves content anywhere but its own box or a box inside it, which is publishing drawn as routing. Given both views of one workflow, it also reports a part or line in one view but not the other, apart from triggers and comments the platform view leaves out. [`SPEC.md`](SPEC.md) gives the exact rules.
+`awml check` reports a missing or unknown field, an unknown kind or view, an id used twice or badly written, a value YAML didn't read as text, a `breaks` that isn't true or false, a part or group in an unknown group, a group nested in itself, a line to or from an unknown part, a comment linked by anything but `tie`, a `tie` with no comment at either end, an unknown `op` or one on a part that isn't a step, a step that does what its operation must never do, as far as the drawing shows it, and a `data` line in the security view that moves content anywhere but its own box or a box inside it, which is publishing drawn as routing. Given both views of one workflow, it also reports a part or line in one view but not the other, apart from triggers and comments the platform view leaves out. It warns when AI decides a `do` step or one `do` step leads to more than one change. Warnings leave the exit status alone. [`SPEC.md`](SPEC.md) gives the exact rules.
 
 ### Examples to start from
 

@@ -15,9 +15,11 @@ for (const path of top.sort()) {
 
   const nativeCheck = runNative(["check", relative]);
   const wasmErrors = api.check(source);
-  const wasmCheck = wasmErrors.length
-    ? wasmErrors.map((message) => `${relative}: ${message}\n`).join("")
-    : `${relative}: ok\n`;
+  const wasmWarnings = api.warnings(source);
+  const wasmCheck = [
+    ...wasmWarnings.map((message) => `${relative}: warning: ${message}\n`),
+    ...(wasmErrors.length ? wasmErrors.map((message) => `${relative}: ${message}\n`) : [`${relative}: ok\n`]),
+  ].join("");
   assert.equal(wasmCheck, nativeCheck, `${relative}: check output`);
 
   assert.equal(api.summaryJSON(source) + "\n", runNative(["summary", "--json", relative]), `${relative}: summary JSON`);
@@ -31,6 +33,16 @@ const badSource = await readFile(badPath, "utf8");
 const badErrors = api.check(badSource).map((message) => `${badRelative}: ${message}\n`).join("");
 assert.equal(badErrors, runNative(["check", badRelative], 1), "invalid file: check messages");
 
+const warningPath = new URL("testdata/warning.yaml", import.meta.url).pathname;
+const warningRelative = warningPath.slice(new URL("../", import.meta.url).pathname.length);
+const warningSource = await readFile(warningPath, "utf8");
+const warning = api.warnings(warningSource).map((message) => `${warningRelative}: warning: ${message}\n`).join("");
+assert.equal(
+  warning + `${warningRelative}: ok\n`,
+  runNative(["check", warningRelative]),
+  "warning: check messages",
+);
+
 const fitPaths = [
   "examples/client-email.yaml",
   "examples/platforms/cowork-mac-mini.yaml",
@@ -41,7 +53,7 @@ const fitPaths = [
 const fitSources = await Promise.all(fitPaths.map((path) => readFile(new URL(`../${path}`, import.meta.url), "utf8")));
 assert.equal(api.fitJSON(fitSources) + "\n", runNative(["fit", "--json", ...fitPaths]), "fit JSON");
 
-console.log(`Node wasm parity: ${passed} examples passed (check, summary, Mermaid); invalid check messages and fit passed`);
+console.log(`Node wasm parity: ${passed} examples passed (check, warnings, summary, Mermaid); invalid check messages and fit passed`);
 
 async function yamlFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
