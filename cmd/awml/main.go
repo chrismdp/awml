@@ -27,7 +27,7 @@ positional arguments:
   {draw,page,check,fit,summary,login,push,pull}
     draw             print a file's Mermaid
     page             write one HTML page that draws each file
-    check            report a file's structural mistakes
+    check            report structural mistakes and differences between views
     fit              judge where a workflow can run
     summary          count the parts and lines in one workflow
     login            save a registry API token
@@ -219,15 +219,80 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	if command == "check" {
-		code := 0
+		type checkedFile struct {
+			path string
+			doc  *awml.Map
+			errs []string
+		}
+		type viewsOfTitle struct {
+			security []int
+			platform []int
+		}
+		checked := make([]checkedFile, 0, len(files))
+		byTitle := map[string]*viewsOfTitle{}
+		var titleOrder []string
 		for _, path := range files {
-			_, errs := read(path)
-			if len(errs) == 0 {
-				fmt.Fprintf(stdout, "%s: ok\n", path)
+			doc, errs := read(path)
+			checked = append(checked, checkedFile{path, doc, errs})
+			if doc == nil {
 				continue
 			}
-			for _, e := range errs {
-				fmt.Fprintf(stdout, "%s: %s\n", path, e)
+			view := strField(doc, "view")
+			if view != "security" && view != "platform" {
+				continue
+			}
+			title := strField(doc, "title")
+			views := byTitle[title]
+			if views == nil {
+				views = &viewsOfTitle{}
+				byTitle[title] = views
+				titleOrder = append(titleOrder, title)
+			}
+			if view == "security" {
+				views.security = append(views.security, len(checked)-1)
+			} else {
+				views.platform = append(views.platform, len(checked)-1)
+			}
+		}
+
+		type comparison struct {
+			security int
+			platform int
+			mistakes []string
+		}
+		var comparisons []comparison
+		failedComparison := make([]bool, len(checked))
+		for _, title := range titleOrder {
+			views := byTitle[title]
+			if len(views.security) != 1 || len(views.platform) != 1 {
+				continue
+			}
+			security, platform := views.security[0], views.platform[0]
+			mistakes := awml.CompareViews(checked[security].doc, checked[platform].doc)
+			if len(mistakes) == 0 {
+				continue
+			}
+			failedComparison[security], failedComparison[platform] = true, true
+			comparisons = append(comparisons, comparison{security, platform, mistakes})
+		}
+
+		code := 0
+		for i, file := range checked {
+			if len(file.errs) == 0 {
+				if !failedComparison[i] {
+					fmt.Fprintf(stdout, "%s: ok\n", file.path)
+				}
+				continue
+			}
+			for _, e := range file.errs {
+				fmt.Fprintf(stdout, "%s: %s\n", file.path, e)
+			}
+			code = 1
+		}
+		for _, comparison := range comparisons {
+			security, platform := checked[comparison.security], checked[comparison.platform]
+			for _, mistake := range comparison.mistakes {
+				fmt.Fprintf(stdout, "%s and %s: %s\n", security.path, platform.path, mistake)
 			}
 			code = 1
 		}
@@ -337,7 +402,8 @@ func read(path string) (*awml.Map, []string) {
 		return nil, []string{"isn't YAML: " + strings.Join(strings.Fields(err.Error()), " ")}
 	}
 	if errs := awml.Check(doc); len(errs) > 0 {
-		return nil, errs
+		file, _ := doc.(*awml.Map)
+		return file, errs
 	}
 	return doc.(*awml.Map), nil
 }
