@@ -79,7 +79,7 @@ func fieldsExact(name string, item *Map, needFields, mayFields []string, errors 
 		}
 	}
 	for _, field := range item.Keys() {
-		if (field == "id" || field == "label") && item.get(field) != nil {
+		if (field == "id" || field == "label" || field == "in" && (need["in"] || may["in"])) && item.get(field) != nil {
 			if _, ok := item.get(field).(string); !ok {
 				errors.add("values.text", fmt.Sprintf("%s: YAML read its %s as %s, not text: put it in quotes", name, field, show(item.get(field))))
 			}

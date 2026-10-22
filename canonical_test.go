@@ -74,6 +74,52 @@ func TestCanonicalCheck(t *testing.T) {
 	}
 }
 
+// A 0.4 file is checked as its design and as each implementation's platform view, and each
+// mistake is reported once, in the words the file uses.
+func TestCanonicalCheckReportsEachMistakeOnce(t *testing.T) {
+	refused := `awml: "0.4"
+title: Two scopes
+scopes:
+  - { id: client, label: "client", processing: any }
+  - { id: venture, label: "venture", processing: any }
+  - { id: mine, label: "mine", in: client, processing: any }
+parts:
+  - { id: plan, kind: context, label: "The plan", in: venture }
+  - { id: assist, kind: ai, op: reflect, label: "Plan the week", in: mine }
+lines:
+  - { from: plan, to: assist, kind: data }
+`
+	if got, want := Check(parseCanonical(t, refused)), []string{`the line from "plan" to "assist" moves content from group "venture" into group "mine", which isn't inside it: draw it as publish, or as refused if the design refuses the read`}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %q; want %q", got, want)
+	}
+	cases := []struct {
+		old, new string
+		want     []string
+	}{
+		{"label: Keys, in: server", "in: server", []string{`comment "keys" has no label`}},
+		{"label: Keys, in: server", "label: Keys, in: server, colour: red", []string{`comment "keys" has unknown field "colour"`}},
+		{"label: Keys, in: server", "label: 12, in: server", []string{`comment "keys": YAML read its label as 12, not text: put it in quotes`}},
+		{"label: Keys, in: server", "label: Keys, in: 12", []string{`comment "keys": YAML read its in as 12, not text: put it in quotes`, `part "keys" is in unknown group "12"`}},
+		{"ties: [plan]", "ties: [12]", []string{`comment "keys": tie id 12 must be text: put it in quotes`, `the line from "keys" to "12" ends at unknown part "12"`}},
+		{"label: Server, platform", "platform", []string{`block "server" has no label`}},
+		{"label: Server, platform", "label: 12, platform", []string{`block "server": YAML read its label as 12, not text: put it in quotes`}},
+		{"label: Server, platform", "label: Server, colour: red, platform", []string{`block "server" has unknown field "colour"`}},
+		{"label: Server, platform", "label: Server, processing: any, platform", []string{`block "server" has unknown field "processing"`}},
+		{"label: Server, platform", "label: Server, in: 12, platform", []string{`block "server": YAML read its in as 12, not text: put it in quotes`, `group "server" is in unknown group "12"`}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.new, func(t *testing.T) {
+			source := strings.Replace(canonical, tc.old, tc.new, 1)
+			if source == canonical {
+				t.Fatalf("%q isn't in the file", tc.old)
+			}
+			if got := Check(parseCanonical(t, source)); !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("got %q; want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestCanonicalViews(t *testing.T) {
 	doc := parseCanonical(t, canonical)
 	security, err := View(doc, "")
