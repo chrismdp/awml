@@ -12,7 +12,7 @@ working tree.
   text that both sides changed. Fix those problems before continuing the rebase.
 - Keep the copies of SPEC.md, GUIDE.md and the examples under
   `plugins/awml/skills/awml/references/` identical to their sources, as AGENTS.md requires.
-- Add the resolved files and run `GIT_EDITOR=true git rebase --continue`. Repeat this for every
+- Add the resolved files and run `git rebase --continue`. Repeat this for every
   commit that stops with conflicts, until the rebase finishes.
 - At the end, run every check in AGENTS.md until it passes.
 - Don't push. A later job checks and pushes the rebased commits.

@@ -142,6 +142,8 @@ jobs:
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           RESOLVE_DIR: ${{ runner.temp }}/resolve
+          # So a plain git rebase --continue, which Claude may run, never waits for an editor.
+          GIT_EDITOR: "true"
         run: |
           prompt="$(sed "s|RESOLVE_DIR|$RESOLVE_DIR|g" .github/resolve-prompt.md)"
           claude -p "$prompt" --model opus --max-turns 200 --permission-mode acceptEdits \
