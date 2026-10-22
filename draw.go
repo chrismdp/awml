@@ -137,7 +137,8 @@ var pastel = []string{"fill:#e3ebfa,stroke:#b9c8e8", "fill:#fbe9df,stroke:#ecc7b
 
 const red = "stroke:#d0342c,stroke-width:2.5px,color:#b0271f"
 
-var header = []string{"---", "config:", "  theme: default", "  flowchart:", "    useMaxWidth: false",
+var header = []string{"---", "config:", "  theme: default",
+	"  fontFamily: Inter, sans-serif", "  flowchart:", "    useMaxWidth: false",
 	"    subGraphTitleMargin:", "      top: 6", "      bottom: 30", "---", "flowchart TB"}
 
 // Who decides a step or review, as an emoji, so a reader needn't tell the colours apart. Code is a

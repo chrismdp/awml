@@ -303,6 +303,7 @@ lines:
 const approved = `---
 config:
   theme: default
+  fontFamily: Inter, sans-serif
   flowchart:
     useMaxWidth: false
     subGraphTitleMargin:

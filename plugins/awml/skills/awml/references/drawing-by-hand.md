@@ -12,6 +12,7 @@ Start with these lines, unchanged:
 ---
 config:
   theme: default
+  fontFamily: Inter, sans-serif
   flowchart:
     useMaxWidth: false
     subGraphTitleMargin:
