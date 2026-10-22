@@ -6,7 +6,7 @@ license: MIT
 
 # Publish to an AWML registry
 
-Publishing saves a workflow's two files on an AWML registry as a new numbered version, with a page that draws both views. awml.io is the public registry, free for public workflows. Publish only when the person asks to.
+Publishing saves a workflow on an AWML registry as a new numbered version, with a page that draws its views. awml.io is the public registry, free for public workflows. Publish only when the person asks to.
 
 ## 1. Find the registry tools
 
@@ -43,9 +43,9 @@ Ask both at once:
 
 ## 4. Check, then publish
 
-Run `check` with the security view as `security` and the platform view as `platform`. Fix every mistake it gives, and check again until it says `No mistakes.`
+For a 0.4 workflow, run `check` with the canonical file as `security` and no `platform`. For a legacy pair, pass the security and platform files in those fields. Fix every mistake it gives, and check again until it says `No mistakes.`
 
-Then run `publish` with the owner, the slug, both files and, for the first version only, `visibility`. If it refuses, say what it said and fix what you can: a mistake in a file, an owner the person can't publish to, or private for anything but an organisation.
+Then run `publish` with the owner, the slug, the same file fields and, for the first version only, `visibility`. If it refuses, say what it said and fix what you can: a mistake in a file, an owner the person can't publish to, or private for anything but an organisation.
 
 Show the person the page it gives back, such as `https://awml.io/acme/client-email`, and the version number.
 
@@ -55,7 +55,7 @@ With a shell, the `awml` command publishes too. If `awml --help` doesn't list `p
 
 ```sh
 awml login
-awml push acme/client-email client-email-security.yaml client-email-platform.yaml
+awml push bakery/client-email client-email.yaml
 ```
 
 The person runs `awml login` in their own terminal, so the token never passes through the conversation; it asks for the token and keeps it. `awml push` checks the files, publishes them and prints the page. Add `--private` to the first push of an organisation's private workflow. Both use `AWML_REGISTRY_URL` when it is set, and `--registry` with an address names another registry.

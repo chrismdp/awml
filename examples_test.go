@@ -35,7 +35,7 @@ func TestThereAreExamples(t *testing.T) {
 	for _, p := range examples(t) {
 		names = append(names, strings.TrimSuffix(strings.TrimPrefix(p, "examples/"), ".yaml"))
 	}
-	want := []string{"client-email-platform", "client-email", "dinners-platform", "dinners-security", "legend", "question",
+	want := []string{"client-email", "dinners", "legend", "question",
 		"tour/01-draft-and-send", "tour/02-fork", "tour/03-refused-read", "tour/04-publishing", "tour/05-side-by-side",
 		"tour/06-red-line", "tour/07-person-step", "tour/08-gap", "tour/09-platform-view", "tour/10-operations",
 		"tour/11-do", "tour/12-standing-approval", "tour/13-check-by-code"}
@@ -58,6 +58,27 @@ func TestEachExampleIsSoundAndItsDrawingsAreCurrent(t *testing.T) {
 			mistakes(t, doc)
 			if got := Warnings(doc); len(got) != 0 {
 				t.Errorf("%s has warnings: %v", path, got)
+			}
+			file := doc.(*Map)
+			if !IsCanonical(file) {
+				t.Fatal("example is not 0.4")
+			}
+			for _, name := range ImplementationIDs(file) {
+				view, err := View(file, name)
+				if err != nil {
+					t.Fatal(err)
+				}
+				stem := strings.TrimSuffix(path, ".yaml") + "-" + name
+				mmd, err := os.ReadFile(stem + ".mmd")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if string(mmd) != Draw(view)+"\n" {
+					t.Errorf("%s.mmd is stale", stem)
+				}
+				if _, err := os.Stat(stem + ".svg"); err != nil {
+					t.Error(err)
+				}
 			}
 			stem := strings.TrimSuffix(path, ".yaml")
 			mmd, err := os.ReadFile(stem + ".mmd")

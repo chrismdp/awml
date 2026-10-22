@@ -1,8 +1,7 @@
 # A comment marking a gap that drawing the workflow found. The household is fictional.
-awml: "0.2"
+awml: "0.4"
 title: Bin day
-view: security
-groups:
+scopes:
   - { id: house, label: "house: Sam, Priya" }
 parts:
   - { id: monday, kind: trigger, label: "Monday 06:00" }

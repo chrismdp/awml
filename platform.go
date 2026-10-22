@@ -8,7 +8,7 @@ func checkPlatformDescription(file *Map) []string {
 		version, ok := file.get("awml").(string)
 		if !ok {
 			errors = append(errors, fmt.Sprintf("awml: YAML read it as %s, not text: put it in quotes", show(file.get("awml"))))
-		} else if version != "0.3" {
+		} else if version != "0.3" && version != "0.4" {
 			errors = append(errors, fmt.Sprintf(`awml must be "0.3" for a platform description, not "%s"`, version))
 		}
 	}

@@ -13,10 +13,8 @@ func TestSummariseEveryExample(t *testing.T) {
 	pubGrandma := PublishingSummary{Count: 1, Labels: []string{"standing rule: pickups to Grandma"}}
 	pubChecklist := PublishingSummary{Count: 1, Labels: []string{"the checklist, with no names in it"}}
 	cases := map[string]Summary{
-		"examples/client-email-platform.yaml":     {Steps: StepCounts{AI: 3, Code: 2, Person: 1}, Operations: map[string]int{"bring-in": 1, "sort": 2, "learn": 1, "draft": 1, "do": 1}, OutsideActions: TierCounts{Ask: 1}, Triggers: 1, Contexts: 3, Connectors: 1, Platforms: 4, PublishingLines: pubClient},
-		"examples/client-email.yaml":              {Steps: StepCounts{AI: 3, Code: 2, Person: 1}, Operations: map[string]int{"bring-in": 1, "sort": 2, "learn": 1, "draft": 1, "do": 1}, OutsideActions: TierCounts{Ask: 1}, Triggers: 1, Contexts: 3, Connectors: 1, Scopes: 2, PublishingLines: pubClient},
-		"examples/dinners-platform.yaml":          {Steps: StepCounts{AI: 1, Code: 3}, Operations: map[string]int{"bring-in": 1, "do": 1, "check": 1}, OutsideActions: TierCounts{Allow: 1, Ask: 1}, Reviews: 1, Contexts: 3, Connectors: 3, Surfaces: 3, Platforms: 6, PublishingLines: pubDinners},
-		"examples/dinners-security.yaml":          {Steps: StepCounts{AI: 1, Code: 3}, Operations: map[string]int{"bring-in": 1, "do": 1, "check": 1}, OutsideActions: TierCounts{Allow: 1, Ask: 1}, Triggers: 3, Reviews: 1, Contexts: 3, Connectors: 3, Surfaces: 3, Scopes: 3, PublishingLines: pubDinners},
+		"examples/client-email.yaml":              {Steps: StepCounts{AI: 3, Code: 2, Person: 1}, Operations: map[string]int{"bring-in": 1, "sort": 2, "learn": 1, "draft": 1, "do": 1}, OutsideActions: TierCounts{Ask: 1}, Triggers: 1, Contexts: 3, Connectors: 1, Scopes: 2, Platforms: 4, PublishingLines: pubClient},
+		"examples/dinners.yaml":                   {Steps: StepCounts{AI: 1, Code: 3}, Operations: map[string]int{"bring-in": 1, "do": 1, "check": 1}, OutsideActions: TierCounts{Allow: 1, Ask: 1}, Triggers: 3, Reviews: 1, Contexts: 3, Connectors: 3, Surfaces: 3, Scopes: 3, Platforms: 6, PublishingLines: pubDinners},
 		"examples/legend.yaml":                    {Steps: StepCounts{AI: 1, Code: 1, Person: 1}, OutsideActions: TierCounts{Ask: 1}, Triggers: 1, Reviews: 1, Contexts: 1, Connectors: 1, Surfaces: 1},
 		"examples/question.yaml":                  {Steps: StepCounts{AI: 1, Code: 1}, Operations: map[string]int{"answer": 2}, Triggers: 1, Contexts: 3, Surfaces: 1, Scopes: 3, RefusedReads: 1},
 		"examples/tour/01-draft-and-send.yaml":    {Steps: StepCounts{AI: 1, Code: 1}, Operations: map[string]int{"draft": 1, "do": 1}, OutsideActions: TierCounts{Ask: 1}, Triggers: 1, Reviews: 1, Scopes: 1},
@@ -27,7 +25,7 @@ func TestSummariseEveryExample(t *testing.T) {
 		"examples/tour/06-red-line.yaml":          {Steps: StepCounts{AI: 1, Code: 1}, Operations: map[string]int{"draft": 1, "do": 1}, OutsideActions: TierCounts{Ask: 1}, Triggers: 1, Reviews: 1, Scopes: 1, RedLines: 1},
 		"examples/tour/07-person-step.yaml":       {Steps: StepCounts{Code: 1, Person: 1}, Operations: map[string]int{"check": 1, "do": 1}, Triggers: 1, Contexts: 1, Surfaces: 1, Scopes: 1},
 		"examples/tour/08-gap.yaml":               {Steps: StepCounts{Code: 1}, Operations: map[string]int{"bring-in": 1}, Triggers: 1, Contexts: 1, Connectors: 1, Surfaces: 1, Scopes: 1},
-		"examples/tour/09-platform-view.yaml":     {Steps: StepCounts{AI: 1, Code: 1}, Operations: map[string]int{"bring-in": 1, "sort": 1}, Triggers: 1, Contexts: 2, Platforms: 2},
+		"examples/tour/09-platform-view.yaml":     {Steps: StepCounts{AI: 1, Code: 1}, Operations: map[string]int{"bring-in": 1, "sort": 1}, Triggers: 1, Contexts: 2, Scopes: 1, Platforms: 2},
 		"examples/tour/10-operations.yaml":        {Steps: StepCounts{AI: 3, Code: 1}, Operations: map[string]int{"sort": 1, "learn": 1, "draft": 1, "do": 1}, OutsideActions: TierCounts{Allow: 1}, Triggers: 1, Contexts: 2, Scopes: 1},
 		"examples/tour/11-do.yaml":                {Steps: StepCounts{Code: 2}, Operations: map[string]int{"do": 2}, OutsideActions: TierCounts{Allow: 1, Ask: 1}, Triggers: 1, Reviews: 1, Scopes: 1},
 		"examples/tour/12-standing-approval.yaml": {Steps: StepCounts{Code: 2}, Operations: map[string]int{"do": 2}, OutsideActions: TierCounts{Ask: 1}, Triggers: 1, Connectors: 1, Surfaces: 1, Scopes: 1},
@@ -55,8 +53,9 @@ func TestSummariseEveryExample(t *testing.T) {
 }
 
 func TestSummariseDeduplicatesTwoViewsOfOneWorkflow(t *testing.T) {
-	security := readExample(t, "examples/dinners-security.yaml")
-	platform := readExample(t, "examples/dinners-platform.yaml")
+	file := readExample(t, "examples/dinners.yaml")
+	security, _ := View(file, "")
+	platform, _ := View(file, "default")
 	want := Summary{
 		Steps: StepCounts{AI: 1, Code: 3}, Operations: map[string]int{"bring-in": 1, "do": 1, "check": 1},
 		OutsideActions: TierCounts{Allow: 1, Ask: 1}, Triggers: 3, Reviews: 1, Contexts: 3,
@@ -139,8 +138,8 @@ func TestSummariseListsTheAIStepsPeopleAndGroupsByName(t *testing.T) {
 	if want := []string{"private", "business"}; !reflect.DeepEqual(got.ScopeNames, want) {
 		t.Errorf("scope names = %q, want %q", got.ScopeNames, want)
 	}
-	if got.PlatformNames != nil {
-		t.Errorf("platform names = %q, want none from a security file", got.PlatformNames)
+	if want := []string{"Claude Cowork, Mac mini", "Synced Markdown notes", "The consultant's phone", "Gmail"}; !reflect.DeepEqual(got.PlatformNames, want) {
+		t.Errorf("platform names = %q, want %q", got.PlatformNames, want)
 	}
 }
 

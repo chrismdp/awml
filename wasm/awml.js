@@ -49,24 +49,26 @@ async function start(source) {
     summary(sourceTexts) {
       return JSON.parse(this.summaryJSON(sourceTexts));
     },
-    fitJSON(sourceTexts) {
+    fitJSON(sourceTexts, implementation = "") {
       const sources = Array.isArray(sourceTexts) ? sourceTexts : [sourceTexts];
       for (const sourceText of sources) {
         const errors = this.check(sourceText);
         if (errors.length) throw new Error(errors.join("\n"));
       }
-      const output = globalThis.__awmlFit(JSON.stringify(sources));
+      const output = globalThis.__awmlFit(JSON.stringify(sources), implementation);
       const decoded = JSON.parse(output);
       if (decoded.error) throw new Error(decoded.error);
       return output;
     },
-    fit(sourceTexts) {
-      return JSON.parse(this.fitJSON(sourceTexts));
+    fit(sourceTexts, implementation = "") {
+      return JSON.parse(this.fitJSON(sourceTexts, implementation));
     },
-    draw(sourceText) {
+    draw(sourceText, implementation = "") {
       const errors = this.check(sourceText);
       if (errors.length) throw new Error(errors.join("\n"));
-      return globalThis.__awmlDraw(sourceText);
+      const output = globalThis.__awmlDraw(sourceText, implementation);
+      if (output.startsWith("{")) throw new Error(JSON.parse(output).error);
+      return output;
     },
   };
 }

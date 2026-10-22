@@ -9,6 +9,7 @@ import (
 // Page writes one standalone HTML page that draws AWML documents with Mermaid in the browser. Each
 // document must have no mistakes.
 func Page(docs []*Map) string {
+	docs = workflowViews(docs)
 	// Two views of one workflow share its title; several workflows each have their own heading.
 	titles := map[string]bool{}
 	for _, d := range docs {
@@ -24,6 +25,9 @@ func Page(docs []*Map) string {
 	sources := make([]string, len(docs))
 	for i, d := range docs {
 		title, view := escape(str(d, "title")), views[str(d, "view")]
+		if label := str(d, "implementationLabel"); label != "" {
+			view += ": " + escape(label)
+		}
 		out = append(out, "<section>", "<h2>"+title+"</h2>", `<p class="view">`+view+"</p>",
 			fmt.Sprintf(`<div class="panel"><div class="awml" role="img" aria-label="%s, %s"></div></div>`, title, strings.ToLower(view)),
 			"</section>")

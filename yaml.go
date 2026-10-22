@@ -185,3 +185,56 @@ func show(v any) string {
 	}
 	return fmt.Sprint(v)
 }
+
+// Marshal writes a document with mappings in their original order.
+func Marshal(doc *Map) ([]byte, error) {
+	return yaml.Marshal(yamlNode(doc))
+}
+
+func yamlNode(value any) *yaml.Node {
+	switch value := value.(type) {
+	case *Map:
+		node := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+		for _, key := range value.Keys() {
+			node.Content = append(node.Content, yamlNode(key), yamlNode(value.get(key)))
+		}
+		return node
+	case []any:
+		node := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+		for _, item := range value {
+			child := yamlNode(item)
+			child.Style = yaml.FlowStyle
+			node.Content = append(node.Content, child)
+		}
+		return node
+	default:
+		node := &yaml.Node{}
+		_ = node.Encode(value)
+		return node
+	}
+}
+
+// Comments collects YAML comments in source order, ready to keep above a converted document.
+func Comments(source []byte) ([]string, error) {
+	var document yaml.Node
+	if err := yaml.Unmarshal(source, &document); err != nil {
+		return nil, plain(err)
+	}
+	var comments []string
+	var visit func(*yaml.Node)
+	visit = func(node *yaml.Node) {
+		for _, comment := range []string{node.HeadComment, node.LineComment} {
+			if comment != "" {
+				comments = append(comments, comment)
+			}
+		}
+		for _, child := range node.Content {
+			visit(child)
+		}
+		if node.FootComment != "" {
+			comments = append(comments, node.FootComment)
+		}
+	}
+	visit(&document)
+	return comments, nil
+}

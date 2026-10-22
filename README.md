@@ -4,7 +4,7 @@ Agentic work today is tangled up in the tools that run it, so it's hard to say w
 
 The file lists the workflow's triggers, the steps that pass work along, the notes they read, and the surfaces and outside actions it ends in. AWML draws it with Mermaid and gives each step a colour and an emoji so you can see at a glance whether AI, code or a person decides it. A drawing runs nothing and grants nothing: it's the description a live system is checked against.
 
-![A family's dinners, by who may see each part](examples/dinners-security.svg)
+![A family's dinners, by who may see each part](examples/dinners.svg)
 
 A fictional family's dinners. On Thursday evening AI plans next week's dinners and posts the plan in the family chat. On Saturday code fills the supermarket basket, and checking out waits for a parent's yes to the exact basket. Every morning code checks the joint account against the bills expected, which only the parents see. The thick line is the meal plan moving out to a wider scope, so the carers can see it on the kitchen screen. The comment is a gap that drawing it found: nothing keeps that screen current.
 
@@ -44,7 +44,7 @@ This needs Go 1.22 or later, and puts `awml` in Go's own folder for commands, us
 
 ## Use it with Claude or ChatGPT
 
-This repository is also a plugin with two skills. `awml` helps an AI assistant work out a workflow with you, write both views of it, check them and draw them, all on your machine. `awml-publish` is optional: see [Publishing to a registry](#publishing-to-a-registry).
+This repository is also a plugin with two skills. `awml` helps an AI assistant work out a workflow with you, write its design and implementations in one file, check it and draw its views, all on your machine. `awml-publish` is optional: see [Publishing to a registry](#publishing-to-a-registry).
 
 - **Claude Code:** run `/plugin marketplace add chrismdp/awml`, then `/plugin install awml@awml`. Then ask Claude to draw a workflow, or type `/awml:awml`.
 - **claude.ai and the Claude desktop app:** download `awml-skill.zip` from the [Releases page](https://github.com/chrismdp/awml/releases). Go to **Customize > Skills**, click **+**, then **Create skill**, then **Upload a skill**, and choose the zip. Skills need a Pro, Max, Team or Enterprise plan, with **Code execution and file creation** turned on in **Settings > Capabilities**. You can instead add the plugin in **Customize > Plugins**, under **Add > Add marketplace**, with `chrismdp/awml`.
@@ -214,10 +214,10 @@ part "due" has unknown op "chek"
 
 Every workflow raises two questions, and a drawing that answers one hides the other, so each gets its own view:
 
-- **The security view** (`view: security`): who may see each part, and where content crosses from one group of people to a wider one.
-- **The platform view** (`view: platform`): where each part runs, and how the platforms fit together.
+- **The security view**: who may see each part, and where content crosses from one group of people to a wider one.
+- **The platform view**: where each part runs, and how the platforms fit together.
 
-The parts and lines are the same in both, and only the boxes around them change. Draw both, one file for each, and read them side by side.
+One file holds the design and its implementations. The parts and lines are written once, and each implementation places them in blocks. Draw the security view and each platform view, and read them side by side.
 
 The consultant's email, through both lenses:
 
@@ -225,7 +225,7 @@ The consultant's email, through both lenses:
 <tr><th>The security view</th><th>The platform view</th></tr>
 <tr>
 <td valign="top"><img src="examples/client-email.svg" width="416" alt="A client's email, by who may see each part"></td>
-<td valign="top"><img src="examples/client-email-platform.svg" width="353" alt="A client's email, by where each part runs"></td>
+<td valign="top"><img src="examples/client-email-default.svg" width="353" alt="A client's email, by where each part runs"></td>
 </tr>
 </table>
 
@@ -284,7 +284,7 @@ Whose access it is matters, because a connector speaks with that access.
 
 In the platform view, each platform is a tinted block, and each part sits in the block of the platform it runs on or lives in. A **platform** is a machine or service that brings its own surfaces, its own **harness** (the program that runs each step and calls a model) and its own models, and often its own triggers: Claude Cowork on a Mac mini, a mail service or a phone. So a trigger sits in the block of the platform that fires it, and a model on its own isn't a platform: it's a choice a platform makes. A **machine** is anywhere the system's tools run that shares one set of access: a server, a laptop, or a sandbox on either.
 
-![The family's dinners, by where each part runs](examples/dinners-platform.svg)
+![The family's dinners, by where each part runs](examples/dinners-default.svg)
 
 A block is labelled with what an **implementation** chose there, such as the model it runs, and with when the machine is on, if that isn't always, as in `Noor's laptop: on some evenings`. Work for a machine that is off waits for it. An implementation is one running system built from a design, and each draws its own platform view, with the same parts in different blocks.
 
@@ -391,7 +391,7 @@ Drawing bin day shows what a list of its tasks hides: nothing posts the bin day 
 
 The family's photos run on two machines: a server that never stops, and Noor's laptop, which is on only some evenings. The photos wait on the server until the laptop can sort them.
 
-![The family's photos, on a server and a laptop](examples/tour/09-platform-view.svg)
+![The family's photos, on a server and a laptop](examples/tour/09-platform-view-default.svg)
 
 ## Improving one step at a time
 
@@ -418,19 +418,21 @@ AWML isn't a visual workflow tool, where the diagram is the program and drawing 
 awml check examples/question.yaml        # report mistakes; exits 1 on any
 awml fit examples/client-email.yaml examples/platforms/*.yaml
 awml draw examples/question.yaml         # print the Mermaid
-awml page examples/dinners-security.yaml examples/dinners-platform.yaml -o dinners.html
-awml summary examples/dinners-security.yaml --json
+awml draw --implementation default examples/dinners.yaml
+awml page examples/dinners.yaml -o dinners.html
+awml summary examples/dinners.yaml --json
 awml login
-awml push family/dinners examples/dinners-security.yaml examples/dinners-platform.yaml
+awml push family/dinners examples/dinners.yaml
 awml pull family/dinners@1 -o dinners
 ```
 
-- `awml check` checks each file and compares the two views of a workflow when both are given. It prints each warning before `ok` or the mistakes, and exits 1 only if it finds a mistake.
-- `awml fit` judges a security view against platform descriptions, or judges a placement when a platform view comes between them. Add `--json` for the same lines as a JSON array.
-- `awml draw` prints a file's Mermaid. It refuses a file with mistakes, and prints them instead.
-- `awml page` writes one standalone HTML page that draws each file with Mermaid in the browser, in the order given. Each file gets its own heading, saying which view it is. The page takes the files' title when they all share one, as the two views of the family's dinners do, and is called Workflows when they don't.
-- `awml summary` counts the scopes, platforms, triggers, steps and operations, reviews, contexts, connectors, surfaces, outside actions, publishing lines, refused reads and red lines in one workflow. Give it one view or both; `--json` prints the registry's JSON form.
-- `awml login` saves an API token for the registry. `awml push` checks one or two view files before uploading them, and `awml pull` downloads the latest or a numbered version. They use `https://awml.io` unless `--registry` or `AWML_REGISTRY_URL` says otherwise. Add `--private` to the first push of a private organisation workflow.
+- `awml check` checks the design and each implementation. It prints each warning before `ok` or the mistakes, and exits 1 only if it finds a mistake. It still compares legacy view pairs.
+- `awml fit` judges the design against platform descriptions. Add `--implementation ID` to judge that placement, and `--json` for the report's JSON form.
+- `awml draw` prints the security view's Mermaid. Add `--implementation ID` for a platform view. It refuses a file with mistakes, and prints them instead.
+- `awml page` writes one standalone HTML page with the security view then every implementation, each with a heading. Several files appear in the order given. The page takes their shared title, or Workflows when they differ.
+- `awml summary` counts the scopes, platforms, parts and lines in one workflow. It includes platforms from every implementation and counts the design once. `--json` prints the registry's JSON form.
+- `awml convert security.yaml platform.yaml` joins a matching 0.3 or 0.2 pair into one 0.4 file, printed to standard output. It keeps the security design and turns platform groups into blocks of the `default` implementation. YAML comments move to the top. The canonical labels, part order and triggers may change the old platform drawing.
+- `awml login` saves an API token for the registry. `awml push` checks and uploads a workflow, and `awml pull` downloads the latest or a numbered version. A 0.4 file travels in the API's security field, with no platform file, and is downloaded as `security.yaml`. Legacy pairs still work. The commands use `https://awml.io` unless `--registry` or `AWML_REGISTRY_URL` says otherwise. Add `--private` to the first push of a private organisation workflow.
 
 For example, the client email workflow can run on the scheduled scripts platform, while the other descriptions show why they don't fit:
 
@@ -455,13 +457,12 @@ npx -y @mermaid-js/mermaid-cli@11.4.1 -b white -i my-workflow.mmd -o my-workflow
 
 ### Writing a file
 
-One file holds one view of one workflow:
+One file holds one workflow and its implementations:
 
 ```yaml
-awml: "0.3"
+awml: "0.4"
 title: The family's dinners
-view: security      # or: platform
-groups:
+scopes:
   - { id: carers, label: "carers: + June, Beth" }
   - { id: family, label: "family: parents, kids", in: carers }
 parts:
@@ -473,25 +474,33 @@ lines:
   - { from: thu, to: plan, kind: start }
   - { from: favourites, to: plan, kind: data }
   - { from: plan, to: chat, kind: data, label: posted }
+implementations:
+  home:
+    label: At home
+    blocks:
+      - { id: server, label: Server, parts: [favourites, plan] }
+      - { id: phone, label: Family phone, parts: [chat] }
 ```
 
-- The file needs `awml`, the version `"0.3"`; `title`, the workflow's name; `view`, `security` or `platform`; and `parts`. It may have `groups` and `lines`. Version `"0.2"` remains valid without the 0.3 fields.
-- A **group** is a scope in a security view, or a platform in a platform view. Each has an `id` and a `label`, and may have `in`, the id of the group it sits inside. A security group may have `processing`; a platform group may name a platform description with `platform`.
-- A **part** has an `id`, a `kind` and a `label`, which a fork doesn't need. It may have `in`, the id of its group. A step, `ai`, `code` or `person`, may have `op`, its operation, such as `op: draft`. A trigger may have `wait`, and a context may have `at`.
+- The file needs `awml`, the version `"0.4"`; `title`, the workflow's name; and `parts`. It may have `scopes`, `lines` and `implementations`. Versions `"0.3"` and `"0.2"` still read as before, with `groups` and `view`.
+- A **scope** has an `id` and a `label`, and may have `in`, the id of its parent scope, and `processing`, the companies it allows.
+- A **part** has an `id`, a `kind` and a `label`, which a fork doesn't need. Its `in` names its scope. A step may have `op`, a trigger `wait`, and a context `at`.
+- An **implementation** has an id in the `implementations` map, a `label` and `blocks`. Each block has an `id`, a `label` and `parts`, the ids it holds. It may have `in`, its parent block, and `platform`, a platform description id. Every part except a trigger or comment needs exactly one block per implementation.
+- An implementation may have **comments**, each with `id`, `label`, `in`, its block, and `ties`, a list of design part ids. These comments appear only in its platform view.
 - A **line** has `from` and `to`, the ids of two parts, and a `kind`. It may have a `label`, and `breaks: true` to draw it red.
 - The part kinds are `trigger`, `ai`, `code`, `person`, `review`, `fork`, `context`, `connector`, `surface`, `outside` and `comment`. The line kinds are `start`, `data`, `publish`, `refused`, `tie` and `hidden`.
-- An id is letters, digits and underscores, starting with a letter, and no two are the same.
-- Parts are drawn in the order listed, and each group after the parts beside it. A trigger or comment with no `in` is drawn in the group of what it starts or explains. A `hidden` line steers the layout when Mermaid puts something in an awkward place.
+- An id is letters, digits and underscores, starting with a letter, and scope, part, block and comment ids are unique across the file. Implementation ids have their own namespace.
+- Parts are drawn in the design's order, and each scope or block after the parts beside it. Unplaced triggers and design comments are drawn beside the other end of their first visible line. A `hidden` line steers the layout when Mermaid puts something in an awkward place.
 
 Every id, label, kind and reference to an id is text. `awml` reads YAML 1.2, which reads `true`, `false`, numbers and dates such as `2026-10-20` as something other than text, so quote those. Tools that read YAML 1.1 also read `yes`, `no`, `on` and `off` as true or false, and `19:00` as a number, so quoting those too keeps a file the same in every tool. `breaks` is `true` or `false`, unquoted.
 
 ### What `awml check` reports
 
-`awml check` reports a missing or unknown field, an unknown kind or view, an id used twice or badly written, a value YAML didn't read as text, a `breaks` that isn't true or false, a part or group in an unknown group, a group nested in itself, a line to or from an unknown part, a comment linked by anything but `tie`, a `tie` with no comment at either end, an unknown `op` or one on a part that isn't a step, a step that does what its operation must never do, as far as the drawing shows it, and a `data` line in the security view that moves content anywhere but its own box or a box inside it, which is publishing drawn as routing. Given both views of one workflow, it also reports a part or line in one view but not the other, apart from triggers and comments the platform view leaves out. It warns when AI decides a `do` step or one `do` step leads to more than one change. Warnings leave the exit status alone. [`SPEC.md`](SPEC.md) gives the exact rules.
+`awml check` reports structural mistakes, invalid operations and publishing drawn as routing. It also checks each implementation's block references, nesting and placement, and its comments' ties. It warns when AI decides a `do` step or one `do` step leads to more than one change. Warnings leave the exit status alone. [`SPEC.md`](SPEC.md) gives the exact rules, including the checks for older view pairs.
 
 ### Examples to start from
 
-Besides the gallery, [`examples/`](examples) has three workflows to start from: the family's dinners and the consultant's email, each in both views, and the question in the family chat. It also has [`examples/legend.yaml`](examples/legend.yaml), the key at the top of [Reading a drawing](#reading-a-drawing). The tests run with `go test ./...`, and they check that every example has no mistakes and that its drawings are current.
+Besides the gallery, [`examples/`](examples) has three workflows to start from: the family's dinners and the consultant's email, each with an implementation, and the question in the family chat. It also has [`examples/legend.yaml`](examples/legend.yaml), the key at the top of [Reading a drawing](#reading-a-drawing). The tests run with `go test ./...`, and they check that every example has no mistakes and that its drawings are current.
 
 ## What comes next
 
@@ -501,6 +510,6 @@ Besides the gallery, [`examples/`](examples) has three workflows to start from: 
 
 ## Status and licence
 
-Draft 0.3. The notation and the file format may still change.
+Draft 0.4. The notation and the file format may still change.
 
 MIT. See `LICENSE`.

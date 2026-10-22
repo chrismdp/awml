@@ -1,7 +1,7 @@
 {
   "name": "awml",
   "displayName": "AWML",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Describe, check and draw agentic workflows in AWML, the Agentic Workflow Modelling Language: who decides each step, who may see each part, and what needs a person's yes.",
   "author": {
     "name": "Chris Parsons"

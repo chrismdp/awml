@@ -65,12 +65,18 @@ func main() {
 			}
 			docs = append(docs, doc.(*awml.Map))
 		}
-		if field(docs[0], "view") != "security" {
+		if !awml.IsCanonical(docs[0]) && field(docs[0], "view") != "security" {
 			return errorJSON("the first file must be a security view")
 		}
 		var placement *awml.Map
 		start := 1
-		if field(docs[1], "view") == "platform" {
+		if implementation := optionalImplementation(args); implementation != "" {
+			var err error
+			placement, err = awml.View(docs[0], implementation)
+			if err != nil {
+				return errorJSON(err.Error())
+			}
+		} else if !awml.IsCanonical(docs[0]) && field(docs[1], "view") == "platform" {
 			placement = docs[1]
 			start = 2
 		}
@@ -93,7 +99,11 @@ func main() {
 		if err != nil || len(awml.Check(doc)) != 0 {
 			return ""
 		}
-		return awml.Draw(doc.(*awml.Map))
+		view, err := awml.View(doc.(*awml.Map), optionalImplementation(args))
+		if err != nil {
+			return errorJSON(err.Error())
+		}
+		return awml.Draw(view)
 	})
 	select {}
 }
@@ -139,4 +149,11 @@ func errorJSON(message string) string {
 		Error string `json:"error"`
 	}{message})
 	return string(encoded)
+}
+
+func optionalImplementation(args []js.Value) string {
+	if len(args) > 1 && args[1].Type() == js.TypeString {
+		return args[1].String()
+	}
+	return ""
 }

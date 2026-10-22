@@ -1,21 +1,27 @@
 # Where each part runs, with a laptop that is only on some of the time beside a server that always
 # is. Noor and the family are fictional.
-awml: "0.2"
+# Where each part runs, with a laptop that is only on some of the time beside a server that always
+# is. Noor and the family are fictional.
+awml: "0.4"
 title: The family's photos, by where each part runs
-view: platform
-groups:
-  - { id: server, label: "Server: always on" }
-  - { id: laptop, label: "Noor's laptop: a small model, on some evenings" }
+scopes:
+    - {id: family, label: 'family: parents, kids'}
 parts:
-  - { id: nightly, kind: trigger, label: "Every night 23:00", in: server }
-  - { id: bring, kind: code, op: bring-in, label: "Bring in the day's photos from the family's phones", in: server }
-  - { id: new, kind: context, label: "New photos", in: server }
-  - { id: sort, kind: ai, op: sort, label: "Sort them into albums", in: laptop }
-  - { id: albums, kind: context, label: "Albums", in: laptop }
-  - { id: wait, kind: comment, label: "The laptop is off most days, so new photos wait on the server until it's on", in: laptop }
+    - {id: nightly, kind: trigger, label: 'Every night 23:00', in: family}
+    - {id: bring, kind: code, op: bring-in, label: Bring in the day's photos from the family's phones, in: family}
+    - {id: new, kind: context, label: New photos, in: family}
+    - {id: sort, kind: ai, op: sort, label: Sort them into albums, in: family}
+    - {id: albums, kind: context, label: Albums, in: family}
+    - {id: wait, kind: comment, label: 'The laptop is off most days, so new photos wait on the server until it''s on', in: family}
 lines:
-  - { from: nightly, to: bring, kind: start }
-  - { from: bring, to: new, kind: data }
-  - { from: new, to: sort, kind: data, label: when the laptop is on }
-  - { from: sort, to: albums, kind: data }
-  - { from: wait, to: sort, kind: tie }
+    - {from: nightly, to: bring, kind: start}
+    - {from: bring, to: new, kind: data}
+    - {from: new, to: sort, kind: data, label: when the laptop is on}
+    - {from: sort, to: albums, kind: data}
+    - {from: wait, to: sort, kind: tie}
+implementations:
+    default:
+        label: Default
+        blocks:
+            - {id: server, label: 'Server: always on', parts: [nightly, bring, new]}
+            - {id: laptop, label: 'Noor''s laptop: a small model, on some evenings', parts: [sort, albums, wait]}
