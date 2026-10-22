@@ -9,9 +9,11 @@
 # applies when main moves during a long draft, and the pull request catches up like any other. The
 # write-capable job runs none of the proposed code. It judges a passing patch against
 # .github/build-rules.yml with the rule as it is on main, gives the token only to the steps that
-# push or use the GitHub API, and opens the pull request. A change that needs review stays open. A
-# straightforward change merges by itself, saying why and how to undo it, then starts the conflict
-# rebase workflow and CI on main, because a merge by the Actions token starts no other workflow.
+# push or use the GitHub API, and opens the pull request. A change that needs review stays open, and
+# the person who added the label is asked to review it, or the repository's owner when a workflow
+# started the build. A straightforward change merges by itself, saying why and how to undo it, then
+# starts the conflict rebase workflow and CI on main, because a merge by the Actions token starts no
+# other workflow.
 #
 # Another workflow can start a build too, by dispatching this one with the issue's number, as CI
 # does when main fails. A build that fails its checks, or whose draft fails or runs out of time,
@@ -39,6 +41,9 @@ on:
       previous_run:
         description: The run of the last try, whose result this try is told about
         default: ""
+      requested_by:
+        description: Who to ask to review the pull request, if it needs a review
+        default: ""
 
 concurrency:
   group: build-issue-${{ inputs.issue || github.event.issue.number }}
@@ -48,6 +53,9 @@ env:
   ISSUE: ${{ inputs.issue || github.event.issue.number }}
   ATTEMPT: ${{ inputs.attempt || '1' }}
   PREVIOUS_RUN: ${{ inputs.previous_run }}
+  # Whoever added the label, or started the build by hand. A retry passes them on. A build that a
+  # workflow started has only the Actions bot here, which the review step replaces with the owner.
+  REQUESTED_BY: ${{ inputs.requested_by || github.event.sender.login }}
 
 jobs:
   draft:
@@ -341,6 +349,13 @@ jobs:
             } > "$RUNNER_TEMP/review-pull-request.md"
             gh pr edit "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
               --body-file "$RUNNER_TEMP/review-pull-request.md"
+            reviewer="$REQUESTED_BY"
+            case "$reviewer" in
+              ''|*[!A-Za-z0-9-]*) reviewer="$GITHUB_REPOSITORY_OWNER" ;;
+            esac
+            if ! gh pr edit "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --add-reviewer "$reviewer"; then
+              echo "::warning::Could not ask $reviewer to review the pull request."
+            fi
             exit 0
           fi
 
@@ -420,7 +435,8 @@ jobs:
 
           if [ "$ATTEMPT" -lt 3 ]; then
             gh workflow run build.yml --repo "$GITHUB_REPOSITORY" --ref main \
-              -f issue="$ISSUE" -f attempt="$((ATTEMPT + 1))" -f previous_run="$GITHUB_RUN_ID"
+              -f issue="$ISSUE" -f attempt="$((ATTEMPT + 1))" -f previous_run="$GITHUB_RUN_ID" \
+              -f requested_by="$REQUESTED_BY"
             exit 0
           fi
 
