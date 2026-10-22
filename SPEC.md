@@ -1,16 +1,16 @@
 # AWML: the Agentic Workflow Modelling Language
 
-Draft 0.2, 20 October 2026.
+Draft 0.3, 22 October 2026.
 
 AWML describes agentic work as diagrams, written as YAML files and drawn with Mermaid.
 
-**Contents:** [What it describes](#what-it-describes) · [The parts](#the-parts) · [The lines](#the-lines) · [The security view](#the-security-view-who-may-see-each-part) · [Connectors](#connectors) · [The platform view](#the-platform-view-where-each-part-runs) · [Tiers and yeses](#tiers-and-yeses) · [Standing approvals](#standing-approvals) · [Operations](#operations) · [Patterns](#patterns) · [Records](#records) · [The red line](#the-red-line) · [What AWML is not](#what-awml-is-not) · [The file format](#the-file-format)
+**Contents:** [What it describes](#what-it-describes) · [The parts](#the-parts) · [The lines](#the-lines) · [The security view](#the-security-view-who-may-see-each-part) · [Connectors](#connectors) · [The platform view](#the-platform-view-where-each-part-runs) · [Placing a workflow](#placing-a-workflow-where-it-can-run) · [Tiers and yeses](#tiers-and-yeses) · [Standing approvals](#standing-approvals) · [Operations](#operations) · [Patterns](#patterns) · [Records](#records) · [The red line](#the-red-line) · [What AWML is not](#what-awml-is-not) · [The file format](#the-file-format)
 
 ## What it describes
 
 A **workflow** is the chain from a trigger to the surfaces and outside actions it ends in, through the steps and approvals that pass work along. A **design** is the written description of a system that does such work: who takes part, what each part may read and write, and what needs a person's yes. AWML draws one workflow of a design as one picture, so a person can see who decides each step, who may see each part and what leaves the system.
 
-Each workflow can be drawn two ways, one file for each: the **security view** (`view: security`), by who may see each part, and the **platform view** (`view: platform`), by where each part runs. AWML builds on the UML activity diagram, so each part means what its UML element means.
+Each workflow can be drawn two ways, one file for each: the **security view** (`view: security`), by who may see each part, and the **platform view** (`view: platform`), by where each part runs. A third kind of file, a **platform description**, says what one platform offers, so a workflow can be matched to the platforms that could run it. AWML builds on the UML activity diagram, so each part means what its UML element means.
 
 ## The parts
 
@@ -51,7 +51,7 @@ A line may carry a label. Words in square brackets are a guard, the condition th
 
 ## The security view: who may see each part
 
-A **scope** is a set of people. Everything belongs to one scope, which says who may see it and which companies may process it: the makers of the models the system uses, and services such as transcription or the host of a folder. Its terms say whether a company may keep the content, and a company that may train on it is never used. A scope may also allow no processing, as for something told in confidence. Scopes aren't a ladder: two may overlap, each with someone the other lacks, or one may hold only people the other has, under looser terms.
+A **scope** is a set of people. Everything belongs to one scope, which says who may see it and which companies may process it: the makers of the models the system uses, and services such as transcription or the host of a folder. Its terms say whether a company may keep the content, and a company that may train on it is never used. A scope may also allow no processing, as for something told in confidence. Its `processing` field names the companies, so `awml fit` can check them (see [Placing a workflow](#placing-a-workflow-where-it-can-run)). Scopes aren't a ladder: two may overlap, each with someone the other lacks, or one may hold only people the other has, under looser terms.
 
 In the security view, each scope is a dashed box, labelled with its name and members, such as `family: parents, kids`, or with `+` and the people it adds to the scope inside it, such as `carers: + June, Beth`.
 
@@ -78,6 +78,52 @@ A block is labelled with what an **implementation** chose there, such as the mod
 Anything running on a machine can reach everything that machine holds, and send it to any host the machine can reach. So a machine holds only contexts and connectors whose scopes allow every company that processes content there, and reaches only the hosts its connectors need.
 
 An implementation's choices change how a step is done, never what it may do: the contexts a step reads, the tier of each action it takes and its review stay the design's call. A different model may mean a different company processing the content, which every context feeding the step must allow.
+
+## Placing a workflow: where it can run
+
+Which platforms could run a workflow is a separate question from which one it runs on. The security view says what the workflow needs, a **platform description** says what one platform offers, and `awml fit` matches the two, giving the same answer every time. A person, or an agent working with them, writes the needs and describes their own machines. The matching is code. Choosing one of the platforms that fit, drawing the platform view for it and installing the workflow there is the person's call, and their agent's work.
+
+**What a workflow needs.** Most of it is already in the drawing: the contexts, connectors and AI steps the workflow reaches. Three fields add the rest:
+
+- **Who may process it.** A scope's `processing` names the companies that may process its content, and for which operations. `{ anthropic: any, openai: [sort] }` lets Anthropic's models do anything in the scope and OpenAI's only sort. `any` lets every company in, and `none` keeps them all out, as for something told in confidence. A company is a short id, which only has to match the id the platform descriptions use. Where one company offers different terms, name the agreement instead, as in `openai-zero-retention`.
+- **How long work may wait.** A trigger's `wait` is the longest the work may wait once the trigger fires, as an ISO 8601 duration: `PT5M` for urgent mail, `P1D` for a weekly review. This is what "always on" means for a workflow.
+- **Where a context is kept.** A context's `at` names the folder or store it already is, as a path such as `notes/projects`. A context without `at` isn't looked for: it's state the workflow makes wherever it's installed, or kept by a service a connector reaches.
+
+**What a platform offers.** A platform description is a file of its own. It describes one kind of platform, such as a container on a server, or one real machine, and names no workflow:
+
+```yaml
+awml: "0.3"
+platform: { id: cowork-mac-mini, label: "Claude Cowork on a Mac mini" }
+off_for_up_to: PT0S
+agents: [anthropic]
+calls: any
+holds: [notes]
+```
+
+- `off_for_up_to` is the longest the platform may be off, as an ISO 8601 duration: `PT0S` for one that's always on, `P14D` for a laptop that may be shut for a fortnight's holiday.
+- `agents` lists the companies whose agents run there. An agent is a model with tools, so it can read everything the platform holds. An empty list means only the workflow's own code runs there, as in a container that holds nothing else.
+- `calls` lists the companies whose models the workflow's own code can call from there, or says `any`.
+- `holds` lists the folders and stores the platform holds or can be given, as paths. A platform that holds `notes` holds `notes/projects`.
+
+A description of a kind of platform is a starting point. A real machine's description adds what else is on it, such as the coding agents its owner uses there.
+
+**How `awml fit` decides.** Given a security view and some platform descriptions, `awml fit` says of each platform that the workflow fits, or gives every reason it doesn't:
+
+1. **It's on often enough.** Every trigger's `wait` is at least the platform's `off_for_up_to`.
+2. **Every agent there may see what it holds.** Each company in `agents` is allowed `any` by every scope that has a step, context or connector of the workflow on the platform. This is the platform view's rule for a machine. A person's own steps and reviews happen on their own devices, so they don't count.
+3. **Every AI step has a model it may use.** Each AI step's scope allows at least one company, for the step's operation, that the platform reaches through `agents` or `calls`. The fit names those companies for each AI step. Which model to use is the implementation's choice.
+4. **Every context it relies on is there.** Each context with `at` is in something the platform `holds`.
+
+A scope without `processing`, or a trigger without `wait`, is a gap, and `awml fit` reports it rather than guess. Take the client email in the examples, with the private scope allowing any company, the business scope allowing only Anthropic, the engagements and their projects kept under `notes`, and the trigger allowed to wait two hours. Given three platforms, `awml fit` might say:
+
+```text
+$ awml fit client-email.yaml cowork-mac-mini.yaml codex-laptop.yaml worker.yaml
+cowork-mac-mini  fits: choose, learn and draft may use anthropic
+codex-laptop     no: weekdays may wait PT2H, but the platform may be off for P14D
+                 no: openai's agents run here, and business doesn't allow openai
+worker           no: engagements is kept at notes/engagements, which the platform doesn't hold
+                 no: project is kept at notes/projects, which the platform doesn't hold
+```
 
 ## Tiers and yeses
 
@@ -182,7 +228,7 @@ AWML runs nothing and grants nothing. In a workflow tool such as n8n, the diagra
 One YAML file holds one view of one workflow.
 
 ```yaml
-awml: "0.2"
+awml: "0.3"
 title: The family's dinners
 view: security
 groups:
@@ -197,12 +243,16 @@ lines:
   - { from: plan, to: mealplan, kind: data, label: posted }
 ```
 
-The file needs `awml`, the version `"0.2"`; `title`, the workflow's name; `view`, `security` or `platform`; and `parts`. It may have `groups` and `lines`.
+The file needs `awml`, the version `"0.3"`; `title`, the workflow's name; `view`, `security` or `platform`; and `parts`. It may have `groups` and `lines`. A file marked `"0.2"` is read as before, and may use none of the fields 0.3 added.
 
-- A **group** has an `id` and a `label`, and may have `in`, the id of the group it sits inside.
-- A **part** has an `id`, a `kind` and a `label`, which a fork doesn't need and never shows. It may have `in`, the id of its group. A step, `ai`, `code` or `person`, may have `op`, its operation.
+- A **group** has an `id` and a `label`, and may have `in`, the id of the group it sits inside. In the security view it may have `processing`: `any`, `none`, or a map from company ids to `any` or a list of operations.
+- A **part** has an `id`, a `kind` and a `label`, which a fork doesn't need and never shows. It may have `in`, the id of its group. A step, `ai`, `code` or `person`, may have `op`, its operation. A trigger may have `wait`, an ISO 8601 duration such as `PT5M`. A context may have `at`, a path such as `notes/projects`.
 - A **line** has `from` and `to`, the ids of two parts, and a `kind`. It may have a `label`, and `breaks: true` to draw it red.
 
 An id is letters, digits and underscores, starting with a letter, and no two are the same. Every id, label, kind and reference to an id is text. `awml` reads YAML 1.2, which reads `true`, `false`, numbers and dates such as `2026-10-20` as something other than text, so quote them. YAML 1.1, which many other tools read, also reads `yes`, `no`, `on` and `off` as true or false, and `19:00` as a number, so quoting those too keeps a file the same in every tool. `breaks` is `true` or `false`, unquoted. The drawing keeps the parts in the order the file lists them, and draws each group after the parts beside it. List the parts in the order the work flows, with its triggers first.
 
-`awml check` reports a missing or unknown field, an unknown kind or view, an id used twice or badly written, a value YAML didn't read as text, a `breaks` that isn't true or false, a part or group in an unknown group, a group nested in itself, a line to or from an unknown part, a comment linked by anything but `tie`, a `tie` with no comment at either end, an unknown `op` or one on a part that isn't a step, a step that does what its operation must not, as far as the drawing shows it, and a `data` line in the security view that moves content anywhere but its own box or a box inside it.
+`awml check` reports a missing or unknown field, an unknown kind or view, an id used twice or badly written, a value YAML didn't read as text, a `breaks` that isn't true or false, a part or group in an unknown group, a group nested in itself, a line to or from an unknown part, a comment linked by anything but `tie`, a `tie` with no comment at either end, an unknown `op` or one on a part that isn't a step, a step that does what its operation must not, as far as the drawing shows it, a `data` line in the security view that moves content anywhere but its own box or a box inside it, a `processing` that isn't `any`, `none` or a map of company ids to `any` or known operations, `processing` on a group in the platform view, a `wait` that isn't a duration or is on a part that isn't a trigger, and an `at` that isn't a path or is on a part that isn't a context.
+
+A **platform description** is a file of its own. It needs `awml`, the version `"0.3"`; `platform`, with an `id`, written like a company id, and a `label`; `off_for_up_to`, an ISO 8601 duration; `agents`, a list of company ids, which may be empty; `calls`, a list of company ids or `any`; and `holds`, a list of paths, which may be empty. It has no `title`, `view`, `groups`, `parts` or `lines`. `awml check` reports a missing or unknown field, a value of the wrong kind and a company id or path badly written. A company id is lower-case letters, digits and hyphens, starting with a letter. A path is names of letters, digits, dots, hyphens and underscores, joined by `/`, with no leading `/` and no `.` or `..` names.
+
+`awml fit` takes one security view and one or more platform descriptions, and prints one line for each platform that fits, naming the companies each AI step may use there, and one line for each reason a platform doesn't fit, as in [Placing a workflow](#placing-a-workflow-where-it-can-run). It exits 0 when it could judge every platform, whether or not any fits, and 1 when a file has mistakes or the security view has a gap. With `--json` it prints the same as JSON.
