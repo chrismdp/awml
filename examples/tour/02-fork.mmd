@@ -19,11 +19,11 @@ flowchart TB
     chat@{ shape: win-pane, label: "Family chat" }
   end
 
-  arrives -.-> split
+  arrives --> split
   split --> learn
   split --> due
-  learn --> notes
-  due -->|"what needs doing"| chat
+  learn -.-> notes
+  due -.->|"what needs doing"| chat
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
   classDef con fill:#eceef2,stroke:#5d6472,color:#16171b

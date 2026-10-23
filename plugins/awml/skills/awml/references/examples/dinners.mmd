@@ -39,26 +39,26 @@ flowchart TB
     end
   end
 
-  thu -.-> plan
-  favourites --> plan
-  plan --> mealplan
-  mealplan -->|"posted"| chat
-  sat -.-> fill
-  mealplan --> fill
-  favourites --> fill
+  thu --> plan
+  favourites -.-> plan
+  plan -.-> mealplan
+  mealplan -.->|"posted"| chat
+  sat --> fill
+  mealplan -.-> fill
+  favourites -.-> fill
   fill --> basket
-  basket --> shop
+  basket -.-> shop
   basket --> approve
   approve -->|"#91;yes#93;"| checkout
-  checkout --> shop
-  calendar --> copy
-  copy --> pickups
-  pickups --> screen
+  checkout -.-> shop
+  calendar -.-> copy
+  copy -.-> pickups
+  pickups -.-> screen
   screen <==>|"standing rule#58; dinners to carers"| mealplan
   screen -.- screen_gap
-  daily -.-> match
-  bank --> match
-  match --> parents_chat
+  daily --> match
+  bank -.-> match
+  match -.-> parents_chat
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
   classDef con fill:#eceef2,stroke:#5d6472,color:#16171b
@@ -81,4 +81,5 @@ flowchart TB
   style carers fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
   style family fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
   style household fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
-  linkStyle 15 marker-end:none
+  linkStyle 15 stroke-dasharray:3,marker-end:none
+  linkStyle 16 stroke:#8a93a3

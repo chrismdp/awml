@@ -161,12 +161,14 @@ A workflow whose every step is green ⚙️ has no AI in it, even if AI helped b
 
 | Line | Drawn as | Means |
 |---|---|---|
-| `start` | A dotted arrow | Starts something, as a trigger starts a step |
-| `data` | A solid arrow | Moves data from one part to the next |
+| `start` | An arrow | Starts something, as a trigger starts a step |
+| `data` | An arrow | Moves data from one part to the next |
 | `publish` | A thick arrow | Moves content into a wider scope, which is publishing |
 | `refused` | A line ending in a cross | A read the design refuses |
-| `tie` | A dotted line | Links a comment to what it explains |
+| `tie` | A grey dotted line | Links a comment to what it explains |
 | `hidden` | Nothing | Steers the layout only |
+
+The solid lines are the path the work takes, from the trigger through each step to the next. A line into or out of a context, a connector or a surface is dotted, since it's information moving in and out. A `publish` line is thick either way, and a `refused` line keeps its cross.
 
 A line may carry a label. Words in square brackets are a **guard**, the condition the line is taken on. A line drawn red is a finding: see [The red line](#the-red-line).
 

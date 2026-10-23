@@ -51,13 +51,106 @@ func TestAForkNeedsNoLabel(t *testing.T) {
 }
 
 func TestEachLineKindHasItsArrow(t *testing.T) {
-	for kind, arrow := range map[string]string{"start": "-.->", "data": "-->", "publish": "==>", "refused": "--x", "tie": "-.-", "hidden": "~~~"} {
+	for kind, arrow := range map[string]string{"start": "-->", "data": "-->", "publish": "==>", "refused": "--x", "tie": "-.-", "hidden": "~~~"} {
 		t.Run(kind, func(t *testing.T) {
 			out := drawing(t, "security", fmt.Sprintf(`
-parts: [{id: a, kind: code, label: A}, {id: b, kind: comment, label: B}]
+parts: [{id: a, kind: code, label: A}, {id: b, kind: code, label: B}]
 lines: [{from: a, to: b, kind: %s}]`, kind))
 			has(t, out, "\n  a "+arrow+" b\n")
 		})
+	}
+}
+
+// A line from one step to the next is solid, whatever its kind, so the solid lines are the path the
+// work takes.
+func TestALineFromOneStepToTheNextIsSolid(t *testing.T) {
+	out := drawing(t, "security", `
+parts:
+  - {id: t, kind: trigger, label: T}
+  - {id: a, kind: ai, label: A}
+  - {id: r, kind: review, label: R}
+  - {id: f, kind: fork}
+  - {id: o, kind: outside, label: O}
+lines:
+  - {from: t, to: a, kind: start}
+  - {from: a, to: r, kind: data}
+  - {from: r, to: f, kind: data, label: "[yes]"}
+  - {from: f, to: o, kind: start}
+  - {from: o, to: a, kind: data}`)
+	has(t, out, "\n  t --> a\n")
+	has(t, out, "\n  a --> r\n")
+	has(t, out, "\n  r -->|\"#91;yes#93;\"| f\n")
+	has(t, out, "\n  f --> o\n")
+	has(t, out, "\n  a <--> o\n")
+}
+
+// A line that reads from or writes to a context, a connector or a surface is dotted: it's
+// information moving in and out, beside the path.
+func TestALineInOrOutOfAContextConnectorOrSurfaceIsDotted(t *testing.T) {
+	for _, kind := range []string{"context", "connector", "surface"} {
+		t.Run(kind, func(t *testing.T) {
+			out := drawing(t, "security", fmt.Sprintf(`
+parts: [{id: a, kind: code, label: A}, {id: b, kind: %s, label: B}, {id: c, kind: code, label: C}]
+lines:
+  - {from: a, to: b, kind: data}
+  - {from: b, to: c, kind: data}
+  - {from: c, to: b, kind: data}
+  - {from: b, to: a, kind: start}
+  - {from: a, to: b, kind: refused}
+  - {from: c, to: b, kind: refused}`, kind))
+			has(t, out, "\n  a -.-> b\n")
+			has(t, out, "\n  b -.-> c\n")
+			has(t, out, "\n  b <-.-> c\n")
+			has(t, out, "\n  a <-.-> b\n")
+			has(t, out, "\n  a -.-x b\n")
+			has(t, out, "\n  b x-.-x c\n")
+			has(t, out, "\n  linkStyle 2,3,5 marker-end:none")
+		})
+	}
+}
+
+// Mermaid has no thick dotted arrow, so a publish line into or out of a context, a connector or a
+// surface is a thick arrow with dashes added.
+func TestAPublishLineStaysThickAndIsDottedWhereItMeetsAContext(t *testing.T) {
+	out := drawing(t, "security", `
+parts: [{id: a, kind: code, label: A}, {id: b, kind: surface, label: B}, {id: d, kind: context, label: D}, {id: c, kind: code, label: C}]
+lines:
+  - {from: a, to: c, kind: publish}
+  - {from: a, to: b, kind: publish}
+  - {from: d, to: c, kind: publish}
+  - {from: d, to: a, kind: publish}`)
+	has(t, out, "\n  a ==> c\n")
+	has(t, out, "\n  a ==> b\n")
+	has(t, out, "\n  d ==> c\n")
+	has(t, out, "\n  a <==> d\n")
+	if !strings.HasSuffix(out, "\n  linkStyle 1,2 "+dotted+"\n  linkStyle 3 "+dotted+",marker-end:none") {
+		t.Errorf("the drawing is\n%s", out)
+	}
+}
+
+// A tie is grey and dotted, so it reads as a comment's and never as data.
+func TestATieIsAGreyDottedLine(t *testing.T) {
+	out := drawing(t, "security", `
+parts: [{id: a, kind: code, label: A}, {id: b, kind: comment, label: B}, {id: c, kind: comment, label: C}]
+lines:
+  - {from: b, to: a, kind: tie}
+  - {from: a, to: c, kind: hidden}
+  - {from: c, to: a, kind: tie}`)
+	has(t, out, "\n  a -.- b\n")
+	has(t, out, "\n  a -.- c\n")
+	if !strings.HasSuffix(out, "\n  linkStyle 0,2 "+grey) {
+		t.Errorf("the drawing is\n%s", out)
+	}
+}
+
+// A red line takes the red style, and stays thick and dotted where it would be.
+func TestARedDottedPublishLineIsRedThickAndDotted(t *testing.T) {
+	out := drawing(t, "security", `
+parts: [{id: a, kind: code, label: A}, {id: b, kind: surface, label: B}]
+lines: [{from: b, to: a, kind: publish, breaks: true}]`)
+	has(t, out, "\n  a <==> b\n")
+	if !strings.HasSuffix(out, "\n  linkStyle 0 "+red+","+dotted+",marker-end:none") {
+		t.Errorf("the drawing is\n%s", out)
 	}
 }
 
@@ -65,7 +158,7 @@ func TestALineCarriesItsLabel(t *testing.T) {
 	out := drawing(t, "security", `
 parts: [{id: a, kind: code, label: A}, {id: b, kind: surface, label: B}]
 lines: [{from: a, to: b, kind: data, label: posted}]`)
-	has(t, out, "\n  a -->|\"posted\"| b\n")
+	has(t, out, "\n  a -.->|\"posted\"| b\n")
 }
 
 func TestQuotesInLabelsDontBreakTheDrawing(t *testing.T) {
@@ -73,7 +166,7 @@ func TestQuotesInLabelsDontBreakTheDrawing(t *testing.T) {
 parts: [{id: a, kind: code, label: 'Say "yes"'}, {id: b, kind: surface, label: B}]
 lines: [{from: a, to: b, kind: data, label: '"now"'}]`)
 	has(t, out, `a("<small style='color:rgb(61,67,79)'>⚙️</small><br>Say #34;yes#34;")`)
-	has(t, out, `a -->|"#34;now#34;"| b`)
+	has(t, out, `a -.->|"#34;now#34;"| b`)
 }
 
 func TestMarkdownPunctuationInEveryKindOfLabelIsEscaped(t *testing.T) {
@@ -88,7 +181,7 @@ lines: [{from: a, to: c, kind: data, label: 'Read https://example.com'}]`)
 	has(t, out, `a("<small style='color:rgb(61,67,79)'>⚙️</small><br>Email noor#64;example#46;com and visit https#58;#47;#47;example#46;org#47;a")`)
 	has(t, out, `b@{ shape: notch-rect, label: "#42;#42;Keep#42;#42; #126;#126;this#126;#126; #91;literal#93;#40;https#58;#47;#47;example#46;com#41;" }`)
 	has(t, out, `c@{ shape: win-pane, label: "1#46; First #45; #35; heading #62; quote" }`)
-	has(t, out, `a -->|"Read https#58;#47;#47;example#46;com"| c`)
+	has(t, out, `a -.->|"Read https#58;#47;#47;example#46;com"| c`)
 }
 
 func TestMarkdownPunctuationIsAnEntityInLabelText(t *testing.T) {
@@ -134,12 +227,11 @@ lines:
   - {from: last, to: first, kind: tie}
   - {from: last, to: first, kind: hidden}`)
 	has(t, out, "\n  first <--> last\n")
-	has(t, out, "\n  first <-.-> last\n")
 	has(t, out, "\n  first x--x last\n")
 	has(t, out, "\n  first <==> last\n")
 	has(t, out, "\n  first -.- last\n")
 	has(t, out, "\n  first ~~~ last\n")
-	has(t, out, "\n  linkStyle 0,1,2,3 marker-end:none")
+	has(t, out, "\n  linkStyle 0,1,2,3 marker-end:none\n  linkStyle 4 "+grey)
 }
 
 func TestAReversedRedLineKeepsItsColourAndOnlyItsRealArrowhead(t *testing.T) {
@@ -328,12 +420,12 @@ flowchart TB
     end
   end
 
-  tAsk -.-> sFind
-  cFam --> sFind
-  cCar --> sFind
-  sFind x--x|"never read here"| cNadia
+  tAsk --> sFind
+  cFam -.-> sFind
+  cCar -.-> sFind
+  sFind x-.-x|"never read here"| cNadia
   sFind --> sWord
-  sWord -->|"the answer#44; naming its notes"| uChat
+  sWord -.->|"the answer#44; naming its notes"| uChat
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
   classDef con fill:#eceef2,stroke:#5d6472,color:#16171b

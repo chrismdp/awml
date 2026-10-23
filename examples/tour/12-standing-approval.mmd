@@ -19,12 +19,12 @@ flowchart TB
     list@{ shape: win-pane, label: "Sam#39;s list" }
   end
 
-  morning -.-> renew
-  library -->|"books due back"| renew
+  morning --> renew
+  library -.->|"books due back"| renew
   renew --> approval
   approval -->|"#91;within limits#93;"| action
-  library <--> action
-  approval -->|"each renewal#44; with how to undo it"| list
+  library <-.-> action
+  approval -.->|"each renewal#44; with how to undo it"| list
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
   classDef con fill:#eceef2,stroke:#5d6472,color:#16171b

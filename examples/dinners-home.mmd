@@ -50,26 +50,26 @@ flowchart TB
     bank{{"Joint account#44; on Owen#39;s consent"}}
   end
 
-  thu -.-> plan
-  favourites --> plan
-  plan --> mealplan
-  mealplan -->|"posted"| chat
-  sat -.-> fill
-  mealplan --> fill
-  favourites --> fill
+  thu --> plan
+  favourites -.-> plan
+  plan -.-> mealplan
+  mealplan -.->|"posted"| chat
+  sat --> fill
+  mealplan -.-> fill
+  favourites -.-> fill
   fill --> basket
-  basket --> shop
+  basket -.-> shop
   basket --> approve
   approve -->|"#91;yes#93;"| checkout
-  checkout --> shop
-  calendar --> copy
-  copy --> pickups
-  pickups --> screen
+  checkout -.-> shop
+  calendar -.-> copy
+  copy -.-> pickups
+  pickups -.-> screen
   screen <==>|"standing rule#58; dinners to carers"| mealplan
   screen -.- screen_gap
-  daily -.-> match
-  bank --> match
-  match --> parents_chat
+  daily --> match
+  bank -.-> match
+  match -.-> parents_chat
   plan -.- scored
   plan -.- tried
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
@@ -97,4 +97,5 @@ flowchart TB
   style calendars fill:#fbf3d9,stroke:#e8d9a6,color:#16171b
   style wall fill:#dff3ef,stroke:#b4ddd4,color:#16171b
   style banking fill:#f6e3ea,stroke:#e3bccb,color:#16171b
-  linkStyle 15 marker-end:none
+  linkStyle 15 stroke-dasharray:3,marker-end:none
+  linkStyle 16,20,21 stroke:#8a93a3

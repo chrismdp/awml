@@ -19,10 +19,10 @@ flowchart TB
     wait@{ shape: notch-rect, label: "The laptop is off most days#44; so new photos wait on the server until it#39;s on" }
   end
 
-  nightly -.-> bring
-  bring --> new
-  new -->|"when the laptop is on"| sort
-  sort --> albums
+  nightly --> bring
+  bring -.-> new
+  new -.->|"when the laptop is on"| sort
+  sort -.-> albums
   sort -.- wait
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
@@ -40,3 +40,4 @@ flowchart TB
   class bring code
   class wait gap
   style family fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
+  linkStyle 4 stroke:#8a93a3

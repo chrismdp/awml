@@ -41,12 +41,14 @@ In either view, a trigger or design comment given no scope or block is drawn bes
 
 | `kind` | Drawn as | Means |
 |---|---|---|
-| `start` | A dotted arrow | Starts something |
-| `data` | A solid arrow | Moves data |
+| `start` | An arrow | Starts something |
+| `data` | An arrow | Moves data |
 | `publish` | A thick arrow | Moves content into a wider scope, which is publishing |
 | `refused` | A line ending in a cross | A read the design refuses |
-| `tie` | A dotted line | Links a comment to what it explains |
+| `tie` | A grey dotted line | Links a comment to what it explains |
 | `hidden` | Nothing | Steers the layout only |
+
+A line's style says where it goes, not its kind. A line that reads from or writes to a context, a connector or a surface is dotted: that's information moving in and out. Any other line, such as one from a trigger or from one step to the next, is solid: that's the path the work takes. A `publish` line is thick either way, and a `refused` line keeps its cross.
 
 A line may carry a label. Words in square brackets are a guard, the condition the line is taken on, as in UML: `[yes]` leaves a review. A comment moves nothing, so only `tie` lines link it.
 

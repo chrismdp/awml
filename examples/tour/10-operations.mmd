@@ -21,11 +21,11 @@ flowchart TB
     move>"Move it to the school folder#58; Allow"]
   end
 
-  arrives -.-> sort
+  arrives --> sort
   sort -->|"a date"| learn
-  learn --> notes
+  learn -.-> notes
   sort -->|"a request"| draft
-  draft --> drafts
+  draft -.-> drafts
   sort --> file
   file --> move
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b

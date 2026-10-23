@@ -26,12 +26,12 @@ flowchart TB
     end
   end
 
-  ask -.-> find
-  family_notes --> find
-  carers_notes --> find
-  find x--x|"never read here"| nadia_notes
+  ask --> find
+  family_notes -.-> find
+  carers_notes -.-> find
+  find x-.-x|"never read here"| nadia_notes
   find --> word
-  word -->|"the answer#44; naming its notes"| chat
+  word -.->|"the answer#44; naming its notes"| chat
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
   classDef con fill:#eceef2,stroke:#5d6472,color:#16171b
