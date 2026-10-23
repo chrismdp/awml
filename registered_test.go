@@ -15,11 +15,23 @@ func TestABlockMayNameARegisteredPlatformIn05(t *testing.T) {
 	if got := Check(parseCanonical(t, strings.Replace(canonical, `awml: "0.4"`, `awml: "0.5"`, 1))); len(got) != 0 {
 		t.Fatalf("0.5 with a bare platform: %q", got)
 	}
+	// The owner and slug follow the registry's rule for names, so either may start with a digit.
+	for _, name := range []string{"42labs/platforms/worker", "acme/platforms/2nd-runner", "a/platforms/9", strings.Repeat("a", 40) + "/platforms/" + strings.Repeat("9", 40)} {
+		source := strings.Replace(strings.Replace(canonical, `awml: "0.4"`, `awml: "0.5"`, 1), "platform: scripts", "platform: "+name, 1)
+		if got := Check(parseCanonical(t, source)); len(got) != 0 {
+			t.Fatalf("0.5 with %s: %q", name, got)
+		}
+	}
 	cases := []struct{ version, platform, want string }{
 		{"0.4", "acme/platforms/ops-runner", `group "server": platform "acme/platforms/ops-runner" must be a company id`},
 		{"0.5", "acme/ops-runner", `group "server": platform "acme/ops-runner" must be a company id, or owner/platforms/slug for a registered platform`},
 		{"0.5", "acme/workflows/ops-runner", `group "server": platform "acme/workflows/ops-runner" must be a company id, or owner/platforms/slug for a registered platform`},
 		{"0.5", "Acme/platforms/ops-runner", `group "server": platform "Acme/platforms/ops-runner" must be a company id, or owner/platforms/slug for a registered platform`},
+		{"0.5", "acme-/platforms/ops-runner", `group "server": platform "acme-/platforms/ops-runner" must be a company id, or owner/platforms/slug for a registered platform`},
+		{"0.5", "acme/platforms/-ops-runner", `group "server": platform "acme/platforms/-ops-runner" must be a company id, or owner/platforms/slug for a registered platform`},
+		{"0.5", strings.Repeat("a", 41) + "/platforms/ops-runner", `group "server": platform "` + strings.Repeat("a", 41) + `/platforms/ops-runner" must be a company id, or owner/platforms/slug for a registered platform`},
+		{"0.5", "acme/platforms/" + strings.Repeat("a", 41), `group "server": platform "acme/platforms/` + strings.Repeat("a", 41) + `" must be a company id, or owner/platforms/slug for a registered platform`},
+		{"0.5", "42labs", `group "server": platform "42labs" must be a company id, or owner/platforms/slug for a registered platform`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.version+" "+tc.platform, func(t *testing.T) {
@@ -54,9 +66,13 @@ func TestADescriptionMayHaveARegisteredIDIn05(t *testing.T) {
 	if got := Check(parsed(t, registeredDescription)); len(got) != 0 {
 		t.Fatalf("got %q", got)
 	}
+	if got := Check(parsed(t, strings.Replace(registeredDescription, "acme/platforms/ops-runner", "42labs/platforms/9-runner", 1))); len(got) != 0 {
+		t.Fatalf("an owner and slug starting with a digit: %q", got)
+	}
 	cases := []struct{ old, new, want string }{
 		{`awml: "0.5"`, `awml: "0.4"`, `platform id "acme/platforms/ops-runner" must be lower-case letters, digits and hyphens, starting with a letter`},
 		{"acme/platforms/ops-runner", "acme/ops-runner", `platform id "acme/ops-runner" must be lower-case letters, digits and hyphens, starting with a letter, or owner/platforms/slug for a registered platform`},
+		{"acme/platforms/ops-runner", "acme/platforms/ops-runner-", `platform id "acme/platforms/ops-runner-" must be lower-case letters, digits and hyphens, starting with a letter, or owner/platforms/slug for a registered platform`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.new, func(t *testing.T) {

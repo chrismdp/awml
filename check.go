@@ -607,7 +607,9 @@ func fields(what, name string, item *Map, version string, errors *mistakeList) {
 var companyID = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 
 // A platform published to the registry is named owner/platforms/slug, where 0.5 files allow it.
-var registeredPlatform = regexp.MustCompile(`^[a-z][a-z0-9-]*/platforms/[a-z][a-z0-9-]*$`)
+// The owner and slug follow the registry's rule for names: lower-case letters, digits and
+// hyphens, up to 40 characters, starting and ending with a letter or a digit.
+var registeredPlatform = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?/platforms/[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$`)
 var pathName = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
 
 func validPath(path string) bool {
