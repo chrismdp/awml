@@ -8,9 +8,13 @@
 # starts one build. Otherwise the app opens an issue with the end of the failing output, labelled
 # build, and GitHub starts the build from that label as it would from a person's. The build retries
 # and merges by the same rules as any other. The report job checks out nothing and runs none of the
-# code it reports on: it reads the failed jobs' log with gh. It mints the app's token from the
-# FACTORY_APP_ID and FACTORY_APP_KEY secrets only to open the issue, and comments with the Actions
-# token.
+# code it reports on: it reads the failed jobs' log with gh. It mints the app's token only to open
+# the issue, and comments with the Actions token.
+#
+# Before it works, a repository needs the GitHub App and its two secrets that build.yml lists, and:
+# - failing-main and tool labels, which the report job puts on its issue beside build;
+# - a ruleset on main that requires both test jobs to pass, so that nothing merges, by hand or by
+#   itself, until CI has passed on the branch.
 name: CI
 
 on:
@@ -29,11 +33,11 @@ jobs:
       matrix:
         go: ["1.22", stable]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
       - run: go vet ./...

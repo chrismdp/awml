@@ -11,13 +11,13 @@
 # a passing patch against .github/build-rules.yml with the rule as it is on main, and opens the pull
 # request.
 #
-# A change to what awml draw reads or writes is redrawn by the check job, after its checks pass:
-# it runs examples/render.sh, hands back the redrawn SVGs as a second patch, and pictures each
-# drawing that changed, before and after. The rule judges Claude's patch alone. The write-capable
-# job then commits both patches together, pushes the pictures to the factory-media branch, which
-# holds only pictures, and shows them in the pull request. Claude writes the pull request's
-# description in Markdown, and the job puts why the change needs review, and Claude's note, above
-# it.
+# A change that alters an example's .mmd, or the renderer in examples/render*, is redrawn by the
+# check job, after its checks pass: it runs examples/render.sh, hands back the SVGs of the drawings
+# that changed as a second patch, and pictures each of them, before and after. The rule judges
+# Claude's patch alone. The write-capable job then commits both patches together, pushes the
+# pictures to the factory-media branch, which holds only pictures, and shows them in the pull
+# request. Claude writes the pull request's description in Markdown, and the job puts why the
+# change needs review, and Claude's note, above it.
 #
 # A change that needs review stays open, and the person who added the label is asked to
 # review it, or the repository's owner when the app added the label. A straightforward change is set
@@ -28,8 +28,8 @@
 # the merge, because GitHub starts other workflows from what an app does but not from what the
 # Actions token does. So CI runs on the pull request and shows on it, and the merge starts CI on
 # main and the conflict rebase workflow, as a person's merge would. The job mints the app's token
-# from the FACTORY_APP_ID and FACTORY_APP_KEY secrets and gives it only to the steps that write with
-# it. Review requests, comments and the retry's dispatch use the Actions token.
+# from the app's two secrets and gives it only to the steps that write with it. Review requests,
+# comments and the retry's dispatch use the Actions token.
 #
 # A build can also be started by hand, by dispatching this one with the issue's number. A build that
 # fails its checks, or whose draft fails or runs out of time, starts itself again by dispatch, up to
@@ -39,8 +39,13 @@
 # tried again: it comments with Claude's message. The retry job only reads results and calls the
 # GitHub API, and runs nothing from the change.
 #
-# It needs a CLAUDE_CODE_OAUTH_TOKEN secret, made with `claude setup-token`, so the runs come out
-# of the maintainer's subscription rather than a metered API key.
+# Before it works, a repository needs:
+# - a GitHub App with read and write access to contents, pull requests and issues, installed on the
+#   repository, with its app id in a FACTORY_APP_ID secret and a private key in FACTORY_APP_KEY;
+# - a CLAUDE_CODE_OAUTH_TOKEN secret, made with `claude setup-token`, so the runs come out of the
+#   maintainer's subscription rather than a metered API key;
+# - a build label;
+# - "Allow auto-merge" turned on in the repository's general settings.
 name: Build from an issue
 
 on:
@@ -94,13 +99,13 @@ jobs:
           case "$ATTEMPT" in [1-3]) ;; *) echo "The attempt must be 1, 2 or 3: $ATTEMPT"; exit 1 ;; esac
           case "$PREVIOUS_RUN" in *[!0-9]*) echo "The previous run must be a number: $PREVIOUS_RUN"; exit 1 ;; esac
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
       - uses: actions/setup-go@v5
         with:
           go-version: stable
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
 
@@ -194,14 +199,14 @@ jobs:
           echo "The workflow failed before it could check the proposed change." \
             > "$RUNNER_TEMP/result/result.txt"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
       - uses: actions/setup-go@v5
         with:
           go-version: stable
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
 
@@ -242,10 +247,11 @@ jobs:
             go run ./cmd/awml check examples/*.yaml examples/tour/*.yaml examples/platforms/*.yaml
           run_check "The WebAssembly tests did not pass." make test-wasm
 
-      # A change to what awml draw reads or writes is redrawn here, and each drawing that changed is
-      # pictured before and after. The redrawn SVGs go back as drawings.patch, apart from Claude's
-      # patch, and the pictures and their manifest go into the result. Only stills are made: a page
-      # that moves would be recorded as a GIF in this step, but nothing in this repository moves yet.
+      # A change to an example's .mmd, or to the renderer, is redrawn here, and each drawing that
+      # changed is pictured before and after. The redrawn SVGs go back as drawings.patch, apart from
+      # Claude's patch, and the pictures and their manifest go into the result. Only stills are
+      # made: a page that moves would be recorded as a GIF in this step, but nothing in this
+      # repository moves yet.
       - name: Redraw the examples and picture what changed
         env:
           PUPPETEER_EXECUTABLE_PATH: /usr/bin/google-chrome
@@ -278,7 +284,7 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ github.sha }}
           persist-credentials: false

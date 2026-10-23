@@ -1,7 +1,13 @@
 #!/bin/bash
-# Redraws the examples into a change that alters what awml draw reads or writes, and pictures each
-# drawing that changed, before and after. The build workflow's check job runs it on the patched
-# tree, with the change staged and main's commit at HEAD.
+# Redraws the examples a change alters, and pictures each drawing that changed, before and after.
+# The build workflow's check job runs it on the patched tree, with the change staged and main's
+# commit at HEAD.
+#
+# A drawing has changed when the change adds or alters its .mmd, since Claude regenerates the .mmd
+# files and the checks hold them to awml draw. Only those SVGs are kept and pictured, so renderer
+# noise in the others never reaches the change. A change to examples/render.sh or examples/render/
+# changes the renderer itself, so every drawing is kept and pictured. A change that alters neither
+# doesn't run the renderer at all.
 #
 # It writes into the directory it's given:
 # - drawings.patch, the redrawn SVGs, kept apart from Claude's patch;
@@ -15,18 +21,26 @@ set -euo pipefail
 out="$1"
 mkdir -p "$out"
 
-drawn="$(git diff --cached --name-only HEAD -- \
-  ':(glob)**/*.go' ':(glob)examples/**/*.yaml' ':(glob)examples/render*' \
-  ':(exclude,glob)**/*_test.go')"
-if [ -z "$drawn" ]; then
-  echo "The change touches nothing awml draw reads or writes, so nothing is redrawn."
-  exit 0
+renderer="$(git diff --cached --name-only HEAD -- \
+  ':(glob)examples/render*' ':(glob)examples/render/**')"
+if [ -n "$renderer" ]; then
+  svgs=(':(glob)examples/*.svg' ':(glob)examples/tour/*.svg')
+else
+  svgs=()
+  while IFS= read -r mmd; do
+    svgs+=(":(literal)${mmd%.mmd}.svg")
+  done < <(git diff --cached --name-only --diff-filter=AM HEAD -- \
+    ':(glob)examples/*.mmd' ':(glob)examples/tour/*.mmd')
+  if [ "${#svgs[@]}" -eq 0 ]; then
+    echo "The change alters no example's .mmd and not the renderer, so nothing is redrawn."
+    exit 0
+  fi
 fi
 
 examples/render.sh
 # Only the SVGs: the .mmd files are Claude's to regenerate, and the checks hold them to awml draw.
-git add -N -- ':(glob)examples/*.svg' ':(glob)examples/tour/*.svg'
-git diff --binary -- ':(glob)examples/*.svg' ':(glob)examples/tour/*.svg' > "$out/drawings.patch"
+git add -N -- "${svgs[@]}"
+git diff --binary -- "${svgs[@]}" > "$out/drawings.patch"
 if [ ! -s "$out/drawings.patch" ]; then
   rm "$out/drawings.patch"
   echo "No drawing changed."
@@ -59,7 +73,7 @@ picture() {
 pictures="$out/pictures"
 mkdir -p "$pictures"
 echo '[]' > "$pictures/manifest.json"
-git diff --name-only --diff-filter=AM -- ':(glob)examples/*.svg' ':(glob)examples/tour/*.svg' |
+git diff --name-only --diff-filter=AM -- "${svgs[@]}" |
 while IFS= read -r svg; do
   stem="${svg%.svg}"
   before=""

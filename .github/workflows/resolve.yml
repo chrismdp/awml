@@ -10,13 +10,13 @@
 #
 # The repository's GitHub App pushes the rebased branch, because GitHub starts CI from an app's push
 # but not from one by the Actions token. So CI runs on the rebased branch and shows on the pull
-# request, and main's rule holds the merge until it passes. The push job mints the app's token from
-# the FACTORY_APP_ID and FACTORY_APP_KEY secrets and gives it only to the push. The find job mints
-# one only to learn the app's name, since the build workflow opens its pull requests as the app, and
-# gives it to no step. Comments use the Actions token.
+# request, and main's rule holds the merge until it passes. The push job mints the app's token and
+# gives it only to the push. The find job needs no token of the app's: it knows the build's pull
+# requests as a bot's, from a build/issue- branch in this repository. Comments use the Actions
+# token.
 #
-# It needs the same CLAUDE_CODE_OAUTH_TOKEN secret as build.yml, made with `claude setup-token`, so
-# the runs come out of the maintainer's subscription rather than a metered API key.
+# Before it works, a repository needs the GitHub App, its two secrets and the
+# CLAUDE_CODE_OAUTH_TOKEN secret that build.yml lists.
 name: Rebase conflicting pull requests
 
 on:
@@ -39,18 +39,12 @@ jobs:
       pulls: ${{ steps.find.outputs.pulls }}
       main_sha: ${{ steps.find.outputs.main_sha }}
     steps:
-      - name: Learn the app's name
-        id: app
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.FACTORY_APP_ID }}
-          private-key: ${{ secrets.FACTORY_APP_KEY }}
-
-      # The build workflow opened its pull requests with the Actions token before it used the app.
+      # A pull request is the build workflow's when a bot opened it from a build/issue- branch in
+      # this repository, whether the bot is the app or, as before the build used the app, the
+      # Actions token.
       - name: Find conflicting pull requests
         id: find
         env:
-          APP_BOT: ${{ steps.app.outputs.app-slug }}[bot]
           GH_TOKEN: ${{ github.token }}
         run: |
           pulls='[]'
@@ -68,15 +62,14 @@ jobs:
             [ "$mergeable" = CONFLICTING ] || continue
 
             pull="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$number")"
-            eligible="$(jq -r --arg repository "$GITHUB_REPOSITORY" --arg app_bot "$APP_BOT" '
+            eligible="$(jq -r --arg repository "$GITHUB_REPOSITORY" '
               .base.ref == "main" and
               .head.repo.full_name == $repository and
               .head.ref != "factory-media" and
               ((.author_association == "OWNER" or
                 .author_association == "MEMBER" or
                 .author_association == "COLLABORATOR") or
-               .user.login == $app_bot or
-               .user.login == "github-actions[bot]")
+               (.user.type == "Bot" and (.head.ref | startswith("build/issue-"))))
             ' <<< "$pull")"
             [ "$eligible" = true ] || continue
 
@@ -103,7 +96,7 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ matrix.pull.head_sha }}
           fetch-depth: 0
@@ -111,7 +104,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
 
@@ -221,7 +214,7 @@ jobs:
           echo "The workflow failed before it could check the proposed resolution." \
             > "$RUNNER_TEMP/result/result.txt"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         id: checkout
         with:
           ref: ${{ needs.find.outputs.main_sha }}
@@ -303,7 +296,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
 
@@ -349,7 +342,7 @@ jobs:
           echo "The workflow failed before it could prepare a resolution." \
             > "$RUNNER_TEMP/resolve-failure.txt"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         id: checkout
         with:
           ref: ${{ needs.find.outputs.main_sha }}
