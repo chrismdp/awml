@@ -9,17 +9,27 @@
 # draft started from, so the patch still applies when main moves during a long draft, and the pull
 # request catches up like any other. The write-capable job runs none of the proposed code. It judges
 # a passing patch against .github/build-rules.yml with the rule as it is on main, and opens the pull
-# request. A change that needs review stays open, and the person who added the label is asked to
+# request.
+#
+# A change to what awml draw reads or writes is redrawn by the check job, after its checks pass:
+# it runs examples/render.sh, hands back the redrawn SVGs as a second patch, and pictures each
+# drawing that changed, before and after. The rule judges Claude's patch alone. The write-capable
+# job then commits both patches together, pushes the pictures to the factory-media branch, which
+# holds only pictures, and shows them in the pull request. Claude writes the pull request's
+# description in Markdown, and the job puts why the change needs review, and Claude's note, above
+# it.
+#
+# A change that needs review stays open, and the person who added the label is asked to
 # review it, or the repository's owner when the app added the label. A straightforward change is set
 # to merge by itself once CI passes, saying why and how to undo it. Main's rule holds every merge
 # until CI has passed on the branch.
 #
-# The repository's GitHub App pushes the branch, opens the pull request and sets the merge, because
-# GitHub starts other workflows from what an app does but not from what the Actions token does. So
-# CI runs on the pull request and shows on it, and the merge starts CI on main and the conflict
-# rebase workflow, as a person's merge would. The job mints the app's token from the FACTORY_APP_ID
-# and FACTORY_APP_KEY secrets and gives it only to the steps that write with it. Review requests,
-# comments and the retry's dispatch use the Actions token.
+# The repository's GitHub App pushes the branch and the pictures, opens the pull request and sets
+# the merge, because GitHub starts other workflows from what an app does but not from what the
+# Actions token does. So CI runs on the pull request and shows on it, and the merge starts CI on
+# main and the conflict rebase workflow, as a person's merge would. The job mints the app's token
+# from the FACTORY_APP_ID and FACTORY_APP_KEY secrets and gives it only to the steps that write with
+# it. Review requests, comments and the retry's dispatch use the Actions token.
 #
 # A build can also be started by hand, by dispatching this one with the issue's number. A build that
 # fails its checks, or whose draft fails or runs out of time, starts itself again by dispatch, up to
@@ -167,6 +177,7 @@ jobs:
           path: |
             ${{ runner.temp }}/build/change.patch
             ${{ runner.temp }}/build/message.md
+            ${{ runner.temp }}/build/pull-request.md
             ${{ runner.temp }}/build/review.md
 
   check:
@@ -230,6 +241,21 @@ jobs:
           run_check "The example checks did not pass." \
             go run ./cmd/awml check examples/*.yaml examples/tour/*.yaml examples/platforms/*.yaml
           run_check "The WebAssembly tests did not pass." make test-wasm
+
+      # A change to what awml draw reads or writes is redrawn here, and each drawing that changed is
+      # pictured before and after. The redrawn SVGs go back as drawings.patch, apart from Claude's
+      # patch, and the pictures and their manifest go into the result. Only stills are made: a page
+      # that moves would be recorded as a GIF in this step, but nothing in this repository moves yet.
+      - name: Redraw the examples and picture what changed
+        env:
+          PUPPETEER_EXECUTABLE_PATH: /usr/bin/google-chrome
+        run: |
+          set -o pipefail
+          echo "Redrawing the examples failed." > "$RUNNER_TEMP/result/result.txt"
+          if ! .github/picture-drawings.sh "$RUNNER_TEMP/result" 2>&1 | tee "$RUNNER_TEMP/render.log"; then
+            tail -n 150 "$RUNNER_TEMP/render.log" > "$RUNNER_TEMP/result/output.txt"
+            exit 1
+          fi
           echo pass > "$RUNNER_TEMP/result/result.txt"
 
       - uses: actions/upload-artifact@v4
@@ -287,6 +313,63 @@ jobs:
             exit 1
           fi
 
+      # The check job ran the change's own code, so its pictures are taken on trust only as far as
+      # this: every path is checked, and only PNG files under the size cap are kept. If any picture
+      # fails, all are left out and the description says why, since the change itself is still good.
+      - name: Check the pictures
+        id: pictures
+        run: |
+          pictures="$RUNNER_TEMP/result/pictures"
+          media="$RUNNER_TEMP/media"
+          mkdir -p "$media"
+          : > "$RUNNER_TEMP/pictures.txt"
+          : > "$RUNNER_TEMP/pictures-left-out.txt"
+          leave_out() {
+            echo "::warning::$1"
+            echo "$1" > "$RUNNER_TEMP/pictures-left-out.txt"
+            : > "$RUNNER_TEMP/pictures.txt"
+            rm -rf "$media"
+            echo "count=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+          safe_path() {
+            case "$1" in ''|/*|*..*|*[!A-Za-z0-9._/-]*) return 1 ;; esac
+          }
+          take() {
+            safe_path "$1" && case "$1" in *.png) ;; *) return 1 ;; esac || return 1
+            [ -f "$pictures/$1" ] && [ ! -L "$pictures/$1" ] || return 1
+            [ "$(stat -c %s "$pictures/$1")" -le $((5 * 1024 * 1024)) ] || return 1
+            [ "$(head -c 8 "$pictures/$1" | od -An -tx1 | tr -d ' \n')" = 89504e470d0a1a0a ] || return 1
+            mkdir -p "$(dirname "$media/$1")"
+            cp "$pictures/$1" "$media/$1"
+          }
+          if [ ! -f "$RUNNER_TEMP/result/drawings.patch" ]; then
+            echo "count=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          [ -f "$pictures/manifest.json" ] || leave_out "The check job redrew the examples but made no pictures."
+          # A bar can't be in a checked path, so it parts the fields where a tab, being blank, wouldn't.
+          rows="$(jq -r '.[] | [.example, .before, .after] | join("|")' "$pictures/manifest.json")" \
+            || leave_out "The pictures' manifest could not be read."
+          count=0
+          if [ -z "$rows" ]; then
+            echo "count=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          while IFS='|' read -r example before after; do
+            safe_path "$example" && case "$example" in *.svg) ;; *) false ;; esac \
+              || leave_out "The pictures' manifest names an example that isn't an SVG path."
+            if [ -n "$before" ]; then
+              take "$before" || leave_out "A before picture of $example isn't a PNG under 5 MB at a plain path."
+              count=$((count + 1))
+            fi
+            take "$after" || leave_out "An after picture of $example isn't a PNG under 5 MB at a plain path."
+            count=$((count + 1))
+            [ "$count" -le 80 ] || leave_out "There are more than 80 pictures, too many to show."
+            printf '%s|%s|%s\n' "$example" "$before" "$after" >> "$RUNNER_TEMP/pictures.txt"
+          done <<< "$rows"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
       - name: Make the app's token
         id: app
         uses: actions/create-github-app-token@v1
@@ -305,6 +388,9 @@ jobs:
           echo "name=$APP_SLUG[bot]" >> "$GITHUB_OUTPUT"
           echo "email=$id+$APP_SLUG[bot]@users.noreply.github.com" >> "$GITHUB_OUTPUT"
 
+      # The rule judges Claude's patch alone, so redrawn SVGs never push a change over the line
+      # limit. The redrawn drawings may then touch only the examples' SVGs, since the rule never saw
+      # them.
       - name: Apply and commit the change
         id: commit
         env:
@@ -314,10 +400,19 @@ jobs:
           git apply --index "$RUNNER_TEMP/change/change.patch"
           "$RUNNER_TEMP/build-rule" -repo . -rules "$RUNNER_TEMP/build-rules.yml" \
             -review "$RUNNER_TEMP/change/review.md" > "$RUNNER_TEMP/verdict.txt"
-          message="$RUNNER_TEMP/change/message.md"
+          if [ -s "$RUNNER_TEMP/result/drawings.patch" ]; then
+            judged="$(git write-tree)"
+            git apply --index "$RUNNER_TEMP/result/drawings.patch"
+            drawn="$(git diff-index --cached --name-status "$judged")"
+            if [ -n "$drawn" ] && grep -vE '^[AM]'$'\t''examples/(tour/)?[A-Za-z0-9._-]+\.svg$' <<< "$drawn"; then
+              echo "The redrawn drawings touch more than the examples' SVGs."
+              exit 1
+            fi
+          fi
+          message="$RUNNER_TEMP/commit.md"
+          cat "$RUNNER_TEMP/change/message.md" > "$message" 2> /dev/null || true
           [ -s "$message" ] || echo "Build #$ISSUE" > "$message"
           printf '\n\nCloses #%s\n' "$ISSUE" >> "$message"
-          cp "$message" "$RUNNER_TEMP/pull-request.md"
           branch="build/issue-$ISSUE"
           git config user.name "$BOT_NAME"
           git config user.email "$BOT_EMAIL"
@@ -334,22 +429,40 @@ jobs:
             -c http.https://github.com/.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" \
             push --force origin "HEAD:refs/heads/$BRANCH"
 
-      - name: Open or update the pull request
-        id: pull
+      # The pictures go to the factory-media branch, which holds nothing else and shares no history
+      # with main. Each try adds a commit with its own folder, so the links in older descriptions
+      # keep working.
+      - name: Push the pictures to the factory-media branch
+        if: steps.pictures.outputs.count != '0'
         env:
-          BRANCH: ${{ steps.commit.outputs.branch }}
           GH_TOKEN: ${{ steps.app.outputs.token }}
         run: |
-          title="$(head -n 1 "$RUNNER_TEMP/pull-request.md")"
-          if gh pr view "$BRANCH" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh pr edit "$BRANCH" --repo "$GITHUB_REPOSITORY" \
-              --title "$title" --body-file "$RUNNER_TEMP/pull-request.md"
-          else
-            gh pr create --repo "$GITHUB_REPOSITORY" --head "$BRANCH" \
-              --title "$title" --body-file "$RUNNER_TEMP/pull-request.md"
-          fi
-          number="$(gh pr view "$BRANCH" --repo "$GITHUB_REPOSITORY" --json number --jq .number)"
-          echo "number=$number" >> "$GITHUB_OUTPUT"
+          auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          export GIT_INDEX_FILE="$RUNNER_TEMP/media.index"
+          parent=""
+          status=0
+          git -c http.https://github.com/.extraheader="$auth" \
+            ls-remote --exit-code origin refs/heads/factory-media > /dev/null || status=$?
+          case "$status" in
+            0)
+              git -c http.https://github.com/.extraheader="$auth" \
+                fetch --no-tags --depth=1 origin refs/heads/factory-media
+              parent="$(git rev-parse FETCH_HEAD)"
+              git read-tree "$parent"
+              ;;
+            2) git read-tree --empty ;;
+            *) echo "Could not read the factory-media branch."; exit 1 ;;
+          esac
+          (cd "$RUNNER_TEMP/media" && find . -type f -name '*.png' | sed 's|^\./||') |
+          while IFS= read -r path; do
+            blob="$(git hash-object -w "$RUNNER_TEMP/media/$path")"
+            git update-index --add --cacheinfo "100644,$blob,issue-$ISSUE/attempt-$ATTEMPT/$path"
+          done
+          tree="$(git write-tree)"
+          commit="$(git commit-tree "$tree" ${parent:+-p "$parent"} \
+            -m "Pictures for #$ISSUE, attempt $ATTEMPT")"
+          git -c core.hooksPath=/dev/null -c http.https://github.com/.extraheader="$auth" \
+            push origin "$commit:refs/heads/factory-media"
 
       - name: Read the verdict
         id: verdict
@@ -366,23 +479,90 @@ jobs:
               ;;
           esac
 
+      # The description opens with why the change needs review, then Claude's note as written, or
+      # with one line saying it merges by itself. Then Claude's description, the pictures, and the
+      # issue it closes.
+      - name: Write the pull request's description
+        env:
+          VERDICT: ${{ steps.verdict.outputs.verdict }}
+        run: |
+          change="$RUNNER_TEMP/change"
+          media_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/raw/factory-media/issue-$ISSUE/attempt-$ATTEMPT"
+          title="$(head -n 1 "$change/message.md" 2> /dev/null || true)"
+          [ -n "$title" ] || title="Build #$ISSUE"
+          printf '%s\n' "$title" > "$RUNNER_TEMP/title.txt"
+          {
+            if [ "$VERDICT" = review ]; then
+              echo "## Needs your review because"
+              echo
+              while IFS= read -r line; do
+                [ -n "$line" ] && printf -- '- %s\n' "$line"
+              done < "$RUNNER_TEMP/reasons.txt"
+              if [ -s "$change/review.md" ] && grep -q '[^[:space:]]' "$change/review.md"; then
+                echo
+                echo "### Claude's note"
+                echo
+                cat "$change/review.md"
+              fi
+            else
+              printf 'Merges by itself once CI passes, because the build rule found it straightforward: %s\n' \
+                "$(grep -v '^$' "$RUNNER_TEMP/reasons.txt" | paste -sd ' ')"
+            fi
+            echo
+            if [ -s "$change/pull-request.md" ]; then
+              cat "$change/pull-request.md"
+            else
+              tail -n +2 "$change/message.md" 2> /dev/null | sed '/./,$!d'
+            fi
+            if [ -s "$RUNNER_TEMP/pictures.txt" ]; then
+              echo
+              echo "## Pictures"
+              while IFS='|' read -r example before after; do
+                echo
+                printf '### `%s`\n\n' "$example"
+                echo "| Before | After |"
+                echo "| --- | --- |"
+                if [ -n "$before" ]; then
+                  before_cell="![Before]($media_url/$before)"
+                else
+                  before_cell="New drawing"
+                fi
+                printf '| %s | ![After](%s/%s) |\n' "$before_cell" "$media_url" "$after"
+              done < "$RUNNER_TEMP/pictures.txt"
+            elif [ -s "$RUNNER_TEMP/pictures-left-out.txt" ]; then
+              echo
+              echo "## Pictures"
+              echo
+              printf 'The pictures were left out: %s\n' "$(cat "$RUNNER_TEMP/pictures-left-out.txt")"
+            fi
+            echo
+            printf 'Closes #%s\n' "$ISSUE"
+          } > "$RUNNER_TEMP/pull-request.md"
+          cat "$RUNNER_TEMP/pull-request.md"
+
+      - name: Open or update the pull request
+        id: pull
+        env:
+          BRANCH: ${{ steps.commit.outputs.branch }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: |
+          title="$(cat "$RUNNER_TEMP/title.txt")"
+          if gh pr view "$BRANCH" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh pr edit "$BRANCH" --repo "$GITHUB_REPOSITORY" \
+              --title "$title" --body-file "$RUNNER_TEMP/pull-request.md"
+          else
+            gh pr create --repo "$GITHUB_REPOSITORY" --head "$BRANCH" \
+              --title "$title" --body-file "$RUNNER_TEMP/pull-request.md"
+          fi
+          number="$(gh pr view "$BRANCH" --repo "$GITHUB_REPOSITORY" --json number --jq .number)"
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+
       - name: Ask for a review
         if: steps.verdict.outputs.verdict == 'review'
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ steps.pull.outputs.number }}
         run: |
-          {
-            cat "$RUNNER_TEMP/pull-request.md"
-            echo
-            echo "Needs your review because:"
-            echo
-            while IFS= read -r line; do
-              [ -n "$line" ] && printf -- '- %s\n' "$line"
-            done < "$RUNNER_TEMP/reasons.txt"
-          } > "$RUNNER_TEMP/review-pull-request.md"
-          gh pr edit "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
-            --body-file "$RUNNER_TEMP/review-pull-request.md"
           reviewer="$REQUESTED_BY"
           case "$reviewer" in
             ''|*[!A-Za-z0-9-]*) reviewer="$GITHUB_REPOSITORY_OWNER" ;;
@@ -438,15 +618,17 @@ jobs:
           if [ "$DRAFT" = success ] && [ "$CHANGED" != true ]; then
             gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" -n change -D "$here/change" || true
             {
-              echo "The build changed nothing, so it won't be tried again. Claude said:"
+              echo "**The build changed nothing, so it won't be tried again.**"
               echo
               if [ -s "$here/change/message.md" ]; then
+                echo "- Claude left the code as it was, and said why:"
+                echo
                 cat "$here/change/message.md"
               else
-                echo "Nothing; it left no message."
+                echo "- Claude left the code as it was, and left no message saying why."
               fi
               echo
-              echo "The run: $run_url"
+              echo "[The run]($run_url)"
             } > "$here/comment.md"
             gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body-file "$here/comment.md"
             exit 0
@@ -473,23 +655,24 @@ jobs:
           fi
 
           {
-            echo "The build failed three times, so it has stopped. The last try failed because:"
+            echo "**The build failed three times, so it has stopped.**"
             echo
-            echo "$reason"
+            printf -- '- The last try failed because: %s\n' "$reason"
+            echo "- To start afresh, remove the build label and add it again."
             if [ -s "$here/result/output.txt" ]; then
               tail -n 50 "$here/result/output.txt" > "$here/output.txt"
               longest="$(grep -o '`*' "$here/output.txt" | awk '{ if (length($0) > m) m = length($0) } END { print m + 0 }')"
               fence="$(printf '%*s' "$(( longest >= 3 ? longest + 1 : 3 ))" '' | tr ' ' '`')"
               echo
-              echo "The end of its output:"
+              echo "<details><summary>Output</summary>"
               echo
               echo "$fence"
               cat "$here/output.txt"
               echo "$fence"
+              echo
+              echo "</details>"
             fi
             echo
-            echo "The run: $run_url"
-            echo
-            echo "To start afresh, remove the build label and add it again."
+            echo "[The run]($run_url)"
           } > "$here/comment.md"
           gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body-file "$here/comment.md"

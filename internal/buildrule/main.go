@@ -91,11 +91,10 @@ func evaluate(repo string, cfg config, reviewPath string) (verdict, error) {
 			return verdict{}, fmt.Errorf("read Claude's review note: %w", err)
 		}
 		if err == nil {
-			text := strings.Join(strings.Fields(string(note)), " ")
-			if text == "" {
+			if strings.TrimSpace(string(note)) == "" {
 				reasons = append(reasons, "Claude asked for the maintainer's review.")
 			} else {
-				reasons = append(reasons, "Claude's note: "+text)
+				reasons = append(reasons, "Claude asked for a review: see Claude's note.")
 			}
 		}
 	}

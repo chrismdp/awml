@@ -71,6 +71,7 @@ jobs:
             eligible="$(jq -r --arg repository "$GITHUB_REPOSITORY" --arg app_bot "$APP_BOT" '
               .base.ref == "main" and
               .head.repo.full_name == $repository and
+              .head.ref != "factory-media" and
               ((.author_association == "OWNER" or
                 .author_association == "MEMBER" or
                 .author_association == "COLLABORATOR") or
@@ -457,16 +458,16 @@ jobs:
           PR_NUMBER: ${{ matrix.pull.number }}
         run: |
           {
-            echo "Rebased this pull request onto \`main\` and force-pushed the branch."
+            echo "**Rebased this pull request onto \`main\` and force-pushed the branch.**"
+            echo
+            echo "- The old head was \`$HEAD_SHA\`. To put the branch back, run \`git push --force origin $HEAD_SHA:$BRANCH\`."
+            echo
+            echo "### How it was resolved"
             echo
             cat "$RUNNER_TEMP/result/message.md"
             echo
-            printf '[View the workflow run](%s/%s/actions/runs/%s)\n' \
+            printf '[The run](%s/%s/actions/runs/%s)\n' \
               "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
-            echo
-            echo "The old head was \`$HEAD_SHA\`. To put the branch back:"
-            echo
-            echo "\`git push --force origin $HEAD_SHA:$BRANCH\`"
           } > "$RUNNER_TEMP/comment.md"
           gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
             --body-file "$RUNNER_TEMP/comment.md"
@@ -482,18 +483,19 @@ jobs:
             reason="$(cat "$RUNNER_TEMP/resolve-failure.txt")"
           fi
           {
-            echo "The workflow couldn't resolve the conflicts with \`main\`. $reason"
+            echo "**The workflow couldn't resolve the conflicts with \`main\`.**"
+            echo
+            printf -- '- %s\n' "$reason"
+            echo "- A maintainer should resolve this pull request by hand."
             echo
             if [ ! -s "$RUNNER_TEMP/draft/rebased.bundle" ] && \
               [ -s "$RUNNER_TEMP/result/message.md" ]; then
-              echo "Claude's note:"
+              echo "### Claude's note"
               echo
               cat "$RUNNER_TEMP/result/message.md"
               echo
             fi
-            echo "A maintainer should resolve this pull request by hand."
-            echo
-            printf '[View the workflow run](%s/%s/actions/runs/%s)\n' \
+            printf '[The run](%s/%s/actions/runs/%s)\n' \
               "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
           } > "$RUNNER_TEMP/resolve-failure-comment.md"
           gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
