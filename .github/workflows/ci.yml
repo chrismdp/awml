@@ -1,20 +1,21 @@
 # Runs every check from AGENTS.md on every push: it vets and tests the code, checks every example,
 # and checks that the WebAssembly build gives the same answers as the CLI. It runs on the oldest Go
-# that go.mod allows, and on the newest. The build workflow also starts it by dispatch after it
-# merges a change, because a merge by the Actions token starts no other workflow.
+# that go.mod allows, and on the newest. The build and rebase workflows push and merge with the
+# repository's GitHub App, so their pushes start it as a person's would.
 #
 # When a check fails on main, a last job reports it. If an issue labelled failing-main is already
 # open, it adds this run to that issue and starts nothing, so a main that fails on several pushes
-# starts one build. Otherwise it opens an issue with the end of the failing output, labelled build
-# so it reads like any other build, and starts the build by dispatch, since a label added by the
-# Actions token starts nothing. The build retries and merges by the same rules as any other. The
-# report job checks out nothing and runs none of the code it reports on: it reads the failed jobs'
-# log with gh.
+# starts one build. Otherwise the app opens an issue with the end of the failing output, labelled
+# build, and GitHub starts the build from that label as it would from a person's. The build retries
+# and merges by the same rules as any other. The report job checks out nothing and runs none of the
+# code it reports on: it reads the failed jobs' log with gh. It mints the app's token from the
+# FACTORY_APP_ID and FACTORY_APP_KEY secrets only to open the issue, and comments with the Actions
+# token.
 name: CI
 
 on:
   push:
-  # The factory starts this by hand, because pushes made with the Actions token start nothing.
+  # For running the checks by hand.
   workflow_dispatch:
 
 jobs:
@@ -44,11 +45,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      actions: write
+      actions: read
       contents: read
       issues: write
     steps:
-      - name: Report the failure on an issue, and start a build of a new one
+      - name: Report the failure on the open issue, or write a new one
+        id: report
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -83,22 +85,38 @@ jobs:
             --json number --jq '.[0].number // empty')"
           if [ -n "$open" ]; then
             gh issue comment "$open" --repo "$GITHUB_REPOSITORY" --body-file "$here/failure.md"
+            echo "new=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           if [ "${#subject}" -gt 60 ]; then
             subject="${subject:0:57}..."
           fi
+          echo "Main is failing: $subject" > "$here/title.txt"
           {
             cat "$here/failure.md"
             echo
-            echo "A build of this issue has started. A fix the build rule finds straightforward merges by itself."
+            echo "The build label starts a build of this issue. A fix the build rule finds straightforward merges by itself once CI passes."
           } > "$here/issue.md"
-          if ! url="$(gh issue create --repo "$GITHUB_REPOSITORY" --title "Main is failing: $subject" \
+          echo "new=true" >> "$GITHUB_OUTPUT"
+
+      - name: Make the app's token
+        id: app
+        if: steps.report.outputs.new == 'true'
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.FACTORY_APP_ID }}
+          private-key: ${{ secrets.FACTORY_APP_KEY }}
+
+      - name: Open an issue labelled build
+        if: steps.report.outputs.new == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: |
+          here="$RUNNER_TEMP/report"
+          if ! url="$(gh issue create --repo "$GITHUB_REPOSITORY" --title "$(cat "$here/title.txt")" \
             --label failing-main --label tool --label build --body-file "$here/issue.md")"; then
             echo "::error::Could not open an issue about the failing main. Check that the failing-main, tool and build labels exist."
             exit 1
           fi
-          number="${url##*/}"
           echo "Opened $url"
-          gh workflow run build.yml --repo "$GITHUB_REPOSITORY" --ref main -f issue="$number"
