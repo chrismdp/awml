@@ -24,7 +24,7 @@ flowchart TB
 
   trigger ~~~ review
   review ~~~ approval
-  approval -->|"lists each action it covers"| surface
+  approval -.->|"lists each action it covers"| surface
   ai ~~~ context
   context ~~~ outside
   code ~~~ connector
@@ -50,3 +50,4 @@ flowchart TB
   class person,review,approval person
   class fork uml
   class comment gap
+  linkStyle 7 stroke:#8a93a3

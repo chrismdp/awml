@@ -18,10 +18,10 @@ flowchart TB
     chat@{ shape: win-pane, label: "Parents#39; chat" }
   end
 
-  daily -.-> match
-  bank --> match
-  expected --> match
-  match -->|"anything missing or different"| chat
+  daily --> match
+  bank -.-> match
+  expected -.-> match
+  match -.->|"anything missing or different"| chat
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
   classDef con fill:#eceef2,stroke:#5d6472,color:#16171b

@@ -19,9 +19,9 @@ flowchart TB
     gap@{ shape: notch-rect, label: "Missing from the design#58; nothing posts the bin day here the night before" }
   end
 
-  monday -.-> copy
-  council --> copy
-  copy --> bins
+  monday --> copy
+  council -.-> copy
+  copy -.-> bins
   bins ~~~ chat
   chat -.- gap
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
@@ -41,3 +41,4 @@ flowchart TB
   class copy code
   class gap gap
   style house fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
+  linkStyle 4 stroke:#8a93a3

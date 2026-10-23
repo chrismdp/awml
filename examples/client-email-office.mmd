@@ -34,18 +34,18 @@ flowchart TB
     send>"Send the reply#58; Ask"]
   end
 
-  weekdays -.-> bring
-  mailbox --> bring
+  weekdays --> bring
+  mailbox -.-> bring
   bring --> rules
   rules ==>|"standing rule#58; a client#39;s email"| choose
-  engagements --> choose
+  engagements -.-> choose
   choose --> learn
-  learn --> project
-  project --> draft
-  draft --> drafts
+  learn -.-> project
+  project -.-> draft
+  draft -.-> drafts
   drafts ==>|"the consultant takes the reply"| edit
   edit --> send
-  mailbox <--> send
+  mailbox <-.-> send
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
   classDef con fill:#eceef2,stroke:#5d6472,color:#16171b
@@ -67,4 +67,5 @@ flowchart TB
   style files fill:#fbe9df,stroke:#ecc7b2,color:#16171b
   style phone fill:#efe6fa,stroke:#d3c2ea,color:#16171b
   style gmail fill:#fbf3d9,stroke:#e8d9a6,color:#16171b
+  linkStyle 9 stroke-dasharray:3
   linkStyle 11 marker-end:none

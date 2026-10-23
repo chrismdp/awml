@@ -18,11 +18,11 @@ flowchart TB
     book("<small style='color:rgb(61,67,79)'>👤 🛠️ do</small><br>Book the MOT with the garage")
   end
 
-  monthly -.-> due
-  car_notes --> due
-  due -->|"the MOT is due"| list
-  list --> book
-  car_notes <-->|"the booking"| book
+  monthly --> due
+  car_notes -.-> due
+  due -.->|"the MOT is due"| list
+  list -.-> book
+  car_notes <-.->|"the booking"| book
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
   classDef con fill:#eceef2,stroke:#5d6472,color:#16171b

@@ -36,11 +36,21 @@ func Draw(doc *Map) string {
 	}
 	emit("", "  ")
 	out = append(out, "")
+	kinds := map[string]string{}
+	for _, p := range parts {
+		kinds[str(p, "id")] = str(p, "kind")
+	}
+	// A line's style says where it goes: solid from one step to the next, dotted into or out of a
+	// context, a connector or a surface.
+	aside := func(l *Map) bool { return beside[kinds[str(l, "from")]] || beside[kinds[str(l, "to")]] }
 	for _, l := range lines {
 		from, to, arrow := str(l, "from"), str(l, "to"), arrows[str(l, "kind")]
+		if aside(l) && dottedArrows[str(l, "kind")] != "" {
+			arrow = dottedArrows[str(l, "kind")]
+		}
 		if partOrder[from] > partOrder[to] {
 			from, to = to, from
-			if flipped := backwardsArrows[str(l, "kind")]; flipped != "" {
+			if flipped := backwardsArrows[arrow]; flipped != "" {
 				arrow = flipped
 			}
 		}
@@ -69,29 +79,37 @@ func Draw(doc *Map) string {
 		}
 		out = append(out, fmt.Sprintf("  style %s %s", str(g, "id"), look))
 	}
-	// linkStyle counts every line, hidden ones too. A backwards arrow is drawn with a head at both
-	// ends, then loses the head at its drawn end, leaving the one at the real target.
-	var backwards, redBackwards, reds []string
+	// linkStyle counts every line, hidden ones too, and a line's last linkStyle replaces any before
+	// it, so each line gets its whole style at once. Lines of the same style share a linkStyle, in
+	// the order of the first of them. A backwards arrow is drawn with a head at both ends, then loses
+	// the head at its drawn end, leaving the one at the real target.
+	var looks []string
+	numbers := map[string][]string{}
 	for i, l := range lines {
-		back := partOrder[str(l, "from")] > partOrder[str(l, "to")] && backwardsArrows[str(l, "kind")] != ""
-		broken := l.get("breaks") == true
+		var look []string
 		switch {
-		case back && broken:
-			redBackwards = append(redBackwards, fmt.Sprint(i))
-		case back:
-			backwards = append(backwards, fmt.Sprint(i))
-		case broken:
-			reds = append(reds, fmt.Sprint(i))
+		case l.get("breaks") == true:
+			look = append(look, red)
+		case str(l, "kind") == "tie":
+			look = append(look, grey)
 		}
+		if str(l, "kind") == "publish" && aside(l) {
+			look = append(look, dotted)
+		}
+		if partOrder[str(l, "from")] > partOrder[str(l, "to")] && backwardsArrows[arrows[str(l, "kind")]] != "" {
+			look = append(look, "marker-end:none")
+		}
+		if look == nil {
+			continue
+		}
+		key := strings.Join(look, ",")
+		if numbers[key] == nil {
+			looks = append(looks, key)
+		}
+		numbers[key] = append(numbers[key], fmt.Sprint(i))
 	}
-	if backwards != nil {
-		out = append(out, fmt.Sprintf("  linkStyle %s marker-end:none", strings.Join(backwards, ",")))
-	}
-	if redBackwards != nil {
-		out = append(out, fmt.Sprintf("  linkStyle %s %s,marker-end:none", strings.Join(redBackwards, ","), red))
-	}
-	if reds != nil {
-		out = append(out, fmt.Sprintf("  linkStyle %s %s", strings.Join(reds, ","), red))
+	for _, look := range looks {
+		out = append(out, fmt.Sprintf("  linkStyle %s %s", strings.Join(numbers[look], ","), look))
 	}
 	return strings.Join(out, "\n")
 }
@@ -115,11 +133,17 @@ var shapes = map[string]string{
 var classes = map[string]string{"trigger": "trig", "context": "ctx", "connector": "con", "surface": "surf", "outside": "out",
 	"ai": "ai", "code": "code", "person": "person", "review": "person", "approval": "person", "fork": "uml", "comment": "gap"}
 
-var arrows = map[string]string{"start": "-.->", "data": "-->", "publish": "==>", "refused": "--x", "tie": "-.-", "hidden": "~~~"}
+var arrows = map[string]string{"start": "-->", "data": "-->", "publish": "==>", "refused": "--x", "tie": "-.-", "hidden": "~~~"}
+
+// The parts a line is dotted into or out of, since what they hold sits beside the path the work takes.
+var beside = map[string]bool{"context": true, "connector": true, "surface": true}
+
+// The dotted arrows. A publish line stays thick, and takes its dashes from linkStyle.
+var dottedArrows = map[string]string{"start": "-.->", "data": "-.->", "refused": "-.-x"}
 
 // Mermaid's layout follows an edge's written direction. For a line back to an earlier part, draw
 // the edge in file order with two heads; linkStyle removes the head at the real source.
-var backwardsArrows = map[string]string{"start": "<-.->", "data": "<-->", "publish": "<==>", "refused": "x--x"}
+var backwardsArrows = map[string]string{"-->": "<-->", "-.->": "<-.->", "==>": "<==>", "--x": "x--x", "-.-x": "x-.-x"}
 
 const defs = `  classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
@@ -138,6 +162,10 @@ var pastel = []string{"fill:#e3ebfa,stroke:#b9c8e8", "fill:#fbe9df,stroke:#ecc7b
 	"fill:#fbf3d9,stroke:#e8d9a6", "fill:#dff3ef,stroke:#b4ddd4", "fill:#f6e3ea,stroke:#e3bccb", "fill:#e9f2dc,stroke:#c7dcae"}
 
 const red = "stroke:#d0342c,stroke-width:2.5px,color:#b0271f"
+
+// A tie is grey, the colour of a comment's border. Mermaid has no thick dotted arrow, so a dotted
+// publish line is a thick one given dashes.
+const grey, dotted = "stroke:#8a93a3", "stroke-dasharray:3"
 
 var header = []string{"---", "config:", "  theme: default",
 	"  fontFamily: Inter, sans-serif", "  flowchart:", "    useMaxWidth: false",
