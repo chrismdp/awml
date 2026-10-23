@@ -15,6 +15,8 @@ name: CI
 
 on:
   push:
+    # The factory-media branch holds only the build's pictures.
+    branches-ignore: [factory-media]
   # For running the checks by hand.
   workflow_dispatch:
 
@@ -61,8 +63,8 @@ jobs:
           # The run is still going, so each failed job's log is read on its own. If gh won't show
           # the failed steps of a job in a run that hasn't finished, the job's whole log stands in.
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" --paginate \
-            --jq '.jobs[] | select(.conclusion == "failure") | .id' > "$here/jobs.txt"
-          while IFS= read -r job; do
+            --jq '.jobs[] | select(.conclusion == "failure") | "\(.id)\t\(.name)"' > "$here/jobs.txt"
+          while IFS=$'\t' read -r job _; do
             gh run view --repo "$GITHUB_REPOSITORY" --job "$job" --log-failed \
               || gh api "repos/$GITHUB_REPOSITORY/actions/jobs/$job/logs"
           done < "$here/jobs.txt" > "$here/log.txt"
@@ -72,19 +74,30 @@ jobs:
           fence="$(printf '%*s' "$(( longest >= 3 ? longest + 1 : 3 ))" '' | tr ' ' '`')"
           subject="$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA" --jq .commit.message | head -n 1)"
           {
-            echo "The checks failed on main at $GITHUB_SHA, \"$subject\"."
+            echo "**The checks failed on main at $GITHUB_SHA, \"$subject\".**"
             echo
-            echo "The run: $run_url"
+            while IFS=$'\t' read -r _ name; do
+              printf -- '- The job `%s` failed.\n' "$name"
+            done < "$here/jobs.txt"
+            echo
+            echo "<details><summary>Output</summary>"
             echo
             echo "$fence"
             cat "$here/output.txt"
             echo "$fence"
+            echo
+            echo "</details>"
           } > "$here/failure.md"
+          {
+            cat "$here/failure.md"
+            echo
+            echo "[The run]($run_url)"
+          } > "$here/comment.md"
 
           open="$(gh issue list --repo "$GITHUB_REPOSITORY" --label failing-main --state open \
             --json number --jq '.[0].number // empty')"
           if [ -n "$open" ]; then
-            gh issue comment "$open" --repo "$GITHUB_REPOSITORY" --body-file "$here/failure.md"
+            gh issue comment "$open" --repo "$GITHUB_REPOSITORY" --body-file "$here/comment.md"
             echo "new=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -97,6 +110,8 @@ jobs:
             cat "$here/failure.md"
             echo
             echo "The build label starts a build of this issue. A fix the build rule finds straightforward merges by itself once CI passes."
+            echo
+            echo "[The run]($run_url)"
           } > "$here/issue.md"
           echo "new=true" >> "$GITHUB_OUTPUT"
 

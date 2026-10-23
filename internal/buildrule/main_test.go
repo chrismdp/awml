@@ -46,8 +46,7 @@ func TestEvaluateReviewNote(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertVerdict(t, got, true,
-		"Claude's note: I chose the slower option. The issue did not settle it.")
+	assertVerdict(t, got, true, "Claude asked for a review: see Claude's note.")
 }
 
 func TestEvaluateReviewPaths(t *testing.T) {
