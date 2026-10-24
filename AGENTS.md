@@ -20,12 +20,22 @@ Findings from real setups arrive as issues written in general terms. If a reques
 
 Work through the open issues one at a time. Their labels say what kind of work each one is.
 
-- **`spec` issues are design decisions, and they belong to the maintainer.** Read the issue and the parts of the spec it touches. Then reply on the issue with the options, what each would change in the spec and the CLI, and your recommendation, and wait for an answer before writing the change. Several decided issues can go in one pull request.
+- **`spec` issues are design decisions, and they belong to the maintainer.** Read the issue and the parts of the spec it touches. Then reply on the issue with the options, what each would change in the spec and the CLI, how each weighs against the principles in "How AWML is designed", and your recommendation, and wait for an answer before writing the change. Several decided issues can go in one pull request.
 - **`tool` and `guide` issues** that follow from what the spec already says can be built straight away.
 - **Build `tool` and `guide` issues, and decided `spec` ones, by adding the `build` label.** The build workflow drafts, checks and opens the pull request. Build by hand only a change the workflow can't push, which is a change under `.github/workflows/`.
 - **A change to a workflow under `.github/workflows/` starts as an AWML drawing,** published to awml.io. Build it only after the maintainer has checked the drawing and said so.
 - **Each pull request says which issues it closes,** with `Closes #n`.
 - **Something new turns up while you work:** open an issue for it, rather than widening the change.
+
+## How AWML is designed
+
+Weigh every spec decision against these.
+
+- **As simple as possible, but no simpler.** A new part or field has to show something a drawing can't show already.
+- **Easy to read, but able to show the full complexity.** A reader who has never seen AWML can follow a drawing. A workflow with every risk drawn in is still one drawing.
+- **Work out what can be worked out.** If AWML can derive something from the file, such as a publish from its scopes or where untrusted text reaches, the author doesn't write it, and the drawing shows it.
+- **Records and logs are assumed.** Every step leaves a record, and a drawing never draws one. Only state that a later run reads back is drawn, as a context.
+- **The drawing is what gets reviewed.** Safety comes from a person reading the drawing, not from asking the author to declare the same thing twice. So whatever matters, the drawing shows.
 
 ## Writing
 
