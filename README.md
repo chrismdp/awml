@@ -354,7 +354,7 @@ Where a live system does something its design doesn't allow, the line for it is 
 
 ![The club's Friday message, sent without a yes](examples/tour/06-red-line.svg)
 
-Here the design waits for Ella's yes to the exact message, but one week the live system sent the draft straight out. `awml check` doesn't hold a red line to the operations' rules or to the boxes it crosses, so the drawing can show exactly what went wrong.
+Here the design waits for Ella's yes to the exact message, but one week the live system sent the draft straight out. Drawn as it ran, that line breaks the rules for an Ask action and for a draft step, so `awml check` reports it and `awml draw` draws it red with what's wrong. Nothing marks it by hand, and a drawing with a red line never passes the check as a finished design. A breach the check can't find goes in a comment tied to the part it's about.
 
 ## A tour of the gallery
 
@@ -510,16 +510,16 @@ implementations:
 - A **part** has an `id`, a `kind` and a `label`, which a fork doesn't need. Its `in` names its scope. A step may have `op`, a trigger `wait`, and a context `at`. A trigger, connector or context may have `untrusted`, and a code step `cleans`.
 - An **implementation** has an id in the `implementations` map, a `label` and `blocks`. Each block has an `id`, a `label` and `parts`, the ids it holds. It may have `in`, its parent block, and `platform`, a platform description id: a bare id for your own, or `owner/platforms/slug` for one published to the registry. Every part except a trigger or comment needs exactly one block per implementation.
 - An implementation may have **comments**, each with `id`, `label`, `in`, its block, and `ties`, a list of design part ids. These comments appear only in its platform view.
-- A **line** has `from` and `to`, the ids of two parts, and a `kind`. It may have a `label`, and `breaks: true` to draw it red.
+- A **line** has `from` and `to`, the ids of two parts, and a `kind`. It may have a `label`.
 - The part kinds are `trigger`, `ai`, `code`, `person`, `review`, `approval`, `fork`, `context`, `connector`, `surface`, `outside` and `comment`. The line kinds are `start`, `data`, `publish`, `refused`, `tie` and `hidden`.
 - An id is letters, digits and underscores, starting with a letter, and scope, part, block and comment ids are unique across the file. Implementation ids have their own namespace.
 - Parts are drawn in the design's order, and each scope or block after the parts beside it. Unplaced triggers and design comments are drawn beside the other end of their first visible line. A `hidden` line steers the layout when Mermaid puts something in an awkward place.
 
-Every id, label, kind and reference to an id is text. `awml` reads YAML 1.2, which reads `true`, `false`, numbers and dates such as `2026-10-20` as something other than text, so quote those. Tools that read YAML 1.1 also read `yes`, `no`, `on` and `off` as true or false, and `19:00` as a number, so quoting those too keeps a file the same in every tool. `breaks`, `untrusted` and `cleans` are `true` or `false`, unquoted.
+Every id, label, kind and reference to an id is text. `awml` reads YAML 1.2, which reads `true`, `false`, numbers and dates such as `2026-10-20` as something other than text, so quote those. Tools that read YAML 1.1 also read `yes`, `no`, `on` and `off` as true or false, and `19:00` as a number, so quoting those too keeps a file the same in every tool. `untrusted` and `cleans` are `true` or `false`, unquoted.
 
 ### What `awml check` reports
 
-`awml check` reports structural mistakes, invalid operations, tiers that disagree with the drawing and publishing drawn as routing. It also checks each implementation's block references, nesting and placement, and its comments' ties. It warns when AI decides a `do` step, when one `do` step leads to more than one change, and when untrusted text reaches an outside action. Warnings leave the exit status alone. [`SPEC.md`](SPEC.md) gives the exact rules, including the checks for older view pairs.
+`awml check` reports structural mistakes, invalid operations, tiers that disagree with the drawing and publishing drawn as routing. It also checks each implementation's block references, nesting and placement, and its comments' ties. It warns when AI decides a `do` step, when one `do` step leads to more than one change, and when untrusted text reaches an outside action. Warnings leave the exit status alone. A line that breaks a rule, such as one into a Block action, is still a mistake, but `awml draw` draws it red rather than refusing the file. [`SPEC.md`](SPEC.md) gives the exact rules, including the checks for older view pairs.
 
 ### Examples to start from
 

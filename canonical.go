@@ -33,8 +33,37 @@ func copyMap(source *Map, omit ...string) *Map {
 }
 
 // View projects a sound workflow into the same representation used by the older views.
-// An empty implementation selects the security view. The source is never changed.
+// An empty implementation selects the security view. The source is never changed. In a 0.6 file,
+// each line the check reports as breaking a rule is red: its breaks holds the check's words for
+// each rule it breaks, as a line marked red by hand in an older file holds true.
 func View(doc *Map, implementation string) (*Map, error) {
+	view, err := project(doc, implementation)
+	if err != nil || !IsCanonical(doc) || str(doc, "awml") != "0.6" {
+		return view, err
+	}
+	found, _ := checkDoc(doc)
+	words := map[*Map][]any{}
+	for _, m := range found {
+		for _, line := range m.lines {
+			words[line] = append(words[line], m.breach)
+		}
+	}
+	var lines []any
+	for _, line := range items(view, "lines") {
+		if breaches := words[line]; breaches != nil {
+			line = copyMap(line)
+			line.set("breaks", breaches)
+		}
+		lines = append(lines, line)
+	}
+	if lines != nil {
+		view.set("lines", lines)
+	}
+	return view, nil
+}
+
+// project projects a workflow into a view as View does, with no line red.
+func project(doc *Map, implementation string) (*Map, error) {
 	if !IsCanonical(doc) {
 		if implementation != "" {
 			return nil, fmt.Errorf("--implementation needs a 0.4, 0.5 or 0.6 workflow")
@@ -102,7 +131,7 @@ func View(doc *Map, implementation string) (*Map, error) {
 func checkCanonical(file *Map) (mistakeList, bool) {
 	var errors mistakeList
 	fieldsExact("the file", file, []string{"awml", "title", "parts"}, []string{"scopes", "lines", "implementations"}, &errors)
-	security, _ := View(file, "")
+	security, _ := project(file, "")
 	// The outer schema was checked above. Keep the existing messages for all design rules.
 	clean := &Map{}
 	for _, key := range security.Keys() {
@@ -118,7 +147,7 @@ func checkCanonical(file *Map) (mistakeList, bool) {
 	}
 	implementations, ok := file.get("implementations").(*Map)
 	if !ok {
-		return append(errors, mistake{"fields.known", "implementations must be a mapping of implementation ids"}), stopped
+		return append(errors, mistake{check: "fields.known", message: "implementations must be a mapping of implementation ids"}), stopped
 	}
 	// Avoid projecting malformed design lists. Check has already explained those mistakes.
 	if stopped {
@@ -200,7 +229,7 @@ func checkCanonical(file *Map) (mistakeList, bool) {
 				}
 				// Implementation comments can only refer to design parts.
 				if knownParts[show(target)] == nil {
-					errors = appendUnique(errors, mistake{"references.known", fmt.Sprintf(`the line from "%s" to "%s" ends at unknown part "%s"`, show(comment.get("id")), show(target), show(target))})
+					errors = appendUnique(errors, mistake{check: "references.known", message: fmt.Sprintf(`the line from "%s" to "%s" ends at unknown part "%s"`, show(comment.get("id")), show(target), show(target))})
 				}
 			}
 		}
@@ -210,11 +239,11 @@ func checkCanonical(file *Map) (mistakeList, bool) {
 				continue
 			}
 			if seen[keyOf(value)] {
-				errors = appendUnique(errors, mistake{"ids.unique", fmt.Sprintf(`id "%s" is used twice`, show(value))})
+				errors = appendUnique(errors, mistake{check: "ids.unique", message: fmt.Sprintf(`id "%s" is used twice`, show(value))})
 			}
 			seen[keyOf(value)] = true
 		}
-		platform, _ := View(file, name)
+		platform, _ := project(file, name)
 		platformErrors, _ := checkView(platform, true, format)
 		errors = appendUnique(errors, platformErrors...)
 	}
@@ -227,13 +256,13 @@ func canonicalList(file *Map, key, singular string) ([]*Map, mistakeList) {
 	}
 	values, ok := file.get(key).([]any)
 	if !ok {
-		return nil, mistakeList{{"fields.known", key + " must be a list"}}
+		return nil, mistakeList{{check: "fields.known", message: key + " must be a list"}}
 	}
 	var result []*Map
 	for _, value := range values {
 		item, ok := value.(*Map)
 		if !ok {
-			return nil, mistakeList{{"fields.known", "each " + singular + " must be a mapping of fields"}}
+			return nil, mistakeList{{check: "fields.known", message: "each " + singular + " must be a mapping of fields"}}
 		}
 		result = append(result, item)
 	}

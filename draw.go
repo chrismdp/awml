@@ -60,9 +60,18 @@ func Draw(doc *Map) string {
 				arrow = flipped
 			}
 		}
-		mid := ""
+		var words []string
 		if str(l, "label") != "" {
-			mid = fmt.Sprintf(`|"%s"|`, text(str(l, "label")))
+			words = append(words, text(str(l, "label")))
+		}
+		// A line the check reports adds its words for each rule the line breaks, each on a row.
+		breaches, _ := l.get("breaks").([]any)
+		for _, breach := range breaches {
+			words = append(words, text(show(breach)))
+		}
+		mid := ""
+		if words != nil {
+			mid = fmt.Sprintf(`|"%s"|`, strings.Join(words, "<br>"))
 		}
 		out = append(out, fmt.Sprintf("  %s %s%s %s", from, arrow, mid, to))
 	}
@@ -101,7 +110,7 @@ func Draw(doc *Map) string {
 	for i, l := range lines {
 		var look []string
 		switch {
-		case l.get("breaks") == true:
+		case drawnRed(l):
 			look = append(look, red)
 		case str(l, "kind") == "tie":
 			look = append(look, grey)
@@ -125,6 +134,13 @@ func Draw(doc *Map) string {
 		out = append(out, fmt.Sprintf("  linkStyle %s %s", strings.Join(numbers[look], ","), look))
 	}
 	return strings.Join(out, "\n")
+}
+
+// drawnRed is whether a view draws a line red: one marked by hand in a file before 0.6, or one that
+// View found breaking a rule.
+func drawnRed(l *Map) bool {
+	breaches, _ := l.get("breaks").([]any)
+	return l.get("breaks") == true || len(breaches) > 0
 }
 
 // UML activity shapes where Mermaid has them; our own where UML has nothing.

@@ -81,6 +81,8 @@ After the parts and groups, leave one empty line, then write each line in the fi
 
 A dotted `publish` line keeps its thick arrow and takes its dots from its style, below.
 
+A line is **red** when it breaks a rule. In a file before 0.6, that's a line with `breaks: true`. In a 0.6 file, it's each line that rule 17, 18, 20 or 22 of [checking by hand](checking-by-hand.md) finds: for 17, the lines from the step that isn't a `do` step on its way to the action; for 18, the line into the context; for 20, the lines from each part that breaks the rule on its way to the action; for 22, the `data` line itself. In a 0.6 file, a red line's label adds, for each rule it breaks, `<br>` and the words `awml check` reports for it, up to the colon before its advice, in the order the rules come. For example, `part "write" leads to outside action "send", but its op is draft`. Write the label's own words first, if it has any, and write the punctuation in the added words as entities too, but not the `<br>`.
+
 ## 4. The colours
 
 Then write these lines, unchanged:
@@ -118,7 +120,7 @@ In the platform view, the first group takes the first of these, the second group
 
 Last, style the lines. Count every line from 0 in the file's order, hidden lines included. A line's style is made of these parts, in this order, joined with commas:
 
-1. For a line with `breaks: true`, the red style `stroke:#d0342c,stroke-width:2.5px,color:#b0271f`. Otherwise, for a `tie` line, the grey `stroke:#8a93a3`.
+1. For a red line, the red style `stroke:#d0342c,stroke-width:2.5px,color:#b0271f`. Otherwise, for a `tie` line, the grey `stroke:#8a93a3`.
 2. For a dotted `publish` line, `stroke-dasharray:3`.
 3. For a backwards `start`, `data`, `publish` or `refused` line, `marker-end:none`. This hides the spare head and leaves the head pointing at the real `to` part.
 
@@ -126,7 +128,7 @@ A line with none of these has no style. Lines with the same style share one line
 
 ## 5. The untrusted view
 
-The untrusted view is the security view, with three changes. First find where the text of each part marked `untrusted: true` reaches. It reaches that part, and from any part it reaches it goes along each `start`, `data` or `publish` line without `breaks: true` to the part at the other end. A `review`, a `person` step or a `code` step with `cleans: true` stops it: the text goes no further than that part, and the part keeps its own class.
+The untrusted view is the security view, with three changes. First find where the text of each part marked `untrusted: true` reaches. It reaches that part, and from any part it reaches it goes along each `start`, `data` or `publish` line to the part at the other end, red lines included. A `review`, a `person` step or a `code` step with `cleans: true` stops it: the text goes no further than that part, and the part keeps its own class.
 
 1. Each part that stops the text has a space and 🛡️ after its label, after any ⚠️.
 2. After the ten `classDef` lines, add these two, unchanged:

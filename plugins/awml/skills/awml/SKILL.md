@@ -86,7 +86,7 @@ If you have a shell, see whether `awml` is there and which release it is with `a
 awml check standup.yaml
 ```
 
-It prints `ok` for each sound file, or one line for each mistake, naming the part or line it is in. Fix every one and run it again until the file prints `ok`.
+It prints `ok` for each sound file, or one line for each mistake, naming the part or line it is in. Fix every one and run it again until the file prints `ok`. In a drawing of a live system, a line that breaks a rule because the system really did that stays, and is drawn red.
 
 If you have no shell, or `awml` can't be installed, go through `references/checking-by-hand.md` for each file instead. Then say plainly that the files were checked by hand, not by `awml check`, and that `awml check` will confirm them.
 
@@ -108,7 +108,7 @@ Drawing a workflow shows what a list of its tasks hides. Go through the drawing 
 
 Say too how the work is shared out: how many steps AI, code and a person each decide.
 
-With the person's agreement, mark each gap in the files as a comment, as `"Missing from the design: nothing keeps the screen current"`, tied to the part it is about, then check and draw again. A red line, `breaks: true`, is only for something a live system did that its design doesn't allow, found in its records. Never use one for a gap in the design.
+With the person's agreement, mark each gap in the files as a comment, as `"Missing from the design: nothing keeps the screen current"`, tied to the part it is about, then check and draw again. A red line is only for something a live system did that its design doesn't allow, found in its records. Draw the line as the system ran it: where it breaks a rule, `awml check` reports it and `awml draw` draws it red, with what's wrong. A breach the check can't find goes in a comment tied to the part it is about. Never use one for a gap in the design.
 
 The files stay where the person keeps their work; if they want to share the workflow, the awml-publish skill can publish it.
 
