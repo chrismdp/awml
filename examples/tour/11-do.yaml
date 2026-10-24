@@ -1,6 +1,6 @@
 # Two do steps. One outside action just happens, because it's Allow and can be undone, and the other
 # waits for a yes, because it's Ask. The parents and the window cleaner are fictional.
-awml: "0.5"
+awml: "0.6"
 title: The window cleaner's visit
 scopes:
   - { id: parents, label: "parents: Mia, Dev" }

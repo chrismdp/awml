@@ -1,5 +1,5 @@
 # Every kind of part, as a key to reading the drawings. The hidden lines only lay it out as a grid.
-awml: "0.5"
+awml: "0.6"
 title: The parts of a drawing
 parts:
   - { id: trigger, kind: trigger, label: "A trigger: a time or an event" }

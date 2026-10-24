@@ -66,14 +66,16 @@ var (
 
 // checkDefinition describes one check. early is whether it runs before a broken list stops the
 // rest, warn whether it warns rather than fails, legacy03 whether a legacy view must be 0.3 for it
-// to apply, and formats the versions of workflow held to it, when not every version is. none says
-// why it was skipped when no file given is one it applies to.
+// to apply, formats the versions of workflow held to it, when not every version is, and before06
+// whether a 0.6 workflow isn't. none says why it was skipped when no file given is one it applies
+// to.
 type checkDefinition struct {
 	id, name, about string
 	appliesTo       []string
 	early, warn     bool
 	legacy03        bool
 	formats         []string
+	before06        bool
 	none            string
 }
 
@@ -88,7 +90,7 @@ var checkDefinitions = []checkDefinition{
 	{id: "fields.known", name: "Every field is known and none is missing", about: "Each file, scope, part, line, implementation, block and comment has the fields it needs and no others, and each list is a list of mappings.", appliesTo: everyFile, early: true},
 	{id: "kinds.known", name: "Every kind is known", about: "Each part and line has a kind the spec defines.", appliesTo: workflows},
 	{id: "ids.unique", name: "No id is used twice", about: "Scope, part, block and comment ids are unique across the file.", appliesTo: workflows},
-	{id: "ids.written", name: "Every id is well written", about: "An id is letters, digits and underscores, starting with a letter, and a block's platform is a company id, or from a 0.5 file owner/platforms/slug.", appliesTo: workflows},
+	{id: "ids.written", name: "Every id is well written", about: "An id is letters, digits and underscores, starting with a letter, and a block's platform is a company id, or from 0.5 owner/platforms/slug.", appliesTo: workflows},
 	{id: "values.text", name: "Every value that should be text is text", about: "Ids, labels, kinds and references are text, not something YAML read as true, false, a number or a date.", appliesTo: everyFile, early: true},
 	{id: "lines.breaks", name: "Every breaks is true or false", about: "A line's breaks, which draws it red, is true or false, unquoted.", appliesTo: workflows},
 	{id: "references.known", name: "Every reference names something in the file", about: "Each in, from and to, each part a block names and each part a comment ties names a scope, block or part the file has.", appliesTo: workflows},
@@ -101,7 +103,7 @@ var checkDefinitions = []checkDefinition{
 	{id: "tiers.written", name: "Every outside action's label ends with its tier", about: "An outside action's label ends with Allow, Ask or Block after a colon.", appliesTo: []string{"workflow"}, formats: since05Formats, none: "no file given is a 0.5 or 0.6 workflow"},
 	{id: "tiers.shape", name: "Every tier agrees with what stands in front of it", about: "An Ask action has a review, a standing approval or a person's own step on every way in, an Allow action has no review or standing approval in front of it, and only red lines lead to a Block action.", appliesTo: []string{"workflow"}, formats: since05Formats, none: "no file given is a 0.5 or 0.6 workflow"},
 	{id: "approvals.listed", name: "Every standing approval lists its actions on a surface", about: "A standing approval leads to the surface where each action it covers is listed with how to undo it.", appliesTo: []string{"workflow"}, formats: since05Formats, none: "no file given is a 0.5 or 0.6 workflow"},
-	{id: "lines.data-narrows", name: "Every data line stays in its scope or narrows", about: "A data line moves content only within its scope or into one inside it, since any other move is publishing drawn as routing.", appliesTo: []string{"workflow", "security"}, none: "no file given is a workflow or a security view"},
+	{id: "lines.data-narrows", name: "Every data line stays in its scope or narrows", about: "A data line moves content only within its scope or into one inside it, since any other move is publishing drawn as routing.", appliesTo: []string{"workflow", "security"}, before06: true, none: "no file given is a workflow before 0.6 or a security view"},
 	{id: "processing.written", name: "Every processing is well written", about: "A scope's processing is any, none, or a map from company ids to any or a list of known operations.", appliesTo: []string{"workflow", "security"}, legacy03: true, none: "no file given is a 0.4 workflow or a 0.3 security view"},
 	{id: "processing.nested", name: "An inner scope allows no more processing than its outer one", about: "A scope inside another allows no company or operation that the outer scope doesn't.", appliesTo: []string{"workflow", "security"}, legacy03: true, none: "no file given is a 0.4 workflow or a 0.3 security view"},
 	{id: "processing.scopes-only", name: "Only a scope takes processing", about: "processing belongs to a scope, never to a block of the platform view.", appliesTo: []string{"workflow", "platform"}, legacy03: true, none: "no file given is a 0.4 workflow or a 0.3 platform view"},
@@ -235,7 +237,8 @@ func (definition checkDefinition) appliesToFile(file checkedSource) bool {
 		return isOneOf("security", definition.appliesTo...) && isOneOf("platform", definition.appliesTo...) &&
 			(!definition.legacy03 || file.version == "0.3")
 	}
-	if !isOneOf(file.view, definition.appliesTo...) || definition.formats != nil && !isOneOf(file.version, definition.formats...) {
+	if !isOneOf(file.view, definition.appliesTo...) || definition.formats != nil && !isOneOf(file.version, definition.formats...) ||
+		definition.before06 && file.view == "workflow" && file.version == "0.6" {
 		return false
 	}
 	return !definition.legacy03 || file.view == "workflow" || file.view == "platform-description" || file.version == "0.3"
