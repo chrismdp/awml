@@ -279,6 +279,8 @@ Publishing waits for a person's yes, unless a **standing rule** names that targe
 
 A **connector** is access to one outside service through one credential: a person's, one an outside party lends, or the system's own. The design names whose access each connector is, which service it reaches and what it may do, such as read, post or carry an outside action, and its label says whose it is, as in `Owen's supermarket account`.
 
+Lines to a connector follow the data. A read comes out of the connector, and a write, or an outside action carried out through it, goes in, so an order placed through a supplier account has its line into the account's connector.
+
 Whose access it is matters, because a connector speaks with that access.
 
 - **A person's connector** reaches only what that person can, and speaks in their name, so they, or a role they choose, approve what it sends. It stops when they leave, so work that must outlive them shouldn't rest on one.
