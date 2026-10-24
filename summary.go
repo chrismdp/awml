@@ -6,23 +6,24 @@ import "strings"
 // steps, people, scopes and platforms. Groups, parts and lines that appear in both views are
 // counted and named once within their kind of view.
 type Summary struct {
-	Steps           StepCounts        `json:"steps"`
-	Operations      map[string]int    `json:"operations"`
-	OutsideActions  TierCounts        `json:"outsideActions"`
-	Triggers        int               `json:"triggers"`
-	Reviews         int               `json:"reviews"`
-	Contexts        int               `json:"contexts"`
-	Connectors      int               `json:"connectors"`
-	Surfaces        int               `json:"surfaces"`
-	Scopes          int               `json:"scopes"`
-	Platforms       int               `json:"platforms"`
-	PublishingLines PublishingSummary `json:"publishingLines"`
-	RefusedReads    int               `json:"refusedReads"`
-	RedLines        int               `json:"redLines"`
-	AISteps         []string          `json:"aiSteps"`
-	People          []PersonSummary   `json:"people"`
-	ScopeNames      []string          `json:"scopeNames"`
-	PlatformNames   []string          `json:"platformNames"`
+	Steps           StepCounts         `json:"steps"`
+	Operations      map[string]int     `json:"operations"`
+	OutsideActions  TierCounts         `json:"outsideActions"`
+	Triggers        int                `json:"triggers"`
+	Reviews         int                `json:"reviews"`
+	Contexts        int                `json:"contexts"`
+	Connectors      int                `json:"connectors"`
+	Surfaces        int                `json:"surfaces"`
+	Scopes          int                `json:"scopes"`
+	Platforms       int                `json:"platforms"`
+	PublishingLines PublishingSummary  `json:"publishingLines"`
+	RefusedReads    int                `json:"refusedReads"`
+	RedLines        int                `json:"redLines"`
+	AISteps         []string           `json:"aiSteps"`
+	People          []PersonSummary    `json:"people"`
+	ScopeNames      []string           `json:"scopeNames"`
+	PlatformNames   []string           `json:"platformNames"`
+	Untrusted       []UntrustedSummary `json:"untrusted"`
 }
 
 // PersonSummary names a place where a person decides: a person step, a review or a standing
@@ -63,6 +64,9 @@ func Summarise(docs ...*Map) Summary {
 	seenGroups := map[string]bool{}
 	for _, doc := range docs {
 		view := str(doc, "view")
+		if view == "security" {
+			out.Untrusted = append(out.Untrusted, summariseUntrusted(items(doc, "parts"), items(doc, "lines"))...)
+		}
 		for _, group := range items(doc, "groups") {
 			key := view + "\x00" + str(group, "id")
 			if seenGroups[key] {
@@ -178,6 +182,7 @@ func TotalSummaries(summaries ...Summary) Summary {
 		out.People = append(out.People, s.People...)
 		out.ScopeNames = append(out.ScopeNames, s.ScopeNames...)
 		out.PlatformNames = append(out.PlatformNames, s.PlatformNames...)
+		out.Untrusted = append(out.Untrusted, s.Untrusted...)
 	}
 	return out
 }

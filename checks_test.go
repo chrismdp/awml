@@ -23,7 +23,7 @@ func checkResult(t *testing.T, report CheckReport, id string) CheckResult {
 
 func source(file, text string) Source { return Source{File: file, Text: []byte(text)} }
 
-const soundWorkflow = `awml: "0.5"
+const soundWorkflow = `awml: "0.6"
 title: Dinners
 scopes:
   - { id: family, label: "family: parents, kids", processing: any }
@@ -60,8 +60,8 @@ func TestTheChecksKeepTheirIDsAndTheSpecsOrder(t *testing.T) {
 		"values.text", "lines.breaks", "references.known", "nesting.acyclic", "comments.tie-only",
 		"ties.comment", "ops.known", "operations.only-do-acts", "operations.answer-check-read-only",
 		"tiers.written", "tiers.shape", "approvals.listed", "lines.data-narrows", "processing.written", "processing.nested", "processing.scopes-only",
-		"platform.blocks-only", "wait.duration", "at.path", "placement.once", "placement.complete",
-		"warn.do-by-code", "warn.one-change", "description.values", "description.ids",
+		"platform.blocks-only", "wait.duration", "at.path", "untrusted.parts", "cleans.code-only", "placement.once", "placement.complete",
+		"warn.do-by-code", "warn.one-change", "warn.untrusted-outside", "description.values", "description.ids",
 		"views.same-parts", "views.same-lines",
 	}
 	if !reflect.DeepEqual(ids, want) {
@@ -348,6 +348,19 @@ lines:
   - { from: d, to: k, kind: data }
   - { from: d, to: b, kind: data }
   - { from: d, to: o, kind: data }
+`,
+		"untrusted": `awml: "0.6"
+title: Untrusted
+parts:
+  - { id: form, kind: trigger, label: Form, untrusted: true }
+  - { id: read, kind: ai, label: Read, untrusted: true, cleans: true }
+  - { id: keep, kind: code, label: Keep, cleans: "yes" }
+  - { id: d, kind: code, op: do, label: D }
+  - { id: a, kind: outside, label: "A: Allow" }
+lines:
+  - { from: form, to: read, kind: start }
+  - { from: read, to: d, kind: start }
+  - { from: d, to: a, kind: start }
 `,
 		"canonical lists":           "awml: \"0.4\"\ntitle: x\nparts: [3]\nimplementations: 3\n",
 		"canonical implementations": "awml: \"0.4\"\ntitle: x\nparts: []\nimplementations: 3\n",

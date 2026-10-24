@@ -48,8 +48,8 @@ func TestA05FileIsAWorkflow(t *testing.T) {
 	if !IsCanonical(doc) {
 		t.Fatal("a 0.5 file isn't read as a workflow")
 	}
-	if got := Check(parseCanonical(t, strings.Replace(canonical, `awml: "0.4"`, `awml: "0.6"`, 1))); !strings.Contains(strings.Join(got, "\n"), `awml must be "0.2" or "0.3", not "0.6"`) {
-		t.Fatalf("0.6 gave %q", got)
+	if got := Check(parseCanonical(t, strings.Replace(canonical, `awml: "0.4"`, `awml: "0.7"`, 1))); !strings.Contains(strings.Join(got, "\n"), `awml must be "0.2" or "0.3", not "0.7"`) {
+		t.Fatalf("0.7 gave %q", got)
 	}
 }
 

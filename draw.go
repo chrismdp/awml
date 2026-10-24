@@ -16,12 +16,18 @@ func Draw(doc *Map) string {
 		partOrder[str(p, "id")] = i
 	}
 	out := append([]string{}, header...)
+	// The untrusted view tints each part untrusted text reaches and marks each part that stops it.
+	untrusted := str(doc, "view") == "untrusted"
+	tinted, stopper := map[string]string{}, map[string]bool{}
+	if untrusted {
+		tinted, stopper = untrustedLooks(parts, lines)
+	}
 
 	var emit func(parent, indent string)
 	emit = func(parent, indent string) {
 		for _, p := range parts {
 			if where[str(p, "id")] == parent {
-				out = append(out, indent+str(p, "id")+fmt.Sprintf(shapes[str(p, "kind")], label(p)))
+				out = append(out, indent+str(p, "id")+fmt.Sprintf(shapes[str(p, "kind")], label(p, stopper[str(p, "id")])))
 			}
 		}
 		for _, g := range groups {
@@ -61,10 +67,17 @@ func Draw(doc *Map) string {
 		out = append(out, fmt.Sprintf("  %s %s%s %s", from, arrow, mid, to))
 	}
 	out = append(out, defs)
-	for _, cls := range []string{"trig", "ctx", "con", "surf", "out", "ai", "code", "person", "uml", "gap"} {
+	if untrusted {
+		out = append(out, "  classDef taint "+taint, "  classDef taintout "+taintOut)
+	}
+	for _, cls := range []string{"trig", "ctx", "con", "surf", "out", "ai", "code", "person", "uml", "gap", "taint", "taintout"} {
 		var ids []string
 		for _, p := range parts {
-			if classes[str(p, "kind")] == cls {
+			own := classes[str(p, "kind")]
+			if tint := tinted[str(p, "id")]; tint != "" {
+				own = tint
+			}
+			if own == cls {
 				ids = append(ids, str(p, "id"))
 			}
 		}
@@ -74,7 +87,7 @@ func Draw(doc *Map) string {
 	}
 	for i, g := range groups {
 		look := scope
-		if str(doc, "view") != "security" {
+		if str(doc, "view") == "platform" {
 			look = pastel[i%len(pastel)] + ",color:#16171b"
 		}
 		out = append(out, fmt.Sprintf("  style %s %s", str(g, "id"), look))
@@ -163,6 +176,10 @@ var pastel = []string{"fill:#e3ebfa,stroke:#b9c8e8", "fill:#fbe9df,stroke:#ecc7b
 
 const red = "stroke:#d0342c,stroke-width:2.5px,color:#b0271f"
 
+// In the untrusted view, a part untrusted text reaches is tinted violet, and an outside action it
+// reaches is drawn in the red of a red line.
+const taint, taintOut = "fill:#ead9f5,stroke:#7b3fa0,color:#16171b", "fill:#f9cdc7,stroke:#d0342c,stroke-width:2.5px,color:#16171b"
+
 // A tie is grey, the colour of a comment's border. Mermaid has no thick dotted arrow, so a dotted
 // publish line is a thick one given dashes.
 const grey, dotted = "stroke:#8a93a3", "stroke-dasharray:3"
@@ -180,10 +197,11 @@ var deciders = map[string]string{"ai": "🤖", "code": "⚙️", "person": "👤
 // approval's 📜 standing approval, which no operation uses.
 const operation = "<small style='color:rgb(61,67,79)'>%s</small><br>"
 
-// label is a part's label as Mermaid reads it. A step's, a review's or a standing approval's sits
-// under its own line.
-func label(p *Map) string {
-	who, words := deciders[str(p, "kind")], text(str(p, "label"))
+// label is a part's label as Mermaid reads it, with its marks. A step's, a review's or a standing
+// approval's sits under its own line. stopper is whether the untrusted view marks it as stopping
+// untrusted text.
+func label(p *Map, stopper bool) string {
+	who, words := deciders[str(p, "kind")], untrustedLabel(p, text(str(p, "label")), stopper)
 	if who == "" {
 		return words
 	}

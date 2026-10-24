@@ -93,7 +93,7 @@ func TestSummaryHasStableJSONFieldNames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"steps":{"ai":0,"code":2,"person":0},"operations":{"do":2},"outsideActions":{"allow":1,"ask":1,"block":0},"triggers":1,"reviews":1,"contexts":0,"connectors":0,"surfaces":0,"scopes":1,"platforms":0,"publishingLines":{"count":0,"labels":null},"refusedReads":0,"redLines":0,"aiSteps":null,"people":[{"label":"Dev's yes to the exact payment","kind":"review"}],"scopeNames":["parents"],"platformNames":null}`
+	want := `{"steps":{"ai":0,"code":2,"person":0},"operations":{"do":2},"outsideActions":{"allow":1,"ask":1,"block":0},"triggers":1,"reviews":1,"contexts":0,"connectors":0,"surfaces":0,"scopes":1,"platforms":0,"publishingLines":{"count":0,"labels":null},"refusedReads":0,"redLines":0,"aiSteps":null,"people":[{"label":"Dev's yes to the exact payment","kind":"review"}],"scopeNames":["parents"],"platformNames":null,"untrusted":null}`
 	if string(got) != want {
 		t.Errorf("JSON = %s\nwant %s", got, want)
 	}

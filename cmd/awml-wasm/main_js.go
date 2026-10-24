@@ -130,6 +130,17 @@ func main() {
 		}
 		return awml.Draw(view)
 	})
+	expose("__awmlDrawUntrusted", func(args []js.Value) string {
+		doc, err := awml.Parse([]byte(args[0].String()))
+		if err != nil || len(awml.Check(doc)) != 0 {
+			return ""
+		}
+		view, err := awml.UntrustedView(doc.(*awml.Map))
+		if err != nil {
+			return errorJSON(err.Error())
+		}
+		return awml.Draw(view)
+	})
 	select {}
 }
 

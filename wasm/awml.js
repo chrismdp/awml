@@ -80,5 +80,13 @@ async function start(source) {
       if (output.startsWith("{")) throw new Error(JSON.parse(output).error);
       return output;
     },
+    // drawUntrusted draws where untrusted text reaches, as awml draw --untrusted does.
+    drawUntrusted(sourceText) {
+      const errors = this.check(sourceText);
+      if (errors.length) throw new Error(errors.join("\n"));
+      const output = globalThis.__awmlDrawUntrusted(sourceText);
+      if (output.startsWith("{")) throw new Error(JSON.parse(output).error);
+      return output;
+    },
   };
 }

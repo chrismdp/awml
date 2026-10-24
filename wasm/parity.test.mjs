@@ -12,6 +12,7 @@ const descriptions = (await yamlFiles(new URL("../examples/platforms/", import.m
 const descriptionSources = await Promise.all(descriptions.map((path) => readFile(path, "utf8")));
 let passed = 0;
 let placements = 0;
+let untrustedViews = 0;
 for (const path of top.sort()) {
   const source = await readFile(path, "utf8");
   const relative = path.slice(new URL("../", import.meta.url).pathname.length);
@@ -28,6 +29,10 @@ for (const path of top.sort()) {
   assert.equal(api.checksJSON([{ file: relative, source }]) + "\n", runNative(["check", "--json", relative]), `${relative}: checks JSON`);
   assert.equal(api.summaryJSON(source) + "\n", runNative(["summary", "--json", relative]), `${relative}: summary JSON`);
   assert.equal(api.draw(source) + "\n", runNative(["draw", relative]), `${relative}: Mermaid`);
+  if (/untrusted: true/.test(source)) {
+    assert.equal(api.drawUntrusted(source) + "\n", runNative(["draw", "--untrusted", relative]), `${relative}: untrusted Mermaid`);
+    untrustedViews++;
+  }
   if (/^awml: ["']?0\.4/m.test(source) && !/^platform:/m.test(source)) {
     const report = api.fit([source, ...descriptionSources]);
     assert.equal(api.fitJSON([source, ...descriptionSources]) + "\n",
@@ -54,6 +59,8 @@ const canonicalSource = await readFile(canonicalPath, "utf8");
 assert.deepEqual(api.check(canonicalSource), []);
 assert.equal(api.draw(canonicalSource, "home") + "\n", runNative(["draw", "--implementation", "home", canonicalPath]));
 assert.throws(() => api.draw(canonicalSource, "missing"), /unknown implementation/);
+assert.throws(() => api.drawUntrusted(canonicalSource), /marks no part untrusted/);
+assert(untrustedViews > 0, "no example marks a part untrusted");
 assert.throws(() => api.fit([canonicalSource, ...descriptionSources], "missing"), /unknown implementation/);
 assert.equal(api.fitJSON([canonicalSource], "home") + "\n",
   runNative(["fit", "--json", "--implementation", "home", canonicalPath]), "fit without descriptions");
@@ -119,7 +126,7 @@ const fitPaths = [
 const fitSources = await Promise.all(fitPaths.map((path) => readFile(new URL(`../${path}`, import.meta.url), "utf8")));
 assert.equal(api.fitJSON(fitSources) + "\n", runNative(["fit", "--json", ...fitPaths]), "fit JSON");
 
-console.log(`Node wasm parity: ${passed} examples passed (check, warnings, summary, Mermaid); ${placements} implementations; invalid check messages and fit passed`);
+console.log(`Node wasm parity: ${passed} examples passed (check, warnings, summary, Mermaid); ${placements} implementations; ${untrustedViews} untrusted views; invalid check messages and fit passed`);
 
 async function yamlFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });

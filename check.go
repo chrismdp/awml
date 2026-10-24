@@ -32,11 +32,11 @@ func (m mistakeList) messages() []string {
 // follow those of the file's own fields.
 func checkDoc(doc any) (mistakeList, bool) { return checkView(doc, false, "") }
 
-// checkView checks a document as checkDoc does. projected is whether it's a 0.4 or 0.5 file's
+// checkView checks a document as checkDoc does. projected is whether it's a 0.4, 0.5 or 0.6 file's
 // platform view, whose fields the file's own checks have already held under the names the file
 // uses, so they aren't reported again as a group's or a part's. format is the version of the file
-// a view was projected from, and "" for a legacy view. In a 0.5 file, a block may name a
-// registered platform.
+// a view was projected from, and "" for a legacy view. From 0.5, a block may name a registered
+// platform, and in a 0.6 file a part may be marked untrusted or cleans.
 func checkView(doc any, projected bool, format string) (mistakeList, bool) {
 	file, ok := doc.(*Map)
 	if !ok {
@@ -52,7 +52,7 @@ func checkView(doc any, projected bool, format string) (mistakeList, bool) {
 	fileVersion := show(file.get("awml"))
 	checkFields := func(what, name string, item *Map) {
 		if !projected {
-			fields(what, name, item, fileVersion, &errors)
+			fields(what, name, item, fileVersion, format, &errors)
 		}
 	}
 	checkFields("file", "the file", file)
@@ -133,9 +133,9 @@ func checkView(doc any, projected bool, format string) (mistakeList, bool) {
 					errors.add("platform.blocks-only", name+" has a platform, but only a group in the platform view takes one")
 				} else if s, ok := g.get("platform").(string); !ok {
 					errors.add("values.text", fmt.Sprintf("%s: YAML read its platform as %s, not text: put it in quotes", name, show(g.get("platform"))))
-				} else if format == "0.5" && !companyID.MatchString(s) && !registeredPlatform.MatchString(s) {
+				} else if since05(format) && !companyID.MatchString(s) && !registeredPlatform.MatchString(s) {
 					errors.add("ids.written", fmt.Sprintf(`%s: platform "%s" must be a company id, or owner/platforms/slug for a registered platform`, name, s))
-				} else if format != "0.5" && !companyID.MatchString(s) {
+				} else if !since05(format) && !companyID.MatchString(s) {
 					errors.add("ids.written", fmt.Sprintf(`%s: platform "%s" must be a company id`, name, s))
 				}
 			}
@@ -166,9 +166,12 @@ func checkView(doc any, projected bool, format string) (mistakeList, bool) {
 		checkFields("part", name, p)
 		if p.has("kind") {
 			// A standing approval is a part only from 0.5.
-			if k, ok := p.get("kind").(string); !ok || shapes[k] == "" || k == "approval" && format != "0.5" {
+			if k, ok := p.get("kind").(string); !ok || shapes[k] == "" || k == "approval" && !since05(format) {
 				errors.add("kinds.known", fmt.Sprintf(`%s has unknown kind "%s"`, name, show(p.get("kind"))))
 			}
+		}
+		if format == "0.6" && !projected {
+			errors = append(errors, marks(name, p)...)
 		}
 		if in := p.get("in"); in != nil && !groupIDs[keyOf(in)] {
 			errors.add("references.known", fmt.Sprintf(`%s is in unknown group "%s"`, name, show(in)))
@@ -238,7 +241,7 @@ func checkView(doc any, projected bool, format string) (mistakeList, bool) {
 		}
 	}
 	errors = append(errors, operations(parts, lines)...)
-	if format == "0.5" && file.get("view") == "security" {
+	if since05(format) && file.get("view") == "security" {
 		errors = append(errors, tiers(parts, lines)...)
 	}
 	if file.get("view") == "security" {
@@ -567,11 +570,22 @@ var textFields = map[string]bool{"title": true, "view": true, "id": true, "label
 // Mermaid reads anything else in an id as part of the syntax around it.
 var id = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`)
 
+// The fields a 0.6 file adds.
+var fields06 = map[string][]string{
+	"part": {"untrusted", "cleans"},
+}
+
 // fields reports what an item lacks, what it has that it shouldn't, and what YAML didn't read as text.
-func fields(what, name string, item *Map, version string, errors *mistakeList) {
+// version is the view's own, and format the version of the file it was projected from.
+func fields(what, name string, item *Map, version, format string, errors *mistakeList) {
 	need, may := setOf(fieldSets[what][0]), setOf(fieldSets[what][1])
 	if version == "0.3" {
 		for _, field := range fields03[what] {
+			may[field] = true
+		}
+	}
+	if format == "0.6" {
+		for _, field := range fields06[what] {
 			may[field] = true
 		}
 	}

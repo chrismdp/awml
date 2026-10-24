@@ -47,7 +47,7 @@ Some judgements need care:
 
 Write the design first, then add its implementations in the same file. Name it after the workflow, as `standup.yaml`, and save it where the person keeps their work. In a chat with no files, give it in a `yaml` code block.
 
-Start with a comment saying what the file shows, then `awml: "0.5"`, `title`, `scopes`, `parts` and `lines`. Write the parts in the order the work flows. Quote every label. Ids are short words joined by underscores, such as `meal_plan`. Give each step an `op` where one fits, using the spec's table of operations for what each produces and must not do. A scope's `processing`, a trigger's `wait` and a context's `at` let `awml fit` judge where the design can run.
+Start with a comment saying what the file shows, then `awml: "0.6"`, `title`, `scopes`, `parts` and `lines`. Write the parts in the order the work flows. Quote every label. Ids are short words joined by underscores, such as `meal_plan`. Give each step an `op` where one fits, using the spec's table of operations for what each produces and must not do. A scope's `processing`, a trigger's `wait` and a context's `at` let `awml fit` judge where the design can run. Mark a trigger, connector or context that takes in text anyone can write `untrusted: true`, and a code step that passes on only what's safe from it `cleans: true`, as the spec's "Untrusted text" says.
 
 Add `implementations` as a map of ids to entries with a `label` and `blocks`. Each block has `id`, `label` and `parts`, a list of design part ids; it may have `platform`, the id of its platform description, and `in`, its parent block. Every part except a trigger or comment needs exactly one block per implementation. Keep the design's parts and lines once. An implementation may add `comments`, each with `id`, `label`, `in`, its block, and `ties`, the design part ids it explains. Scope, part, block and comment ids must be unique across the file.
 
@@ -96,6 +96,7 @@ In the security view, `awml check` also reports publishing drawn as routing: a `
 
 - `awml draw standup.yaml` prints the file's Mermaid, which needs Mermaid 11.4.1 or later. Where the host renders Mermaid, show it in a `mermaid` code block.
 - `awml draw --implementation ID standup.yaml` prints that implementation's platform view.
+- `awml draw --untrusted standup.yaml` prints the untrusted view, for a file that marks a part untrusted.
 - `awml page standup.yaml -o standup.html` writes one standalone HTML page with the security view and every implementation, to share or open in a browser.
 - For an SVG, save the Mermaid to `standup.mmd` and run `npx -y @mermaid-js/mermaid-cli@11.4.1 -b white -i standup.mmd -o standup.svg`, which needs Node.
 

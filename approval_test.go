@@ -186,10 +186,10 @@ func TestTheTierChecksApplyOnlyTo05Workflows(t *testing.T) {
 			t.Errorf("%s gave %s with %+v", id, got.Result, got.Mistakes)
 		}
 	}
-	old := strings.Replace(soundWorkflow, `awml: "0.5"`, `awml: "0.4"`, 1)
+	old := strings.Replace(soundWorkflow, `awml: "0.6"`, `awml: "0.4"`, 1)
 	report = CheckSources("dev", []Source{source("dinners.yaml", old)})
 	for _, id := range []string{"tiers.written", "tiers.shape", "approvals.listed"} {
-		if got := checkResult(t, report, id); got.Result != "skipped" || got.SkippedBecause != "no file given is a 0.5 workflow" {
+		if got := checkResult(t, report, id); got.Result != "skipped" || got.SkippedBecause != "no file given is a 0.5 or 0.6 workflow" {
 			t.Errorf("%s gave %s because %q", id, got.Result, got.SkippedBecause)
 		}
 	}

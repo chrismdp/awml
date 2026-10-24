@@ -4,7 +4,7 @@ Use this only where `awml draw` can't run, as in a chat with no shell. It gives 
 
 Read `examples/dinners.yaml` beside `examples/dinners.mmd` for its security view and `examples/dinners-home.mmd` for its home implementation. Copy their form exactly.
 
-For the security view, use `scopes` as groups and each part's `in` as its group. For a platform view, use the chosen implementation's blocks as groups. Replace each part's scope with the block whose `parts` lists it, leaving unplaced triggers and design comments without a group. Keep the design's part and line order. Append implementation comments as comment parts in their blocks, then append their `tie` lines in comment and target order. The steps below work on these groups, parts and lines.
+For the security view, use `scopes` as groups and each part's `in` as its group. The untrusted view, for a file that marks a part `untrusted: true`, uses the same groups, and section 5 gives what it adds. For a platform view, use the chosen implementation's blocks as groups. Replace each part's scope with the block whose `parts` lists it, leaving unplaced triggers and design comments without a group. Keep the design's part and line order. Append implementation comments as comment parts in their blocks, then append their `tie` lines in comment and target order. The steps below work on these groups, parts and lines.
 
 ## 1. The header
 
@@ -50,6 +50,8 @@ A part is its id followed straight away by its node, with the label in place of 
 In every label, of a part, a group or a line, write each ASCII punctuation mark as its decimal Mermaid entity: `@` as `#64;`, `.` as `#46;`, `"` as `#34;`, and so on. Leave letters, numbers, spaces and non-ASCII characters as written. This stops Mermaid reading email addresses, web addresses, lists or other Markdown instead of literal label text. A fork shows no label.
 
 The label of a step, a review or a standing approval starts with a line of its own saying who decides it, `<small style='color:rgb(61,67,79)'>WHO</small><br>`, and then the label. `WHO` is 🤖 for `ai`, ⚙️ for `code` and 👤 for `person`. For a step with an `op`, add its emoji and its name, so an AI draft is `<small style='color:rgb(61,67,79)'>🤖 ✏️ draft</small><br>`. For a review, `WHO` is `👤 ✅ review`, and for a standing approval, `👤 📜 standing approval`.
+
+In every view, a part with `untrusted: true` has a space and ⚠️ after its label, so an order form is `form(["An order on the website#39;s form ⚠️"])`.
 
 | Emoji | `op` |
 |---|---|
@@ -121,3 +123,19 @@ Last, style the lines. Count every line from 0 in the file's order, hidden lines
 3. For a backwards `start`, `data`, `publish` or `refused` line, `marker-end:none`. This hides the spare head and leaves the head pointing at the real `to` part.
 
 A line with none of these has no style. Lines with the same style share one line, `  linkStyle 4,7 STYLE` with their numbers, and these lines come in the order of the first line each one styles. So a backwards red line and a red line are `  linkStyle 4 stroke:#d0342c,stroke-width:2.5px,color:#b0271f,marker-end:none` and then `  linkStyle 7 stroke:#d0342c,stroke-width:2.5px,color:#b0271f`.
+
+## 5. The untrusted view
+
+The untrusted view is the security view, with three changes. First find where the text of each part marked `untrusted: true` reaches. It reaches that part, and from any part it reaches it goes along each `start`, `data` or `publish` line without `breaks: true` to the part at the other end. A `review`, a `person` step or a `code` step with `cleans: true` stops it: the text goes no further than that part, and the part keeps its own class.
+
+1. Each part that stops the text has a space and 🛡️ after its label, after any ⚠️.
+2. After the ten `classDef` lines, add these two, unchanged:
+
+   ```
+     classDef taint fill:#ead9f5,stroke:#7b3fa0,color:#16171b
+     classDef taintout fill:#f9cdc7,stroke:#d0342c,stroke-width:2.5px,color:#16171b
+   ```
+
+3. A reached `outside` part takes the class `taintout`, and any other reached part the class `taint`, in place of its own. Write the class lines in the order `trig`, `ctx`, `con`, `surf`, `out`, `ai`, `code`, `person`, `uml`, `gap`, `taint`, `taintout`.
+
+Every group keeps the security view's style.
