@@ -98,8 +98,8 @@ func TestUntrustedTextSpreadsAlongEveryLineThatLeadsOnUntilSomethingStopsIt(t *t
 	}
 }
 
-func TestARedLineOrARefusedReadCarriesNoUntrustedText(t *testing.T) {
-	src := strings.Replace(orderForm, "{ from: orders, to: plan, kind: data }", "{ from: orders, to: plan, kind: data, breaks: true, label: \"read by the live system\" }\n  - { from: orders, to: tag, kind: refused }", 1)
+func TestARefusedReadCarriesNoUntrustedText(t *testing.T) {
+	src := strings.Replace(orderForm, "{ from: orders, to: plan, kind: data }", "{ from: orders, to: plan, kind: refused }\n  - { from: orders, to: tag, kind: refused }", 1)
 	got := Summarise(parsed(t, src)).Untrusted[0]
 	if want := []string{"Read the order", "Keep only the order number and quantity"}; !reflect.DeepEqual(got.Steps, want) {
 		t.Errorf("steps = %q, want %q", got.Steps, want)

@@ -116,6 +116,22 @@ assert.equal(
   "warning: check messages",
 );
 
+const redPath = new URL("testdata/red-line.yaml", import.meta.url).pathname;
+const redRelative = redPath.slice(new URL("../", import.meta.url).pathname.length);
+const redSource = await readFile(redPath, "utf8");
+assert.equal([
+  ...api.warnings(redSource).map((message) => `${redRelative}: warning: ${message}\n`),
+  ...api.check(redSource).map((message) => `${redRelative}: ${message}\n`),
+].join(""), runNative(["check", redRelative], 1), "red line: check messages");
+assert.deepEqual(api.unsound(redSource), []);
+assert.deepEqual(api.unsound(badSource), api.check(badSource));
+assert.equal(api.draw(redSource) + "\n", runNative(["draw", redRelative]), "red line: Mermaid");
+assert.match(api.draw(redSource), /linkStyle 1 stroke:#d0342c/);
+assert.equal(api.draw(redSource, "home") + "\n", runNative(["draw", "--implementation", "home", redRelative]), "red line: home Mermaid");
+assert.equal(api.drawUntrusted(redSource) + "\n", runNative(["draw", "--untrusted", redRelative]), "red line: untrusted Mermaid");
+assert.equal(api.summaryJSON(redSource) + "\n", runNative(["summary", "--json", redRelative]), "red line: summary JSON");
+assert.equal(api.summary(redSource).redLines, 1);
+
 const fitPaths = [
   "examples/client-email.yaml",
   "examples/platforms/cowork-mac-mini.yaml",

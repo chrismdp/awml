@@ -90,8 +90,9 @@ func TestASoundWorkflowPassesEveryCheckThatAppliesToIt(t *testing.T) {
 	}
 	for _, check := range report.Checks {
 		want := "pass"
-		// From 0.6 a data line that leaves its scope is a publish, so lines.data-narrows doesn't apply.
-		if strings.HasPrefix(check.ID, "description.") || strings.HasPrefix(check.ID, "views.") || check.ID == "lines.data-narrows" {
+		// From 0.6 a data line that leaves its scope is a publish, so lines.data-narrows doesn't apply,
+		// and a 0.6 workflow has no breaks.
+		if strings.HasPrefix(check.ID, "description.") || strings.HasPrefix(check.ID, "views.") || check.ID == "lines.data-narrows" || check.ID == "lines.breaks" {
 			want = "skipped"
 		}
 		if check.Result != want || len(check.Mistakes) != 0 {
@@ -178,6 +179,17 @@ parts:
 	}
 	if !reflect.DeepEqual(report.Files, []CheckedFile{{File: "old.yaml", View: "security"}}) {
 		t.Errorf("files are %+v", report.Files)
+	}
+}
+
+func TestOnlyAFileBefore06HasBreaks(t *testing.T) {
+	report := CheckSources("dev", []Source{source("live.yaml", fridaySent)})
+	if breaks := checkResult(t, report, "lines.breaks"); breaks.Result != "skipped" || breaks.SkippedBecause != "no file given is a workflow or view before 0.6" {
+		t.Errorf("lines.breaks gave %s because %q", breaks.Result, breaks.SkippedBecause)
+	}
+	report = CheckSources("dev", []Source{source("old.yaml", good)})
+	if breaks := checkResult(t, report, "lines.breaks"); breaks.Result != "pass" {
+		t.Errorf("lines.breaks gave %s", breaks.Result)
 	}
 }
 

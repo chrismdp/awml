@@ -78,6 +78,34 @@ func TestDrawRefusesAFileWithMistakes(t *testing.T) {
 	}
 }
 
+// A 0.6 drawing of a live system, whose one line into a Block action breaks a rule.
+const live = `awml: "0.6"
+title: Old files
+parts:
+  - { id: tidy, kind: code, op: do, label: "Tidy the old files" }
+  - { id: wipe, kind: outside, label: "Delete a file: Block" }
+lines:
+  - { from: tidy, to: wipe, kind: start, label: "one night in June" }
+`
+
+func TestALineThatBreaksARuleFailsTheCheckButIsDrawnRed(t *testing.T) {
+	path := write(t, "live.yaml", live)
+	message := `outside action "wipe" is Block, but part "tidy" leads to it: a blocked action is never taken, so a line into it is red`
+	if r := awmlRun("check", path); r != (result{1, path + ": " + message + "\n", ""}) {
+		t.Errorf("check gave %+v", r)
+	}
+	if r := awmlRun("draw", path); r.code != 0 || r.stdout != awml.Draw(doc(t, live))+"\n" || !strings.Contains(r.stdout, "linkStyle 0 stroke:#d0342c") {
+		t.Errorf("draw gave %+v", r)
+	}
+	if r := awmlRun("summary", "--json", path); r.code != 0 || !strings.Contains(r.stdout, `"redLines":1`) {
+		t.Errorf("summary gave %+v", r)
+	}
+	out := filepath.Join(t.TempDir(), "out.html")
+	if r := awmlRun("page", path, "-o", out); r.code != 0 {
+		t.Errorf("page gave %+v", r)
+	}
+}
+
 func TestCheckPassesASoundFile(t *testing.T) {
 	f := write(t, "good.yaml", good)
 	if r := awmlRun("check", f); r != (result{0, f + ": ok\n", ""}) {

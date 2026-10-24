@@ -156,11 +156,15 @@ func TestTermsThatAllowCertainOperationsAreNamed(t *testing.T) {
 }
 
 // A red line draws what a live system did, so it's no publish of the design.
+// A 0.6 line that still has breaks gets only the field mistake, and is skipped as before, so it
+// isn't a publish either.
 func TestARedDataLineIsNoPublish(t *testing.T) {
-	labels(t, publishingLabels(t,
-		"  - { id: bakery, label: \"bakery: Jo\" }\n  - { id: pottery, label: \"pottery: Jo, Kit\" }\n",
-		"  - { id: notes, kind: context, label: Notes, in: bakery }\n  - { id: shop, kind: context, label: Shop, in: pottery }\n",
-		"  - { from: notes, to: shop, kind: data, breaks: true }\n"))
+	doc := parsed(t, "awml: \"0.6\"\ntitle: T\nscopes:\n"+
+		"  - { id: bakery, label: \"bakery: Jo\" }\n  - { id: pottery, label: \"pottery: Jo, Kit\" }\n"+
+		"parts:\n  - { id: notes, kind: context, label: Notes, in: bakery }\n  - { id: shop, kind: context, label: Shop, in: pottery }\n"+
+		"lines:\n  - { from: notes, to: shop, kind: data, breaks: true }\n")
+	mistakes(t, doc, `the line from "notes" to "shop" has breaks, but from 0.6 awml check works out which lines break a rule, and awml draw draws them red`)
+	labels(t, Summarise(doc).PublishingLines.Labels)
 }
 
 func TestTheScopeCheckDoesntApplyTo06Workflows(t *testing.T) {
