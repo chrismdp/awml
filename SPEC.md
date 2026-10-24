@@ -70,6 +70,8 @@ In the security view, each scope is a dashed box, labelled with its name and mem
 
 A **connector** is access to one outside service through one credential: a person's, one an outside party lends, or the system's own. The design names whose access each one is, which service it reaches and what it may do, such as read, post or carry an outside action. Its label says whose it is, such as `Owen's supermarket account`.
 
+Lines to a connector follow the data. A read comes out of the connector, and a write, or an outside action carried out through it, goes in. So when a bakery places an order through its supplier account, the line runs from `Place the order: Ask` into the account's connector.
+
 A person's connector reaches only what that person can, and what it sends speaks in their name, so they, or a role they choose, approve what it sends. It stops when they leave, so work that must outlive them shouldn't rest on one. The system's own connector, such as a service account, often reaches more than any one person, so each item it brings in takes the scope of who could see it at its source, never everyone's.
 
 ## The platform view: where each part runs
