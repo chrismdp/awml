@@ -13,7 +13,7 @@ func TestSummariseEveryExample(t *testing.T) {
 	pubGrandma := PublishingSummary{Count: 1, Labels: []string{"standing rule: pickups to Grandma"}}
 	pubChecklist := PublishingSummary{Count: 1, Labels: []string{"the checklist, with no names in it"}}
 	cases := map[string]Summary{
-		"examples/client-email.yaml":              {Steps: StepCounts{AI: 3, Code: 2, Person: 1}, Operations: map[string]int{"bring-in": 1, "sort": 2, "learn": 1, "draft": 1, "do": 1}, OutsideActions: TierCounts{Ask: 1}, Triggers: 1, Contexts: 3, Connectors: 1, Scopes: 2, Platforms: 4, PublishingLines: pubClient},
+		"examples/client-email.yaml":              {Steps: StepCounts{AI: 3, Code: 3, Person: 1}, Operations: map[string]int{"bring-in": 1, "sort": 2, "learn": 1, "draft": 1, "do": 2}, OutsideActions: TierCounts{Allow: 1, Ask: 1}, Triggers: 1, Contexts: 2, Connectors: 1, Scopes: 2, Platforms: 4, PublishingLines: pubClient},
 		"examples/dinners.yaml":                   {Steps: StepCounts{AI: 1, Code: 3}, Operations: map[string]int{"bring-in": 1, "do": 1, "check": 1}, OutsideActions: TierCounts{Allow: 1, Ask: 1}, Triggers: 3, Reviews: 1, Contexts: 3, Connectors: 3, Surfaces: 3, Scopes: 3, Platforms: 6, PublishingLines: pubDinners},
 		"examples/legend.yaml":                    {Steps: StepCounts{AI: 1, Code: 1, Person: 1}, OutsideActions: TierCounts{Ask: 1}, Triggers: 1, Reviews: 1, Contexts: 1, Connectors: 1, Surfaces: 1},
 		"examples/question.yaml":                  {Steps: StepCounts{AI: 1, Code: 1}, Operations: map[string]int{"answer": 2}, Triggers: 1, Contexts: 3, Surfaces: 1, Scopes: 3, RefusedReads: 1},
