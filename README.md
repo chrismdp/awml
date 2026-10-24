@@ -121,7 +121,7 @@ If you already run AI routines, such as scheduled tasks, bots and automations, [
 Take a fictional consultant who answers clients' email:
 
 - **Operating model:** every client engagement is a project, and anything that goes out in the consultant's name waits for the consultant's yes.
-- **Workflow:** each weekday morning the inbox is brought in, and a client's email updates the engagement's project. A reply is drafted, and the consultant edits it and sends it.
+- **Workflow:** each weekday morning the inbox is brought in, and a client's email updates the engagement's project. A reply is drafted and left in the consultant's drafts folder, and the consultant edits it and sends it.
 - **Platforms:** Claude Cowork on a Mac mini, Markdown notes synced to the laptop and the Mac mini, Gmail, and the consultant's phone. Any of these can change.
 
 The operating model has little to do with AI: it's how work is organised, whoever or whatever does it. The platforms each work with AI in their own way, slowly converging but with no standard yet, and much of what they run isn't AI at all: code that sorts receipts needs no model. A platform's incentive is lock-in, so the description of the work tends to end up in the platform's own format, where only it can read it. AWML keeps the workflow in a plain file of its own, so the platforms can change around it.
@@ -311,6 +311,8 @@ Every outside action has a **tier**.
 
 The tier follows from the drawing's shape: wherever a tier says a person decides, the drawing shows them. `awml check` reports an Ask action with no person on one of its ways in, an Allow action behind a review or a standing approval, and a line that isn't red into a Block action.
 
+A draft may be a context or an Allow outside action. A draft the workflow keeps for itself and reads back, such as a file it revises, is a context. A draft a `do` step leaves in an outside service for a person to pick up, such as the drafts folder of their mailbox, is an Allow outside action: the `draft` step writes the text, and the `do` step saves it there.
+
 A **yes** is an approver's yes to one action and its exact content, shown with what it's for: the work it serves, why now, what started it and what it drew on. A yes to "send the reply" in general is no yes at all. Any change to the content after the yes, a fix included, needs a new yes.
 
 A person's own `do` step is their yes: when the consultant edits the reply and sends it, they've said yes to its exact content. So an Ask action reached straight from one needs no review in front of it.
@@ -447,7 +449,7 @@ For example, the client email workflow can run on the scheduled scripts platform
 
 ```text
 $ awml fit examples/client-email.yaml examples/platforms/cowork-mac-mini.yaml examples/platforms/scripts-mac-mini.yaml examples/platforms/codex-laptop.yaml examples/platforms/worker.yaml
-cowork-mac-mini   no: bring and rules are code steps, which anthropic's agent would carry out
+cowork-mac-mini   no: bring, rules and save are code steps, which anthropic's agent would carry out
 scripts-mac-mini  fits: choose, learn and draft may use anthropic
 codex-laptop      no: weekdays may wait PT2H, but the platform may be off for P14D
                   no: openai's agents run here, and business doesn't allow openai

@@ -17,6 +17,7 @@ flowchart TB
     choose("<small style='color:rgb(61,67,79)'>🤖 🗂️ sort</small><br>Choose the engagement the email belongs to")
     learn("<small style='color:rgb(61,67,79)'>🤖 🧠 learn</small><br>Update the engagement#39;s project with what the email says")
     draft("<small style='color:rgb(61,67,79)'>🤖 ✏️ draft</small><br>Draft a reply")
+    save("<small style='color:rgb(61,67,79)'>⚙️ 🛠️ do</small><br>Save the reply in the mailbox")
   end
   subgraph files["Synced Markdown notes"]
     direction TB
@@ -30,7 +31,7 @@ flowchart TB
   subgraph gmail["Gmail"]
     direction TB
     mailbox{{"The consultant#39;s mailbox"}}
-    drafts[("Drafts")]
+    saved>"Leave the reply in the drafts folder#58; Allow"]
     send>"Send the reply#58; Ask"]
   end
 
@@ -42,8 +43,9 @@ flowchart TB
   choose --> learn
   learn -.-> project
   project -.-> draft
-  draft -.-> drafts
-  drafts ==>|"the consultant takes the reply"| edit
+  draft --> save
+  save --> saved
+  saved ==>|"the consultant takes the reply"| edit
   edit --> send
   mailbox <-.-> send
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
@@ -57,15 +59,14 @@ flowchart TB
   classDef uml fill:#16171b,stroke:#16171b,color:#16171b
   classDef gap fill:#ffffff,stroke:#8a93a3,stroke-dasharray:4 3,color:#6b7280
   class weekdays trig
-  class engagements,project,drafts ctx
+  class engagements,project ctx
   class mailbox con
-  class send out
+  class saved,send out
   class choose,learn,draft ai
-  class bring,rules code
+  class bring,rules,save code
   class edit person
   style cowork fill:#e3ebfa,stroke:#b9c8e8,color:#16171b
   style files fill:#fbe9df,stroke:#ecc7b2,color:#16171b
   style phone fill:#efe6fa,stroke:#d3c2ea,color:#16171b
   style gmail fill:#fbf3d9,stroke:#e8d9a6,color:#16171b
-  linkStyle 9 stroke-dasharray:3
-  linkStyle 11 marker-end:none
+  linkStyle 12 marker-end:none

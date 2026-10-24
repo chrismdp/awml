@@ -144,7 +144,7 @@ A scope without `processing`, or a trigger without `wait`, is a gap, and `awml f
 
 ```text
 $ awml fit client-email.yaml cowork-mac-mini.yaml scripts-mac-mini.yaml codex-laptop.yaml worker.yaml
-cowork-mac-mini   no: bring and rules are code steps, which anthropic's agent would carry out
+cowork-mac-mini   no: bring, rules and save are code steps, which anthropic's agent would carry out
 scripts-mac-mini  fits: choose, learn and draft may use anthropic
 codex-laptop      no: weekdays may wait PT2H, but the platform may be off for P14D
                   no: openai's agents run here, and business doesn't allow openai
@@ -163,6 +163,8 @@ Each outside action has a **tier**, which follows the last colon in its label, a
 | **Block** | Never, whatever anyone says | Never a line. A flag with nothing leading to it may name it, and a line into one is red |
 
 The tier follows from the drawing's shape: wherever a tier says a person decides, the drawing shows them. A way to an action is a line that leads to it, followed back through any fork to the part it comes from. `awml check` reports an Ask action that any part but a review, a standing approval or a person's own step leads to, an Allow action with a review or standing approval in front of it, and any line but a red one into a Block action.
+
+A draft may be a context or an Allow outside action. A draft the workflow keeps for itself and reads back, such as a file it revises, is a context. A draft a `do` step leaves in an outside service for a person to pick up, such as the drafts folder of their mailbox, is an Allow outside action: the `draft` step writes the text, and the `do` step saves it there.
 
 A **yes** is an approver's yes to one action and its exact content, shown with what it is for: the work it serves, why now, what started it and what it drew on. Any change to the content after the yes, a fix included, needs a new yes. An **approver** is a role, such as the approver of sends, held by one or more people. A rare, high-stakes kind of action may need a yes from two approvers, two people in two roles, to the same content, drawn as two reviews in a row, and kept for few kinds.
 

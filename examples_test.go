@@ -176,7 +176,7 @@ func TestClientEmailFitMatchesTheSpecExample(t *testing.T) {
 	if len(gaps) != 0 {
 		t.Fatalf("fit gaps: %v", gaps)
 	}
-	want := `cowork-mac-mini   no: bring and rules are code steps, which anthropic's agent would carry out
+	want := `cowork-mac-mini   no: bring, rules and save are code steps, which anthropic's agent would carry out
 scripts-mac-mini  fits: choose, learn and draft may use anthropic
 codex-laptop      no: weekdays may wait PT2H, but the platform may be off for P14D
                   no: openai's agents run here, and business doesn't allow openai
