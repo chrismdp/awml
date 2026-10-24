@@ -193,7 +193,7 @@ A `do` step should be code acting on what an earlier step decided. An AI or a ru
 A drawing can show some of these limits, and `awml check` holds each step to those:
 
 - **Only a `do` step leads to an outside action**, by a line straight to it or through a review, a standing approval or a fork. A draft goes to a `do` step, which asks to send it, and a person's yes releases the send, or to a person's own `do` step, which is their yes. A draft step never leads to an outside action, even through a review.
-- **An `answer` step and a `check` step never write to a context.** They read contexts, and speak on surfaces.
+- **An `answer` step and a `check` step never write to a context.** They read contexts, and speak on surfaces. Within one run, a check's verdict travels on its lines out as the branch taken, such as `[all pass]` or `[a check fails]`. For a later run, a step after the check writes the verdict as ordinary state, which that run reads as a context.
 
 A line leads somewhere when it starts something, moves data or publishes. A hidden line, a refused read and a tie lead nowhere. The other limits, such as deciding for a person or making up an aim, are about what happens inside a step, which no drawing shows, so its readers judge those.
 

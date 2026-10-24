@@ -385,6 +385,12 @@ func TestAnAnswerOrACheckNeverWritesToAContext(t *testing.T) {
 	mistakes(t, parsed(t, question+"  - { from: word, to: notes, kind: refused }\n"))
 }
 
+func TestACheckPassesItsVerdictOnAndAStepAfterItKeepsIt(t *testing.T) {
+	src := strings.Replace(question, "  - { id: chat,", "  - { id: mark, kind: code, op: do, label: Mark the bills checked }\n  - { id: chat,", 1) +
+		"  - { from: match, to: mark, kind: start, label: \"[all paid]\" }\n  - { from: mark, to: notes, kind: data }\n"
+	mistakes(t, parsed(t, src))
+}
+
 const scoped = `
 awml: "0.2"
 title: The family's dinners
