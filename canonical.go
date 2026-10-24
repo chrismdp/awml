@@ -47,6 +47,9 @@ func View(doc *Map, implementation string) (*Map, error) {
 	if doc.has("scopes") {
 		out.set("groups", doc.get("scopes"))
 	}
+	if doc.has("lines") {
+		out.set("lines", publishedLines(doc))
+	}
 	if implementation == "" {
 		return out, nil
 	}
@@ -76,7 +79,7 @@ func View(doc *Map, implementation string) (*Map, error) {
 		}
 		parts = append(parts, p)
 	}
-	for _, line := range items(doc, "lines") {
+	for _, line := range items(out, "lines") {
 		lines = append(lines, line)
 	}
 	for _, comment := range items(impl, "comments") {
@@ -113,6 +116,13 @@ func checkCanonical(file *Map) (mistakeList, bool) {
 	format := str(file, "awml")
 	designErrors, stopped := checkView(clean, false, format)
 	errors = appendUnique(errors, designErrors...)
+	if format == "0.6" {
+		for n, line := range soundMaps(file.get("lines")) {
+			if line.get("kind") == "publish" {
+				errors.add("kinds.known", fmt.Sprintf(`%s has unknown kind "publish": write it as data, since a data line publishes whenever its scopes make it one`, lineName(n, line)))
+			}
+		}
+	}
 	if !file.has("implementations") {
 		return errors, stopped
 	}

@@ -8,10 +8,10 @@ import (
 )
 
 func TestSummariseEveryExample(t *testing.T) {
-	pubClient := PublishingSummary{Count: 2, Labels: []string{"standing rule: a client's email", "the consultant takes the reply"}}
-	pubDinners := PublishingSummary{Count: 1, Labels: []string{"standing rule: dinners to carers"}}
-	pubGrandma := PublishingSummary{Count: 1, Labels: []string{"standing rule: pickups to Grandma"}}
-	pubChecklist := PublishingSummary{Count: 1, Labels: []string{"the checklist, with no names in it"}}
+	pubClient := PublishingSummary{Count: 2, Labels: []string{"standing rule: a client's email · adds an associate", "the consultant takes the reply · loosens anthropic only to any company"}}
+	pubDinners := PublishingSummary{Count: 1, Labels: []string{"standing rule: dinners to carers · adds June and Beth"}}
+	pubGrandma := PublishingSummary{Count: 1, Labels: []string{"standing rule: pickups to Grandma · adds Grandma Rose"}}
+	pubChecklist := PublishingSummary{Count: 1, Labels: []string{"the checklist, with no names in it · adds Kit"}}
 	cases := map[string]Summary{
 		"examples/client-email.yaml":              {Steps: StepCounts{AI: 3, Code: 3, Person: 1}, Operations: map[string]int{"bring-in": 1, "sort": 2, "learn": 1, "draft": 1, "do": 2}, OutsideActions: TierCounts{Allow: 1, Ask: 1}, Triggers: 1, Contexts: 2, Connectors: 1, Scopes: 2, Platforms: 4, PublishingLines: pubClient},
 		"examples/dinners.yaml":                   {Steps: StepCounts{AI: 1, Code: 3}, Operations: map[string]int{"bring-in": 1, "do": 1, "check": 1}, OutsideActions: TierCounts{Allow: 1, Ask: 1}, Triggers: 3, Reviews: 1, Contexts: 3, Connectors: 3, Surfaces: 3, Scopes: 3, Platforms: 6, PublishingLines: pubDinners},
@@ -60,7 +60,7 @@ func TestSummariseDeduplicatesTwoViewsOfOneWorkflow(t *testing.T) {
 		Steps: StepCounts{AI: 1, Code: 3}, Operations: map[string]int{"bring-in": 1, "do": 1, "check": 1},
 		OutsideActions: TierCounts{Allow: 1, Ask: 1}, Triggers: 3, Reviews: 1, Contexts: 3,
 		Connectors: 3, Surfaces: 3, Scopes: 3, Platforms: 6,
-		PublishingLines: PublishingSummary{Count: 1, Labels: []string{"standing rule: dinners to carers"}},
+		PublishingLines: PublishingSummary{Count: 1, Labels: []string{"standing rule: dinners to carers · adds June and Beth"}},
 		AISteps:         []string{"Plan next week's dinners"},
 		People:          []PersonSummary{{Label: "Owen's yes to the exact basket", Kind: "review"}},
 		ScopeNames:      []string{"carers", "family", "household"},

@@ -163,13 +163,12 @@ A workflow whose every step is green ⚙️ has no AI in it, even if AI helped b
 | Line | Drawn as | Means |
 |---|---|---|
 | `start` | An arrow | Starts something, as a trigger starts a step |
-| `data` | An arrow | Moves data from one part to the next |
-| `publish` | A thick arrow | Moves content into a wider scope, which is publishing |
+| `data` | An arrow, thick where it publishes | Moves data from one part to the next, and publishes where it moves content into a wider scope |
 | `refused` | A line ending in a cross | A read the design refuses |
 | `tie` | A grey dotted line | Links a comment to what it explains |
 | `hidden` | Nothing | Steers the layout only |
 
-The solid lines are the path the work takes, from the trigger through each step to the next. A line into or out of a context, a connector or a surface is dotted, since it's information moving in and out. A `publish` line is thick either way, and a `refused` line keeps its cross.
+The solid lines are the path the work takes, from the trigger through each step to the next. A line into or out of a context, a connector or a surface is dotted, since it's information moving in and out. A line that publishes is thick either way, and a `refused` line keeps its cross.
 
 A line may carry a label. Words in square brackets are a **guard**, the condition the line is taken on. A line drawn red is a finding: see [The red line](#the-red-line).
 
@@ -233,7 +232,7 @@ The consultant's email, through both lenses:
 </tr>
 </table>
 
-The security view has two scopes side by side: the consultant's private scope, and the business, which the consultant shares with an associate. Two thick lines cross between them, and each is publishing, for a different reason. A standing rule lets a client's email into the business, which adds a viewer, the associate. The consultant takes the reply back into the private scope by editing it and sending it, which loosens the terms: the business keeps client work under the engagement's confidentiality terms, and the consultant's own mailbox doesn't carry them.
+The security view has two scopes side by side: the consultant's private scope, and the business, which the consultant shares with an associate. Two thick lines cross between them, and each is publishing, for a different reason. A standing rule lets a client's email into the business, which adds a viewer, the associate. The consultant takes the reply back into the private scope by editing it and sending it, which loosens the terms: the business keeps client work under the engagement's confidentiality terms, and the consultant's own mailbox doesn't carry them. Each line's label ends with its reason: `adds an associate`, and `loosens anthropic only to any company`.
 
 The platform view spreads the same twelve parts over four platforms, with the edit on the consultant's phone. That's how most agentic work is put together today: no single tool can yet run a whole workflow, so most of us join several. Wherever the flow crosses from one platform to another, it needs the right connector in place, or someone has to copy and paste. Moving the notes into a notes service, or the scheduled task from Claude Cowork to a managed agent service, moves those parts to other blocks and changes nothing else. Swapping the model moves no part at all.
 
@@ -273,6 +272,8 @@ Content moves between scopes in only two ways.
 
 - A move **narrows** when every member of the target scope is in the source, and the target's terms are at least as strict. Narrowing is routing: it shows content to fewer people, or to the same people more carefully, so it's drawn as an ordinary line.
 - Any other move adds a viewer or loosens the terms. That's **publishing**, drawn as a thick line so you notice it first.
+
+Nobody marks a publish. A `data` line publishes whenever its scopes make it one, and the drawing adds to its label who it adds, what it loosens, or both, as in `standing rule: dinners to carers · adds June and Beth`. So a step put in the wrong scope by mistake shows up as a publish when you read the drawing.
 
 Publishing waits for a person's yes, unless a **standing rule** names that target for that kind of item. A standing rule moves only the words of people who agreed to that target, and the thick line's label names the rule and who they are, as in `co-op notes, under the bakery's rule, for customers who ticked the box`. Only the item crosses, never what lies behind it. Nothing reaches the public without a person's yes to that item, under any rule or approval.
 
@@ -453,7 +454,7 @@ awml pull family/dinners@1 -o dinners
 - `awml fit` judges the design against platform descriptions. Add `--implementation ID` to judge that placement, and `--json` for the report's JSON form. An implementation can be given without descriptions, and then each block says it has no platform or that its platform wasn't described.
 - `awml draw` prints the security view's Mermaid. Add `--implementation ID` for a platform view, or `--untrusted` for the untrusted view. It refuses a file with mistakes, and prints them instead.
 - `awml page` writes one standalone HTML page with the security view, the untrusted view if there is one, then every implementation, each with a heading. Several files appear in the order given. The page takes their shared title, or Workflows when they differ.
-- `awml summary` counts the scopes, platforms, parts and lines in one workflow. It includes platforms from every implementation and counts the design once, and lists what each untrusted part's text reaches. `--json` prints the registry's JSON form.
+- `awml summary` counts the scopes, platforms, parts and lines in one workflow, and lists every publish with what it adds or loosens. It includes platforms from every implementation and counts the design once, and lists what each untrusted part's text reaches. `--json` prints the registry's JSON form.
 - `awml convert security.yaml platform.yaml` joins a matching 0.3 or 0.2 pair into one 0.4 file, printed to standard output. It keeps the security design and turns platform groups into blocks of the `default` implementation. Add `--implementation ID` to name the implementation. YAML comments move to the top. The canonical labels, part order and triggers may change the old platform drawing.
 - `awml login` saves an API token for the registry. `awml push` checks and uploads one 0.4, 0.5 or 0.6 file in the API's workflow field. `awml pull` downloads the latest or a numbered version as `<slug>.yaml`, and `awml pull owner/platforms/slug` does the same for a published platform description. It still downloads an older pair as `security.yaml` and `platform.yaml`. The commands use `https://awml.io` unless `--registry` or `AWML_REGISTRY_URL` says otherwise. Add `--private` to the first push of a private organisation workflow.
 
@@ -505,13 +506,13 @@ implementations:
       - { id: phone, label: Family phone, parts: [chat] }
 ```
 
-- The file needs `awml`, the version `"0.6"`; `title`, the workflow's name; and `parts`. It may have `scopes`, `lines` and `implementations`. Version `"0.5"` still reads as before, with no `untrusted` or `cleans`. Version `"0.4"` reads as before too, with no standing approval, no check of its tiers and only a bare id as a block's `platform`, and versions `"0.3"` and `"0.2"` with `groups` and `view`.
+- The file needs `awml`, the version `"0.6"`; `title`, the workflow's name; and `parts`. It may have `scopes`, `lines` and `implementations`. Versions `"0.5"` and `"0.4"` still read as before, marking each publish with a `publish` line and with no `untrusted` or `cleans`, and `"0.4"` with no standing approval, no check of its tiers and only a bare id as a block's `platform`, and versions `"0.3"` and `"0.2"` with `groups` and `view`.
 - A **scope** has an `id` and a `label`, and may have `in`, the id of its parent scope, and `processing`, the companies it allows.
 - A **part** has an `id`, a `kind` and a `label`, which a fork doesn't need. Its `in` names its scope. A step may have `op`, a trigger `wait`, and a context `at`. A trigger, connector or context may have `untrusted`, and a code step `cleans`.
 - An **implementation** has an id in the `implementations` map, a `label` and `blocks`. Each block has an `id`, a `label` and `parts`, the ids it holds. It may have `in`, its parent block, and `platform`, a platform description id: a bare id for your own, or `owner/platforms/slug` for one published to the registry. Every part except a trigger or comment needs exactly one block per implementation.
 - An implementation may have **comments**, each with `id`, `label`, `in`, its block, and `ties`, a list of design part ids. These comments appear only in its platform view.
 - A **line** has `from` and `to`, the ids of two parts, and a `kind`. It may have a `label`, and `breaks: true` to draw it red.
-- The part kinds are `trigger`, `ai`, `code`, `person`, `review`, `approval`, `fork`, `context`, `connector`, `surface`, `outside` and `comment`. The line kinds are `start`, `data`, `publish`, `refused`, `tie` and `hidden`.
+- The part kinds are `trigger`, `ai`, `code`, `person`, `review`, `approval`, `fork`, `context`, `connector`, `surface`, `outside` and `comment`. The line kinds are `start`, `data`, `refused`, `tie` and `hidden`.
 - An id is letters, digits and underscores, starting with a letter, and scope, part, block and comment ids are unique across the file. Implementation ids have their own namespace.
 - Parts are drawn in the design's order, and each scope or block after the parts beside it. Unplaced triggers and design comments are drawn beside the other end of their first visible line. A `hidden` line steers the layout when Mermaid puts something in an awkward place.
 
@@ -519,7 +520,7 @@ Every id, label, kind and reference to an id is text. `awml` reads YAML 1.2, whi
 
 ### What `awml check` reports
 
-`awml check` reports structural mistakes, invalid operations, tiers that disagree with the drawing and publishing drawn as routing. It also checks each implementation's block references, nesting and placement, and its comments' ties. It warns when AI decides a `do` step, when one `do` step leads to more than one change, and when untrusted text reaches an outside action. Warnings leave the exit status alone. [`SPEC.md`](SPEC.md) gives the exact rules, including the checks for older view pairs.
+`awml check` reports structural mistakes, invalid operations and tiers that disagree with the drawing. It also checks each implementation's block references, nesting and placement, and its comments' ties. It warns when AI decides a `do` step, when one `do` step leads to more than one change, and when untrusted text reaches an outside action. Warnings leave the exit status alone. [`SPEC.md`](SPEC.md) gives the exact rules, including the checks for older view pairs.
 
 ### Examples to start from
 

@@ -1,5 +1,5 @@
 # A comment marking a gap that drawing the workflow found. The household is fictional.
-awml: "0.5"
+awml: "0.6"
 title: Bin day
 scopes:
   - { id: house, label: "house: Sam, Priya" }

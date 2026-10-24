@@ -613,6 +613,20 @@ func TestPushSendsA05Workflow(t *testing.T) {
 	}
 }
 
+func TestPushSendsA06Workflow(t *testing.T) {
+	useTemporaryHome(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		fmt.Fprint(w, `{"owner":"acme","slug":"mail","number":1,"url":"/acme/mail/v/1"}`)
+	}))
+	defer server.Close()
+	loginForTest(t, server.URL, "push-token")
+	workflow := write(t, "workflow.yaml", strings.Replace(canonicalFile, `awml: "0.4"`, `awml: "0.6"`, 1))
+	if r := awmlRun("push", "acme/mail", workflow, "--registry", server.URL); r != (result{0, "Pushed acme/mail version 1: /acme/mail/v/1\n", ""}) {
+		t.Fatalf("push gave %+v", r)
+	}
+}
+
 func TestPushRefusesLegacyOrMultipleFilesWithoutAnHTTPCall(t *testing.T) {
 	useTemporaryHome(t)
 	calls := 0

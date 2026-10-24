@@ -1,7 +1,7 @@
 # Two scopes side by side. Jo keeps the books for a bakery and runs a small pottery shop on the
 # side. The two scopes share only Jo, so neither sits inside the other, and the line between them
 # is publishing. Jo, the bakery and the shop are fictional.
-awml: "0.5"
+awml: "0.6"
 title: A checklist moves from a client to a side venture
 scopes:
   - { id: bakery, label: "bakery: Jo, Ben, Lou" }
@@ -15,5 +15,5 @@ parts:
 lines:
   - { from: invoices, to: chase, kind: data }
   - { from: checklist, to: chase, kind: data }
-  - { from: checklist, to: shop_notes, kind: publish, label: "the checklist, with no names in it" }
+  - { from: checklist, to: shop_notes, kind: data, label: "the checklist, with no names in it" }
   - { from: shop_notes, to: remind, kind: data }

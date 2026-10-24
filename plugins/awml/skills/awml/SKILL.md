@@ -63,8 +63,7 @@ Add `implementations` as a map of ids to entries with a `label` and `blocks`. Ea
 Choose each line's kind by what it does:
 
 - `start` runs from a trigger to the step it starts.
-- `data` moves content within a scope, or into a narrower one.
-- `publish` moves content into a wider scope: a box it isn't already inside, or one with looser terms. Label it with the standing rule that allows it and whose words it moves, who must have agreed to that target, as `"co-op notes, under the bakery's rule, for customers who ticked the box"`, or say what yes releases it, as `"the consultant takes the reply"`.
+- `data` moves content. Where it moves content into a wider scope, a box it isn't already inside, it publishes, and `awml draw` draws it thick and adds to its label who it adds or what it loosens. Label each publish with the standing rule that allows it and whose words it moves, who must have agreed to that target, as `"co-op notes, under the bakery's rule, for customers who ticked the box"`, or say what yes releases it, as `"the consultant takes the reply"`.
 - `refused` is a read from a narrower scope that the design refuses, with a label such as `never read here`.
 - The one line out of each review is labelled `"[yes]"`.
 - A standing approval sits between the `do` step and the actions it covers, with a `data` line to the surface where each action is listed with how to undo it.
@@ -90,7 +89,7 @@ It prints `ok` for each sound file, or one line for each mistake, naming the par
 
 If you have no shell, or `awml` can't be installed, go through `references/checking-by-hand.md` for each file instead. Then say plainly that the files were checked by hand, not by `awml check`, and that `awml check` will confirm them.
 
-In the security view, `awml check` also reports publishing drawn as routing: a `data` line into a box that isn't the source's or one inside it. It reads the boxes, not their labels, so it can't see a box drawn in the wrong place. So look at each box inside another yourself: if it adds anyone, or its terms are looser, it belongs beside the other, and a `data` line into it is really publishing. Drawn inside the business, the consultant's private scope would hide that taking the reply there loosens the terms it is kept under.
+In the security view, a `data` line into a box that isn't the source's or one inside it is a publish, which the drawing shows thick, with who it adds or what it loosens. Read each one: a publish nobody meant usually means a part is in the wrong box. The drawing reads the boxes to find each publish, so it can't see a box drawn in the wrong place. So look at each box inside another yourself: if it adds anyone, or its terms are looser, it belongs beside the other, and a `data` line into it is really publishing. Drawn inside the business, the consultant's private scope would hide that taking the reply there loosens the terms it is kept under.
 
 ## 4. Draw
 
@@ -115,7 +114,7 @@ The files stay where the person keeps their work; if they want to share the work
 ## Common mistakes
 
 - **A draft step leading to an outside action**, even through a review. `awml check` says `only a do step leads to an outside action`. Put a `do` step between the draft and the review, such as code that asks the person to send it, or make the person's own step `op: do` when they edit and send it themselves.
-- **Publishing drawn as routing.** A `data` line into a box that isn't the source's or one inside it moves content to more people or under looser terms. `awml check` says `draw it as publish, or as refused if the design refuses the read`. Make it a `publish` line, labelled with the standing rule or the yes that releases it, or a `refused` read. If the move really narrows, the target's box belongs inside the source's.
+- **A publish nobody meant.** A `data` line into a box that isn't the source's or one inside it moves content to more people or under looser terms, so the drawing shows it thick. If it's meant, label it with the standing rule or the yes that releases it. If the design refuses it, make it a `refused` read. If the move really narrows, the target's box belongs inside the source's. In a 0.6 file there is no `publish` line: `awml check` says `write it as data`.
 - **An Ask action with nobody in front of it.** `awml check` says `no person in between`. Put a review or a standing approval between the `do` step and the action, or make the person's own step take it. A standing approval only named in the action's label or a comment doesn't count.
 - **A review used as a decision.** A review has one way out, labelled `"[yes]"`. Draw no `[no]` line and no second branch, since a review isn't a decision node. If a person changes the content, that is their own step, not a review.
 - **An `answer` or `check` step writing to a context.** They read contexts and speak on surfaces. A step that files what it found is a different step, such as `learn` or `sort`.

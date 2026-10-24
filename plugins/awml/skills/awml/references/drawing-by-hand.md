@@ -68,6 +68,15 @@ In every view, a part with `untrusted: true` has a space and ⚠️ after its la
 
 ## 3. The lines
 
+First find each publish in the security view's scopes. Skip any line with `breaks: true`, and any line that isn't `data`. For each other line, find the group of the part at each end, as in step 2. A part in no group sits outside every group, and counts as wider than any of them. If the target's group is the source's group, or sits inside it, following its `in` upwards, the line narrows and stays `data`. Otherwise it publishes: draw it as `publish`, in the security view and in every platform view, and add to its label, after ` · `, what it does:
+
+- who it adds: the people the target's scope holds that the source's doesn't, as `adds June and Beth`. Read a scope's people from its label, after the colon. A label starting with `+` holds the people it names after everyone in the scopes inside it.
+- what it loosens: where both scopes have `processing` and the target's allows a company or an operation the source's doesn't, `loosens SOURCE to TARGET`, writing each as `any company`, `no company`, or its companies in alphabetical order followed by `only`, as `anthropic only` or `anthropic and openai for draft and sort only`.
+- both, who it adds first, joined by ` · `.
+- where neither can be said, `publishes into NAME`, the target scope's name before its colon, or `publishes outside every scope` when the target sits outside every group.
+
+A line with no label of its own takes only what it does, as `adds an associate`.
+
 After the parts and groups, leave one empty line, then write each line in the file's order, indented two spaces: `from ARROW to`, or with a label, `from ARROW|"label"| to`. A line is solid from one step to the next, and dotted when either end is a `context`, a `connector` or a `surface`. Find the position of each end in `parts`. When `from` comes after `to`, swap the written ends and use the backwards arrow in the table. For `tie` and `hidden`, which have no arrowhead, swap the ends but keep the same line.
 
 | Line `kind` | Arrow | Backwards arrow | Dotted arrow | Dotted backwards arrow |
@@ -79,7 +88,7 @@ After the parts and groups, leave one empty line, then write each line in the fi
 | `tie` | `-.-` | `-.-` | `-.-` | `-.-` |
 | `hidden` | `~~~` | `~~~` | `~~~` | `~~~` |
 
-A dotted `publish` line keeps its thick arrow and takes its dots from its style, below.
+A dotted `publish` line keeps its thick arrow and takes its dots from its style, below. A 0.5 or 0.4 file writes its own `publish` lines, which keep their labels as written.
 
 ## 4. The colours
 
@@ -126,7 +135,7 @@ A line with none of these has no style. Lines with the same style share one line
 
 ## 5. The untrusted view
 
-The untrusted view is the security view, with three changes. First find where the text of each part marked `untrusted: true` reaches. It reaches that part, and from any part it reaches it goes along each `start`, `data` or `publish` line without `breaks: true` to the part at the other end. A `review`, a `person` step or a `code` step with `cleans: true` stops it: the text goes no further than that part, and the part keeps its own class.
+The untrusted view is the security view, with three changes. First find where the text of each part marked `untrusted: true` reaches. It reaches that part, and from any part it reaches it goes along each `start` or `data` line without `breaks: true` to the part at the other end. A `review`, a `person` step or a `code` step with `cleans: true` stops it: the text goes no further than that part, and the part keeps its own class.
 
 1. Each part that stops the text has a space and 🛡️ after its label, after any ⚠️.
 2. After the ten `classDef` lines, add these two, unchanged:

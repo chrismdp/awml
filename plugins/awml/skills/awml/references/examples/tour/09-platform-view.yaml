@@ -1,7 +1,7 @@
 # This workflow sorts a family's photos into albums. The file holds its design and its home
 # implementation, which runs on an always on server and a laptop used on some evenings. Noor and
 # the family are fictional.
-awml: "0.5"
+awml: "0.6"
 title: The family's photos, by where each part runs
 scopes:
   - { id: family, label: "family: parents, kids" }
