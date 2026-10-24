@@ -90,7 +90,8 @@ func TestASoundWorkflowPassesEveryCheckThatAppliesToIt(t *testing.T) {
 	}
 	for _, check := range report.Checks {
 		want := "pass"
-		if strings.HasPrefix(check.ID, "description.") || strings.HasPrefix(check.ID, "views.") {
+		// From 0.6 a data line that leaves its scope is a publish, so lines.data-narrows doesn't apply.
+		if strings.HasPrefix(check.ID, "description.") || strings.HasPrefix(check.ID, "views.") || check.ID == "lines.data-narrows" {
 			want = "skipped"
 		}
 		if check.Result != want || len(check.Mistakes) != 0 {

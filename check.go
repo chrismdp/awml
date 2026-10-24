@@ -200,10 +200,7 @@ func checkView(doc any, projected bool, format string) (mistakeList, bool) {
 	}
 
 	for n, l := range lines {
-		name := fmt.Sprintf("line %d", n+1)
-		if l.has("from") && l.has("to") {
-			name = fmt.Sprintf(`the line from "%s" to "%s"`, show(l.get("from")), show(l.get("to")))
-		}
+		name := lineName(n, l)
 		checkFields("line", name, l)
 		if b := l.get("breaks"); b != nil {
 			if _, ok := b.(bool); !ok {
@@ -245,12 +242,23 @@ func checkView(doc any, projected bool, format string) (mistakeList, bool) {
 		errors = append(errors, tiers(parts, lines)...)
 	}
 	if file.get("view") == "security" {
-		errors = append(errors, scopes(groups, parts, lines)...)
+		// From 0.6 a data line that leaves its scope is a publish, and drawn as one.
+		if format != "0.6" {
+			errors = append(errors, scopes(groups, parts, lines)...)
+		}
 		if fileVersion == "0.3" {
 			errors = append(errors, nestedProcessing(groups)...)
 		}
 	}
 	return errors, false
+}
+
+// lineName names the nth line of a file, by its ends where it has both.
+func lineName(n int, l *Map) string {
+	if l.has("from") && l.has("to") {
+		return fmt.Sprintf(`the line from "%s" to "%s"`, show(l.get("from")), show(l.get("to")))
+	}
+	return fmt.Sprintf("line %d", n+1)
 }
 
 type processingTerms struct {
@@ -376,17 +384,6 @@ func scopes(groups, parts, lines []*Map) mistakeList {
 	for _, p := range parts {
 		known[str(p, "id")] = true
 	}
-	// inside is whether a box is the outer one or sits inside it. "" is outside every box, and seen
-	// stops a group nested in itself.
-	inside := func(box, outer string) bool {
-		for seen := map[string]bool{}; outer != "" && !seen[box]; box = parent[box] {
-			if box == outer {
-				return true
-			}
-			seen[box] = true
-		}
-		return outer == ""
-	}
 	where := placed(parts, lines)
 	var errors mistakeList
 	for _, l := range lines {
@@ -395,7 +392,7 @@ func scopes(groups, parts, lines []*Map) mistakeList {
 			continue
 		}
 		source, target := where[from], where[to]
-		if inside(target, source) {
+		if insideBox(parent, target, source) {
 			continue
 		}
 		into := fmt.Sprintf(`into group "%s", which isn't inside it`, target)
@@ -620,7 +617,7 @@ func fields(what, name string, item *Map, version, format string, errors *mistak
 
 var companyID = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 
-// A platform published to the registry is named owner/platforms/slug, where 0.5 files allow it.
+// A platform published to the registry is named owner/platforms/slug, which files allow from 0.5.
 // The owner and slug follow the registry's rule for names: lower-case letters, digits and
 // hyphens, up to 40 characters, starting and ending with a letter or a digit.
 var registeredPlatform = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?/platforms/[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$`)

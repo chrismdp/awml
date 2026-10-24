@@ -1,7 +1,7 @@
 # This workflow plans a family's dinners, fills its shopping basket, copies its pickups and checks
 # its bills. The file holds its design and its home implementation, which runs across a server,
 # family apps, services and a kitchen screen. The family is fictional.
-awml: "0.5"
+awml: "0.6"
 title: The family's dinners
 scopes:
   - { id: carers, label: "carers: + June, Beth" }
@@ -44,7 +44,7 @@ lines:
   - { from: calendar, to: copy, kind: data }
   - { from: copy, to: pickups, kind: data }
   - { from: pickups, to: screen, kind: data }
-  - { from: mealplan, to: screen, kind: publish, label: "standing rule: dinners to carers" }
+  - { from: mealplan, to: screen, kind: data, label: "standing rule: dinners to carers" }
   - { from: screen_gap, to: screen, kind: tie }
   - { from: daily, to: match, kind: start }
   - { from: bank, to: match, kind: data }

@@ -20,7 +20,7 @@ Use this only where `awml check` can't run, as in a chat with no shell. It cover
 
 10. Each line has `from`, `to` and `kind`, and may have `label` and `breaks`. Nothing else.
 11. `from` and `to` each name a part in the same file, never a group.
-12. Each line's `kind` is one of `start`, `data`, `publish`, `refused`, `tie` and `hidden`.
+12. Each line's `kind` is one of `start`, `data`, `refused`, `tie` and `hidden`. There is no `publish`: a `data` line publishes whenever its scopes make it one.
 13. `breaks`, where given, is `true` or `false`, with no quotes.
 14. A line with a comment at either end is a `tie` or a `hidden` line. A `tie` has a comment at one end or both.
 
@@ -31,19 +31,13 @@ Use this only where `awml check` can't run, as in a chat with no shell. It cover
 
 ## Operations and tiers
 
-For these, skip any line with `breaks: true`, and any `hidden`, `refused` or `tie` line: only `start`, `data` and `publish` lines lead anywhere.
+For these, skip any line with `breaks: true`, and any `hidden`, `refused` or `tie` line: only `start` and `data` lines lead anywhere.
 
 17. **Only a `do` step leads to an outside action.** For each `outside` part, walk back along the lines that lead into it. Pass through any review, standing approval or fork and keep walking back from it. Every step you meet whose `op` is anything but `do` or `other` is a mistake, such as a `draft` step whose line reaches a send through a review. A step with no `op` is held to nothing.
 18. **An `answer` or `check` step never writes to a context.** No line runs from a step whose `op` is `answer` or `check` to a `context`.
 19. **Each outside action's label gives its tier.** The first word after the label's last colon is `Allow`, `Ask` or `Block`, as in `"Send the mail: Ask"` or `"Fill the basket: Allow under £180"`.
 20. **Each tier agrees with what stands in front of it.** For each `outside` part, find the parts whose lines lead into it, passing back through any fork. For an Ask action, each of them is a `review`, an `approval` or a `person` step. For an Allow action, none of them is a `review` or an `approval`. For a Block action, there are none.
 21. **Each standing approval lists its actions.** A line leads from each `approval` part straight to a `surface`.
-
-## Scopes
-
-Check the design's scopes. Skip any line with `breaks: true`, and any line that isn't `data`.
-
-22. **Publishing isn't drawn as routing.** For each `data` line, find the box of the part at each end: the group its `in` names, or, for a trigger or comment with no `in`, the group of the part at the other end of its first line that isn't `hidden`. A part in no box sits outside every box, and counts as wider than any of them. The target's box must be the source's box, or sit inside it: follow the target's group's `in` upwards until you reach the source's group or run out. Any other `data` line is a mistake. It should be `publish`, or `refused` if the design refuses the read.
 
 ## Placement and fit fields
 

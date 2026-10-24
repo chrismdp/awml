@@ -1,6 +1,6 @@
 # A standing approval. Sam approved the morning renewals once, so each renewal goes without a yes,
 # within the limits Sam set, and is listed for Sam afterwards. Sam is fictional.
-awml: "0.5"
+awml: "0.6"
 title: Renewing library books
 scopes:
   - { id: sam, label: "sam: Sam" }

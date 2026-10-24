@@ -1,5 +1,5 @@
 # A question asked in the family chat, by who may see each part. The family is fictional.
-awml: "0.5"
+awml: "0.6"
 title: A question in the family chat
 scopes:
   - { id: carers, label: "carers: + June, Beth" }
