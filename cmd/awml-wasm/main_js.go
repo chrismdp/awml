@@ -44,6 +44,12 @@ func main() {
 		encoded, _ := json.Marshal(errors)
 		return string(encoded)
 	})
+	// __awmlUnsound gives the mistakes that stop a file being drawn, as awml draw prints them.
+	expose("__awmlUnsound", func(args []js.Value) string {
+		errors := unsoundSource(args[0].String())
+		encoded, _ := json.Marshal(errors)
+		return string(encoded)
+	})
 	expose("__awmlWarnings", func(args []js.Value) string {
 		warnings := warningsSource(args[0].String())
 		encoded, _ := json.Marshal(warnings)
@@ -60,7 +66,7 @@ func main() {
 			if err != nil {
 				return errorJSON("isn't YAML: " + strings.Join(strings.Fields(err.Error()), " "))
 			}
-			if errors := awml.Check(doc); len(errors) != 0 {
+			if errors := awml.Unsound(doc); len(errors) != 0 {
 				return errorJSON(strings.Join(errors, "\n"))
 			}
 			docs = append(docs, doc.(*awml.Map))
@@ -121,7 +127,7 @@ func main() {
 	})
 	expose("__awmlDraw", func(args []js.Value) string {
 		doc, err := awml.Parse([]byte(args[0].String()))
-		if err != nil || len(awml.Check(doc)) != 0 {
+		if err != nil || len(awml.Unsound(doc)) != 0 {
 			return ""
 		}
 		view, err := awml.View(doc.(*awml.Map), optionalImplementation(args))
@@ -132,7 +138,7 @@ func main() {
 	})
 	expose("__awmlDrawUntrusted", func(args []js.Value) string {
 		doc, err := awml.Parse([]byte(args[0].String()))
-		if err != nil || len(awml.Check(doc)) != 0 {
+		if err != nil || len(awml.Unsound(doc)) != 0 {
 			return ""
 		}
 		view, err := awml.UntrustedView(doc.(*awml.Map))
@@ -162,6 +168,18 @@ func checkSource(source string) []string {
 		return []string{"isn't YAML: " + strings.Join(strings.Fields(err.Error()), " ")}
 	}
 	errors := awml.Check(doc)
+	if errors == nil {
+		return []string{}
+	}
+	return errors
+}
+
+func unsoundSource(source string) []string {
+	doc, err := awml.Parse([]byte(source))
+	if err != nil {
+		return []string{"isn't YAML: " + strings.Join(strings.Fields(err.Error()), " ")}
+	}
+	errors := awml.Unsound(doc)
 	if errors == nil {
 		return []string{}
 	}

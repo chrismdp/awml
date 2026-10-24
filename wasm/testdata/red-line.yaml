@@ -1,0 +1,18 @@
+# A drawing of a live system whose line into a Block action breaks a rule, so check fails and draw
+# draws it red. The bakery is fictional.
+awml: "0.6"
+title: The bakery's old files
+scopes:
+  - { id: bakery, label: "bakery: Ana, Ben", processing: any }
+parts:
+  - { id: night, kind: trigger, label: "Every night", untrusted: true }
+  - { id: tidy, kind: code, op: do, label: "Tidy the old files", in: bakery }
+  - { id: wipe, kind: outside, label: "Delete a file: Block", in: bakery }
+lines:
+  - { from: night, to: tidy, kind: start }
+  - { from: tidy, to: wipe, kind: start, label: "one night in June" }
+implementations:
+  home:
+    label: At the bakery
+    blocks:
+      - { id: server, label: "Server", parts: [tidy, wipe] }

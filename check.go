@@ -13,12 +13,38 @@ func Check(doc any) []string {
 	return found.messages()
 }
 
-// mistake is one thing Check reports, with the id of the check that found it.
-type mistake struct{ check, message string }
+// Unsound finds the mistakes that stop a document being drawn: every one Check finds, except, in a
+// 0.6 file, a line that breaks a rule, which Draw draws red.
+func Unsound(doc any) []string {
+	found, _ := checkDoc(doc)
+	var unsound mistakeList
+	for _, m := range found {
+		if m.lines == nil {
+			unsound = append(unsound, m)
+		}
+	}
+	return unsound.messages()
+}
+
+// mistake is one thing Check reports, with the id of the check that found it. A mistake that is a
+// line breaking a rule in a 0.6 file also has the lines, and breach, the check's words for what's
+// wrong, which the line's label adds.
+type mistake struct {
+	check, message string
+	lines          []*Map
+	breach         string
+}
 
 type mistakeList []mistake
 
-func (m *mistakeList) add(check, message string) { *m = append(*m, mistake{check, message}) }
+func (m *mistakeList) add(check, message string) {
+	*m = append(*m, mistake{check: check, message: message})
+}
+
+// addBreach adds a mistake that is a line breaking a rule. Its message is the breach, then advice.
+func (m *mistakeList) addBreach(check, breach, advice string, lines ...*Map) {
+	*m = append(*m, mistake{check: check, message: breach + ": " + advice, lines: lines, breach: breach})
+}
 
 func (m mistakeList) messages() []string {
 	var messages []string
@@ -40,7 +66,7 @@ func checkDoc(doc any) (mistakeList, bool) { return checkView(doc, false, "") }
 func checkView(doc any, projected bool, format string) (mistakeList, bool) {
 	file, ok := doc.(*Map)
 	if !ok {
-		return mistakeList{{"file.yaml", "the file must be a mapping of fields, starting with awml"}}, true
+		return mistakeList{{check: "file.yaml", message: "the file must be a mapping of fields, starting with awml"}}, true
 	}
 	if IsCanonical(file) {
 		return checkCanonical(file)
@@ -205,7 +231,7 @@ func checkView(doc any, projected bool, format string) (mistakeList, bool) {
 			name = fmt.Sprintf(`the line from "%s" to "%s"`, show(l.get("from")), show(l.get("to")))
 		}
 		checkFields("line", name, l)
-		if b := l.get("breaks"); b != nil {
+		if b := l.get("breaks"); b != nil && format != "0.6" {
 			if _, ok := b.(bool); !ok {
 				errors.add("lines.breaks", fmt.Sprintf(`%s: breaks must be true or false, not "%s"`, name, show(b)))
 			}
@@ -250,6 +276,13 @@ func checkView(doc any, projected bool, format string) (mistakeList, bool) {
 			errors = append(errors, nestedProcessing(groups)...)
 		}
 	}
+	// Before 0.6, a red line is marked by hand, so a line that breaks a rule unmarked is a mistake
+	// like any other.
+	if format != "0.6" {
+		for i := range errors {
+			errors[i].lines = nil
+		}
+	}
 	return errors, false
 }
 
@@ -276,7 +309,7 @@ func readProcessing(value any, name string) (processingTerms, mistakeList) {
 	mapping, ok := value.(*Map)
 	if !ok {
 		terms.valid = false
-		return terms, mistakeList{{"processing.written", name + ": processing must be any, none or a map from company ids to any or operations"}}
+		return terms, mistakeList{{check: "processing.written", message: name + ": processing must be any, none or a map from company ids to any or operations"}}
 	}
 	var errors mistakeList
 	for _, company := range mapping.Keys() {
@@ -365,8 +398,8 @@ func nestedProcessing(groups []*Map) mistakeList {
 // only into the box it starts in or one inside it, and narrowing is routing, drawn as an ordinary
 // line. Any other move adds viewers or loosens the terms, so it's publishing, or a read the design
 // refuses. A part in no box sits outside every box, so it's wider than any of them, and a trigger
-// with none is in the box of what it starts. A red line draws what a live system did, not the
-// design, so this rule doesn't hold it.
+// with none is in the box of what it starts. A line marked red by hand in a file before 0.6 draws
+// what a live system did, not the design, so this rule doesn't hold it.
 func scopes(groups, parts, lines []*Map) mistakeList {
 	parent := map[string]string{}
 	for _, g := range groups {
@@ -402,8 +435,9 @@ func scopes(groups, parts, lines []*Map) mistakeList {
 		if target == "" {
 			into = "to the top level, outside every group"
 		}
-		errors.add("lines.data-narrows", fmt.Sprintf(`the line from "%s" to "%s" moves content from group "%s" %s: draw it as publish, or as refused if the design refuses the read`,
-			from, to, source, into))
+		breach := fmt.Sprintf(`moves content from group "%s" %s`, source, into)
+		errors = append(errors, mistake{check: "lines.data-narrows", lines: []*Map{l}, breach: breach,
+			message: fmt.Sprintf(`the line from "%s" to "%s" %s: draw it as publish, or as refused if the design refuses the read`, from, to, breach)})
 	}
 	return errors
 }
@@ -416,8 +450,9 @@ var ops = map[string]string{
 }
 var steps = setOf([]string{"ai", "code", "person"})
 
-// lineLeads is whether a line starts something, moves data or publishes. A red line is a finding
-// about a live system, not part of the design.
+// lineLeads is whether a line starts something, moves data or publishes. A line marked red by hand
+// in a file before 0.6 is a finding about a live system, not part of the design. From 0.6 a red
+// line is one the check has reported, so it leads like any other.
 func lineLeads(line *Map) bool {
 	kind := line.get("kind")
 	return (kind == "start" || kind == "data" || kind == "publish") && line.get("breaks") != true
@@ -425,8 +460,8 @@ func lineLeads(line *Map) bool {
 
 // operations holds each step to what its op must not do, wherever the drawing shows it. Only a do
 // step leads to an outside action, directly or through a review, a standing approval or a fork,
-// and an answer or check step never writes to a context. A red line draws what a live system did,
-// not the design, so these rules don't hold it.
+// and an answer or check step never writes to a context. A line marked red by hand in a file before
+// 0.6 draws what a live system did, not the design, so these rules don't hold it.
 func operations(parts, lines []*Map) mistakeList {
 	byID := map[any]*Map{}
 	for _, p := range parts {
@@ -448,7 +483,8 @@ func operations(parts, lines []*Map) mistakeList {
 		if out.get("kind") != "outside" {
 			continue
 		}
-		seen, reported := map[*Map]bool{}, map[*Map]bool{}
+		// reported gives where a step's mistake is, so each line it leads along is added to it.
+		seen, reported := map[*Map]bool{}, map[*Map]int{}
 		var back func(to *Map)
 		back = func(to *Map) {
 			seen[to] = true
@@ -461,10 +497,14 @@ func operations(parts, lines []*Map) mistakeList {
 					if !seen[from] {
 						back(from)
 					}
-				} else if op := opOf(from); op != "" && op != "do" && !reported[from] {
-					reported[from] = true
-					errors.add("operations.only-do-acts", fmt.Sprintf(`part "%s" leads to outside action "%s", but its op is %s: only a do step leads to an outside action`,
-						show(from.get("id")), show(out.get("id")), op))
+				} else if op := opOf(from); op != "" && op != "do" {
+					if n, ok := reported[from]; ok {
+						errors[n].lines = append(errors[n].lines, l)
+						continue
+					}
+					reported[from] = len(errors)
+					errors.addBreach("operations.only-do-acts", fmt.Sprintf(`part "%s" leads to outside action "%s", but its op is %s`,
+						show(from.get("id")), show(out.get("id")), op), "only a do step leads to an outside action", l)
 				}
 			}
 		}
@@ -477,8 +517,8 @@ func operations(parts, lines []*Map) mistakeList {
 		}
 		if op := opOf(from); op == "answer" || op == "check" {
 			a := map[string]string{"answer": "an", "check": "a"}[op]
-			errors.add("operations.answer-check-read-only", fmt.Sprintf(`part "%s" writes to context "%s", but its op is %s: %s %s step never writes to a context`,
-				show(from.get("id")), show(to.get("id")), op, a, op))
+			errors.addBreach("operations.answer-check-read-only", fmt.Sprintf(`part "%s" writes to context "%s", but its op is %s`,
+				show(from.get("id")), show(to.get("id")), op), fmt.Sprintf("%s %s step never writes to a context", a, op), l)
 		}
 	}
 	return errors
@@ -505,7 +545,13 @@ func tiers(parts, lines []*Map) mistakeList {
 			errors.add("tiers.written", fmt.Sprintf(`outside action "%s" has no tier: end its label with Allow, Ask or Block after a colon, as in "Send the mail: Ask"`, name))
 			continue
 		}
-		var ways []*Map
+		// Each way in is a part, with the lines it leads along.
+		type way struct {
+			from  *Map
+			lines []*Map
+		}
+		var ways []*way
+		found := map[*Map]*way{}
 		seen := map[*Map]bool{out: true}
 		var back func(to *Map)
 		back = func(to *Map) {
@@ -514,26 +560,36 @@ func tiers(parts, lines []*Map) mistakeList {
 				if !lineLeads(l) || from == nil || byID[keyOf(l.get("to"))] != to || seen[from] {
 					continue
 				}
-				seen[from] = true
 				if from.get("kind") == "fork" {
+					seen[from] = true
 					back(from)
+				} else if w := found[from]; w != nil {
+					w.lines = append(w.lines, l)
 				} else {
-					ways = append(ways, from)
+					found[from] = &way{from, []*Map{l}}
+					ways = append(ways, found[from])
 				}
 			}
 		}
 		back(out)
-		for _, from := range ways {
-			kind, id := from.get("kind"), show(from.get("id"))
+		for _, w := range ways {
+			kind, id := w.from.get("kind"), show(w.from.get("id"))
+			var breach, advice string
 			switch {
 			case tier == "Ask" && !isOneOf(kind, "review", "approval", "person"):
-				errors.add("tiers.shape", fmt.Sprintf(`outside action "%s" is Ask, but part "%s" leads to it with no person in between: put a review or a standing approval in front of it, or have a person's own do step take it`, name, id))
+				breach = fmt.Sprintf(`outside action "%s" is Ask, but part "%s" leads to it with no person in between`, name, id)
+				advice = "put a review or a standing approval in front of it, or have a person's own do step take it"
 			case tier == "Allow" && isOneOf(kind, "review", "approval"):
 				what := map[any]string{"review": "review", "approval": "standing approval"}[kind]
-				errors.add("tiers.shape", fmt.Sprintf(`outside action "%s" is Allow, but %s "%s" stands in front of it: an Allow action just happens, so make it Ask or take the yes away`, name, what, id))
+				breach = fmt.Sprintf(`outside action "%s" is Allow, but %s "%s" stands in front of it`, name, what, id)
+				advice = "an Allow action just happens, so make it Ask or take the yes away"
 			case tier == "Block":
-				errors.add("tiers.shape", fmt.Sprintf(`outside action "%s" is Block, but part "%s" leads to it: a blocked action is never taken, so a line into it is red`, name, id))
+				breach = fmt.Sprintf(`outside action "%s" is Block, but part "%s" leads to it`, name, id)
+				advice = "a blocked action is never taken, so a line into it is red"
+			default:
+				continue
 			}
+			errors.addBreach("tiers.shape", breach, advice, w.lines...)
 		}
 	}
 	for _, approval := range parts {
@@ -604,8 +660,14 @@ func fields(what, name string, item *Map, version, format string, errors *mistak
 	for _, f := range missing {
 		errors.add("fields.known", fmt.Sprintf("%s has no %s", name, f))
 	}
+	// From 0.6 the check works out which lines are red, so none is marked by hand.
+	if what == "line" && format == "0.6" {
+		delete(may, "breaks")
+	}
 	for _, f := range item.Keys() {
-		if !need[f] && !may[f] {
+		if what == "line" && f == "breaks" && !may[f] {
+			errors.add("fields.known", name+" has breaks, but from 0.6 awml check works out which lines break a rule, and awml draw draws them red")
+		} else if !need[f] && !may[f] {
 			errors.add("fields.known", fmt.Sprintf(`%s has unknown field "%s"`, name, f))
 		}
 	}

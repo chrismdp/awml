@@ -32,6 +32,11 @@ async function start(source) {
     check(sourceText) {
       return JSON.parse(globalThis.__awmlCheck(sourceText));
     },
+    // unsound gives the mistakes that stop a file being drawn: every one check gives, except, in a
+    // 0.6 file, a line that breaks a rule, which draw draws red.
+    unsound(sourceText) {
+      return JSON.parse(globalThis.__awmlUnsound(sourceText));
+    },
     warnings(sourceText) {
       return JSON.parse(globalThis.__awmlWarnings(sourceText));
     },
@@ -48,7 +53,7 @@ async function start(source) {
     summaryJSON(sourceTexts) {
       const sources = Array.isArray(sourceTexts) ? sourceTexts : [sourceTexts];
       for (const sourceText of sources) {
-        const errors = this.check(sourceText);
+        const errors = this.unsound(sourceText);
         if (errors.length) throw new Error(errors.join("\n"));
       }
       const output = globalThis.__awmlSummary(JSON.stringify(sources));
@@ -74,7 +79,7 @@ async function start(source) {
       return JSON.parse(this.fitJSON(sourceTexts, implementation));
     },
     draw(sourceText, implementation = "") {
-      const errors = this.check(sourceText);
+      const errors = this.unsound(sourceText);
       if (errors.length) throw new Error(errors.join("\n"));
       const output = globalThis.__awmlDraw(sourceText, implementation);
       if (output.startsWith("{")) throw new Error(JSON.parse(output).error);
@@ -82,7 +87,7 @@ async function start(source) {
     },
     // drawUntrusted draws where untrusted text reaches, as awml draw --untrusted does.
     drawUntrusted(sourceText) {
-      const errors = this.check(sourceText);
+      const errors = this.unsound(sourceText);
       if (errors.length) throw new Error(errors.join("\n"));
       const output = globalThis.__awmlDrawUntrusted(sourceText);
       if (output.startsWith("{")) throw new Error(JSON.parse(output).error);
