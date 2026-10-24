@@ -18,10 +18,10 @@ Use this only where `awml check` can't run, as in a chat with no shell. It cover
 9. Only an `ai`, `code` or `person` part has an `op`, and the `op` is one of `bring-in`, `sort`, `learn`, `prepare`, `check`, `reflect`, `draft`, `do`, `answer` and `other`.
 ## Lines
 
-10. Each line has `from`, `to` and `kind`, and may have `label` and `breaks`. Nothing else.
+10. Each line has `from`, `to` and `kind`, and may have `label`. Nothing else.
 11. `from` and `to` each name a part in the same file, never a group.
 12. Each line's `kind` is one of `start`, `data`, `refused`, `tie` and `hidden`. There is no `publish`: a `data` line publishes whenever its scopes make it one.
-13. `breaks`, where given, is `true` or `false`, with no quotes.
+13. No line has `breaks`. A line that breaks rule 17, 18 or 20 is a mistake, and the drawing shows it red, so a file never marks one by hand.
 14. A line with a comment at either end is a `tie` or a `hidden` line. A `tie` has a comment at one end or both.
 
 ## Text
@@ -31,7 +31,7 @@ Use this only where `awml check` can't run, as in a chat with no shell. It cover
 
 ## Operations and tiers
 
-For these, skip any line with `breaks: true`, and any `hidden`, `refused` or `tie` line: only `start` and `data` lines lead anywhere.
+For these, skip any `hidden`, `refused` or `tie` line: only `start` and `data` lines lead anywhere. In a drawing of a live system, a line that breaks one of these rules may be what the system really did. It stays a mistake, and the drawing shows it red, so leave it there until the system changes.
 
 17. **Only a `do` step leads to an outside action.** For each `outside` part, walk back along the lines that lead into it. Pass through any review, standing approval or fork and keep walking back from it. Every step you meet whose `op` is anything but `do` or `other` is a mistake, such as a `draft` step whose line reaches a send through a review. A step with no `op` is held to nothing.
 18. **An `answer` or `check` step never writes to a context.** No line runs from a step whose `op` is `answer` or `check` to a `context`.

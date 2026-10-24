@@ -128,14 +128,14 @@ func Summarise(docs ...*Map) Summary {
 		}
 		for _, line := range items(doc, "lines") {
 			key := strings.Join([]string{str(line, "from"), str(line, "to"), str(line, "kind"), str(line, "label")}, "\x00")
-			if line.get("breaks") == true {
+			if drawnRed(line) {
 				key += "\x00red"
 			}
 			if seenLines[key] {
 				continue
 			}
 			seenLines[key] = true
-			if line.get("breaks") == true {
+			if drawnRed(line) {
 				out.RedLines++
 				continue
 			}

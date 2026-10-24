@@ -80,8 +80,9 @@ type checkDefinition struct {
 }
 
 var (
-	since05Formats = []string{"0.5", "0.6"}
-	since06Formats = []string{"0.6"}
+	since05Formats  = []string{"0.5", "0.6"}
+	since06Formats  = []string{"0.6"}
+	before06Formats = []string{"0.2", "0.3", "0.4", "0.5"}
 )
 
 var checkDefinitions = []checkDefinition{
@@ -92,7 +93,7 @@ var checkDefinitions = []checkDefinition{
 	{id: "ids.unique", name: "No id is used twice", about: "Scope, part, block and comment ids are unique across the file.", appliesTo: workflows},
 	{id: "ids.written", name: "Every id is well written", about: "An id is letters, digits and underscores, starting with a letter, and a block's platform is a company id, or from 0.5 owner/platforms/slug.", appliesTo: workflows},
 	{id: "values.text", name: "Every value that should be text is text", about: "Ids, labels, kinds and references are text, not something YAML read as true, false, a number or a date.", appliesTo: everyFile, early: true},
-	{id: "lines.breaks", name: "Every breaks is true or false", about: "A line's breaks, which draws it red, is true or false, unquoted.", appliesTo: workflows},
+	{id: "lines.breaks", name: "Every breaks is true or false", about: "Before 0.6, a line's breaks, which draws it red, is true or false, unquoted. From 0.6 the check works out which lines are red.", appliesTo: workflows, formats: before06Formats, none: "no file given is a workflow or view before 0.6"},
 	{id: "references.known", name: "Every reference names something in the file", about: "Each in, from and to, each part a block names and each part a comment ties names a scope, block or part the file has.", appliesTo: workflows},
 	{id: "nesting.acyclic", name: "No scope or block is nested in itself", about: "Following in from any scope or block never leads back to it.", appliesTo: workflows},
 	{id: "comments.tie-only", name: "A comment is linked only by tie lines", about: "A comment moves nothing, so only a tie, or a hidden line, may touch it.", appliesTo: workflows},
@@ -203,11 +204,11 @@ func CheckSources(engine string, sources []Source) CheckReport {
 
 func checkSource(source Source) checkedSource {
 	if source.Unreadable != "" {
-		return checkedSource{mistakes: mistakeList{{"file.yaml", source.Unreadable}}, stopped: true}
+		return checkedSource{mistakes: mistakeList{{check: "file.yaml", message: source.Unreadable}}, stopped: true}
 	}
 	parsed, err := Parse(source.Text)
 	if err != nil {
-		return checkedSource{mistakes: mistakeList{{"file.yaml", "isn't YAML: " + strings.Join(strings.Fields(err.Error()), " ")}}, stopped: true}
+		return checkedSource{mistakes: mistakeList{{check: "file.yaml", message: "isn't YAML: " + strings.Join(strings.Fields(err.Error()), " ")}}, stopped: true}
 	}
 	found, stopped := checkDoc(parsed)
 	file, ok := parsed.(*Map)

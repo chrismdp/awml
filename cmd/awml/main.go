@@ -318,7 +318,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 		return code
 	}
-	docs, ok := sound(files, stderr)
+	docs, ok := sound(files, stderr, command == "draw" || command == "page" || command == "summary")
 	if !ok {
 		return 1
 	}
@@ -503,8 +503,11 @@ func printSummary(out io.Writer, s awml.Summary) {
 	}
 }
 
-// read gives the document in a file, and the mistakes that stop it being drawn.
-func read(path string) (*awml.Map, []string) {
+// read gives the document in a file, and every mistake awml check reports in it.
+func read(path string) (*awml.Map, []string) { return readWith(path, awml.Check) }
+
+// readWith gives the document in a file, and the mistakes find reports in it.
+func readWith(path string, find func(any) []string) (*awml.Map, []string) {
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return nil, []string{"can't be read: " + reason(err)}
@@ -513,19 +516,25 @@ func read(path string) (*awml.Map, []string) {
 	if err != nil {
 		return nil, []string{"isn't YAML: " + strings.Join(strings.Fields(err.Error()), " ")}
 	}
-	if errs := awml.Check(doc); len(errs) > 0 {
+	if errs := find(doc); len(errs) > 0 {
 		file, _ := doc.(*awml.Map)
 		return file, errs
 	}
 	return doc.(*awml.Map), nil
 }
 
-// sound gives every file's document, or false once any file has mistakes, which are printed.
-func sound(paths []string, stderr io.Writer) ([]*awml.Map, bool) {
+// sound gives every file's document, or false once any file has mistakes, which are printed. A
+// command that draws or counts red lines takes a 0.6 file whose only mistakes are lines that break
+// a rule.
+func sound(paths []string, stderr io.Writer, drawn bool) ([]*awml.Map, bool) {
+	find := awml.Check
+	if drawn {
+		find = awml.Unsound
+	}
 	var docs []*awml.Map
 	ok := true
 	for _, path := range paths {
-		doc, errs := read(path)
+		doc, errs := readWith(path, find)
 		for _, e := range errs {
 			fmt.Fprintf(stderr, "%s: %s\n", path, e)
 		}
