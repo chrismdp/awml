@@ -1,0 +1,24 @@
+# Untrusted text. Anyone can type into the bakery's order form, so its text could steer an AI step
+# that reads it. A code step that keeps only the cake, the quantity and the date stops that text,
+# and so does Ana's yes to the exact reply. The bakery and its people are fictional.
+awml: "0.6"
+title: A cake order from the website
+scopes:
+  - { id: bakery, label: "bakery: Ana, Ben" }
+parts:
+  - { id: form, kind: trigger, label: "An order on the website's form", untrusted: true }
+  - { id: keep, kind: code, op: bring-in, label: "Keep only the cake, the quantity and the date, each checked against the price list", in: bakery, cleans: true }
+  - { id: book, kind: code, op: do, label: "Book the bake", in: bakery }
+  - { id: rota, kind: outside, label: "Add it to the baking rota: Allow", in: bakery }
+  - { id: draft, kind: ai, op: draft, label: "Draft a reply to the customer's note", in: bakery }
+  - { id: ask, kind: code, op: do, label: "Ask to send the reply", in: bakery }
+  - { id: approve, kind: review, label: "Ana's yes to the exact reply", in: bakery }
+  - { id: send, kind: outside, label: "Send the reply: Ask", in: bakery }
+lines:
+  - { from: form, to: keep, kind: start }
+  - { from: keep, to: book, kind: data }
+  - { from: book, to: rota, kind: data }
+  - { from: form, to: draft, kind: start }
+  - { from: draft, to: ask, kind: data }
+  - { from: ask, to: approve, kind: data }
+  - { from: approve, to: send, kind: data, label: "[yes]" }

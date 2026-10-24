@@ -323,9 +323,58 @@ func TestSummaryPrintsJSONForOneOrBothViews(t *testing.T) {
 
 func TestSummaryPrintsPlainCounts(t *testing.T) {
 	r := awmlRun("summary", write(t, "good.yaml", good))
-	want := "steps: AI 1, code 0, person 0\noperations: none\noutside actions: Allow 0, Ask 0, Block 0\ntriggers: 1\nreviews: 0\ncontexts: 0\nconnectors: 0\nsurfaces: 0\nscopes: 1\nplatforms: 0\npublishing lines: 0\nrefused reads: 0\nred lines: 0\n"
+	want := "steps: AI 1, code 0, person 0\noperations: none\noutside actions: Allow 0, Ask 0, Block 0\ntriggers: 1\nreviews: 0\ncontexts: 0\nconnectors: 0\nsurfaces: 0\nscopes: 1\nplatforms: 0\npublishing lines: 0\nrefused reads: 0\nred lines: 0\nuntrusted parts: 0\n"
 	if r != (result{0, want, ""}) {
 		t.Errorf("summary gave %+v", r)
+	}
+}
+
+const orders = `awml: "0.6"
+title: Cake orders
+scopes:
+  - { id: bakery, label: "bakery: Ana, Ben", processing: any }
+parts:
+  - { id: form, kind: trigger, label: "An order on the website's form", untrusted: true }
+  - { id: keep, kind: code, op: bring-in, label: "Keep only the order number and quantity", in: bakery, cleans: true }
+  - { id: read, kind: ai, op: bring-in, label: "Read the order", in: bakery }
+  - { id: note, kind: code, op: do, label: "Note it", in: bakery }
+  - { id: board, kind: outside, label: "Pin it to the board: Allow", in: bakery }
+lines:
+  - { from: form, to: keep, kind: start }
+  - { from: keep, to: read, kind: start }
+  - { from: form, to: note, kind: start }
+  - { from: note, to: board, kind: start }
+`
+
+func TestSummaryListsWhatEachUntrustedPartsTextReaches(t *testing.T) {
+	r := awmlRun("summary", write(t, "orders.yaml", orders))
+	want := "untrusted parts: 1\n  An order on the website's form\n    steps:\n      Keep only the order number and quantity\n      Note it\n    outside actions:\n      Pin it to the board: Allow\n    stopped by:\n      Keep only the order number and quantity\n"
+	if r := awmlRun("summary", write(t, "nothing.yaml", strings.Replace(orders, "{ from: form, to: note, kind: start }", "{ from: keep, to: note, kind: start }", 1))); !strings.HasSuffix(r.stdout, "    outside actions: none\n    stopped by:\n      Keep only the order number and quantity\n") {
+		t.Errorf("summary gave %+v", r)
+	}
+	if r.code != 0 || !strings.HasSuffix(r.stdout, want) {
+		t.Errorf("summary gave %+v", r)
+	}
+}
+
+func TestDrawUntrustedDrawsTheUntrustedView(t *testing.T) {
+	path := write(t, "orders.yaml", orders)
+	view, err := awml.UntrustedView(doc(t, orders))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := awmlRun("draw", "--untrusted", path); r != (result{0, awml.Draw(view) + "\n", ""}) {
+		t.Errorf("draw --untrusted gave %+v", r)
+	}
+	if r := awmlRun("draw", "--untrusted", "--implementation", "home", path); r.code != 2 || !strings.Contains(r.stderr, "argument --untrusted: not allowed with argument --implementation") {
+		t.Errorf("draw --untrusted --implementation gave %+v", r)
+	}
+	plain := write(t, "plain.yaml", strings.Replace(strings.Replace(orders, ", untrusted: true", "", 1), ", cleans: true", "", 1))
+	if r := awmlRun("draw", "--untrusted", plain); r != (result{1, "", "the file marks no part untrusted, so it has no untrusted view\n"}) {
+		t.Errorf("draw --untrusted of a file with nothing untrusted gave %+v", r)
+	}
+	if r := awmlRun("check", path); r.code != 0 || !strings.Contains(r.stdout, `warning: untrusted text from part "form" reaches outside action "board"`) {
+		t.Errorf("check gave %+v", r)
 	}
 }
 
@@ -463,7 +512,7 @@ func TestAMistakeInTheCommandShowsHowToUseIt(t *testing.T) {
 	}{
 		{nil, "usage: awml [-h] [--version] [--registry URL] {draw,page,check,fit,summary,convert,login,push,pull} ...\nawml: error: the following arguments are required: command\n"},
 		{[]string{"drew", "a.yaml"}, "usage: awml [-h] [--version] [--registry URL] {draw,page,check,fit,summary,convert,login,push,pull} ...\nawml: error: argument command: invalid choice: 'drew' (choose from 'draw', 'page', 'check', 'fit', 'summary', 'convert', 'login', 'push', 'pull')\n"},
-		{[]string{"draw"}, "usage: awml draw [-h] [--implementation ID] file\nawml draw: error: the following arguments are required: file\n"},
+		{[]string{"draw"}, "usage: awml draw [-h] [--implementation ID | --untrusted] file\nawml draw: error: the following arguments are required: file\n"},
 		{[]string{"draw", "a.yaml", "b.yaml"}, "usage: awml [-h] [--version] [--registry URL] {draw,page,check,fit,summary,convert,login,push,pull} ...\nawml: error: unrecognized arguments: b.yaml\n"},
 		{[]string{"check"}, "usage: awml check [-h] [--json] files [files ...]\nawml check: error: the following arguments are required: files\n"},
 		{[]string{"page", "a.yaml"}, "usage: awml page [-h] -o OUT files [files ...]\nawml page: error: the following arguments are required: -o/--out\n"},
@@ -556,9 +605,11 @@ func TestPushSendsA05Workflow(t *testing.T) {
 	}))
 	defer server.Close()
 	loginForTest(t, server.URL, "push-token")
-	workflow := write(t, "workflow.yaml", strings.Replace(canonicalFile, `awml: "0.4"`, `awml: "0.5"`, 1))
-	if r := awmlRun("push", "acme/mail", workflow, "--registry", server.URL); r != (result{0, "Pushed acme/mail version 1: /acme/mail/v/1\n", ""}) {
-		t.Fatalf("push gave %+v", r)
+	for _, format := range []string{"0.5", "0.6"} {
+		workflow := write(t, "workflow.yaml", strings.Replace(canonicalFile, `awml: "0.4"`, `awml: "`+format+`"`, 1))
+		if r := awmlRun("push", "acme/mail", workflow, "--registry", server.URL); r != (result{0, "Pushed acme/mail version 1: /acme/mail/v/1\n", ""}) {
+			t.Fatalf("push of a %s file gave %+v", format, r)
+		}
 	}
 }
 

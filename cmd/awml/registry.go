@@ -79,7 +79,7 @@ func push(name string, paths []string, private bool, registry string, stdout, st
 		return 1
 	}
 	format, _ := doc.Get("awml")
-	if format != "0.4" && format != "0.5" {
+	if format != "0.4" && format != "0.5" && format != "0.6" {
 		printConvertAdvice(stderr)
 		return 1
 	}
@@ -130,7 +130,7 @@ func push(name string, paths []string, private bool, registry string, stdout, st
 }
 
 func printConvertAdvice(stderr io.Writer) {
-	fmt.Fprintln(stderr, "awml push: push one 0.4 or 0.5 file; convert an old pair with awml convert security.yaml platform.yaml > workflow.yaml")
+	fmt.Fprintln(stderr, "awml push: push one 0.4, 0.5 or 0.6 file; convert an old pair with awml convert security.yaml platform.yaml > workflow.yaml")
 }
 
 func pull(name, dir, registry string, stdout, stderr io.Writer) int {

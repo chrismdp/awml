@@ -44,13 +44,14 @@ options:
 `
 
 var commands = map[string]struct{ usage, help string }{
-	"draw": {"usage: awml draw [-h] [--implementation ID] file\n", `
+	"draw": {"usage: awml draw [-h] [--implementation ID | --untrusted] file\n", `
 positional arguments:
   file
 
 options:
   -h, --help  show this help message and exit
   --implementation ID  draw one implementation
+  --untrusted  draw where untrusted text reaches
 `},
 	"convert": {"usage: awml convert [-h] [--implementation ID] SECURITY PLATFORM\n", `
 Join a legacy security and platform pair into one 0.4 file.
@@ -132,6 +133,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	var out *string
 	implementation := ""
 	jsonOutput := false
+	untrusted := false
 	private := false
 	var registryFlag *string
 	flags := true
@@ -185,6 +187,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			out = &v
 		case flags && (command == "summary" || command == "fit" || command == "check") && a == "--json":
 			jsonOutput = true
+		case flags && command == "draw" && a == "--untrusted":
+			untrusted = true
 		case flags && command == "push" && a == "--private":
 			private = true
 		case flags && strings.HasPrefix(a, "-") && a != "-":
@@ -219,6 +223,9 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	if command == "convert" && len(files) != 2 {
 		return fail(commands[command].usage, "awml convert", "expected SECURITY and PLATFORM")
+	}
+	if command == "draw" && untrusted && implementation != "" {
+		return fail(commands[command].usage, "awml draw", "argument --untrusted: not allowed with argument --implementation")
 	}
 	if command == "draw" && len(files) > 1 {
 		unknown = append(files[1:], unknown...)
@@ -317,6 +324,9 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	if command == "draw" {
 		view, err := awml.View(docs[0], implementation)
+		if untrusted {
+			view, err = awml.UntrustedView(docs[0])
+		}
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
@@ -475,6 +485,22 @@ func printSummary(out io.Writer, s awml.Summary) {
 		fmt.Fprintf(out, "  %s\n", label)
 	}
 	fmt.Fprintf(out, "refused reads: %d\nred lines: %d\n", s.RefusedReads, s.RedLines)
+	fmt.Fprintf(out, "untrusted parts: %d\n", len(s.Untrusted))
+	for _, u := range s.Untrusted {
+		fmt.Fprintf(out, "  %s\n", u.Part)
+		for _, list := range [][2]any{{"steps", u.Steps}, {"outside actions", u.OutsideActions}, {"stopped by", u.StoppedBy}} {
+			names := list[1].([]string)
+			if len(names) == 0 {
+				fmt.Fprintf(out, "    %s: none\n", list[0])
+				continue
+			}
+			// A label may hold commas, so each has a line of its own.
+			fmt.Fprintf(out, "    %s:\n", list[0])
+			for _, name := range names {
+				fmt.Fprintf(out, "      %s\n", name)
+			}
+		}
+	}
 }
 
 // read gives the document in a file, and the mistakes that stop it being drawn.

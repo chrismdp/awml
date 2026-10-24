@@ -5,7 +5,8 @@ import (
 	"strings"
 )
 
-// Warnings finds choices that are valid AWML but are usually better split into smaller steps.
+// Warnings finds choices that are valid AWML but are usually better split into smaller steps, and
+// each outside action that untrusted text reaches.
 func Warnings(doc any) []string {
 	return warningList(doc).messages()
 }
@@ -100,6 +101,9 @@ func warningList(doc any) mistakeList {
 		if changes >= 2 {
 			warnings.add("warn.one-change", fmt.Sprintf(`do step "%s" leads to %d changes (%s): each do step should make one`, id, changes, strings.Join(names, ", ")))
 		}
+	}
+	if file.get("awml") == "0.6" && IsCanonical(file) {
+		warnings = append(warnings, untrustedWarnings(parts, lines)...)
 	}
 	return warnings
 }

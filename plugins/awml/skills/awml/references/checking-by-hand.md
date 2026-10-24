@@ -5,18 +5,17 @@ Use this only where `awml check` can't run, as in a chat with no shell. It cover
 ## The file
 
 1. The file is one YAML mapping with `awml`, `title` and `parts`, and may have `scopes`, `lines` and `implementations`. It has no other field.
-2. `awml` is `"0.5"`, in quotes. There is no `view`.
+2. `awml` is `"0.6"`, in quotes. There is no `view`.
 3. `parts`, and `scopes` and `lines` where given, are lists, and each item in them is a mapping.
 
 ## Scopes and parts
 
 4. Each scope has `id` and `label`, and may have `in` and `processing`. Nothing else.
-5. Each part has `id`, `kind` and `label`, and may have `in`, `op`, `wait` and `at`. A fork needn't have a label. Nothing else.
+5. Each part has `id`, `kind` and `label`, and may have `in`, `op`, `wait`, `at`, `untrusted` and `cleans`. A fork needn't have a label. Nothing else. `untrusted` and `cleans`, where given, are `true` or `false`, with no quotes. Only a `trigger`, `connector` or `context` has `untrusted: true`, and only a `code` step has `cleans: true`.
 6. Each id is letters, digits and underscores, starting with a letter: `meal_plan`, never `meal-plan` or `2nd_plan`. No id is used twice, across scopes, parts, blocks and implementation comments.
 7. Each part's `kind` is one of `trigger`, `ai`, `code`, `person`, `review`, `approval`, `fork`, `context`, `connector`, `surface`, `outside` and `comment`.
 8. A design part or scope's `in` names a scope. Follow each scope's `in` upwards: it never comes back to the scope it started from.
 9. Only an `ai`, `code` or `person` part has an `op`, and the `op` is one of `bring-in`, `sort`, `learn`, `prepare`, `check`, `reflect`, `draft`, `do`, `answer` and `other`.
-
 ## Lines
 
 10. Each line has `from`, `to` and `kind`, and may have `label` and `breaks`. Nothing else.

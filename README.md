@@ -25,6 +25,7 @@ A fictional family's dinners. On Thursday evening AI plans next week's dinners a
 - [The platform view](#the-platform-view-where-each-part-runs)
 - [Tiers and yeses](#tiers-and-yeses)
 - [Standing approvals](#standing-approvals)
+- [Untrusted text](#untrusted-text)
 - [Records](#records)
 - [The red line](#the-red-line)
 - [A tour of the gallery](#a-tour-of-the-gallery)
@@ -329,6 +330,16 @@ A standing approval is a part of its own, in the box of the person who gives it,
 
 Here Sam approved the morning renewals once, for renewals only and up to six a week, and each renewal is listed on Sam's list.
 
+## Untrusted text
+
+Text that anyone can write, such as a web form or a public inbox, can try to steer the AI step that reads it. Mark the trigger, connector or context it comes in through with `untrusted: true`, and it's drawn with ⚠️ after its label. The text goes wherever the lines lead on, until a person's review, a person's own step or a code step marked `cleans: true` stops it. A `cleans` step promises to pass on only what's safe, such as an order number and a quantity, and its label says how. Only code can promise that, since strangers' text can steer AI however it's instructed. A standing approval never sees the text, so it doesn't stop it.
+
+`awml check` warns of each outside action the text reaches, and `awml summary` lists what each untrusted part's text reaches. `awml draw --untrusted` draws the untrusted view: the security view with each part the text reaches tinted, 🛡️ on what stops it, and each outside action it reaches in red.
+
+![A cake order from the website, in the untrusted view](examples/tour/14-untrusted-text-untrusted-view.svg)
+
+Here anyone can type into the bakery's order form. A code step keeps only the cake, the quantity and the date, so the bake is booked from those alone, and the customer's note stops at Ana's yes to the exact reply.
+
 ## Records
 
 Every step leaves one **record** each time it runs: what started it, what decided it (code, a model with its instructions and exact version, or a person), what it drew on, what it made and what it cost. Records are only ever added to, and only the system writes them.
@@ -347,7 +358,7 @@ Here the design waits for Ella's yes to the exact message, but one week the live
 
 ## A tour of the gallery
 
-Each drawing here shows one idea, with fictional people and everyday cases, and their files are in [`examples/tour/`](examples/tour). Several are patterns, and the commonest are the first two: the draft for review and the do step. The rest of the gallery appears beside the idea it draws: [two scopes side by side](#boxes-inside-boxes-and-side-by-side), [operations](#operations), [a standing approval](#standing-approvals) and [a red line](#the-red-line).
+Each drawing here shows one idea, with fictional people and everyday cases, and their files are in [`examples/tour/`](examples/tour). Several are patterns, and the commonest are the first two: the draft for review and the do step. The rest of the gallery appears beside the idea it draws: [two scopes side by side](#boxes-inside-boxes-and-side-by-side), [operations](#operations), [a standing approval](#standing-approvals), [untrusted text](#untrusted-text) and [a red line](#the-red-line).
 
 ### Draft for review
 
@@ -430,6 +441,7 @@ awml check examples/question.yaml        # report mistakes; exits 1 on any
 awml fit examples/client-email.yaml examples/platforms/*.yaml
 awml draw examples/question.yaml         # print the Mermaid
 awml draw --implementation home examples/dinners.yaml
+awml draw --untrusted examples/tour/14-untrusted-text.yaml
 awml page examples/dinners.yaml -o dinners.html
 awml summary examples/dinners.yaml --json
 awml login
@@ -439,11 +451,11 @@ awml pull family/dinners@1 -o dinners
 
 - `awml check` checks the design and each implementation. It prints each warning before `ok` or the mistakes, and exits 1 only if it finds a mistake. It still compares legacy view pairs. `--json` lists every check it makes, passing ones included, each with a stable id and its result: `pass`, `fail`, `skipped` or `warn`.
 - `awml fit` judges the design against platform descriptions. Add `--implementation ID` to judge that placement, and `--json` for the report's JSON form. An implementation can be given without descriptions, and then each block says it has no platform or that its platform wasn't described.
-- `awml draw` prints the security view's Mermaid. Add `--implementation ID` for a platform view. It refuses a file with mistakes, and prints them instead.
-- `awml page` writes one standalone HTML page with the security view then every implementation, each with a heading. Several files appear in the order given. The page takes their shared title, or Workflows when they differ.
-- `awml summary` counts the scopes, platforms, parts and lines in one workflow. It includes platforms from every implementation and counts the design once. `--json` prints the registry's JSON form.
+- `awml draw` prints the security view's Mermaid. Add `--implementation ID` for a platform view, or `--untrusted` for the untrusted view. It refuses a file with mistakes, and prints them instead.
+- `awml page` writes one standalone HTML page with the security view, the untrusted view if there is one, then every implementation, each with a heading. Several files appear in the order given. The page takes their shared title, or Workflows when they differ.
+- `awml summary` counts the scopes, platforms, parts and lines in one workflow. It includes platforms from every implementation and counts the design once, and lists what each untrusted part's text reaches. `--json` prints the registry's JSON form.
 - `awml convert security.yaml platform.yaml` joins a matching 0.3 or 0.2 pair into one 0.4 file, printed to standard output. It keeps the security design and turns platform groups into blocks of the `default` implementation. Add `--implementation ID` to name the implementation. YAML comments move to the top. The canonical labels, part order and triggers may change the old platform drawing.
-- `awml login` saves an API token for the registry. `awml push` checks and uploads one 0.4 or 0.5 file in the API's workflow field. `awml pull` downloads the latest or a numbered version as `<slug>.yaml`, and `awml pull owner/platforms/slug` does the same for a published platform description. It still downloads an older pair as `security.yaml` and `platform.yaml`. The commands use `https://awml.io` unless `--registry` or `AWML_REGISTRY_URL` says otherwise. Add `--private` to the first push of a private organisation workflow.
+- `awml login` saves an API token for the registry. `awml push` checks and uploads one 0.4, 0.5 or 0.6 file in the API's workflow field. `awml pull` downloads the latest or a numbered version as `<slug>.yaml`, and `awml pull owner/platforms/slug` does the same for a published platform description. It still downloads an older pair as `security.yaml` and `platform.yaml`. The commands use `https://awml.io` unless `--registry` or `AWML_REGISTRY_URL` says otherwise. Add `--private` to the first push of a private organisation workflow.
 
 For example, the client email workflow can run on the scheduled scripts platform, while the other descriptions show why they don't fit:
 
@@ -471,7 +483,7 @@ npx -y @mermaid-js/mermaid-cli@11.4.1 -b white -i my-workflow.mmd -o my-workflow
 One file holds one workflow and its implementations:
 
 ```yaml
-awml: "0.5"
+awml: "0.6"
 title: The family's dinners
 scopes:
   - { id: carers, label: "carers: + June, Beth" }
@@ -493,9 +505,9 @@ implementations:
       - { id: phone, label: Family phone, parts: [chat] }
 ```
 
-- The file needs `awml`, the version `"0.5"`; `title`, the workflow's name; and `parts`. It may have `scopes`, `lines` and `implementations`. Version `"0.4"` still reads as before, with no standing approval, no check of its tiers and only a bare id as a block's `platform`, and versions `"0.3"` and `"0.2"` with `groups` and `view`.
+- The file needs `awml`, the version `"0.6"`; `title`, the workflow's name; and `parts`. It may have `scopes`, `lines` and `implementations`. Version `"0.5"` still reads as before, with no `untrusted` or `cleans`. Version `"0.4"` reads as before too, with no standing approval, no check of its tiers and only a bare id as a block's `platform`, and versions `"0.3"` and `"0.2"` with `groups` and `view`.
 - A **scope** has an `id` and a `label`, and may have `in`, the id of its parent scope, and `processing`, the companies it allows.
-- A **part** has an `id`, a `kind` and a `label`, which a fork doesn't need. Its `in` names its scope. A step may have `op`, a trigger `wait`, and a context `at`.
+- A **part** has an `id`, a `kind` and a `label`, which a fork doesn't need. Its `in` names its scope. A step may have `op`, a trigger `wait`, and a context `at`. A trigger, connector or context may have `untrusted`, and a code step `cleans`.
 - An **implementation** has an id in the `implementations` map, a `label` and `blocks`. Each block has an `id`, a `label` and `parts`, the ids it holds. It may have `in`, its parent block, and `platform`, a platform description id: a bare id for your own, or `owner/platforms/slug` for one published to the registry. Every part except a trigger or comment needs exactly one block per implementation.
 - An implementation may have **comments**, each with `id`, `label`, `in`, its block, and `ties`, a list of design part ids. These comments appear only in its platform view.
 - A **line** has `from` and `to`, the ids of two parts, and a `kind`. It may have a `label`, and `breaks: true` to draw it red.
@@ -503,11 +515,11 @@ implementations:
 - An id is letters, digits and underscores, starting with a letter, and scope, part, block and comment ids are unique across the file. Implementation ids have their own namespace.
 - Parts are drawn in the design's order, and each scope or block after the parts beside it. Unplaced triggers and design comments are drawn beside the other end of their first visible line. A `hidden` line steers the layout when Mermaid puts something in an awkward place.
 
-Every id, label, kind and reference to an id is text. `awml` reads YAML 1.2, which reads `true`, `false`, numbers and dates such as `2026-10-20` as something other than text, so quote those. Tools that read YAML 1.1 also read `yes`, `no`, `on` and `off` as true or false, and `19:00` as a number, so quoting those too keeps a file the same in every tool. `breaks` is `true` or `false`, unquoted.
+Every id, label, kind and reference to an id is text. `awml` reads YAML 1.2, which reads `true`, `false`, numbers and dates such as `2026-10-20` as something other than text, so quote those. Tools that read YAML 1.1 also read `yes`, `no`, `on` and `off` as true or false, and `19:00` as a number, so quoting those too keeps a file the same in every tool. `breaks`, `untrusted` and `cleans` are `true` or `false`, unquoted.
 
 ### What `awml check` reports
 
-`awml check` reports structural mistakes, invalid operations, tiers that disagree with the drawing and publishing drawn as routing. It also checks each implementation's block references, nesting and placement, and its comments' ties. It warns when AI decides a `do` step or one `do` step leads to more than one change. Warnings leave the exit status alone. [`SPEC.md`](SPEC.md) gives the exact rules, including the checks for older view pairs.
+`awml check` reports structural mistakes, invalid operations, tiers that disagree with the drawing and publishing drawn as routing. It also checks each implementation's block references, nesting and placement, and its comments' ties. It warns when AI decides a `do` step, when one `do` step leads to more than one change, and when untrusted text reaches an outside action. Warnings leave the exit status alone. [`SPEC.md`](SPEC.md) gives the exact rules, including the checks for older view pairs.
 
 ### Examples to start from
 
@@ -521,6 +533,6 @@ Besides the gallery, [`examples/`](examples) has three workflows to start from: 
 
 ## Status and licence
 
-Draft 0.5. The notation and the file format may still change.
+Draft 0.6. The notation and the file format may still change.
 
 MIT. See `LICENSE`.

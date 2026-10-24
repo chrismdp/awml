@@ -40,7 +40,8 @@ func Page(docs []*Map) string {
 	return strings.Join(out, "\n") + "\n"
 }
 
-var views = map[string]string{"security": "Security view: who may see each part", "platform": "Platform view: where each part runs"}
+var views = map[string]string{"security": "Security view: who may see each part", "untrusted": "Untrusted view: where strangers' text reaches",
+	"platform": "Platform view: where each part runs"}
 
 const style = `:root { color-scheme: light; }
 body { margin: 0; background: #f6f7f9; color: #1a1c21; font: 16px/1.6 system-ui, "Segoe UI", sans-serif; }

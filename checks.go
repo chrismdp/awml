@@ -66,16 +66,21 @@ var (
 
 // checkDefinition describes one check. early is whether it runs before a broken list stops the
 // rest, warn whether it warns rather than fails, legacy03 whether a legacy view must be 0.3 for it
-// to apply, and format05 whether only a 0.5 workflow is held to it. none says why it was skipped
-// when no file given is one it applies to.
+// to apply, and formats the versions of workflow held to it, when not every version is. none says
+// why it was skipped when no file given is one it applies to.
 type checkDefinition struct {
 	id, name, about string
 	appliesTo       []string
 	early, warn     bool
 	legacy03        bool
-	format05        bool
+	formats         []string
 	none            string
 }
+
+var (
+	since05Formats = []string{"0.5", "0.6"}
+	since06Formats = []string{"0.6"}
+)
 
 var checkDefinitions = []checkDefinition{
 	{id: "file.yaml", name: "The file is YAML", about: "Each file can be read, and holds a YAML mapping of fields.", appliesTo: everyFile, early: true},
@@ -83,7 +88,7 @@ var checkDefinitions = []checkDefinition{
 	{id: "fields.known", name: "Every field is known and none is missing", about: "Each file, scope, part, line, implementation, block and comment has the fields it needs and no others, and each list is a list of mappings.", appliesTo: everyFile, early: true},
 	{id: "kinds.known", name: "Every kind is known", about: "Each part and line has a kind the spec defines.", appliesTo: workflows},
 	{id: "ids.unique", name: "No id is used twice", about: "Scope, part, block and comment ids are unique across the file.", appliesTo: workflows},
-	{id: "ids.written", name: "Every id is well written", about: "An id is letters, digits and underscores, starting with a letter, and a block's platform is a company id, or in a 0.5 file owner/platforms/slug.", appliesTo: workflows},
+	{id: "ids.written", name: "Every id is well written", about: "An id is letters, digits and underscores, starting with a letter, and a block's platform is a company id, or from a 0.5 file owner/platforms/slug.", appliesTo: workflows},
 	{id: "values.text", name: "Every value that should be text is text", about: "Ids, labels, kinds and references are text, not something YAML read as true, false, a number or a date.", appliesTo: everyFile, early: true},
 	{id: "lines.breaks", name: "Every breaks is true or false", about: "A line's breaks, which draws it red, is true or false, unquoted.", appliesTo: workflows},
 	{id: "references.known", name: "Every reference names something in the file", about: "Each in, from and to, each part a block names and each part a comment ties names a scope, block or part the file has.", appliesTo: workflows},
@@ -93,9 +98,9 @@ var checkDefinitions = []checkDefinition{
 	{id: "ops.known", name: "Every op is known and on a step", about: "An op is one of the operations the spec lists, on an ai, code or person step.", appliesTo: workflows},
 	{id: "operations.only-do-acts", name: "Only a do step leads to an outside action", about: "A step that leads to an outside action, straight or through a review or a fork, is a do step.", appliesTo: workflows},
 	{id: "operations.answer-check-read-only", name: "An answer or check step never writes to a context", about: "An answer step and a check step read contexts and speak on surfaces, but never write to a context.", appliesTo: workflows},
-	{id: "tiers.written", name: "Every outside action's label ends with its tier", about: "An outside action's label ends with Allow, Ask or Block after a colon.", appliesTo: []string{"workflow"}, format05: true, none: "no file given is a 0.5 workflow"},
-	{id: "tiers.shape", name: "Every tier agrees with what stands in front of it", about: "An Ask action has a review, a standing approval or a person's own step on every way in, an Allow action has no review or standing approval in front of it, and only red lines lead to a Block action.", appliesTo: []string{"workflow"}, format05: true, none: "no file given is a 0.5 workflow"},
-	{id: "approvals.listed", name: "Every standing approval lists its actions on a surface", about: "A standing approval leads to the surface where each action it covers is listed with how to undo it.", appliesTo: []string{"workflow"}, format05: true, none: "no file given is a 0.5 workflow"},
+	{id: "tiers.written", name: "Every outside action's label ends with its tier", about: "An outside action's label ends with Allow, Ask or Block after a colon.", appliesTo: []string{"workflow"}, formats: since05Formats, none: "no file given is a 0.5 or 0.6 workflow"},
+	{id: "tiers.shape", name: "Every tier agrees with what stands in front of it", about: "An Ask action has a review, a standing approval or a person's own step on every way in, an Allow action has no review or standing approval in front of it, and only red lines lead to a Block action.", appliesTo: []string{"workflow"}, formats: since05Formats, none: "no file given is a 0.5 or 0.6 workflow"},
+	{id: "approvals.listed", name: "Every standing approval lists its actions on a surface", about: "A standing approval leads to the surface where each action it covers is listed with how to undo it.", appliesTo: []string{"workflow"}, formats: since05Formats, none: "no file given is a 0.5 or 0.6 workflow"},
 	{id: "lines.data-narrows", name: "Every data line stays in its scope or narrows", about: "A data line moves content only within its scope or into one inside it, since any other move is publishing drawn as routing.", appliesTo: []string{"workflow", "security"}, none: "no file given is a workflow or a security view"},
 	{id: "processing.written", name: "Every processing is well written", about: "A scope's processing is any, none, or a map from company ids to any or a list of known operations.", appliesTo: []string{"workflow", "security"}, legacy03: true, none: "no file given is a 0.4 workflow or a 0.3 security view"},
 	{id: "processing.nested", name: "An inner scope allows no more processing than its outer one", about: "A scope inside another allows no company or operation that the outer scope doesn't.", appliesTo: []string{"workflow", "security"}, legacy03: true, none: "no file given is a 0.4 workflow or a 0.3 security view"},
@@ -103,12 +108,15 @@ var checkDefinitions = []checkDefinition{
 	{id: "platform.blocks-only", name: "Only a block takes a platform", about: "platform belongs to a block of the platform view, never to a scope.", appliesTo: []string{"workflow", "security"}, legacy03: true, none: "no file given is a 0.4 workflow or a 0.3 security view"},
 	{id: "wait.duration", name: "Every wait is a duration on a trigger", about: "wait is an ISO 8601 duration in weeks, days, hours, minutes or seconds, given only on a trigger.", appliesTo: workflows, legacy03: true, none: "no file given is a 0.4 workflow or a 0.3 view"},
 	{id: "at.path", name: "Every at is a path on a context", about: "at is a relative path of plain names, given only on a context.", appliesTo: workflows, legacy03: true, none: "no file given is a 0.4 workflow or a 0.3 view"},
+	{id: "untrusted.parts", name: "Only a trigger, connector or context is marked untrusted", about: "untrusted is true or false, and is true only on a trigger, connector or context.", appliesTo: []string{"workflow"}, formats: since06Formats, none: "no file given is a 0.6 workflow"},
+	{id: "cleans.code-only", name: "Only a code step cleans", about: "cleans is true or false, and is true only on a code step, since strangers' text can steer an AI step however it's written.", appliesTo: []string{"workflow"}, formats: since06Formats, none: "no file given is a 0.6 workflow"},
 	{id: "placement.once", name: "No part is placed twice in an implementation", about: "Each part sits in at most one block of each implementation.", appliesTo: []string{"workflow"}, none: "no file given is a 0.4 workflow"},
 	{id: "placement.complete", name: "Every part that needs a block has one", about: "Every part but a trigger or comment sits in a block of each implementation.", appliesTo: []string{"workflow"}, none: "no file given is a 0.4 workflow"},
 	{id: "warn.do-by-code", name: "No do step is decided by AI", about: "A do step should be code acting on what an earlier step decided; this warns and never fails.", appliesTo: workflows, warn: true},
 	{id: "warn.one-change", name: "Each do step makes one change", about: "A do step should lead to one change, counting each outside action and surface and all contexts together as one; this warns and never fails.", appliesTo: workflows, warn: true},
+	{id: "warn.untrusted-outside", name: "No untrusted text reaches an outside action", about: "Text from a part marked untrusted reaches no outside action without a review, a person's own step or a code step marked cleans to stop it; this warns and never fails.", appliesTo: []string{"workflow"}, warn: true, formats: since06Formats, none: "no file given is a 0.6 workflow"},
 	{id: "description.values", name: "Every platform description value is of the right kind", about: "platform is a mapping, off_for_up_to a duration, steps code or agent, agents and calls lists of company ids, and holds a list.", appliesTo: []string{"platform-description"}, none: "no file given is a platform description"},
-	{id: "description.ids", name: "Every company id and path is well written", about: "A platform description's ids and company ids are lower-case letters, digits and hyphens, a 0.5 description's id may be owner/platforms/slug, and what it holds are relative paths.", appliesTo: []string{"platform-description"}, none: "no file given is a platform description"},
+	{id: "description.ids", name: "Every company id and path is well written", about: "A platform description's ids and company ids are lower-case letters, digits and hyphens, from 0.5 a description's id may be owner/platforms/slug, and what it holds are relative paths.", appliesTo: []string{"platform-description"}, none: "no file given is a platform description"},
 	{id: "views.same-parts", name: "Both views have the same parts", about: "A legacy security view and platform view with the same title have the same parts, of the same kinds, apart from comments and triggers the platform view leaves out.", appliesTo: []string{"security", "platform"}},
 	{id: "views.same-lines", name: "Both views have the same lines", about: "A legacy security view and platform view with the same title have the same lines by their ends and kind, apart from ties, hidden lines and lines to what the platform view leaves out.", appliesTo: []string{"security", "platform"}},
 }
@@ -227,7 +235,7 @@ func (definition checkDefinition) appliesToFile(file checkedSource) bool {
 		return isOneOf("security", definition.appliesTo...) && isOneOf("platform", definition.appliesTo...) &&
 			(!definition.legacy03 || file.version == "0.3")
 	}
-	if !isOneOf(file.view, definition.appliesTo...) || definition.format05 && file.version != "0.5" {
+	if !isOneOf(file.view, definition.appliesTo...) || definition.formats != nil && !isOneOf(file.version, definition.formats...) {
 		return false
 	}
 	return !definition.legacy03 || file.view == "workflow" || file.view == "platform-description" || file.version == "0.3"

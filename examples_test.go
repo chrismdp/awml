@@ -39,7 +39,7 @@ func TestThereAreExamples(t *testing.T) {
 	want := []string{"client-email", "dinners", "legend", "question",
 		"tour/01-draft-and-send", "tour/02-fork", "tour/03-refused-read", "tour/04-publishing", "tour/05-side-by-side",
 		"tour/06-red-line", "tour/07-person-step", "tour/08-gap", "tour/09-platform-view", "tour/10-operations",
-		"tour/11-do", "tour/12-standing-approval", "tour/13-check-by-code"}
+		"tour/11-do", "tour/12-standing-approval", "tour/13-check-by-code", "tour/14-untrusted-text"}
 	if !reflect.DeepEqual(names, want) {
 		t.Errorf("examples = %q\nwant %q", names, want)
 	}
@@ -79,6 +79,16 @@ func TestEachExampleIsSoundAndItsDrawingsAreCurrent(t *testing.T) {
 				}
 				if _, err := os.Stat(stem + ".svg"); err != nil {
 					t.Error(err)
+				}
+			}
+			// No implementation id has a hyphen, so the untrusted view's name is never one's.
+			if untrusted, err := UntrustedView(file); err == nil {
+				stem := strings.TrimSuffix(path, ".yaml") + "-untrusted-view"
+				if mmd, err := os.ReadFile(stem + ".mmd"); err != nil || string(mmd) != Draw(untrusted)+"\n" {
+					t.Errorf("%s.mmd isn't what awml draw --untrusted draws now: run examples/render.sh", stem)
+				}
+				if svg, err := os.ReadFile(stem + ".svg"); err != nil || !strings.HasPrefix(string(svg), "<svg") {
+					t.Errorf("%s.svg isn't an SVG", stem)
 				}
 			}
 			stem := strings.TrimSuffix(path, ".yaml")
