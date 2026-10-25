@@ -31,6 +31,11 @@ for (const path of top.sort()) {
 
   assert.equal(api.checksJSON([{ file: relative, source }]) + "\n", runNative(["check", "--json", relative], failed), `${relative}: checks JSON`);
   assert.equal(api.summaryJSON(source) + "\n", runNative(["summary", "--json", relative]), `${relative}: summary JSON`);
+  // A file of the current version comes back as it was, comments and all.
+  if (!failed) {
+    assert.equal(api.convert(source), source, `${relative}: convert`);
+    assert.equal(runNative(["convert", relative]), source, `${relative}: awml convert`);
+  }
   if (/^platform:/m.test(source)) {
     assert.throws(() => api.draw(source), /a platform description has no drawing/);
     passed++;
@@ -156,6 +161,20 @@ implementations:
     label: At home
     blocks:
       - {id: runner, label: Runner, platform: acme/platforms/ops-runner, parts: [renew, standing, library, phone, board]}
+`,
+    // Each comment moves to the top once, in the file's order.
+    "comments-0.5.yaml": `# The family's dinners.
+awml: "0.5"
+title: Dinners
+scopes:
+  - {id: family, label: "family: parents, kids"}
+parts:
+  # The week starts on Thursday.
+  - {id: thu, kind: trigger, label: Thursday} # After the school run.
+  - {id: plan, kind: ai, label: Plan, in: family}
+lines:
+  # Thursday starts the plan.
+  - {from: thu, to: plan, kind: start}
 `,
     "description-0.3.yaml": description("0.3"),
     "description-0.4.yaml": description("0.4"),
@@ -324,7 +343,7 @@ const fitPaths = [
 const fitSources = await Promise.all(fitPaths.map((path) => readFile(new URL(`../${path}`, import.meta.url), "utf8")));
 assert.equal(api.fitJSON(fitSources) + "\n", runNative(["fit", "--json", ...fitPaths]), "fit JSON");
 
-console.log(`Node wasm parity: ${passed} examples passed (check, warnings, summary, Mermaid); ${placements} implementations; ${untrustedViews} untrusted views; ${conversions} conversions; invalid check messages and fit passed`);
+console.log(`Node wasm parity: ${passed} examples passed (check, warnings, summary, convert, Mermaid); ${placements} implementations; ${untrustedViews} untrusted views; ${conversions} conversions; invalid check messages and fit passed`);
 
 async function yamlFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });

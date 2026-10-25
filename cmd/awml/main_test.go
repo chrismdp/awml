@@ -193,6 +193,40 @@ func TestConvertUpgradesOneOlderFile(t *testing.T) {
 	}
 }
 
+func TestConvertGivesA06FileAsItWasWithItsComments(t *testing.T) {
+	path := filepath.Join("..", "..", "examples", "dinners.yaml")
+	src, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(src), "# ") {
+		t.Fatalf("%s no longer starts with a comment", path)
+	}
+	if r := awmlRun("convert", path); r != (result{0, string(src), ""}) {
+		t.Errorf("convert gave %+v\nwant stdout:\n%s", r, src)
+	}
+}
+
+func TestConvertMovesEachCommentOfAnOlderFileToTheTopOnce(t *testing.T) {
+	old := `# Dinners at home.
+awml: "0.5"
+title: Dinners
+scopes:
+  - { id: family, label: "family" }
+parts:
+  # The week starts on Thursday.
+  - { id: thu, kind: trigger, label: "Thursday 19:00" } # After the school run.
+  - { id: plan, kind: ai, label: "Plan next week's dinners", in: family }
+lines:
+  # Thursday starts the plan.
+  - { from: thu, to: plan, kind: start }
+`
+	want := "# Dinners at home.\n# The week starts on Thursday.\n# After the school run.\n# Thursday starts the plan.\n" + good
+	if r := awmlRun("convert", write(t, "old.yaml", old)); r != (result{0, want, ""}) {
+		t.Errorf("convert gave %+v\nwant stdout:\n%s", r, want)
+	}
+}
+
 // A file older ones passed may break a rule a newer one holds it to. awml convert still writes all
 // of it, and lists what awml check will report.
 func TestConvertListsTheMistakesNewerRulesFind(t *testing.T) {

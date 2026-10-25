@@ -1,6 +1,7 @@
 package awml
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"strings"
@@ -155,6 +156,88 @@ func commentRedLines(file *Map, red []*Map) {
 	}
 	file.set("parts", parts)
 	file.set("lines", lines)
+}
+
+// ConvertSources writes the one file of the current version that awml convert prints, from one file
+// or from a legacy security view followed by its platform view, whose implementation is named
+// default unless it's given. A file of the current version comes back as it was. Otherwise each
+// YAML comment of the files moves to the top once, in the files' order. It also gives the mistakes
+// Check finds in the result, since newer rules can find mistakes in a file that older ones passed.
+// A mistake in one of the files starts with its name, when it has one.
+func ConvertSources(sources []Source, implementation string) ([]byte, []string, error) {
+	if len(sources) == 0 || len(sources) > 2 {
+		return nil, nil, errors.New("convert takes one file, or a security view and its platform view")
+	}
+	if len(sources) == 1 && implementation != "" {
+		return nil, nil, errors.New("only a legacy pair has an implementation to name")
+	}
+	var docs []any
+	var comments []string
+	for _, source := range sources {
+		doc, err := Parse(source.Text)
+		if err != nil {
+			return nil, nil, named(source, errors.New("isn't YAML: "+strings.Join(strings.Fields(err.Error()), " ")))
+		}
+		found, err := Comments(source.Text)
+		if err != nil {
+			return nil, nil, named(source, err)
+		}
+		docs = append(docs, doc)
+		comments = append(comments, found...)
+	}
+	var converted *Map
+	var err error
+	if len(docs) == 1 {
+		if file, ok := docs[0].(*Map); ok && file.get("awml") == currentFormat {
+			return sources[0].Text, Check(file), nil
+		}
+		if converted, err = Upgrade(docs[0]); err != nil {
+			return nil, nil, named(sources[0], err)
+		}
+	} else {
+		if implementation == "" {
+			implementation = "default"
+		}
+		security, _ := docs[0].(*Map)
+		platform, _ := docs[1].(*Map)
+		if converted, err = ConvertWithImplementation(security, platform, implementation); err != nil {
+			return nil, nil, err
+		}
+	}
+	dropComments(converted)
+	data, err := Marshal(converted)
+	if err != nil {
+		return nil, nil, err
+	}
+	var out bytes.Buffer
+	for _, comment := range comments {
+		out.WriteString(comment + "\n")
+	}
+	out.Write(data)
+	return out.Bytes(), Check(converted), nil
+}
+
+// named starts a mistake in one file with the file's name, when it has one.
+func named(source Source, err error) error {
+	if source.File == "" {
+		return err
+	}
+	return fmt.Errorf("%s: %w", source.File, err)
+}
+
+// dropComments takes the YAML comments off a converted file, since they move to its top.
+func dropComments(value any) {
+	switch value := value.(type) {
+	case *Map:
+		value.headComment, value.footComment, value.keyComments = "", "", nil
+		for _, key := range value.Keys() {
+			dropComments(value.get(key))
+		}
+	case []any:
+		for _, item := range value {
+			dropComments(item)
+		}
+	}
 }
 
 // Convert joins a matching legacy pair into one file of the current version. The security view
