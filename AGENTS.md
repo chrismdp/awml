@@ -79,6 +79,6 @@ To release:
 
 ## The registry depends on this package
 
-The AWML registry runs this package as WebAssembly: `check`, `summary`, `draw` and `fit`, through `cmd/awml-wasm` and `wasm/awml.js`. `wasm/parity.test.mjs` keeps them giving the same answers as the CLI.
+The AWML registry runs this package as WebAssembly: `check`, `summary`, `draw`, `fit` and `convert`, through `cmd/awml-wasm` and `wasm/awml.js`. `wasm/parity.test.mjs` keeps them giving the same answers as the CLI.
 
 After a release that changes what any of them return, tell the registry on its own issue tracker, so it can update its copy of the engine.
