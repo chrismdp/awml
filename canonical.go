@@ -2,17 +2,14 @@ package awml
 
 import (
 	"fmt"
-	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
-// IsCanonical reports whether a document holds a 0.4, 0.5 or 0.6 workflow.
+// IsCanonical reports whether a document holds a workflow of the current version.
 func IsCanonical(doc *Map) bool {
-	return doc != nil && isOneOf(doc.get("awml"), "0.4", "0.5", "0.6") && !doc.has("platform")
+	return doc != nil && doc.get("awml") == currentFormat && !doc.has("platform")
 }
-
-// since05 is whether a file's version has what 0.5 added: standing approvals, tiers that the check
-// reads, and platforms named from the registry.
-func since05(format string) bool { return isOneOf(format, "0.5", "0.6") }
 
 // ImplementationIDs gives implementations in the order they were written.
 func ImplementationIDs(doc *Map) []string {
@@ -22,23 +19,43 @@ func ImplementationIDs(doc *Map) []string {
 	return nil
 }
 
+// copyMap copies a mapping but the keys omitted, keeping how YAML wrote each value, so a copy
+// written out again quotes what the file quoted.
 func copyMap(source *Map, omit ...string) *Map {
 	result := &Map{}
 	for _, key := range source.Keys() {
-		if !isOneOf(key, omit...) {
-			result.set(key, source.get(key))
+		if isOneOf(key, omit...) {
+			continue
+		}
+		result.set(key, source.get(key))
+		if style, ok := source.scalarStyles[key]; ok {
+			if result.scalarStyles == nil {
+				result.scalarStyles = map[string]yaml.Style{}
+			}
+			result.scalarStyles[key] = style
+		}
+		if source.nonTextKeys[key] {
+			if result.nonTextKeys == nil {
+				result.nonTextKeys = map[string]bool{}
+			}
+			result.nonTextKeys[key] = true
 		}
 	}
 	return result
 }
 
-// View projects a sound workflow into the same representation used by the older views.
-// An empty implementation selects the security view. The source is never changed. In a 0.6 file,
-// each line the check reports as breaking a rule is red: its breaks holds the check's words for
-// each rule it breaks, as a line marked red by hand in an older file holds true.
+// View projects a sound workflow into one of its views, whose boxes are groups. An empty
+// implementation selects the security view. The source is never changed. Each line the check
+// reports as breaking a rule is red: its breaks holds the check's words for each rule it breaks.
 func View(doc *Map, implementation string) (*Map, error) {
+	if doc != nil && doc.has("platform") {
+		return nil, fmt.Errorf("a platform description has no drawing")
+	}
+	if !IsCanonical(doc) {
+		return nil, fmt.Errorf(`awml draws only a workflow whose awml is "%s": upgrade an older file with awml convert`, currentFormat)
+	}
 	view, err := project(doc, implementation)
-	if err != nil || !IsCanonical(doc) || str(doc, "awml") != "0.6" {
+	if err != nil {
 		return view, err
 	}
 	found, _ := checkDoc(doc)
@@ -62,15 +79,11 @@ func View(doc *Map, implementation string) (*Map, error) {
 	return view, nil
 }
 
-// project projects a workflow into a view as View does, with no line red.
+// project projects a workflow into a view as View does, with no line red. The file may not be
+// checked yet.
 func project(doc *Map, implementation string) (*Map, error) {
-	if !IsCanonical(doc) {
-		if implementation != "" {
-			return nil, fmt.Errorf("--implementation needs a 0.4, 0.5 or 0.6 workflow")
-		}
-		return doc, nil
-	}
 	out := copyMap(doc, "scopes", "implementations", "groups", "view")
+	// A view keeps the shape of the separate views files once had, which Draw and the checks read.
 	out.set("awml", "0.3")
 	out.set("view", "security")
 	if doc.has("scopes") {
@@ -142,14 +155,11 @@ func checkCanonical(file *Map) (mistakeList, bool) {
 			clean.set(key, security.get(key))
 		}
 	}
-	format := str(file, "awml")
-	designErrors, stopped := checkView(clean, false, format)
+	designErrors, stopped := checkView(clean, false)
 	errors = appendUnique(errors, designErrors...)
-	if format == "0.6" {
-		for n, line := range soundMaps(file.get("lines")) {
-			if line.get("kind") == "publish" {
-				errors.add("kinds.known", fmt.Sprintf(`%s has unknown kind "publish": write it as data, since a data line publishes whenever its scopes make it one`, lineName(n, line)))
-			}
+	for n, line := range soundMaps(file.get("lines")) {
+		if line.get("kind") == "publish" {
+			errors.add("kinds.known", fmt.Sprintf(`%s has unknown kind "publish": write it as data, since a data line publishes whenever its scopes make it one`, lineName(n, line)))
 		}
 	}
 	if !file.has("implementations") {
@@ -254,7 +264,7 @@ func checkCanonical(file *Map) (mistakeList, bool) {
 			seen[keyOf(value)] = true
 		}
 		platform, _ := project(file, name)
-		platformErrors, _ := checkView(platform, true, format)
+		platformErrors, _ := checkView(platform, true)
 		errors = appendUnique(errors, platformErrors...)
 	}
 	return errors, false
@@ -296,125 +306,14 @@ func appendUnique(existing mistakeList, added ...mistake) mistakeList {
 	return existing
 }
 
-// Convert joins a matching legacy pair. The security view supplies the design's wording and order.
-func Convert(security, platform *Map) (*Map, error) {
-	return convert(security, platform, "default")
-}
-
-// ConvertWithImplementation joins a matching legacy pair and names its implementation.
-func ConvertWithImplementation(security, platform *Map, implementation string) (*Map, error) {
-	return convert(security, platform, implementation)
-}
-
-func convert(security, platform *Map, name string) (*Map, error) {
-	for _, doc := range []*Map{security, platform} {
-		if mistakes := Check(doc); len(mistakes) != 0 {
-			return nil, fmt.Errorf("%s", strings.Join(mistakes, "\n"))
-		}
-	}
-	if !isOneOf(str(security, "awml"), "0.2", "0.3") || !isOneOf(str(platform, "awml"), "0.2", "0.3") || str(security, "view") != "security" || str(platform, "view") != "platform" {
-		return nil, fmt.Errorf("convert needs a 0.3 or 0.2 security view followed by a platform view")
-	}
-	platform = copyMap(platform)
-	platform.set("title", security.get("title"))
-	if differences := CompareViews(security, platform); len(differences) > 0 {
-		return nil, fmt.Errorf("%s", strings.Join(differences, "\n"))
-	}
-	out := &Map{}
-	out.set("awml", "0.4")
-	out.set("title", security.get("title"))
-	if security.has("groups") {
-		out.set("scopes", security.get("groups"))
-	}
-	out.set("parts", security.get("parts"))
-	if security.has("lines") {
-		out.set("lines", security.get("lines"))
-	}
-	var blocks, comments []any
-	where := placed(items(platform, "parts"), items(platform, "lines"))
-	design := partsByID(security)
-	used := map[string]bool{}
-	for _, key := range []string{"groups", "parts"} {
-		for _, item := range items(security, key) {
-			used[str(item, "id")] = true
-		}
-	}
-	renamed := map[string]string{}
-	for _, group := range items(platform, "groups") {
-		old := str(group, "id")
-		name := old
-		for used[name] {
-			name = "block_" + name
-		}
-		renamed[old] = name
-		used[name] = true
-	}
-	for _, group := range items(platform, "groups") {
-		block := copyMap(group)
-		block.set("id", renamed[str(group, "id")])
-		if group.has("in") {
-			block.set("in", renamed[str(group, "in")])
-		}
-		ids := []any{}
-		for _, part := range items(platform, "parts") {
-			if str(part, "in") == str(group, "id") && design[str(part, "id")] != nil {
-				ids = append(ids, part.get("id"))
-			}
-		}
-		block.set("parts", ids)
-		blocks = append(blocks, block)
-	}
-	for _, part := range items(platform, "parts") {
-		if design[str(part, "id")] != nil {
-			continue
-		}
-		comment := copyMap(part, "kind", "in")
-		name := str(part, "id")
-		for used[name] {
-			name = "comment_" + name
-		}
-		used[name] = true
-		comment.set("id", name)
-		comment.set("in", renamed[where[str(part, "id")]])
-		ties := []any{}
-		for _, line := range items(platform, "lines") {
-			if str(line, "kind") != "tie" {
-				continue
-			}
-			from, to := str(line, "from"), str(line, "to")
-			if to == str(part, "id") {
-				from, to = to, from
-			}
-			if from == str(part, "id") {
-				ties = append(ties, to)
-			}
-		}
-		comment.set("ties", ties)
-		comments = append(comments, comment)
-	}
-	impl := &Map{}
-	impl.set("label", "Default")
-	impl.set("blocks", blocks)
-	if len(comments) > 0 {
-		impl.set("comments", comments)
-	}
-	implementations := &Map{}
-	implementations.set(name, impl)
-	out.set("implementations", implementations)
-	if mistakes := Check(out); len(mistakes) > 0 {
-		return nil, fmt.Errorf("%s", strings.Join(mistakes, "\n"))
-	}
-	return out, nil
-}
-
 func workflowViews(docs []*Map) []*Map {
 	var views []*Map
 	for _, doc := range docs {
-		security, _ := View(doc, "")
-		views = append(views, security)
-		if !IsCanonical(doc) {
+		security, err := View(doc, "")
+		if err != nil {
 			continue
 		}
+		views = append(views, security)
 		if untrusted, err := UntrustedView(doc); err == nil {
 			views = append(views, untrusted)
 		}

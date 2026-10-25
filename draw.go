@@ -5,10 +5,13 @@ import (
 	"strings"
 )
 
-// Draw turns an AWML document into Mermaid, so every drawing uses the same shapes and colours. The
-// document must have no mistakes: Check it first.
+// Draw turns a workflow, or one of its views, into Mermaid, so every drawing uses the same shapes
+// and colours. A workflow is drawn as its security view. It must have no mistakes but lines that
+// break a rule: check it with Unsound first.
 func Draw(doc *Map) string {
-	doc, _ = View(doc, "")
+	if IsCanonical(doc) {
+		doc, _ = View(doc, "")
+	}
 	groups, parts, lines := items(doc, "groups"), items(doc, "parts"), items(doc, "lines")
 	where := placed(parts, lines)
 	partOrder := map[string]int{}
@@ -136,11 +139,10 @@ func Draw(doc *Map) string {
 	return strings.Join(out, "\n")
 }
 
-// drawnRed is whether a view draws a line red: one marked by hand in a file before 0.6, or one that
-// View found breaking a rule.
+// drawnRed is whether a view draws a line red: one that View found breaking a rule.
 func drawnRed(l *Map) bool {
 	breaches, _ := l.get("breaks").([]any)
-	return l.get("breaks") == true || len(breaches) > 0
+	return len(breaches) > 0
 }
 
 // UML activity shapes where Mermaid has them; our own where UML has nothing.

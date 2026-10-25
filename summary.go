@@ -3,8 +3,8 @@ package awml
 import "strings"
 
 // Summary holds the things in a workflow that an inventory can count, and the names of its AI
-// steps, people, scopes and platforms. Groups, parts and lines that appear in both views are
-// counted and named once within their kind of view.
+// steps, people, scopes and platforms. Groups, parts and lines that appear in more than one view
+// are counted and named once within their kind of view.
 type Summary struct {
 	Steps           StepCounts         `json:"steps"`
 	Operations      map[string]int     `json:"operations"`
@@ -53,9 +53,9 @@ type PublishingSummary struct {
 	Labels []string `json:"labels"`
 }
 
-// Summarise counts one workflow from either view or from both views. It expects sound documents,
-// as Draw does. A part id identifies the same part in both views; a line is the same when its
-// endpoints, kind and label are the same.
+// Summarise counts one workflow from its security view and every implementation's platform view.
+// It expects sound workflows, as Draw does, and skips anything else. A part id identifies the same
+// part in every view; a line is the same when its endpoints, kind and label are the same.
 func Summarise(docs ...*Map) Summary {
 	docs = workflowViews(docs)
 	var out Summary

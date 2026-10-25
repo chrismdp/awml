@@ -1,4 +1,4 @@
-awml: "0.4"
+awml: "0.6"
 title: Bread
 scopes:
   - {id: bakery, label: Bakery, processing: any}

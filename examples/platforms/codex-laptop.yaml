@@ -1,4 +1,4 @@
-awml: "0.4"
+awml: "0.6"
 platform: { id: codex-laptop, label: "Codex on a laptop" }
 off_for_up_to: P14D
 steps: code

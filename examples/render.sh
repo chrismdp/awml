@@ -34,7 +34,7 @@ CONF
 fi
 printf '@font-face{font-family:"Inter";font-style:normal;font-weight:400;src:url(data:font/woff2;base64,%s) format("woff2")}\n' \
   "$(base64 < examples/fonts/Inter-Regular.woff2 | tr -d '\n')" > "$tmp/inter.css"
-for f in examples/*.yaml examples/tour/*.yaml; do
+for f in examples/*.yaml examples/tour/*.yaml examples/live/*.yaml; do
   for drawing in $("$tmp/draw" "$f"); do
   npx -y -p @mermaid-js/mermaid-cli@11.4.1 -p mermaid@11.17.2 mmdc -q -p "$tmp/puppeteer.json" -C "$tmp/inter.css" -b white -i "$drawing" -o "${drawing%.mmd}.svg"
   done

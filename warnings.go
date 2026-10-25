@@ -13,7 +13,7 @@ func Warnings(doc any) []string {
 
 func warningList(doc any) mistakeList {
 	file, ok := doc.(*Map)
-	if !ok || file == nil || file.has("platform") {
+	if !ok || !IsCanonical(file) {
 		return nil
 	}
 	partValues, ok := file.get("parts").([]any)
@@ -102,8 +102,5 @@ func warningList(doc any) mistakeList {
 			warnings.add("warn.one-change", fmt.Sprintf(`do step "%s" leads to %d changes (%s): each do step should make one`, id, changes, strings.Join(names, ", ")))
 		}
 	}
-	if file.get("awml") == "0.6" && IsCanonical(file) {
-		warnings = append(warnings, untrustedWarnings(parts, lines)...)
-	}
-	return warnings
+	return append(warnings, untrustedWarnings(parts, lines)...)
 }

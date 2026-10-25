@@ -41,7 +41,7 @@ implementations:
       - { id: server, label: Server, parts: [plan, notes] }
 `
 
-const soundDescription = `awml: "0.4"
+const soundDescription = `awml: "0.6"
 platform: { id: scripts-server, label: Scripts on a server }
 off_for_up_to: PT0S
 steps: code
@@ -57,12 +57,11 @@ func TestTheChecksKeepTheirIDsAndTheSpecsOrder(t *testing.T) {
 	}
 	want := []string{
 		"file.yaml", "file.version", "fields.known", "kinds.known", "ids.unique", "ids.written",
-		"values.text", "lines.breaks", "references.known", "nesting.acyclic", "comments.tie-only",
+		"values.text", "references.known", "nesting.acyclic", "comments.tie-only",
 		"ties.comment", "ops.known", "operations.only-do-acts", "operations.answer-check-read-only",
-		"tiers.written", "tiers.shape", "approvals.listed", "lines.data-narrows", "processing.written", "processing.nested", "processing.scopes-only",
+		"tiers.written", "tiers.shape", "approvals.listed", "processing.written", "processing.nested",
 		"platform.blocks-only", "wait.duration", "at.path", "untrusted.parts", "cleans.code-only", "placement.once", "placement.complete",
 		"warn.do-by-code", "warn.one-change", "warn.untrusted-outside", "description.values", "description.ids",
-		"views.same-parts", "views.same-lines",
 	}
 	if !reflect.DeepEqual(ids, want) {
 		t.Errorf("the checks are\n  %s\nwant\n  %s", strings.Join(ids, "\n  "), strings.Join(want, "\n  "))
@@ -90,9 +89,7 @@ func TestASoundWorkflowPassesEveryCheckThatAppliesToIt(t *testing.T) {
 	}
 	for _, check := range report.Checks {
 		want := "pass"
-		// From 0.6 a data line that leaves its scope is a publish, so lines.data-narrows doesn't apply,
-		// and a 0.6 workflow has no breaks.
-		if strings.HasPrefix(check.ID, "description.") || strings.HasPrefix(check.ID, "views.") || check.ID == "lines.data-narrows" || check.ID == "lines.breaks" {
+		if strings.HasPrefix(check.ID, "description.") {
 			want = "skipped"
 		}
 		if check.Result != want || len(check.Mistakes) != 0 {
@@ -152,7 +149,7 @@ func TestAFileThatIsntYAMLRunsNoOtherCheck(t *testing.T) {
 }
 
 func TestAChecksStoppedByAnEarlierMistakeIsSkipped(t *testing.T) {
-	src := "awml: \"0.3\"\ntitle: Broken\nview: security\nparts: [nonsense]\n"
+	src := "awml: \"0.6\"\ntitle: Broken\nparts: [nonsense]\n"
 	report := CheckSources("dev", []Source{source("broken.yaml", src)})
 	if fields := checkResult(t, report, "fields.known"); fields.Result != "fail" {
 		t.Errorf("fields.known gave %s", fields.Result)
@@ -163,7 +160,7 @@ func TestAChecksStoppedByAnEarlierMistakeIsSkipped(t *testing.T) {
 	}
 }
 
-func TestChecksFor03FieldsDontApplyToA02File(t *testing.T) {
+func TestAnOlderFileFailsOnlyItsVersion(t *testing.T) {
 	src := `awml: "0.2"
 title: Dinners
 view: security
@@ -171,25 +168,19 @@ parts:
   - { id: thu, kind: trigger, label: Thursday }
 `
 	report := CheckSources("dev", []Source{source("old.yaml", src)})
-	if wait := checkResult(t, report, "wait.duration"); wait.Result != "skipped" {
-		t.Errorf("wait.duration gave %s", wait.Result)
-	}
-	if scope := checkResult(t, report, "lines.data-narrows"); scope.Result != "pass" {
-		t.Errorf("lines.data-narrows gave %s", scope.Result)
-	}
-	if !reflect.DeepEqual(report.Files, []CheckedFile{{File: "old.yaml", View: "security"}}) {
+	if !reflect.DeepEqual(report.Files, []CheckedFile{{File: "old.yaml"}}) {
 		t.Errorf("files are %+v", report.Files)
 	}
-}
-
-func TestOnlyAFileBefore06HasBreaks(t *testing.T) {
-	report := CheckSources("dev", []Source{source("live.yaml", fridaySent)})
-	if breaks := checkResult(t, report, "lines.breaks"); breaks.Result != "skipped" || breaks.SkippedBecause != "no file given is a workflow or view before 0.6" {
-		t.Errorf("lines.breaks gave %s because %q", breaks.Result, breaks.SkippedBecause)
+	version := checkResult(t, report, "file.version")
+	want := []FileMistake{{"old.yaml", `awml is "0.2", which this release no longer reads: upgrade the file with awml convert`}}
+	if version.Result != "fail" || !reflect.DeepEqual(version.Mistakes, want) {
+		t.Errorf("file.version gave %s with %+v", version.Result, version.Mistakes)
 	}
-	report = CheckSources("dev", []Source{source("old.yaml", good)})
-	if breaks := checkResult(t, report, "lines.breaks"); breaks.Result != "pass" {
-		t.Errorf("lines.breaks gave %s", breaks.Result)
+	if yaml := checkResult(t, report, "file.yaml"); yaml.Result != "pass" {
+		t.Errorf("file.yaml gave %s", yaml.Result)
+	}
+	if kinds := checkResult(t, report, "kinds.known"); kinds.Result != "skipped" || kinds.SkippedBecause != "no file given is a workflow" {
+		t.Errorf("kinds.known gave %s because %q", kinds.Result, kinds.SkippedBecause)
 	}
 }
 
@@ -211,33 +202,6 @@ func TestAPlatformDescriptionIsCheckedOnItsOwnTerms(t *testing.T) {
 	}
 }
 
-func TestTwoViewsWithTheSameTitleAreCompared(t *testing.T) {
-	security := `awml: "0.3"
-title: Dinners
-view: security
-parts:
-  - { id: thu, kind: trigger, label: Thursday }
-  - { id: plan, kind: ai, label: Plan }
-lines:
-  - { from: thu, to: plan, kind: start }
-`
-	platform := strings.Replace(strings.Replace(security, "view: security", "view: platform", 1), "kind: ai", "kind: code", 1)
-	report := CheckSources("dev", []Source{source("s.yaml", security), source("p.yaml", platform)})
-	parts := checkResult(t, report, "views.same-parts")
-	want := []FileMistake{{"s.yaml and p.yaml", `part "plan" has kind "code" in the platform view but "ai" in the security view`}}
-	if parts.Result != "fail" || !reflect.DeepEqual(parts.Mistakes, want) {
-		t.Errorf("views.same-parts gave %s with %+v", parts.Result, parts.Mistakes)
-	}
-	if lines := checkResult(t, report, "views.same-lines"); lines.Result != "pass" {
-		t.Errorf("views.same-lines gave %s", lines.Result)
-	}
-
-	alone := CheckSources("dev", []Source{source("s.yaml", security)})
-	if lines := checkResult(t, alone, "views.same-lines"); lines.Result != "skipped" || lines.SkippedBecause != "no sound security view and platform view share a title" {
-		t.Errorf("views.same-lines gave %s because %q", lines.Result, lines.SkippedBecause)
-	}
-}
-
 func TestTheReportsJSONUsesTheIssuesNames(t *testing.T) {
 	src := strings.Replace(soundWorkflow, "to: notes", "to: note", 1)
 	encoded, err := json.Marshal(CheckSources("dev", []Source{source("dinners.yaml", src)}))
@@ -246,7 +210,7 @@ func TestTheReportsJSONUsesTheIssuesNames(t *testing.T) {
 	}
 	for _, want := range []string{
 		`{"engine":"dev","files":[{"file":"dinners.yaml","view":"workflow"}],"checks":[{"id":"file.yaml","name":`,
-		`"applies_to":["workflow","security","platform","platform-description"],"result":"pass","mistakes":[]}`,
+		`"applies_to":["workflow","platform-description"],"result":"pass","mistakes":[]}`,
 		`"result":"fail","mistakes":[{"file":"dinners.yaml","message":"the line from \"plan\" to \"note\" ends at unknown part \"note\""}]}`,
 		`"result":"skipped","skipped_because":"no file given is a platform description","mistakes":[]}`,
 	} {
@@ -262,7 +226,7 @@ func TestEveryMistakeIsFiledUnderACheck(t *testing.T) {
 	sources := map[string]string{
 		"sound":       soundWorkflow,
 		"description": soundDescription,
-		"bad description": `awml: 3
+		"bad description": `awml: "0.6"
 platform: { id: Server, label: 4 }
 off_for_up_to: P1M
 steps: robots
@@ -273,11 +237,11 @@ extra: 1
 `,
 		"not a mapping": "- one\n- two\n",
 		"bad version":   "awml: \"0.1\"\ntitle: x\nview: sideways\nparts: []\n",
-		"broken lists":  "awml: \"0.3\"\ntitle: x\nview: security\nparts: 3\nlines: [3]\n",
-		"legacy": `awml: "0.3"
-title: Legacy
-view: security
-groups:
+		"older version": "awml: \"0.5\"\ntitle: x\nparts: []\n",
+		"broken lists":  "awml: \"0.6\"\ntitle: x\nparts: 3\nlines: [3]\n",
+		"design": `awml: "0.6"
+title: Design
+scopes:
   - { id: a, label: A, in: b, platform: Pc, processing: { anthropic: [fly], 3: any, Bad: soon } }
   - { id: b, label: B, in: a, processing: { anthropic: [sort] } }
   - { id: c, label: C, in: b, processing: any }
@@ -300,10 +264,9 @@ lines:
   - { from: t, to: zz, kind: sideways }
   - { to: t }
 `,
-		"operations": `awml: "0.3"
+		"operations": `awml: "0.6"
 title: Operations
-view: security
-groups:
+scopes:
   - { id: a, label: A }
 parts:
   - { id: s, kind: ai, op: answer, label: S, in: a }
@@ -316,15 +279,7 @@ lines:
   - { from: d, to: o, kind: data }
   - { from: d, to: p, kind: data }
 `,
-		"platform view": `awml: "0.3"
-title: Legacy
-view: platform
-groups:
-  - { id: box, label: Box, processing: any, platform: 3 }
-parts:
-  - { id: t, kind: trigger, label: T, in: box }
-`,
-		"canonical": `awml: "0.4"
+		"canonical": `awml: "0.6"
 title: Canonical
 extra: 1
 scopes:
@@ -337,7 +292,7 @@ implementations:
   home:
     label: Home
     blocks:
-      - { id: server, label: Server, parts: [plan, plan, 3, ghost], processing: any }
+      - { id: server, label: Server, platform: Pc, parts: [plan, plan, 3, ghost], processing: any }
       - { id: family, label: Again, parts: oops }
     comments:
       - { id: c, label: C, in: "", ties: [ghost, 4], extra: 1 }
@@ -346,7 +301,7 @@ implementations:
     label: Away
     blocks: 3
 `,
-		"tiers": `awml: "0.5"
+		"tiers": `awml: "0.6"
 title: Tiers
 parts:
   - { id: d, kind: code, op: do, label: D }
@@ -375,8 +330,8 @@ lines:
   - { from: read, to: d, kind: start }
   - { from: d, to: a, kind: start }
 `,
-		"canonical lists":           "awml: \"0.4\"\ntitle: x\nparts: [3]\nimplementations: 3\n",
-		"canonical implementations": "awml: \"0.4\"\ntitle: x\nparts: []\nimplementations: 3\n",
+		"canonical lists":           "awml: \"0.6\"\ntitle: x\nparts: [3]\nimplementations: 3\n",
+		"canonical implementations": "awml: \"0.6\"\ntitle: x\nparts: []\nimplementations: 3\n",
 	}
 	examples, _ := filepath.Glob("examples/*.yaml")
 	more, _ := filepath.Glob("examples/*/*.yaml")
@@ -407,9 +362,9 @@ lines:
 			t.Errorf("%s: the checks hold\n  %s\nbut Check and Warnings give\n  %s", name, strings.Join(got, "\n  "), strings.Join(want, "\n  "))
 		}
 	}
-	// Two views and a file that isn't YAML are tested on their own above.
+	// A file that isn't YAML is tested on its own above.
 	for _, check := range CheckSources("dev", nil).Checks {
-		if !failed[check.ID] && check.ID != "file.yaml" && !strings.HasPrefix(check.ID, "views.") {
+		if !failed[check.ID] && check.ID != "file.yaml" {
 			t.Errorf("no source here fails %s", check.ID)
 		}
 	}

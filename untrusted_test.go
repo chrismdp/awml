@@ -53,17 +53,6 @@ func TestA06FileIsAWorkflowThatMayMarkPartsUntrustedAndCodeStepsCleans(t *testin
 	}
 }
 
-func TestAPlatformDescriptionMayBe06AndNameARegisteredPlatform(t *testing.T) {
-	mistakes(t, parsed(t, strings.Replace(registeredDescription, `awml: "0.5"`, `awml: "0.6"`, 1)))
-}
-
-func TestA06WorkflowKeepsWhat05Added(t *testing.T) {
-	src := strings.Replace(standing, `awml: "0.5"`, `awml: "0.6"`, 1)
-	mistakes(t, parsed(t, src))
-	mistakes(t, parsed(t, strings.Replace(src, "Update the prices: Ask", "Update the prices: Allow", 1)),
-		`outside action "prices" is Allow, but standing approval "ana_ok" stands in front of it: an Allow action just happens, so make it Ask or take the yes away`)
-}
-
 func TestOnlyATriggerConnectorOrContextIsMarkedUntrusted(t *testing.T) {
 	src := strings.Replace(orderForm, `label: "Read the order", in: bakery }`, `label: "Read the order", in: bakery, untrusted: true }`, 1)
 	mistakes(t, parsed(t, src), `part "read" is marked untrusted, but only a trigger, connector or context takes it`)
@@ -78,11 +67,6 @@ func TestOnlyACodeStepCleans(t *testing.T) {
 	mistakes(t, parsed(t, src), `part "orders" cleans, but only a code step takes cleans`)
 	src = strings.Replace(orderForm, "cleans: true", "cleans: 1", 1)
 	mistakes(t, parsed(t, src), `part "keep": cleans must be true or false, not "1"`)
-}
-
-func TestA05FileTakesNeitherMark(t *testing.T) {
-	src := strings.Replace(orderForm, `awml: "0.6"`, `awml: "0.5"`, 1)
-	mistakes(t, parsed(t, src), `part "form" has unknown field "untrusted"`, `part "keep" has unknown field "cleans"`)
 }
 
 func TestUntrustedTextSpreadsAlongEveryLineThatLeadsOnUntilSomethingStopsIt(t *testing.T) {
@@ -148,12 +132,6 @@ func TestCheckWarnsOfEachOutsideActionUntrustedTextReaches(t *testing.T) {
 	for _, id := range []string{"untrusted.parts", "cleans.code-only"} {
 		if got := checkResult(t, report, id); got.Result != "pass" {
 			t.Errorf("%s gave %s", id, got.Result)
-		}
-	}
-	report = CheckSources("dev", []Source{source("dinners.yaml", strings.Replace(soundWorkflow, `awml: "0.6"`, `awml: "0.5"`, 1))})
-	for _, id := range []string{"untrusted.parts", "cleans.code-only", "warn.untrusted-outside"} {
-		if got := checkResult(t, report, id); got.Result != "skipped" || got.SkippedBecause != "no file given is a 0.6 workflow" {
-			t.Errorf("%s gave %s because %q", id, got.Result, got.SkippedBecause)
 		}
 	}
 }

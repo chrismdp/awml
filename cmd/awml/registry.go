@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/chrismdp/awml"
 )
 
 const defaultRegistry = "https://awml.io"
@@ -78,8 +80,7 @@ func push(name string, paths []string, private bool, registry string, stdout, st
 	if len(errs) != 0 {
 		return 1
 	}
-	format, _ := doc.Get("awml")
-	if format != "0.4" && format != "0.5" && format != "0.6" {
+	if !awml.IsCanonical(doc) {
 		printConvertAdvice(stderr)
 		return 1
 	}
@@ -130,7 +131,7 @@ func push(name string, paths []string, private bool, registry string, stdout, st
 }
 
 func printConvertAdvice(stderr io.Writer) {
-	fmt.Fprintln(stderr, "awml push: push one 0.4, 0.5 or 0.6 file; convert an old pair with awml convert security.yaml platform.yaml > workflow.yaml")
+	fmt.Fprintln(stderr, "awml push: push one 0.6 workflow; join an old pair with awml convert security.yaml platform.yaml > workflow.yaml")
 }
 
 func pull(name, dir, registry string, stdout, stderr io.Writer) int {

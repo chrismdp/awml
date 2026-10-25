@@ -38,15 +38,32 @@ func TestThereAreExamples(t *testing.T) {
 	}
 	want := []string{"client-email", "dinners", "legend", "question",
 		"tour/01-draft-and-send", "tour/02-fork", "tour/03-refused-read", "tour/04-publishing", "tour/05-side-by-side",
-		"tour/06-red-line", "tour/07-person-step", "tour/08-gap", "tour/09-platform-view", "tour/10-operations",
+		"tour/07-person-step", "tour/08-gap", "tour/09-platform-view", "tour/10-operations",
 		"tour/11-do", "tour/12-standing-approval", "tour/13-check-by-code", "tour/14-untrusted-text"}
 	if !reflect.DeepEqual(names, want) {
 		t.Errorf("examples = %q\nwant %q", names, want)
 	}
 }
 
+// A drawing of a live system shows where it breaks the design, so awml check fails on it by
+// design. Its examples sit apart from the rest, which every check passes.
+func liveExamples(t *testing.T) []string {
+	t.Helper()
+	paths, err := filepath.Glob("examples/live/*.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return paths
+}
+
+func TestThereAreLiveExamples(t *testing.T) {
+	if got, want := liveExamples(t), []string{"examples/live/red-line.yaml"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("live examples = %q\nwant %q", got, want)
+	}
+}
+
 func TestEachExampleIsSoundAndItsDrawingsAreCurrent(t *testing.T) {
-	for _, path := range examples(t) {
+	for _, path := range append(examples(t), liveExamples(t)...) {
 		t.Run(path, func(t *testing.T) {
 			src, err := os.ReadFile(path)
 			if err != nil {
@@ -56,13 +73,20 @@ func TestEachExampleIsSoundAndItsDrawingsAreCurrent(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			mistakes(t, doc)
+			if strings.HasPrefix(path, "examples/live/") {
+				// Each of its mistakes is a line that breaks a rule, which it draws red.
+				if len(Check(doc)) == 0 || len(Unsound(doc)) != 0 {
+					t.Errorf("%s: Check gave %q and Unsound %q", path, Check(doc), Unsound(doc))
+				}
+			} else {
+				mistakes(t, doc)
+			}
 			if got := Warnings(doc); len(got) != 0 {
 				t.Errorf("%s has warnings: %v", path, got)
 			}
 			file := doc.(*Map)
 			if !IsCanonical(file) {
-				t.Fatal("example is not 0.4")
+				t.Fatal("example is not a workflow")
 			}
 			for _, name := range ImplementationIDs(file) {
 				view, err := View(file, name)
@@ -120,7 +144,7 @@ func TestRenderPinsMermaid(t *testing.T) {
 }
 
 func TestEachExampleIsWrittenInTheHouseStyle(t *testing.T) {
-	for _, path := range append(examples(t), platformExamples(t)...) {
+	for _, path := range append(append(examples(t), liveExamples(t)...), platformExamples(t)...) {
 		t.Run(path, func(t *testing.T) {
 			src, err := os.ReadFile(path)
 			if err != nil {

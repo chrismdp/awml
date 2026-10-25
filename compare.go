@@ -2,20 +2,11 @@ package awml
 
 import "fmt"
 
-// CompareViews finds parts and lines that differ between the two views of one workflow. It expects
-// a sound security view followed by a sound platform view with the same title. Other documents do
-// not form a pair, so it reports nothing for them.
-func CompareViews(security, platform any) []string {
-	differences, _ := compareViews(security, platform)
-	return differences.messages()
-}
-
-// compareViews gives the differences between two views, and whether they formed a pair to compare.
-func compareViews(security, platform any) (mistakeList, bool) {
-	securityFile, securityOK := security.(*Map)
-	platformFile, platformOK := platform.(*Map)
-	if !securityOK || !platformOK || len(Check(securityFile)) != 0 || len(Check(platformFile)) != 0 ||
-		str(securityFile, "view") != "security" || str(platformFile, "view") != "platform" ||
+// compareViews finds parts and lines that differ between the two views of one workflow in a legacy
+// pair, which awml convert joins. It gives whether they formed a pair to compare: a security view
+// followed by a platform view with the same title.
+func compareViews(securityFile, platformFile *Map) (mistakeList, bool) {
+	if str(securityFile, "view") != "security" || str(platformFile, "view") != "platform" ||
 		str(securityFile, "title") != str(platformFile, "title") {
 		return nil, false
 	}

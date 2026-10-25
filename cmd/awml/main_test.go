@@ -15,11 +15,10 @@ import (
 	"github.com/chrismdp/awml"
 )
 
-const good = `awml: "0.2"
+const good = `awml: "0.6"
 title: Dinners
-view: security
-groups:
-  - { id: family, label: family }
+scopes:
+  - { id: family, label: "family" }
 parts:
   - { id: thu, kind: trigger, label: "Thursday 19:00" }
   - { id: plan, kind: ai, label: "Plan next week's dinners", in: family }
@@ -28,6 +27,21 @@ lines:
 `
 
 var bad = strings.Replace(good, "to: plan", "to: plann", 1)
+
+// A legacy pair, which this release reads only to convert.
+const legacySecurity = `awml: "0.2"
+title: Dinners
+view: security
+groups:
+  - { id: family, label: "family" }
+parts:
+  - { id: thu, kind: trigger, label: "Thursday 19:00" }
+  - { id: plan, kind: ai, label: "Plan next week's dinners", in: family }
+lines:
+  - { from: thu, to: plan, kind: start }
+`
+
+var legacyPlatform = strings.Replace(legacySecurity, "view: security", "view: platform", 1)
 
 type result struct {
 	code           int
@@ -141,52 +155,60 @@ func TestCheckReportsEachMistakeAndFails(t *testing.T) {
 	}
 }
 
-func TestCheckComparesTwoViewsWithTheSameTitle(t *testing.T) {
-	securitySource := strings.Replace(good, "  - { from: thu, to: plan, kind: start }\n", "", 1)
-	security := write(t, "security.yaml", securitySource)
-	platform := write(t, "platform.yaml", strings.Replace(strings.Replace(securitySource, "view: security", "view: platform", 1),
-		"  - { id: plan, kind: ai, label: \"Plan next week's dinners\", in: family }\n", "", 1))
-	r := awmlRun("check", security, platform)
-	want := result{1, security + " and " + platform + `: part "plan" is in the security view but not the platform view` + "\n", ""}
-	if r != want {
+func TestEveryCommandRefusesAnOlderFileAndSaysToConvertIt(t *testing.T) {
+	path := write(t, "old.yaml", strings.Replace(good, `awml: "0.6"`, `awml: "0.5"`, 1))
+	message := path + `: awml is "0.5", which this release no longer reads: upgrade the file with awml convert` + "\n"
+	if r := awmlRun("check", path); r != (result{1, message, ""}) {
 		t.Errorf("check gave %+v", r)
+	}
+	desc := write(t, "worker.yaml", goodPlatformForCommand)
+	out := filepath.Join(t.TempDir(), "out.html")
+	for _, args := range [][]string{{"draw", path}, {"summary", path}, {"fit", path, desc}, {"page", path, "-o", out}} {
+		if r := awmlRun(args...); r != (result{1, "", message}) {
+			t.Errorf("%v gave %+v", args, r)
+		}
 	}
 }
 
-func TestCheckComparesOnlyOneSecurityAndOnePlatformViewOfATitle(t *testing.T) {
-	security := write(t, "security.yaml", good)
-	secondSecurity := write(t, "second-security.yaml", good)
-	platformSource := strings.Replace(good, "view: security", "view: platform", 1)
-	platform := write(t, "platform.yaml", platformSource)
-	r := awmlRun("check", security, secondSecurity, platform)
-	want := result{0, security + ": ok\n" + secondSecurity + ": ok\n" + platform + ": ok\n", ""}
-	if r != want {
-		t.Errorf("check gave %+v", r)
+func TestConvertUpgradesOneOlderFile(t *testing.T) {
+	old := "# Dinners at home.\n" + strings.Replace(strings.Replace(good, `awml: "0.6"`, `awml: "0.5"`, 1),
+		"kind: start }", "kind: start, breaks: false }", 1)
+	r := awmlRun("convert", write(t, "old.yaml", old))
+	if r != (result{0, "# Dinners at home.\n" + good, ""}) {
+		t.Errorf("convert gave %+v\nwant stdout:\n%s", r, good)
+	}
+	security := awmlRun("convert", write(t, "security.yaml", legacySecurity))
+	if security != (result{0, good, ""}) {
+		t.Errorf("convert of a security view gave %+v", security)
+	}
+	if r := awmlRun("convert", write(t, "current.yaml", good)); r != (result{0, good, ""}) {
+		t.Errorf("convert of a current file gave %+v", r)
+	}
+	platform := write(t, "platform.yaml", legacyPlatform)
+	if r := awmlRun("convert", platform); r != (result{1, "", platform + ": a platform view converts only with its security view: awml convert security.yaml platform.yaml\n"}) {
+		t.Errorf("convert of a platform view gave %+v", r)
+	}
+	if r := awmlRun("convert", "--implementation", "home", write(t, "old.yaml", old)); r.code != 2 || !strings.Contains(r.stderr, "only a legacy pair has an implementation to name") {
+		t.Errorf("convert --implementation of one file gave %+v", r)
 	}
 }
 
-func TestCheckCountsAFaultyViewWhenDecidingWhetherATitleHasOnePair(t *testing.T) {
-	securitySource := strings.Replace(good, "  - { from: thu, to: plan, kind: start }\n", "", 1)
-	security := write(t, "security.yaml", securitySource)
-	faulty := write(t, "faulty-security.yaml", strings.Replace(securitySource, "in: family }", "in: unknown }", 1))
-	platformSource := strings.Replace(strings.Replace(securitySource, "view: security", "view: platform", 1),
-		"  - { id: plan, kind: ai, label: \"Plan next week's dinners\", in: family }\n", "", 1)
-	platform := write(t, "platform.yaml", platformSource)
-	r := awmlRun("check", security, faulty, platform)
-	want := result{1, security + ": ok\n" + faulty + `: part "plan" is in unknown group "unknown"` + "\n" + platform + ": ok\n", ""}
-	if r != want {
-		t.Errorf("check gave %+v", r)
-	}
-}
-
-func TestCheckDoesNotCompareDifferentTitles(t *testing.T) {
-	security := write(t, "security.yaml", good)
-	platformSource := strings.Replace(strings.Replace(good, "view: security", "view: platform", 1), "title: Dinners", "title: Lunches", 1)
-	platform := write(t, "platform.yaml", platformSource)
-	r := awmlRun("check", security, platform)
-	want := result{0, security + ": ok\n" + platform + ": ok\n", ""}
-	if r != want {
-		t.Errorf("check gave %+v", r)
+// A file older ones passed may break a rule a newer one holds it to. awml convert still writes all
+// of it, and lists what awml check will report.
+func TestConvertListsTheMistakesNewerRulesFind(t *testing.T) {
+	old := `awml: "0.4"
+title: Send
+parts:
+  - { id: act, kind: code, op: do, label: "Act" }
+  - { id: out, kind: outside, label: "Send it" }
+lines:
+  - { from: act, to: out, kind: data }
+`
+	r := awmlRun("convert", write(t, "old.yaml", old))
+	want := "awml convert: converted, but awml check finds these mistakes in the result:\n" +
+		`  outside action "out" has no tier: end its label with Allow, Ask or Block after a colon, as in "Send the mail: Ask"` + "\n"
+	if r != (result{1, strings.Replace(old, `awml: "0.4"`, `awml: "0.6"`, 1), want}) {
+		t.Errorf("convert gave %+v", r)
 	}
 }
 
@@ -213,7 +235,7 @@ func TestCheckJSONListsEveryCheckAndFailsLikeThePlainOutput(t *testing.T) {
 	if r != (result{1, string(want) + "\n", ""}) {
 		t.Errorf("check --json gave %+v\nwant %s", r, want)
 	}
-	if r := awmlRun("check", g, "--json"); r.code != 0 || !strings.HasPrefix(r.stdout, `{"engine":"0.4.1","files":[{"file":"`+g+`","view":"security"}],"checks":[`) {
+	if r := awmlRun("check", g, "--json"); r.code != 0 || !strings.HasPrefix(r.stdout, `{"engine":"0.4.1","files":[{"file":"`+g+`","view":"workflow"}],"checks":[`) {
 		t.Errorf("check --json gave %+v", r)
 	}
 }
@@ -234,15 +256,14 @@ func TestCheckReportsAMissingFile(t *testing.T) {
 
 func TestFitPrintsPlainAndJSONResults(t *testing.T) {
 	security := write(t, "security.yaml", `
-awml: "0.3"
+awml: "0.6"
 title: Reply
-view: security
-groups: [{id: business, label: business, processing: {anthropic: any}}]
+scopes: [{id: business, label: business, processing: {anthropic: any}}]
 parts:
   - {id: draft, kind: ai, op: draft, label: Draft, in: business}
 `)
 	platform := write(t, "worker.yaml", `
-awml: "0.3"
+awml: "0.6"
 platform: {id: worker, label: Worker}
 off_for_up_to: PT0S
 steps: code
@@ -260,7 +281,7 @@ holds: []
 		t.Errorf("JSON fit gave %+v", json)
 	}
 	cowork := write(t, "cowork.yaml", `
-awml: "0.3"
+awml: "0.6"
 platform: {id: cowork, label: Cowork}
 off_for_up_to: PT0S
 steps: agent
@@ -277,10 +298,9 @@ holds: []
 
 func TestFitFailsForAGapOrTheWrongKindsOfFile(t *testing.T) {
 	security := write(t, "security.yaml", `
-awml: "0.3"
+awml: "0.6"
 title: Reply
-view: security
-groups: [{id: business, label: business}]
+scopes: [{id: business, label: business}]
 parts: [{id: draft, kind: ai, op: draft, label: Draft, in: business}]
 `)
 	platform := write(t, "worker.yaml", goodPlatformForCommand)
@@ -290,35 +310,33 @@ parts: [{id: draft, kind: ai, op: draft, label: Draft, in: business}]
 	if r := awmlRun("fit", "--json", security, platform); r.code != 1 || r.stdout != `{"results":[],"gaps":["group \"business\" has no processing"]}`+"\n" {
 		t.Errorf("gap fit as JSON gave %+v", r)
 	}
-	view := write(t, "view.yaml", strings.Replace(good, "view: security", "view: platform", 1))
-	if r := awmlRun("fit", view, platform); r.code != 1 || !strings.Contains(r.stderr, "must be a security view") {
-		t.Errorf("wrong-view fit gave %+v", r)
+	if r := awmlRun("fit", platform, platform); r.code != 1 || !strings.Contains(r.stderr, "must be a workflow") {
+		t.Errorf("fit of a description gave %+v", r)
+	}
+	if r := awmlRun("fit", security, security); r.code != 1 || !strings.Contains(r.stderr, "must be a platform description") {
+		t.Errorf("fit of two workflows gave %+v", r)
 	}
 }
 
-func TestFitJudgesAPlatformView(t *testing.T) {
-	security := write(t, "security.yaml", `
-awml: "0.3"
+func TestFitJudgesAnImplementation(t *testing.T) {
+	workflow := write(t, "reply.yaml", `
+awml: "0.6"
 title: Reply
-view: security
-groups: [{id: business, label: business, processing: {anthropic: any}}]
+scopes: [{id: business, label: business, processing: {anthropic: any}}]
 parts: [{id: draft, kind: ai, op: draft, label: Draft, in: business}]
-`)
-	placement := write(t, "placement.yaml", `
-awml: "0.3"
-title: Reply placement
-view: platform
-groups: [{id: box, label: Box, platform: worker}]
-parts: [{id: draft, kind: ai, op: draft, label: Draft, in: box}]
+implementations:
+  office:
+    label: Office
+    blocks: [{id: box, label: Box, platform: worker, parts: [draft]}]
 `)
 	platform := write(t, "worker.yaml", goodPlatformForCommand)
-	if r := awmlRun("fit", security, placement, platform); r != (result{0, "box  fits: draft may use anthropic\n", ""}) {
+	if r := awmlRun("fit", "--implementation", "office", workflow, platform); r != (result{0, "box  fits: draft may use anthropic\n", ""}) {
 		t.Errorf("placement fit gave %+v", r)
 	}
 }
 
 const goodPlatformForCommand = `
-awml: "0.3"
+awml: "0.6"
 platform: {id: worker, label: Worker}
 off_for_up_to: PT0S
 steps: code
@@ -327,21 +345,21 @@ calls: [anthropic]
 holds: []
 `
 
-func TestSummaryPrintsJSONForOneOrBothViews(t *testing.T) {
-	security := write(t, "security.yaml", good)
-	platform := write(t, "platform.yaml", strings.Replace(good, "view: security", "view: platform", 1))
+func TestSummaryPrintsJSONForOneOrMoreFiles(t *testing.T) {
+	lunches := strings.Replace(strings.Replace(good, "title: Dinners", "title: Lunches", 1), "id: plan, kind: ai", "id: plan, kind: code", 1)
+	dinners, other := write(t, "dinners.yaml", good), write(t, "lunches.yaml", lunches)
 	wantSingle, err := json.Marshal(awml.Summarise(doc(t, good)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantBoth, err := json.Marshal(awml.Summarise(doc(t, good), doc(t, strings.Replace(good, "view: security", "view: platform", 1))))
+	wantBoth, err := json.Marshal(awml.Summarise(doc(t, good), doc(t, lunches)))
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, tc := range []struct {
 		args []string
 		want []byte
-	}{{[]string{"summary", "--json", security}, wantSingle}, {[]string{"summary", security, platform, "--json"}, wantBoth}} {
+	}{{[]string{"summary", "--json", dinners}, wantSingle}, {[]string{"summary", dinners, other, "--json"}, wantBoth}} {
 		r := awmlRun(tc.args...)
 		if r != (result{0, string(tc.want) + "\n", ""}) {
 			t.Errorf("awml %q gave %+v", tc.args, r)
@@ -407,14 +425,14 @@ func TestDrawUntrustedDrawsTheUntrustedView(t *testing.T) {
 }
 
 func TestPageWritesOneHTMLFile(t *testing.T) {
-	platform := strings.Replace(good, "view: security", "view: platform", 1)
-	a, b := write(t, "a.yaml", good), write(t, "b.yaml", platform)
+	lunches := strings.Replace(good, "title: Dinners", "title: Lunches", 1)
+	a, b := write(t, "a.yaml", good), write(t, "b.yaml", lunches)
 	out := filepath.Join(t.TempDir(), "out.html")
 	if r := awmlRun("page", a, b, "-o", out); r != (result{0, "", ""}) {
 		t.Errorf("page gave %+v", r)
 	}
 	html, err := os.ReadFile(out)
-	if err != nil || string(html) != awml.Page([]*awml.Map{doc(t, good), doc(t, platform)}) {
+	if err != nil || string(html) != awml.Page([]*awml.Map{doc(t, good), doc(t, lunches)}) {
 		t.Errorf("the page isn't the two drawings: %v", err)
 	}
 }
@@ -464,7 +482,7 @@ lines:
 	r := awmlRun("convert", "--implementation", "office", security, platform)
 	want := `# A bakery plans tomorrow's loaves. The bakery is fictional.
 # It runs in the bakery office.
-awml: "0.4"
+awml: "0.6"
 title: Tomorrow's loaves
 scopes:
   - { id: bakery, label: "bakery: Jo, Kit", processing: { anthropic: any } }
@@ -625,52 +643,25 @@ func TestPushChecksThenSendsTheWorkflowAndToken(t *testing.T) {
 	}
 }
 
-func TestPushSendsA05Workflow(t *testing.T) {
-	useTemporaryHome(t)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusCreated)
-		fmt.Fprint(w, `{"owner":"acme","slug":"mail","number":1,"url":"/acme/mail/v/1"}`)
-	}))
-	defer server.Close()
-	loginForTest(t, server.URL, "push-token")
-	for _, format := range []string{"0.5", "0.6"} {
-		workflow := write(t, "workflow.yaml", strings.Replace(canonicalFile, `awml: "0.4"`, `awml: "`+format+`"`, 1))
-		if r := awmlRun("push", "acme/mail", workflow, "--registry", server.URL); r != (result{0, "Pushed acme/mail version 1: /acme/mail/v/1\n", ""}) {
-			t.Fatalf("push of a %s file gave %+v", format, r)
-		}
-	}
-}
-
-func TestPushSendsA06Workflow(t *testing.T) {
-	useTemporaryHome(t)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusCreated)
-		fmt.Fprint(w, `{"owner":"acme","slug":"mail","number":1,"url":"/acme/mail/v/1"}`)
-	}))
-	defer server.Close()
-	loginForTest(t, server.URL, "push-token")
-	workflow := write(t, "workflow.yaml", strings.Replace(canonicalFile, `awml: "0.4"`, `awml: "0.6"`, 1))
-	if r := awmlRun("push", "acme/mail", workflow, "--registry", server.URL); r != (result{0, "Pushed acme/mail version 1: /acme/mail/v/1\n", ""}) {
-		t.Fatalf("push gave %+v", r)
-	}
-}
-
-func TestPushRefusesLegacyOrMultipleFilesWithoutAnHTTPCall(t *testing.T) {
+func TestPushRefusesOlderOrMultipleFilesWithoutAnHTTPCall(t *testing.T) {
 	useTemporaryHome(t)
 	calls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { calls++ }))
 	defer server.Close()
-	legacy := strings.Replace(good, `awml: "0.2"`, `awml: "0.3"`, 1)
-	security := write(t, "security.yaml", legacy)
-	platform := write(t, "platform.yaml", strings.Replace(legacy, "view: security", "view: platform", 1))
+	security := write(t, "security.yaml", legacySecurity)
+	platform := write(t, "platform.yaml", legacyPlatform)
+	older := write(t, "older.yaml", strings.Replace(canonicalFile, `awml: "0.6"`, `awml: "0.5"`, 1))
 
-	for _, files := range [][]string{{security}, {security, platform}} {
+	for _, files := range [][]string{{security}, {older}, {security, platform}} {
 		args := append([]string{"push", "acme/mail"}, files...)
 		args = append(args, "--registry", server.URL)
 		r := awmlRun(args...)
-		if r.code != 1 || !strings.Contains(r.stderr, "awml convert security.yaml platform.yaml > workflow.yaml") {
+		if r.code != 1 || !strings.Contains(r.stderr, "awml convert") {
 			t.Errorf("push %v gave %+v", files, r)
 		}
+	}
+	if r := awmlRun("push", "acme/mail", write(t, "worker.yaml", goodPlatformForCommand), "--registry", server.URL); r.code != 1 || !strings.Contains(r.stderr, "push one 0.6 workflow") {
+		t.Errorf("push of a platform description gave %+v", r)
 	}
 	if calls != 0 {
 		t.Errorf("server received %d calls", calls)
@@ -700,7 +691,7 @@ func TestPullDownloadsAnExplicitVersion(t *testing.T) {
 		if r.URL.Path != "/api/v1/acme/mail/v/2" {
 			t.Errorf("path = %q", r.URL.Path)
 		}
-		fmt.Fprintf(w, `{"number":2,"files":{"security":%q,"platform":%q}}`, good, strings.Replace(good, "view: security", "view: platform", 1))
+		fmt.Fprintf(w, `{"number":2,"files":{"security":%q,"platform":%q}}`, legacySecurity, legacyPlatform)
 	}))
 	defer server.Close()
 	loginForTest(t, server.URL, "pull-token")
@@ -712,7 +703,7 @@ func TestPullDownloadsAnExplicitVersion(t *testing.T) {
 	if gotAuth != "Bearer pull-token" {
 		t.Errorf("Authorization = %q", gotAuth)
 	}
-	for name, want := range map[string]string{"security.yaml": good, "platform.yaml": strings.Replace(good, "view: security", "view: platform", 1)} {
+	for name, want := range map[string]string{"security.yaml": legacySecurity, "platform.yaml": legacyPlatform} {
 		got, err := os.ReadFile(filepath.Join(out, name))
 		if err != nil || string(got) != want {
 			t.Errorf("%s = %q, %v", name, got, err)
@@ -834,7 +825,7 @@ func loginForTest(t *testing.T, registry, token string) {
 }
 
 const canonicalFile = `# Bakery workflow
-awml: "0.4"
+awml: "0.6"
 title: Bread
 scopes: [{id: bakery, label: Bakery, processing: any}]
 parts:
@@ -847,7 +838,7 @@ implementations:
 
 func TestCanonicalCommands(t *testing.T) {
 	path := write(t, "bread.yaml", canonicalFile)
-	desc := write(t, "scripts.yaml", `awml: "0.3"
+	desc := write(t, "scripts.yaml", `awml: "0.6"
 platform: {id: scripts, label: Scripts}
 off_for_up_to: PT0S
 steps: code
@@ -896,17 +887,17 @@ func TestFitAnImplementationWithoutDescriptions(t *testing.T) {
 }
 
 func TestConvertCommand(t *testing.T) {
-	security := write(t, "security.yaml", "# Keep this comment\n"+good)
-	platform := write(t, "platform.yaml", strings.Replace(good, "view: security", "view: platform", 1))
+	security := write(t, "security.yaml", "# Keep this comment\n"+legacySecurity)
+	platform := write(t, "platform.yaml", legacyPlatform)
 	got := awmlRun("convert", security, platform)
-	if got.code != 0 || !strings.Contains(got.stdout, "# Keep this comment") || !strings.Contains(got.stdout, `awml: "0.4"`) {
+	if got.code != 0 || !strings.Contains(got.stdout, "# Keep this comment") || !strings.Contains(got.stdout, `awml: "0.6"`) {
 		t.Fatalf("%+v", got)
 	}
 	parsed, err := awml.Parse([]byte(got.stdout))
 	if err != nil || len(awml.Check(parsed)) > 0 {
 		t.Fatalf("%v %v", err, awml.Check(parsed))
 	}
-	platform = write(t, "bad-pair.yaml", strings.Replace(strings.Replace(good, "view: security", "view: platform", 1), "kind: ai", "kind: code", 1))
+	platform = write(t, "bad-pair.yaml", strings.Replace(legacyPlatform, "kind: ai", "kind: code", 1))
 	got = awmlRun("convert", security, platform)
 	if got.code != 1 || !strings.Contains(got.stderr, `has kind "code"`) {
 		t.Fatalf("%+v", got)
@@ -954,8 +945,8 @@ func TestCanonicalPushAndPull(t *testing.T) {
 }
 
 func TestConvertCollectsInlineComments(t *testing.T) {
-	security := write(t, "security.yaml", strings.Replace(good, "title: Dinners", "title: Dinners # Dinner plans", 1))
-	platform := write(t, "platform.yaml", strings.Replace(good, "view: security", "view: platform", 1))
+	security := write(t, "security.yaml", strings.Replace(legacySecurity, "title: Dinners", "title: Dinners # Dinner plans", 1))
+	platform := write(t, "platform.yaml", legacyPlatform)
 	got := awmlRun("convert", security, platform)
 	if got.code != 0 || !strings.HasPrefix(got.stdout, "# Dinner plans\n") {
 		t.Fatalf("%+v", got)
@@ -965,7 +956,7 @@ func TestConvertCollectsInlineComments(t *testing.T) {
 func TestPushRefusesACanonicalFileWithALegacyPlatformFile(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	canonical := write(t, "bread.yaml", canonicalFile)
-	platform := write(t, "platform.yaml", strings.Replace(good, "view: security", "view: platform", 1))
+	platform := write(t, "platform.yaml", legacyPlatform)
 	got := awmlRun("push", "bakery/bread", canonical, platform)
 	if got.code != 1 || !strings.Contains(got.stderr, "awml convert security.yaml platform.yaml > workflow.yaml") {
 		t.Fatalf("%+v", got)

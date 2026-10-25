@@ -85,7 +85,7 @@ If you have a shell, see whether `awml` is there and which release it is with `a
 awml check standup.yaml
 ```
 
-It prints `ok` for each sound file, or one line for each mistake, naming the part or line it is in. Fix every one and run it again until the file prints `ok`. In a drawing of a live system, a line that breaks a rule because the system really did that stays, and is drawn red.
+It prints `ok` for each sound file, or one line for each mistake, naming the part or line it is in. Fix every one and run it again until the file prints `ok`. In a drawing of a live system, a line that breaks a rule because the system really did that stays, and is drawn red. If it says the file is of a version it no longer reads, upgrade it with `awml convert old.yaml > new.yaml`, then check the new file.
 
 If you have no shell, or `awml` can't be installed, go through `references/checking-by-hand.md` for each file instead. Then say plainly that the files were checked by hand, not by `awml check`, and that `awml check` will confirm them.
 
@@ -114,7 +114,7 @@ The files stay where the person keeps their work; if they want to share the work
 ## Common mistakes
 
 - **A draft step leading to an outside action**, even through a review. `awml check` says `only a do step leads to an outside action`. Put a `do` step between the draft and the review, such as code that asks the person to send it, or make the person's own step `op: do` when they edit and send it themselves.
-- **A publish nobody meant.** A `data` line into a box that isn't the source's or one inside it moves content to more people or under looser terms, so the drawing shows it thick. If it's meant, label it with the standing rule or the yes that releases it. If the design refuses it, make it a `refused` read. If the move really narrows, the target's box belongs inside the source's. In a 0.6 file there is no `publish` line: `awml check` says `write it as data`.
+- **A publish nobody meant.** A `data` line into a box that isn't the source's or one inside it moves content to more people or under looser terms, so the drawing shows it thick. If it's meant, label it with the standing rule or the yes that releases it. If the design refuses it, make it a `refused` read. If the move really narrows, the target's box belongs inside the source's. There is no `publish` line: `awml check` says `write it as data`.
 - **An Ask action with nobody in front of it.** `awml check` says `no person in between`. Put a review or a standing approval between the `do` step and the action, or make the person's own step take it. A standing approval only named in the action's label or a comment doesn't count.
 - **A review used as a decision.** A review has one way out, labelled `"[yes]"`. Draw no `[no]` line and no second branch, since a review isn't a decision node. If a person changes the content, that is their own step, not a review.
 - **An `answer` or `check` step writing to a context.** They read contexts and speak on surfaces. A step that files what it found is a different step, such as `learn` or `sort`.

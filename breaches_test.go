@@ -45,8 +45,9 @@ func TestCheckStillReportsEachLineThatBreaksARule(t *testing.T) {
 
 func TestA06LineHasNoBreaks(t *testing.T) {
 	src := strings.Replace(fridaySent, `label: "sent without Ella's yes" }`, `label: "sent without Ella's yes", breaks: true }`, 1)
-	mistakes(t, parsed(t, src),
-		`the line from "write" to "send" has breaks, but from 0.6 awml check works out which lines break a rule, and awml draw draws them red`)
+	mistakes(t, parsed(t, src), append([]string{
+		`the line from "write" to "send" has breaks, but awml check works out which lines break a rule, and awml draw draws them red`},
+		fridayBreaches...)...)
 }
 
 func TestOnlyALineThatBreaksARuleLeavesAFileDrawable(t *testing.T) {
@@ -55,11 +56,6 @@ func TestOnlyALineThatBreaksARuleLeavesAFileDrawable(t *testing.T) {
 	}
 	bad := strings.Replace(fridaySent, "op: draft", "op: drafting", 1)
 	if got := Unsound(parsed(t, bad)); !reflect.DeepEqual(got, []string{`part "write" has unknown op "drafting"`}) {
-		t.Errorf("Unsound gave %q", got)
-	}
-	// A file before 0.6 marks its red lines by hand, so a line it leaves unmarked is a mistake still.
-	old := strings.Replace(fridaySent, `awml: "0.6"`, `awml: "0.5"`, 1)
-	if got := Unsound(parsed(t, old)); !reflect.DeepEqual(got, fridayBreaches) {
 		t.Errorf("Unsound gave %q", got)
 	}
 }
@@ -125,9 +121,9 @@ lines:
 
 func TestAMistakeThatIsntALinesIsDrawnAsBefore(t *testing.T) {
 	// A standing approval with no line to a surface is a mistake of the part, so no line is red.
-	src := strings.Replace(standing, `awml: "0.5"`, `awml: "0.6"`, 1)
-	if strings.Contains(Draw(parsed(t, src)), red) {
-		t.Error("a sound 0.6 file has a red line")
+	src := strings.Replace(standing, "  - { from: ana_ok, to: list, kind: data, label: \"each change, with how to undo it\" }\n", "", 1)
+	if len(Check(parsed(t, src))) != 1 || strings.Contains(Draw(parsed(t, src)), red) {
+		t.Error("a mistake that isn't a line's draws a red line")
 	}
 }
 

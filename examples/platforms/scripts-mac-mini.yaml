@@ -1,4 +1,4 @@
-awml: "0.4"
+awml: "0.6"
 platform: { id: scripts-mac-mini, label: "Scheduled scripts on a Mac mini" }
 off_for_up_to: PT0S
 steps: code

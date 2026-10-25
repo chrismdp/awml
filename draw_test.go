@@ -6,10 +6,11 @@ import (
 	"testing"
 )
 
-// drawing draws a file of the given view whose groups, parts and lines are body.
+// drawing draws a view, as View projects one, whose groups, parts and lines are body. A red line's
+// breaks holds the check's words for each rule it breaks.
 func drawing(t *testing.T, view, body string) string {
 	t.Helper()
-	return Draw(parsed(t, fmt.Sprintf("awml: \"0.2\"\ntitle: T\nview: %s\n%s", view, body)))
+	return Draw(parsed(t, fmt.Sprintf("awml: \"0.3\"\ntitle: T\nview: %s\n%s", view, body)))
 }
 
 // body is a drawing without its config header.
@@ -147,8 +148,8 @@ lines:
 func TestARedDottedPublishLineIsRedThickAndDotted(t *testing.T) {
 	out := drawing(t, "security", `
 parts: [{id: a, kind: code, label: A}, {id: b, kind: surface, label: B}]
-lines: [{from: b, to: a, kind: publish, breaks: true}]`)
-	has(t, out, "\n  a <==> b\n")
+lines: [{from: b, to: a, kind: publish, breaks: [wrong]}]`)
+	has(t, out, "\n  a <==>|\"wrong\"| b\n")
 	if !strings.HasSuffix(out, "\n  linkStyle 0 "+red+","+dotted+",marker-end:none") {
 		t.Errorf("the drawing is\n%s", out)
 	}
@@ -199,9 +200,9 @@ func TestRedLinesAreCountedAmongAllLinesHiddenOnesToo(t *testing.T) {
 parts: [{id: a, kind: code, label: a}, {id: b, kind: code, label: b}, {id: c, kind: code, label: c}, {id: d, kind: code, label: d}]
 lines:
   - {from: a, to: b, kind: hidden}
-  - {from: b, to: c, kind: data, breaks: true}
+  - {from: b, to: c, kind: data, breaks: [wrong]}
   - {from: c, to: d, kind: data}
-  - {from: a, to: d, kind: publish, breaks: true}`)
+  - {from: a, to: d, kind: publish, breaks: [wrong]}`)
 	if !strings.HasSuffix(out, "\n  linkStyle 1,3 stroke:#d0342c,stroke-width:2.5px,color:#b0271f") {
 		t.Errorf("the drawing ends\n%s", out[strings.LastIndex(out, "\n"):])
 	}
@@ -210,7 +211,7 @@ lines:
 func TestNoRedLinesMeansNoLinkStyle(t *testing.T) {
 	out := drawing(t, "security", `
 parts: [{id: a, kind: code, label: A}, {id: b, kind: code, label: B}]
-lines: [{from: a, to: b, kind: data, breaks: false}]`)
+lines: [{from: a, to: b, kind: data}]`)
 	if strings.Contains(out, "linkStyle") {
 		t.Errorf("a linkStyle in\n%s", out)
 	}
@@ -239,9 +240,9 @@ func TestAReversedRedLineKeepsItsColourAndOnlyItsRealArrowhead(t *testing.T) {
 parts: [{id: first, kind: code, label: First}, {id: last, kind: code, label: Last}]
 lines:
   - {from: first, to: last, kind: hidden}
-  - {from: last, to: first, kind: data, label: back, breaks: true}
-  - {from: first, to: last, kind: data, breaks: true}`)
-	has(t, out, `first <-->|"back"| last`)
+  - {from: last, to: first, kind: data, label: back, breaks: [wrong]}
+  - {from: first, to: last, kind: data, breaks: [wrong]}`)
+	has(t, out, `first <-->|"back<br>wrong"| last`)
 	if !strings.HasSuffix(out, "\n  linkStyle 1 "+red+",marker-end:none\n  linkStyle 2 "+red) {
 		t.Errorf("the drawing ends\n%s", out[strings.LastIndex(out, "\n  linkStyle"):])
 	}
@@ -367,10 +368,9 @@ func TestEachOperationIsDrawnWithItsEmoji(t *testing.T) {
 }
 
 const questionFile = `
-awml: "0.2"
+awml: "0.6"
 title: A question in the family chat
-view: security
-groups:
+scopes:
   - {id: zCarers, label: "carers: + June, Beth"}
   - {id: zFamily, label: "family: parents, kids", in: zCarers}
   - {id: zNadia, label: "nadia: Nadia", in: zFamily}
