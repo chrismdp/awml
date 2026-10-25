@@ -121,6 +121,72 @@ func main() {
 		}
 		return string(encoded)
 	})
+	// __awmlConvert gives one 0.6 file, upgraded from one file or joined from a legacy pair, with the
+	// YAML comments of each file at its top, and the mistakes the current rules find in it, as awml
+	// convert writes them.
+	expose("__awmlConvert", func(args []js.Value) string {
+		var sources []string
+		if err := json.Unmarshal([]byte(args[0].String()), &sources); err != nil {
+			return errorJSON(err.Error())
+		}
+		implementation := optionalImplementation(args)
+		if len(sources) == 0 || len(sources) > 2 {
+			return errorJSON("convert takes one file, or a security view and its platform view")
+		}
+		if len(sources) == 1 && implementation != "" {
+			return errorJSON("only a legacy pair has an implementation to name")
+		}
+		var parsed []any
+		var comments []string
+		for _, source := range sources {
+			doc, err := awml.Parse([]byte(source))
+			if err != nil {
+				return errorJSON("isn't YAML: " + strings.Join(strings.Fields(err.Error()), " "))
+			}
+			found, err := awml.Comments([]byte(source))
+			if err != nil {
+				return errorJSON(err.Error())
+			}
+			parsed = append(parsed, doc)
+			comments = append(comments, found...)
+		}
+		var converted *awml.Map
+		var err error
+		if len(parsed) == 1 {
+			converted, err = awml.Upgrade(parsed[0])
+		} else {
+			if implementation == "" {
+				implementation = "default"
+			}
+			security, _ := parsed[0].(*awml.Map)
+			platform, _ := parsed[1].(*awml.Map)
+			converted, err = awml.ConvertWithImplementation(security, platform, implementation)
+		}
+		if err != nil {
+			return errorJSON(err.Error())
+		}
+		data, err := awml.Marshal(converted)
+		if err != nil {
+			return errorJSON(err.Error())
+		}
+		var file strings.Builder
+		for _, comment := range comments {
+			file.WriteString(comment + "\n")
+		}
+		file.Write(data)
+		mistakes := awml.Check(converted)
+		if mistakes == nil {
+			mistakes = []string{}
+		}
+		encoded, err := json.Marshal(struct {
+			File     string   `json:"file"`
+			Mistakes []string `json:"mistakes"`
+		}{file.String(), mistakes})
+		if err != nil {
+			return errorJSON(err.Error())
+		}
+		return string(encoded)
+	})
 	expose("__awmlDraw", func(args []js.Value) string {
 		doc, err := awml.Parse([]byte(args[0].String()))
 		if err != nil || len(awml.Unsound(doc)) != 0 {

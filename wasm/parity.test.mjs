@@ -13,6 +13,7 @@ const descriptionSources = await Promise.all(descriptions.map((path) => readFile
 let passed = 0;
 let placements = 0;
 let untrustedViews = 0;
+let conversions = 0;
 for (const path of top.sort()) {
   const source = await readFile(path, "utf8");
   const relative = path.slice(new URL("../", import.meta.url).pathname.length);
@@ -103,6 +104,179 @@ try {
   assert.equal(api.checks(older).checks.find((check) => check.id === "file.version").result, "fail");
   assert.equal(api.checksJSON(older) + "\n", runNative(["check", "--json", ...older.map(({ file }) => file)], 1), "checks JSON for older files");
   assert.throws(() => api.draw(older[0].source), /upgrade the file with awml convert/);
+
+  // convert upgrades a file of each older version into one 0.6 file, workflow or platform
+  // description, and gives the file awml convert writes, byte for byte.
+  const dinners = (version) => `# The family's dinners.
+awml: "${version}"
+title: Dinners
+view: security
+groups:
+  - {id: family, label: "family: parents, kids"}
+parts:
+  - {id: thu, kind: trigger, label: Thursday}
+  - {id: plan, kind: ai, label: Plan, in: family}
+  - {id: board, kind: surface, label: The board}
+lines:
+  - {from: thu, to: plan, kind: start}
+  - {from: plan, to: board, kind: publish, label: posted}
+`;
+  const description = (version) => `awml: "${version}"
+platform: {id: scripts, label: Scripts on a server}
+off_for_up_to: PT0S
+steps: code
+agents: []
+calls: [anthropic]
+holds: [notes]
+`;
+  const upgrades = {
+    "dinners-0.2.yaml": dinners("0.2"),
+    "dinners-0.3.yaml": dinners("0.3"),
+    "bread-0.4.yaml": canonicalSource.replace('awml: "0.6"', 'awml: "0.4"'),
+    "renewals-0.5.yaml": `awml: "0.5"
+title: Renewals
+scopes:
+  - {id: sam, label: "sam: Sam", processing: any}
+  - {id: club, label: "club: Sam, members"}
+parts:
+  - {id: monday, kind: trigger, label: Monday}
+  - {id: renew, kind: code, op: do, label: Renew the books, in: sam}
+  - {id: standing, kind: approval, label: "Sam's standing approval: renewals only", in: sam}
+  - {id: library, kind: outside, label: "Renew at the library: Ask", in: sam}
+  - {id: phone, kind: surface, label: Sam's phone, in: sam}
+  - {id: board, kind: surface, label: The club's board, in: club}
+lines:
+  - {from: monday, to: renew, kind: start}
+  - {from: renew, to: standing, kind: data, breaks: false}
+  - {from: standing, to: library, kind: data}
+  - {from: standing, to: phone, kind: data}
+  - {from: renew, to: board, kind: publish, label: what was renewed}
+implementations:
+  home:
+    label: At home
+    blocks:
+      - {id: runner, label: Runner, platform: acme/platforms/ops-runner, parts: [renew, standing, library, phone, board]}
+`,
+    "description-0.3.yaml": description("0.3"),
+    "description-0.4.yaml": description("0.4"),
+    "description-0.5.yaml": description("0.5"),
+  };
+  for (const [name, source] of Object.entries(upgrades)) {
+    await writeFile(`${temporary}/${name}`, source);
+    assert.equal(api.convert(source), runNative(["convert", `${temporary}/${name}`]), `convert ${name}`);
+    conversions++;
+  }
+
+  // A file already at 0.6 comes back unchanged.
+  const current = api.convert(upgrades["bread-0.4.yaml"]);
+  await writeFile(`${temporary}/current.yaml`, current);
+  assert.equal(api.convert(current), current, "convert of a 0.6 file");
+  assert.equal(runNative(["convert", `${temporary}/current.yaml`]), current, "awml convert of a 0.6 file");
+
+  // A legacy security view joins with its platform view, under the implementation named or default.
+  const security = `# A bakery plans tomorrow's loaves. The bakery is fictional.
+awml: "0.3"
+title: Tomorrow's loaves
+view: security
+groups:
+  - { id: "bakery", label: "bakery: Jo, Kit", processing: { anthropic: any } }
+parts:
+  - { id: morning, kind: "trigger", label: "Tomorrow 07:00", wait: "PT1H" }
+  - { id: "plan", kind: ai, op: "draft", label: "Plan a \\"special\\" loaf \\\\ batch", in: bakery }
+  - { id: notes, kind: context, label: "Notes", at: "notes/bread", in: bakery }
+lines:
+  - { from: morning, to: "plan", kind: "start" }
+  - { from: plan, to: notes, kind: data, label: "yes" }
+`;
+  const platform = `# It runs in the bakery office.
+awml: "0.3"
+title: Tomorrow's loaves
+view: platform
+groups:
+  - { id: laptop, label: "Laptop: always on" }
+parts:
+  - { id: morning, kind: trigger, label: "Tomorrow 07:00", wait: PT1H }
+  - { id: "plan", kind: ai, op: draft, label: "Plan a \\"special\\" loaf \\\\ batch", in: laptop }
+  - { id: notes, kind: context, label: "Notes", at: notes/bread, in: laptop }
+  - { id: key, kind: comment, label: "The key: read only", in: laptop }
+lines:
+  - { from: morning, to: plan, kind: start }
+  - { from: plan, to: notes, kind: data, label: "yes" }
+  - { from: key, to: plan, kind: tie }
+`;
+  const pair = [`${temporary}/security.yaml`, `${temporary}/platform.yaml`];
+  await writeFile(pair[0], security);
+  await writeFile(pair[1], platform);
+  assert.equal(api.convert([security, platform]), runNative(["convert", ...pair]), "convert of a legacy pair");
+  assert.equal(api.convert([security, platform], "office"), runNative(["convert", "--implementation", "office", ...pair]), "convert of a legacy pair, naming its implementation");
+  conversions += 2;
+
+  // When the current rules find mistakes in the converted file, convert throws them, one to a line,
+  // and the error carries the file, which awml convert still writes.
+  const mistaken = {
+    "send-0.4.yaml": `awml: "0.4"
+title: Send
+parts:
+  - { id: act, kind: code, op: do, label: "Act" }
+  - { id: out, kind: outside, label: "Send it" }
+lines:
+  - { from: act, to: out, kind: data }
+`,
+    "red-line-0.5.yaml": `awml: "0.5"
+title: The club's Friday message
+scopes:
+  - {id: ella, label: "ella: Ella"}
+parts:
+  - {id: fri, kind: trigger, label: "Friday 16:00"}
+  - {id: write, kind: ai, op: draft, label: Draft the message, in: ella}
+  - {id: ask, kind: code, op: do, label: Ask Ella to send it, in: ella}
+  - {id: approve, kind: review, label: Ella's yes, in: ella}
+  - {id: send, kind: outside, label: "Send it: Ask", in: ella}
+lines:
+  - {from: fri, to: write, kind: start}
+  - {from: write, to: ask, kind: data, label: read the whole inbox, breaks: true}
+  - {from: ask, to: approve, kind: data}
+  - {from: approve, to: send, kind: data, label: "[yes]"}
+  - {from: write, to: send, kind: data, label: sent without Ella's yes, breaks: true}
+`,
+  };
+  for (const [name, source] of Object.entries(mistaken)) {
+    await writeFile(`${temporary}/${name}`, source);
+    const native = runNativeResult(["convert", `${temporary}/${name}`], 1);
+    assert.throws(() => api.convert(source), (error) => {
+      assert.equal(error.converted, native.stdout, `convert ${name}: the file`);
+      assert.equal("awml convert: converted, but awml check finds these mistakes in the result:\n" +
+        error.message.split("\n").map((message) => `  ${message}\n`).join(""), native.stderr, `convert ${name}: its mistakes`);
+      return true;
+    });
+    conversions++;
+  }
+
+  // A file that can't be converted throws why, as awml convert says it.
+  const unconvertible = {
+    "platform-view.yaml": platform,
+    "too-old.yaml": "awml: \"0.1\"\ntitle: Bread\nparts: []\n",
+    "not-a-mapping.yaml": "- a list\n",
+    "not-yaml.yaml": "parts: [\n",
+  };
+  for (const [name, source] of Object.entries(unconvertible)) {
+    await writeFile(`${temporary}/${name}`, source);
+    const native = runNativeResult(["convert", `${temporary}/${name}`], 1);
+    assert.throws(() => api.convert(source), (error) => {
+      assert.equal(`${temporary}/${name}: ${error.message}\n`, native.stderr, `convert ${name}`);
+      return true;
+    });
+  }
+  const mismatched = platform.replace("kind: ai", "kind: code");
+  await writeFile(`${temporary}/mismatched.yaml`, mismatched);
+  const refused = runNativeResult(["convert", pair[0], `${temporary}/mismatched.yaml`], 1);
+  assert.throws(() => api.convert([security, mismatched]), (error) => {
+    assert.equal(`${error.message}\n`, refused.stderr, "convert of a pair that doesn't match");
+    return true;
+  });
+  assert.throws(() => api.convert(upgrades["bread-0.4.yaml"], "office"), /^Error: only a legacy pair has an implementation to name$/);
+  assert.throws(() => api.convert([security, platform, platform]), /^Error: convert takes one file, or a security view and its platform view$/);
+  assert.throws(() => api.convert([]), /^Error: convert takes one file, or a security view and its platform view$/);
 } finally {
   await rm(temporary, { recursive: true });
 }
@@ -150,7 +324,7 @@ const fitPaths = [
 const fitSources = await Promise.all(fitPaths.map((path) => readFile(new URL(`../${path}`, import.meta.url), "utf8")));
 assert.equal(api.fitJSON(fitSources) + "\n", runNative(["fit", "--json", ...fitPaths]), "fit JSON");
 
-console.log(`Node wasm parity: ${passed} examples passed (check, warnings, summary, Mermaid); ${placements} implementations; ${untrustedViews} untrusted views; invalid check messages and fit passed`);
+console.log(`Node wasm parity: ${passed} examples passed (check, warnings, summary, Mermaid); ${placements} implementations; ${untrustedViews} untrusted views; ${conversions} conversions; invalid check messages and fit passed`);
 
 async function yamlFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -164,7 +338,11 @@ async function yamlFiles(directory) {
 }
 
 function runNative(args, status = 0) {
+  return runNativeResult(args, status).stdout;
+}
+
+function runNativeResult(args, status = 0) {
   const result = spawnSync(native, args, { encoding: "utf8" });
   assert.equal(result.status, status, `${args.join(" ")}: ${result.stderr}`);
-  return result.stdout;
+  return result;
 }
