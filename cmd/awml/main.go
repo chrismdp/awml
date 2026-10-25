@@ -394,59 +394,25 @@ func checkJSON(files []string, stdout, stderr io.Writer) int {
 }
 
 // convert prints one 0.6 file, upgraded from a file of an older version or joined from a legacy
-// pair, with the YAML comments of each file at its top. It fails when the files can't be
-// converted, and when the converted file has mistakes, which newer versions' rules can find in a
-// file that older ones passed. It lists those on standard error.
+// pair, as awml.ConvertSources writes it. It fails when the files can't be converted, and when the
+// converted file has mistakes, which newer versions' rules can find in a file that older ones
+// passed. It lists those on standard error.
 func convert(files []string, implementation string, stdout, stderr io.Writer) int {
-	var parsed []any
-	var comments []string
+	var sources []awml.Source
 	for _, path := range files {
 		src, err := os.ReadFile(path)
 		if err != nil {
 			fmt.Fprintf(stderr, "%s: can't be read: %s\n", path, reason(err))
 			return 1
 		}
-		doc, err := awml.Parse(src)
-		if err != nil {
-			fmt.Fprintf(stderr, "%s: isn't YAML: %s\n", path, strings.Join(strings.Fields(err.Error()), " "))
-			return 1
-		}
-		found, err := awml.Comments(src)
-		if err != nil {
-			fmt.Fprintf(stderr, "%s: %s\n", path, err)
-			return 1
-		}
-		parsed = append(parsed, doc)
-		comments = append(comments, found...)
+		sources = append(sources, awml.Source{File: path, Text: src})
 	}
-	var converted *awml.Map
-	var err error
-	if len(parsed) == 1 {
-		if converted, err = awml.Upgrade(parsed[0]); err != nil {
-			fmt.Fprintf(stderr, "%s: %s\n", files[0], err)
-			return 1
-		}
-	} else {
-		if implementation == "" {
-			implementation = "default"
-		}
-		security, _ := parsed[0].(*awml.Map)
-		platform, _ := parsed[1].(*awml.Map)
-		if converted, err = awml.ConvertWithImplementation(security, platform, implementation); err != nil {
-			fmt.Fprintln(stderr, err)
-			return 1
-		}
-	}
-	data, err := awml.Marshal(converted)
+	data, mistakes, err := awml.ConvertSources(sources, implementation)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	for _, comment := range comments {
-		fmt.Fprintln(stdout, comment)
-	}
-	fmt.Fprint(stdout, string(data))
-	mistakes := awml.Check(converted)
+	stdout.Write(data)
 	if len(mistakes) == 0 {
 		return 0
 	}
