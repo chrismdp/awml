@@ -17,8 +17,10 @@ for (const path of top.sort()) {
   const source = await readFile(path, "utf8");
   const relative = path.slice(new URL("../", import.meta.url).pathname.length);
 
-  const nativeCheck = runNative(["check", relative]);
+  // A drawing of a live system fails the check by design, for the lines it draws red.
   const wasmErrors = api.check(source);
+  const failed = wasmErrors.length ? 1 : 0;
+  const nativeCheck = runNative(["check", relative], failed);
   const wasmWarnings = api.warnings(source);
   const wasmCheck = [
     ...wasmWarnings.map((message) => `${relative}: warning: ${message}\n`),
@@ -26,14 +28,19 @@ for (const path of top.sort()) {
   ].join("");
   assert.equal(wasmCheck, nativeCheck, `${relative}: check output`);
 
-  assert.equal(api.checksJSON([{ file: relative, source }]) + "\n", runNative(["check", "--json", relative]), `${relative}: checks JSON`);
+  assert.equal(api.checksJSON([{ file: relative, source }]) + "\n", runNative(["check", "--json", relative], failed), `${relative}: checks JSON`);
   assert.equal(api.summaryJSON(source) + "\n", runNative(["summary", "--json", relative]), `${relative}: summary JSON`);
+  if (/^platform:/m.test(source)) {
+    assert.throws(() => api.draw(source), /a platform description has no drawing/);
+    passed++;
+    continue;
+  }
   assert.equal(api.draw(source) + "\n", runNative(["draw", relative]), `${relative}: Mermaid`);
   if (/untrusted: true/.test(source)) {
     assert.equal(api.drawUntrusted(source) + "\n", runNative(["draw", "--untrusted", relative]), `${relative}: untrusted Mermaid`);
     untrustedViews++;
   }
-  if (/^awml: ["']?0\.4/m.test(source) && !/^platform:/m.test(source)) {
+  if (!failed && !/^platform:/m.test(source)) {
     const report = api.fit([source, ...descriptionSources]);
     assert.equal(api.fitJSON([source, ...descriptionSources]) + "\n",
       runNative(["fit", "--json", relative, ...descriptions], report.gaps.length ? 1 : 0), `${relative}: design fit`);
@@ -51,7 +58,7 @@ for (const path of top.sort()) {
 
 const everyPath = [...top.sort(), ...descriptions].map((path) => path.slice(new URL("../", import.meta.url).pathname.length));
 const everySource = await Promise.all(everyPath.map(async (file) => ({ file, source: await readFile(new URL(`../${file}`, import.meta.url), "utf8") })));
-assert.equal(api.checksJSON(everySource) + "\n", runNative(["check", "--json", ...everyPath]), "checks JSON for every example at once");
+assert.equal(api.checksJSON(everySource) + "\n", runNative(["check", "--json", ...everyPath], 1), "checks JSON for every example at once");
 assert.deepEqual(api.checks(everySource).files.map((file) => file.file), everyPath);
 
 const canonicalPath = new URL("testdata/canonical.yaml", import.meta.url).pathname;
@@ -81,20 +88,21 @@ try {
       ...api.warnings(source).map((message) => `${path}: warning: ${message}\n`),
       ...(errors.length ? errors.map((message) => `${path}: ${message}\n`) : [`${path}: ok\n`]),
     ].join("");
-    assert.equal(output, runNative(["check", path], errors.length ? 1 : 0), `0.4 ${name}`);
-    assert.equal(api.checksJSON([{ file: path, source }]) + "\n", runNative(["check", "--json", path], errors.length ? 1 : 0), `0.4 ${name}: checks JSON`);
+    assert.equal(output, runNative(["check", path], errors.length ? 1 : 0), `canonical ${name}`);
+    assert.equal(api.checksJSON([{ file: path, source }]) + "\n", runNative(["check", "--json", path], errors.length ? 1 : 0), `canonical ${name}: checks JSON`);
   }
 
-  const security = "awml: \"0.3\"\ntitle: Pair\nview: security\nparts:\n  - { id: t, kind: trigger, label: T }\n  - { id: s, kind: ai, label: S }\nlines:\n  - { from: t, to: s, kind: start }\n";
-  const pair = [
-    { file: `${temporary}/security.yaml`, source: security },
-    { file: `${temporary}/platform.yaml`, source: security.replace("view: security", "view: platform").replace("kind: ai", "kind: code") },
+  // An older file is refused, with a pointer to awml convert, in both engines.
+  const older = [
+    { file: `${temporary}/older.yaml`, source: canonicalSource.replace('awml: "0.6"', 'awml: "0.5"') },
+    { file: `${temporary}/security.yaml`, source: "awml: \"0.3\"\ntitle: Pair\nview: security\nparts:\n  - { id: t, kind: trigger, label: T }\n" },
     { file: `${temporary}/broken.yaml`, source: "parts: [\n" },
   ];
-  for (const { file, source } of pair) await writeFile(file, source);
-  const pairReport = api.checks(pair);
-  assert.equal(pairReport.checks.find((check) => check.id === "views.same-parts").result, "fail");
-  assert.equal(api.checksJSON(pair) + "\n", runNative(["check", "--json", ...pair.map(({ file }) => file)], 1), "checks JSON for a legacy pair");
+  for (const { file, source } of older) await writeFile(file, source);
+  assert.match(api.check(older[0].source)[0], /which this release no longer reads: upgrade the file with awml convert/);
+  assert.equal(api.checks(older).checks.find((check) => check.id === "file.version").result, "fail");
+  assert.equal(api.checksJSON(older) + "\n", runNative(["check", "--json", ...older.map(({ file }) => file)], 1), "checks JSON for older files");
+  assert.throws(() => api.draw(older[0].source), /upgrade the file with awml convert/);
 } finally {
   await rm(temporary, { recursive: true });
 }

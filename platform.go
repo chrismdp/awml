@@ -4,14 +4,6 @@ import "fmt"
 
 func checkPlatformDescription(file *Map) mistakeList {
 	var errors mistakeList
-	if file.has("awml") {
-		version, ok := file.get("awml").(string)
-		if !ok {
-			errors.add("file.version", fmt.Sprintf("awml: YAML read it as %s, not text: put it in quotes", show(file.get("awml"))))
-		} else if !isOneOf(version, "0.3", "0.4", "0.5", "0.6") {
-			errors.add("file.version", fmt.Sprintf(`awml must be "0.3" for a platform description, not "%s"`, version))
-		}
-	}
 	platformFileFields(file, &errors)
 	if value := file.get("platform"); file.has("platform") {
 		platform, ok := value.(*Map)
@@ -20,11 +12,8 @@ func checkPlatformDescription(file *Map) mistakeList {
 		} else {
 			fieldsExact("platform", platform, []string{"id", "label"}, nil, &errors)
 			id, ok := platform.get("id").(string)
-			registered := since05(str(file, "awml"))
-			if ok && registered && !companyID.MatchString(id) && !registeredPlatform.MatchString(id) {
+			if ok && !companyID.MatchString(id) && !registeredPlatform.MatchString(id) {
 				errors.add("description.ids", fmt.Sprintf(`platform id "%s" must be lower-case letters, digits and hyphens, starting with a letter, or owner/platforms/slug for a registered platform`, id))
-			} else if ok && !registered && !companyID.MatchString(id) {
-				errors.add("description.ids", fmt.Sprintf(`platform id "%s" must be lower-case letters, digits and hyphens, starting with a letter`, id))
 			}
 		}
 	}

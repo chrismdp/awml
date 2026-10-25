@@ -1,5 +1,4 @@
-awml: "0.3"
+awml: "0.6"
 title: Fill
-view: security
 parts:
   - {id: fill, kind: ai, op: do, label: Fill}

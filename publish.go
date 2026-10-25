@@ -5,14 +5,13 @@ import (
 	"strings"
 )
 
-// publishedLines gives a workflow's lines, with each data line of a 0.6 file that publishes made a
-// publish line, its label followed by what the publish adds or loosens. Older files keep the lines
-// they wrote. The file may still have mistakes, so a line that isn't sound is left as it is, for the
-// checks to report.
+// publishedLines gives a workflow's lines, with each data line that publishes made a publish line,
+// its label followed by what the publish adds or loosens. The file may still have mistakes, so a
+// line that isn't sound is left as it is, for the checks to report.
 func publishedLines(doc *Map) any {
 	lines := doc.get("lines")
 	list, ok := lines.([]any)
-	if doc.get("awml") != "0.6" || !ok {
+	if !ok {
 		return lines
 	}
 	scopes, parts := soundMaps(doc.get("scopes")), soundMaps(doc.get("parts"))
@@ -31,7 +30,7 @@ func publishedLines(doc *Map) any {
 	for i, item := range list {
 		out[i] = item
 		l, ok := item.(*Map)
-		if !ok || l.get("kind") != "data" || l.get("breaks") == true || !known[str(l, "from")] || !known[str(l, "to")] {
+		if !ok || l.get("kind") != "data" || !known[str(l, "from")] || !known[str(l, "to")] {
 			continue
 		}
 		if _, text := l.get("label").(string); l.has("label") && !text {

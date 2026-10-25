@@ -50,19 +50,6 @@ func TestA06FileHasNoPublishLine(t *testing.T) {
 		`the line from "draft" to "drafts" has unknown kind "publish": write it as data, since a data line publishes whenever its scopes make it one`)
 }
 
-func TestAnOlderFileKeepsPublishAndItsCheck(t *testing.T) {
-	src := strings.Replace(replies, `awml: "0.6"`, `awml: "0.5"`, 1)
-	mistakes(t, parsed(t, src),
-		`the line from "rules" to "draft" moves content from group "private" into group "business", which isn't inside it: draw it as publish, or as refused if the design refuses the read`,
-		`the line from "drafts" to "edit" moves content from group "business" into group "private", which isn't inside it: draw it as publish, or as refused if the design refuses the read`,
-		`the line from "draft" to "pitch" moves content from group "business" into group "venture", which isn't inside it: draw it as publish, or as refused if the design refuses the read`)
-	old := strings.NewReplacer(`awml: "0.6"`, `awml: "0.5"`, "kind: data, label", "kind: publish, label", "{ from: draft, to: pitch, kind: data }", "{ from: draft, to: pitch, kind: publish }").Replace(replies)
-	mistakes(t, parsed(t, old))
-	out := Draw(parsed(t, old))
-	has(t, out, `rules ==>|"`+text("standing rule: a client's email")+`"| draft`)
-	has(t, out, `drafts ==>|"the consultant takes the reply"| edit`)
-}
-
 // Each publish is drawn thick, with who it adds and what it loosens after its own label.
 func TestA06DrawingSaysWhatEachPublishAddsOrLoosens(t *testing.T) {
 	out := Draw(parsed(t, replies))
@@ -155,36 +142,11 @@ func TestTermsThatAllowCertainOperationsAreNamed(t *testing.T) {
 		"adds Kit · loosens no company to anthropic and openai for draft and sort only")
 }
 
-// A red line draws what a live system did, so it's no publish of the design.
-// A 0.6 line that still has breaks gets only the field mistake, and is skipped as before, so it
-// isn't a publish either.
-func TestARedDataLineIsNoPublish(t *testing.T) {
-	doc := parsed(t, "awml: \"0.6\"\ntitle: T\nscopes:\n"+
-		"  - { id: bakery, label: \"bakery: Jo\" }\n  - { id: pottery, label: \"pottery: Jo, Kit\" }\n"+
-		"parts:\n  - { id: notes, kind: context, label: Notes, in: bakery }\n  - { id: shop, kind: context, label: Shop, in: pottery }\n"+
-		"lines:\n  - { from: notes, to: shop, kind: data, breaks: true }\n")
-	mistakes(t, doc, `the line from "notes" to "shop" has breaks, but from 0.6 awml check works out which lines break a rule, and awml draw draws them red`)
-	labels(t, Summarise(doc).PublishingLines.Labels)
-}
-
-func TestTheScopeCheckDoesntApplyTo06Workflows(t *testing.T) {
+func TestAWorkflowThatPublishesPassesEveryCheck(t *testing.T) {
 	report := CheckSources("dev", []Source{source("replies.yaml", replies)})
-	if got := checkResult(t, report, "lines.data-narrows"); got.Result != "skipped" || got.SkippedBecause != "no file given is a workflow before 0.6 or a security view" {
-		t.Errorf("lines.data-narrows gave %s because %q", got.Result, got.SkippedBecause)
-	}
-	for _, id := range []string{"tiers.written", "tiers.shape", "approvals.listed"} {
-		if got := checkResult(t, report, id); got.Result != "pass" {
-			t.Errorf("%s gave %s because %q", id, got.Result, got.SkippedBecause)
+	for _, check := range report.Checks {
+		if check.Result == "fail" {
+			t.Errorf("%s failed with %+v", check.ID, check.Mistakes)
 		}
 	}
-}
-
-func TestA06FileKeepsWhat05Allows(t *testing.T) {
-	mistakes(t, parsed(t, strings.Replace(standing, `awml: "0.5"`, `awml: "0.6"`, 1)))
-	src := strings.Replace(strings.Replace(canonical, `awml: "0.4"`, `awml: "0.6"`, 1), "platform: scripts", "platform: acme/platforms/ops-runner", 1)
-	mistakes(t, parseCanonical(t, src))
-}
-
-func TestAPlatformDescriptionMayBe06(t *testing.T) {
-	mistakes(t, parsed(t, strings.Replace(registeredDescription, `awml: "0.5"`, `awml: "0.6"`, 1)))
 }

@@ -8,9 +8,10 @@ import (
 
 func compared(t *testing.T, security, platform string, want ...string) {
 	t.Helper()
-	got := CompareViews(parsed(t, security), parsed(t, platform))
+	differences, _ := compareViews(parsed(t, security), parsed(t, platform))
+	got := differences.messages()
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("CompareViews gave\n  %s\nwant\n  %s", strings.Join(got, "\n  "), strings.Join(want, "\n  "))
+		t.Errorf("compareViews gave\n  %s\nwant\n  %s", strings.Join(got, "\n  "), strings.Join(want, "\n  "))
 	}
 }
 

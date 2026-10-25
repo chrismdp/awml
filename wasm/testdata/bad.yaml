@@ -1,6 +1,5 @@
-awml: "0.2"
+awml: "0.6"
 title: Broken
-view: security
 parts:
   - { id: start, kind: trigger, label: Start }
   - { id: work, kind: code, label: Work }

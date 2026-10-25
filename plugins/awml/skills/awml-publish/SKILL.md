@@ -43,9 +43,10 @@ Ask both at once:
 
 ## 4. Check, then publish
 
-Use one 0.6, 0.5 or 0.4 file. If the workflow is still a legacy pair, convert it first:
+Use one 0.6 file. If the workflow is in an older version, or still a legacy pair, convert it first:
 
 ```sh
+awml convert old.yaml > workflow.yaml
 awml convert security.yaml platform.yaml > workflow.yaml
 ```
 

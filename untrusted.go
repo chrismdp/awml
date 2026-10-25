@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// marks holds a part of a 0.6 file to where untrusted and cleans may go. Only a trigger, connector
+// marks holds a part to where untrusted and cleans may go. Only a trigger, connector
 // or context takes in text from strangers, and only a code step can promise to pass on just what's
 // safe, since strangers' text can steer an AI step however it's written.
 func marks(name string, p *Map) mistakeList {

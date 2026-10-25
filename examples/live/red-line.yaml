@@ -1,6 +1,6 @@
 # A red line: the club's Friday message, as the live system ran it one week. The design waits for
 # Ella's yes, but the system sent the draft straight out. Ella is fictional.
-awml: "0.5"
+awml: "0.6"
 title: The club's Friday message, one week
 scopes:
   - { id: ella, label: "ella: Ella" }
@@ -15,4 +15,4 @@ lines:
   - { from: write, to: ask, kind: data, label: the draft }
   - { from: ask, to: approve, kind: data }
   - { from: approve, to: send, kind: data, label: "[yes]" }
-  - { from: write, to: send, kind: data, label: "sent without Ella's yes", breaks: true }
+  - { from: write, to: send, kind: data, label: "sent without Ella's yes" }

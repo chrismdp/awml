@@ -15,9 +15,8 @@ func warnings(t *testing.T, doc any, want ...string) {
 }
 
 const changes = `
-awml: "0.3"
+awml: "0.6"
 title: Changes
-view: security
 parts:
   - {id: fill, kind: code, op: do, label: Fill}
   - {id: basket, kind: outside, label: "Fill the basket: Allow"}
@@ -53,7 +52,7 @@ func TestADoStepThatLeadsToMoreThanOneChangeWarns(t *testing.T) {
 	warnings(t, withChangeLines(t,
 		"{from: fill, to: basket, kind: data}",
 		"{from: fill, to: split, kind: start}",
-		"{from: split, to: approve, kind: publish}",
+		"{from: split, to: approve, kind: data}",
 		"{from: approve, to: checkout, kind: data}"),
 		`do step "fill" leads to 2 changes ("basket", "checkout"): each do step should make one`)
 }
@@ -76,10 +75,9 @@ func TestEachSurfaceIsOneChange(t *testing.T) {
 		`do step "fill" leads to 2 changes ("basket", "list"): each do step should make one`)
 }
 
-func TestLinesThatDoNotLeadAndRedLinesDoNotCauseWarnings(t *testing.T) {
+func TestLinesThatDoNotLeadDoNotCauseWarnings(t *testing.T) {
 	warnings(t, withChangeLines(t,
 		"{from: fill, to: basket, kind: data}",
-		"{from: fill, to: checkout, kind: data, breaks: true}",
 		"{from: fill, to: list, kind: hidden}",
 		"{from: fill, to: filed, kind: refused}"))
 }
@@ -89,7 +87,7 @@ func TestWarningsAcceptsAnythingCheckAccepts(t *testing.T) {
 	var file *Map
 	warnings(t, file)
 	warnings(t, []any{"not", "a", "file"})
-	warnings(t, parsed(t, `awml: "0.3"
+	warnings(t, parsed(t, `awml: "0.6"
 platform: {id: worker, label: Worker}
 off_for_up_to: PT0S
 steps: code

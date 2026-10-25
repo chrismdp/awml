@@ -33,8 +33,9 @@ type CheckReport struct {
 	Checks []CheckResult `json:"checks"`
 }
 
-// CheckedFile names a file and what kind of file it was read as: workflow, security, platform or
-// platform-description. A file that couldn't be read as one has no view.
+// CheckedFile names a file and what kind of file it was read as: workflow or platform-description.
+// A file that couldn't be read as one, such as one of a version this release doesn't read, has no
+// view.
 type CheckedFile struct {
 	File string `json:"file"`
 	View string `json:"view,omitempty"`
@@ -52,48 +53,35 @@ type CheckResult struct {
 	Mistakes       []FileMistake `json:"mistakes"`
 }
 
-// FileMistake is one mistake, word for word as awml check prints it, and the file it is in. A
-// difference between two views names both files.
+// FileMistake is one mistake, word for word as awml check prints it, and the file it is in.
 type FileMistake struct {
 	File    string `json:"file"`
 	Message string `json:"message"`
 }
 
 var (
-	everyFile = []string{"workflow", "security", "platform", "platform-description"}
-	workflows = []string{"workflow", "security", "platform"}
+	everyFile = []string{"workflow", "platform-description"}
+	workflows = []string{"workflow"}
 )
 
 // checkDefinition describes one check. early is whether it runs before a broken list stops the
-// rest, warn whether it warns rather than fails, legacy03 whether a legacy view must be 0.3 for it
-// to apply, formats the versions of workflow held to it, when not every version is, and before06
-// whether a 0.6 workflow isn't. none says why it was skipped when no file given is one it applies
-// to.
+// rest, and warn whether it warns rather than fails. none says why it was skipped when no file
+// given is one it applies to.
 type checkDefinition struct {
 	id, name, about string
 	appliesTo       []string
 	early, warn     bool
-	legacy03        bool
-	formats         []string
-	before06        bool
 	none            string
 }
 
-var (
-	since05Formats  = []string{"0.5", "0.6"}
-	since06Formats  = []string{"0.6"}
-	before06Formats = []string{"0.2", "0.3", "0.4", "0.5"}
-)
-
 var checkDefinitions = []checkDefinition{
 	{id: "file.yaml", name: "The file is YAML", about: "Each file can be read, and holds a YAML mapping of fields.", appliesTo: everyFile, early: true},
-	{id: "file.version", name: "The file says which version and view it is", about: "awml names a version this release reads, and a legacy view says it is security or platform.", appliesTo: everyFile, early: true},
+	{id: "file.version", name: "The file is of the version this release reads", about: "awml is \"0.6\". An older file is upgraded with awml convert.", appliesTo: everyFile, early: true},
 	{id: "fields.known", name: "Every field is known and none is missing", about: "Each file, scope, part, line, implementation, block and comment has the fields it needs and no others, and each list is a list of mappings.", appliesTo: everyFile, early: true},
 	{id: "kinds.known", name: "Every kind is known", about: "Each part and line has a kind the spec defines.", appliesTo: workflows},
 	{id: "ids.unique", name: "No id is used twice", about: "Scope, part, block and comment ids are unique across the file.", appliesTo: workflows},
-	{id: "ids.written", name: "Every id is well written", about: "An id is letters, digits and underscores, starting with a letter, and a block's platform is a company id, or from 0.5 owner/platforms/slug.", appliesTo: workflows},
+	{id: "ids.written", name: "Every id is well written", about: "An id is letters, digits and underscores, starting with a letter, and a block's platform is a company id or owner/platforms/slug.", appliesTo: workflows},
 	{id: "values.text", name: "Every value that should be text is text", about: "Ids, labels, kinds and references are text, not something YAML read as true, false, a number or a date.", appliesTo: everyFile, early: true},
-	{id: "lines.breaks", name: "Every breaks is true or false", about: "Before 0.6, a line's breaks, which draws it red, is true or false, unquoted. From 0.6 the check works out which lines are red.", appliesTo: workflows, formats: before06Formats, none: "no file given is a workflow or view before 0.6"},
 	{id: "references.known", name: "Every reference names something in the file", about: "Each in, from and to, each part a block names and each part a comment ties names a scope, block or part the file has.", appliesTo: workflows},
 	{id: "nesting.acyclic", name: "No scope or block is nested in itself", about: "Following in from any scope or block never leads back to it.", appliesTo: workflows},
 	{id: "comments.tie-only", name: "A comment is linked only by tie lines", about: "A comment moves nothing, so only a tie, or a hidden line, may touch it.", appliesTo: workflows},
@@ -101,35 +89,29 @@ var checkDefinitions = []checkDefinition{
 	{id: "ops.known", name: "Every op is known and on a step", about: "An op is one of the operations the spec lists, on an ai, code or person step.", appliesTo: workflows},
 	{id: "operations.only-do-acts", name: "Only a do step leads to an outside action", about: "A step that leads to an outside action, straight or through a review or a fork, is a do step.", appliesTo: workflows},
 	{id: "operations.answer-check-read-only", name: "An answer or check step never writes to a context", about: "An answer step and a check step read contexts and speak on surfaces, but never write to a context.", appliesTo: workflows},
-	{id: "tiers.written", name: "Every outside action's label ends with its tier", about: "An outside action's label ends with Allow, Ask or Block after a colon.", appliesTo: []string{"workflow"}, formats: since05Formats, none: "no file given is a 0.5 or 0.6 workflow"},
-	{id: "tiers.shape", name: "Every tier agrees with what stands in front of it", about: "An Ask action has a review, a standing approval or a person's own step on every way in, an Allow action has no review or standing approval in front of it, and only red lines lead to a Block action.", appliesTo: []string{"workflow"}, formats: since05Formats, none: "no file given is a 0.5 or 0.6 workflow"},
-	{id: "approvals.listed", name: "Every standing approval lists its actions on a surface", about: "A standing approval leads to the surface where each action it covers is listed with how to undo it.", appliesTo: []string{"workflow"}, formats: since05Formats, none: "no file given is a 0.5 or 0.6 workflow"},
-	{id: "lines.data-narrows", name: "Every data line stays in its scope or narrows", about: "A data line moves content only within its scope or into one inside it, since any other move is publishing drawn as routing.", appliesTo: []string{"workflow", "security"}, before06: true, none: "no file given is a workflow before 0.6 or a security view"},
-	{id: "processing.written", name: "Every processing is well written", about: "A scope's processing is any, none, or a map from company ids to any or a list of known operations.", appliesTo: []string{"workflow", "security"}, legacy03: true, none: "no file given is a 0.4 workflow or a 0.3 security view"},
-	{id: "processing.nested", name: "An inner scope allows no more processing than its outer one", about: "A scope inside another allows no company or operation that the outer scope doesn't.", appliesTo: []string{"workflow", "security"}, legacy03: true, none: "no file given is a 0.4 workflow or a 0.3 security view"},
-	{id: "processing.scopes-only", name: "Only a scope takes processing", about: "processing belongs to a scope, never to a block of the platform view.", appliesTo: []string{"workflow", "platform"}, legacy03: true, none: "no file given is a 0.4 workflow or a 0.3 platform view"},
-	{id: "platform.blocks-only", name: "Only a block takes a platform", about: "platform belongs to a block of the platform view, never to a scope.", appliesTo: []string{"workflow", "security"}, legacy03: true, none: "no file given is a 0.4 workflow or a 0.3 security view"},
-	{id: "wait.duration", name: "Every wait is a duration on a trigger", about: "wait is an ISO 8601 duration in weeks, days, hours, minutes or seconds, given only on a trigger.", appliesTo: workflows, legacy03: true, none: "no file given is a 0.4 workflow or a 0.3 view"},
-	{id: "at.path", name: "Every at is a path on a context", about: "at is a relative path of plain names, given only on a context.", appliesTo: workflows, legacy03: true, none: "no file given is a 0.4 workflow or a 0.3 view"},
-	{id: "untrusted.parts", name: "Only a trigger, connector or context is marked untrusted", about: "untrusted is true or false, and is true only on a trigger, connector or context.", appliesTo: []string{"workflow"}, formats: since06Formats, none: "no file given is a 0.6 workflow"},
-	{id: "cleans.code-only", name: "Only a code step cleans", about: "cleans is true or false, and is true only on a code step, since strangers' text can steer an AI step however it's written.", appliesTo: []string{"workflow"}, formats: since06Formats, none: "no file given is a 0.6 workflow"},
-	{id: "placement.once", name: "No part is placed twice in an implementation", about: "Each part sits in at most one block of each implementation.", appliesTo: []string{"workflow"}, none: "no file given is a 0.4 workflow"},
-	{id: "placement.complete", name: "Every part that needs a block has one", about: "Every part but a trigger or comment sits in a block of each implementation.", appliesTo: []string{"workflow"}, none: "no file given is a 0.4 workflow"},
+	{id: "tiers.written", name: "Every outside action's label ends with its tier", about: "An outside action's label ends with Allow, Ask or Block after a colon.", appliesTo: workflows},
+	{id: "tiers.shape", name: "Every tier agrees with what stands in front of it", about: "An Ask action has a review, a standing approval or a person's own step on every way in, an Allow action has no review or standing approval in front of it, and only red lines lead to a Block action.", appliesTo: workflows},
+	{id: "approvals.listed", name: "Every standing approval lists its actions on a surface", about: "A standing approval leads to the surface where each action it covers is listed with how to undo it.", appliesTo: workflows},
+	{id: "processing.written", name: "Every processing is well written", about: "A scope's processing is any, none, or a map from company ids to any or a list of known operations.", appliesTo: workflows},
+	{id: "processing.nested", name: "An inner scope allows no more processing than its outer one", about: "A scope inside another allows no company or operation that the outer scope doesn't.", appliesTo: workflows},
+	{id: "platform.blocks-only", name: "Only a block takes a platform", about: "platform belongs to a block of an implementation, never to a scope.", appliesTo: workflows},
+	{id: "wait.duration", name: "Every wait is a duration on a trigger", about: "wait is an ISO 8601 duration in weeks, days, hours, minutes or seconds, given only on a trigger.", appliesTo: workflows},
+	{id: "at.path", name: "Every at is a path on a context", about: "at is a relative path of plain names, given only on a context.", appliesTo: workflows},
+	{id: "untrusted.parts", name: "Only a trigger, connector or context is marked untrusted", about: "untrusted is true or false, and is true only on a trigger, connector or context.", appliesTo: workflows},
+	{id: "cleans.code-only", name: "Only a code step cleans", about: "cleans is true or false, and is true only on a code step, since strangers' text can steer an AI step however it's written.", appliesTo: workflows},
+	{id: "placement.once", name: "No part is placed twice in an implementation", about: "Each part sits in at most one block of each implementation.", appliesTo: workflows},
+	{id: "placement.complete", name: "Every part that needs a block has one", about: "Every part but a trigger or comment sits in a block of each implementation.", appliesTo: workflows},
 	{id: "warn.do-by-code", name: "No do step is decided by AI", about: "A do step should be code acting on what an earlier step decided; this warns and never fails.", appliesTo: workflows, warn: true},
 	{id: "warn.one-change", name: "Each do step makes one change", about: "A do step should lead to one change, counting each outside action and surface and all contexts together as one; this warns and never fails.", appliesTo: workflows, warn: true},
-	{id: "warn.untrusted-outside", name: "No untrusted text reaches an outside action", about: "Text from a part marked untrusted reaches no outside action without a review, a person's own step or a code step marked cleans to stop it; this warns and never fails.", appliesTo: []string{"workflow"}, warn: true, formats: since06Formats, none: "no file given is a 0.6 workflow"},
+	{id: "warn.untrusted-outside", name: "No untrusted text reaches an outside action", about: "Text from a part marked untrusted reaches no outside action without a review, a person's own step or a code step marked cleans to stop it; this warns and never fails.", appliesTo: workflows, warn: true},
 	{id: "description.values", name: "Every platform description value is of the right kind", about: "platform is a mapping, off_for_up_to a duration, steps code or agent, agents and calls lists of company ids, and holds a list.", appliesTo: []string{"platform-description"}, none: "no file given is a platform description"},
-	{id: "description.ids", name: "Every company id and path is well written", about: "A platform description's ids and company ids are lower-case letters, digits and hyphens, from 0.5 a description's id may be owner/platforms/slug, and what it holds are relative paths.", appliesTo: []string{"platform-description"}, none: "no file given is a platform description"},
-	{id: "views.same-parts", name: "Both views have the same parts", about: "A legacy security view and platform view with the same title have the same parts, of the same kinds, apart from comments and triggers the platform view leaves out.", appliesTo: []string{"security", "platform"}},
-	{id: "views.same-lines", name: "Both views have the same lines", about: "A legacy security view and platform view with the same title have the same lines by their ends and kind, apart from ties, hidden lines and lines to what the platform view leaves out.", appliesTo: []string{"security", "platform"}},
+	{id: "description.ids", name: "Every company id and path is well written", about: "A platform description's id is a company id or owner/platforms/slug, its company ids are lower-case letters, digits and hyphens, and what it holds are relative paths.", appliesTo: []string{"platform-description"}, none: "no file given is a platform description"},
 }
 
 // checkedSource is what CheckSources learnt of one file.
 type checkedSource struct {
-	doc      *Map
 	read     bool
 	view     string
-	version  string
 	stopped  bool
 	mistakes mistakeList
 }
@@ -139,51 +121,26 @@ type checkedSource struct {
 func CheckSources(engine string, sources []Source) CheckReport {
 	report := CheckReport{Engine: engine, Files: []CheckedFile{}}
 	checked := make([]checkedSource, len(sources))
-	docs := make([]*Map, len(sources))
 	for i, source := range sources {
 		checked[i] = checkSource(source)
-		docs[i] = checked[i].doc
 		report.Files = append(report.Files, CheckedFile{source.File, checked[i].view})
-	}
-	var compared int
-	var differences []FileMistake
-	var differenceChecks []string
-	for _, pair := range ViewPairs(docs) {
-		found, ok := compareViews(docs[pair[0]], docs[pair[1]])
-		if !ok {
-			continue
-		}
-		compared++
-		for _, difference := range found {
-			differences = append(differences, FileMistake{sources[pair[0]].File + " and " + sources[pair[1]].File, difference.message})
-			differenceChecks = append(differenceChecks, difference.check)
-		}
 	}
 
 	for _, definition := range checkDefinitions {
 		result := CheckResult{ID: definition.id, Name: definition.name, About: definition.about,
 			AppliesTo: definition.appliesTo, Mistakes: []FileMistake{}}
 		ran, applies := false, false
-		if strings.HasPrefix(definition.id, "views.") {
-			ran = compared > 0
-			for i, difference := range differences {
-				if differenceChecks[i] == definition.id {
-					result.Mistakes = append(result.Mistakes, difference)
+		for i, file := range checked {
+			found := false
+			for _, m := range file.mistakes {
+				if m.check == definition.id {
+					result.Mistakes = append(result.Mistakes, FileMistake{sources[i].File, m.message})
+					found = true
 				}
 			}
-		} else {
-			for i, file := range checked {
-				found := false
-				for _, m := range file.mistakes {
-					if m.check == definition.id {
-						result.Mistakes = append(result.Mistakes, FileMistake{sources[i].File, m.message})
-						found = true
-					}
-				}
-				if found || definition.appliesToFile(file) {
-					applies = true
-					ran = ran || found || definition.early || !file.stopped
-				}
+			if found || definition.appliesToFile(file) {
+				applies = true
+				ran = ran || found || definition.early || !file.stopped
 			}
 		}
 		switch {
@@ -215,40 +172,30 @@ func checkSource(source Source) checkedSource {
 	if !ok {
 		return checkedSource{mistakes: found, stopped: true}
 	}
-	result := checkedSource{doc: file, read: true, version: show(file.get("awml")), stopped: stopped,
-		mistakes: append(found, warningList(file)...)}
+	result := checkedSource{read: true, stopped: stopped, mistakes: append(found, warningList(file)...)}
 	switch {
-	case IsCanonical(file):
-		result.view = "workflow"
+	case checkVersion(file) != nil:
 	case file.has("platform"):
 		result.view = "platform-description"
-	case isOneOf(file.get("view"), "security", "platform"):
-		result.view = str(file, "view")
+	default:
+		result.view = "workflow"
 	}
 	return result
 }
 
-// appliesToFile is whether a check is one the file is held to. A legacy view whose view isn't
-// known is held to the checks that every view is.
+// appliesToFile is whether a check is one the file is held to. A file of a version this release
+// doesn't read is held only to being YAML of the right version.
 func (definition checkDefinition) appliesToFile(file checkedSource) bool {
 	if !file.read {
 		return definition.id == "file.yaml"
 	}
 	if file.view == "" {
-		return isOneOf("security", definition.appliesTo...) && isOneOf("platform", definition.appliesTo...) &&
-			(!definition.legacy03 || file.version == "0.3")
+		return isOneOf(definition.id, "file.yaml", "file.version")
 	}
-	if !isOneOf(file.view, definition.appliesTo...) || definition.formats != nil && !isOneOf(file.version, definition.formats...) ||
-		definition.before06 && file.view == "workflow" && file.version == "0.6" {
-		return false
-	}
-	return !definition.legacy03 || file.view == "workflow" || file.view == "platform-description" || file.version == "0.3"
+	return isOneOf(file.view, definition.appliesTo...)
 }
 
 func (definition checkDefinition) skippedBecause(checked []checkedSource, applies bool) string {
-	if strings.HasPrefix(definition.id, "views.") {
-		return "no sound security view and platform view share a title"
-	}
 	if applies {
 		return "an earlier mistake stopped it in every file it applies to"
 	}
@@ -265,36 +212,5 @@ func (definition checkDefinition) skippedBecause(checked []checkedSource, applie
 	if definition.none != "" {
 		return definition.none
 	}
-	return "no file given is a workflow or a view"
-}
-
-// ViewPairs gives the legacy security and platform views that awml check compares: one of each
-// with the same title, where no other view shares it. Each pair holds the security view's index
-// and then the platform view's.
-func ViewPairs(docs []*Map) [][2]int {
-	type views struct{ security, platform []int }
-	byTitle := map[string]*views{}
-	var titles []string
-	for i, doc := range docs {
-		if doc == nil || !isOneOf(doc.get("view"), "security", "platform") {
-			continue
-		}
-		title := str(doc, "title")
-		if byTitle[title] == nil {
-			byTitle[title] = &views{}
-			titles = append(titles, title)
-		}
-		if doc.get("view") == "security" {
-			byTitle[title].security = append(byTitle[title].security, i)
-		} else {
-			byTitle[title].platform = append(byTitle[title].platform, i)
-		}
-	}
-	var pairs [][2]int
-	for _, title := range titles {
-		if v := byTitle[title]; len(v.security) == 1 && len(v.platform) == 1 {
-			pairs = append(pairs, [2]int{v.security[0], v.platform[0]})
-		}
-	}
-	return pairs
+	return "no file given is a workflow"
 }

@@ -27,7 +27,8 @@ type FitReport struct {
 	Gaps    []string    `json:"gaps"`
 }
 
-// Fit judges a security view against platform descriptions and gives the lines `awml fit` prints.
+// Fit judges a workflow, or its security view, against platform descriptions and gives the lines
+// `awml fit` prints.
 // Gaps mean the placement could not be judged.
 func Fit(security, placement *Map, descriptions []*Map) (lines, gaps []string) {
 	results, gaps := judge(security, placement, descriptions)
@@ -37,8 +38,9 @@ func Fit(security, placement *Map, descriptions []*Map) (lines, gaps []string) {
 	return FitLines(results), nil
 }
 
-// Judge judges a security view against platform descriptions, either as whole-workflow candidates
-// or in the placement drawn by a platform view. The documents must have passed Check.
+// Judge judges a workflow, or its security view, against platform descriptions, either as
+// whole-workflow candidates or in the placement drawn by one of its platform views. The documents
+// must have passed Check.
 func Judge(security, placement *Map, descriptions []*Map) FitReport {
 	results, gaps := judge(security, placement, descriptions)
 	if results == nil {
@@ -51,7 +53,9 @@ func Judge(security, placement *Map, descriptions []*Map) FitReport {
 }
 
 func judge(security, placement *Map, descriptions []*Map) (results []FitResult, gaps []string) {
-	security, _ = View(security, "")
+	if IsCanonical(security) {
+		security, _ = View(security, "")
+	}
 	model := newFitModel(security)
 	if gaps = model.gaps(); len(gaps) != 0 {
 		return nil, gaps

@@ -32,8 +32,8 @@ async function start(source) {
     check(sourceText) {
       return JSON.parse(globalThis.__awmlCheck(sourceText));
     },
-    // unsound gives the mistakes that stop a file being drawn: every one check gives, except, in a
-    // 0.6 file, a line that breaks a rule, which draw draws red.
+    // unsound gives the mistakes that stop a file being drawn: every one check gives, except a line
+    // that breaks a rule, which draw draws red.
     unsound(sourceText) {
       return JSON.parse(globalThis.__awmlUnsound(sourceText));
     },

@@ -6,10 +6,9 @@ import (
 )
 
 const fitSecurity = `
-awml: "0.3"
+awml: "0.6"
 title: Mail
-view: security
-groups:
+scopes:
   - {id: private, label: private, processing: any}
   - {id: business, label: business, processing: {anthropic: any}}
 parts:
@@ -21,9 +20,21 @@ parts:
 lines:
   - {from: hourly, to: bring, kind: start}
   - {from: mail, to: bring, kind: data}
-  - {from: bring, to: choose, kind: publish}
+  - {from: bring, to: choose, kind: data}
   - {from: notes, to: choose, kind: data}
 `
+
+// placedView is the fit workflow with one implementation, whose blocks are given, and that
+// implementation's platform view.
+func placedView(t *testing.T, blocks string) (*Map, *Map) {
+	t.Helper()
+	doc := fitDocs(t, fitSecurity+"implementations:\n  placed:\n    label: Placed\n    blocks:\n"+blocks)[0]
+	view, err := View(doc, "placed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return doc, view
+}
 
 func fitDocs(t *testing.T, sources ...string) []*Map {
 	t.Helper()
@@ -40,12 +51,12 @@ func fitDocs(t *testing.T, sources ...string) []*Map {
 
 func TestFitAppliesAllFiveRules(t *testing.T) {
 	platforms := []string{
-		`{awml: "0.3", platform: {id: fitting, label: Fitting}, off_for_up_to: PT1H, steps: code, agents: [], calls: [anthropic], holds: [notes]}`,
-		`{awml: "0.3", platform: {id: slow, label: Slow}, off_for_up_to: P1D, steps: code, agents: [], calls: [anthropic], holds: [notes]}`,
-		`{awml: "0.3", platform: {id: exposed, label: Exposed}, off_for_up_to: PT0S, steps: code, agents: [openai], calls: [anthropic], holds: [notes]}`,
-		`{awml: "0.3", platform: {id: no-model, label: No model}, off_for_up_to: PT0S, steps: code, agents: [], calls: [openai], holds: [notes]}`,
-		`{awml: "0.3", platform: {id: no-notes, label: No notes}, off_for_up_to: PT0S, steps: code, agents: [], calls: [anthropic], holds: []}`,
-		`{awml: "0.3", platform: {id: agent, label: Agent}, off_for_up_to: PT0S, steps: agent, agents: [anthropic], calls: any, holds: [notes]}`,
+		`{awml: "0.6", platform: {id: fitting, label: Fitting}, off_for_up_to: PT1H, steps: code, agents: [], calls: [anthropic], holds: [notes]}`,
+		`{awml: "0.6", platform: {id: slow, label: Slow}, off_for_up_to: P1D, steps: code, agents: [], calls: [anthropic], holds: [notes]}`,
+		`{awml: "0.6", platform: {id: exposed, label: Exposed}, off_for_up_to: PT0S, steps: code, agents: [openai], calls: [anthropic], holds: [notes]}`,
+		`{awml: "0.6", platform: {id: no-model, label: No model}, off_for_up_to: PT0S, steps: code, agents: [], calls: [openai], holds: [notes]}`,
+		`{awml: "0.6", platform: {id: no-notes, label: No notes}, off_for_up_to: PT0S, steps: code, agents: [], calls: [anthropic], holds: []}`,
+		`{awml: "0.6", platform: {id: agent, label: Agent}, off_for_up_to: PT0S, steps: agent, agents: [anthropic], calls: any, holds: [notes]}`,
 	}
 	docs := fitDocs(t, append([]string{fitSecurity}, platforms...)...)
 	got, gaps := Fit(docs[0], nil, docs[1:])
@@ -64,10 +75,9 @@ func TestFitAppliesAllFiveRules(t *testing.T) {
 
 func TestFitReportsSecurityGaps(t *testing.T) {
 	security := `
-awml: "0.3"
+awml: "0.6"
 title: Gaps
-view: security
-groups: [{id: private, label: private}]
+scopes: [{id: private, label: private}]
 parts:
   - {id: hourly, kind: trigger, label: Hourly, in: private}
   - {id: loose, kind: ai, op: sort, label: Loose}
@@ -90,30 +100,13 @@ func TestFitCannotChooseBetweenDuplicatePlatformDescriptions(t *testing.T) {
 }
 
 func TestFitJudgesADrawnPlacement(t *testing.T) {
-	placement := `
-awml: "0.3"
-title: Mail placement
-view: platform
-groups:
-  - {id: machine, label: Machine, platform: host}
-  - {id: session, label: Session, in: machine, platform: session}
-  - {id: phone, label: Phone}
-parts:
-  - {id: hourly, kind: trigger, label: Hourly}
-  - {id: bring, kind: code, op: bring-in, label: Bring in, in: session}
-  - {id: mail, kind: connector, label: Mail, in: session}
-  - {id: notes, kind: context, label: Notes, in: machine}
-  - {id: choose, kind: ai, op: sort, label: Choose, in: machine}
-lines:
-  - {from: hourly, to: bring, kind: start}
-  - {from: mail, to: bring, kind: data}
-  - {from: bring, to: choose, kind: publish}
-  - {from: notes, to: choose, kind: data}
-`
-	host := `{awml: "0.3", platform: {id: host, label: Host}, off_for_up_to: PT0S, steps: code, agents: [openai], calls: [anthropic], holds: [notes]}`
-	session := `{awml: "0.3", platform: {id: session, label: Session}, off_for_up_to: P1D, steps: agent, agents: [anthropic], calls: any, holds: [notes]}`
-	docs := fitDocs(t, fitSecurity, placement, host, session)
-	got, gaps := Fit(docs[0], docs[1], docs[2:])
+	doc, placement := placedView(t, `      - {id: machine, label: Machine, platform: host, parts: [notes, choose]}
+      - {id: session, label: Session, in: machine, platform: session, parts: [bring, mail]}
+      - {id: phone, label: Phone, parts: []}
+`)
+	host := `{awml: "0.6", platform: {id: host, label: Host}, off_for_up_to: PT0S, steps: code, agents: [openai], calls: [anthropic], holds: [notes]}`
+	session := `{awml: "0.6", platform: {id: session, label: Session}, off_for_up_to: P1D, steps: agent, agents: [anthropic], calls: any, holds: [notes]}`
+	got, gaps := Fit(doc, placement, fitDocs(t, host, session))
 	want := []string{
 		"machine  no: openai's agents run here, and business doesn't allow openai",
 		"session  no: hourly may wait PT2H, but the platform may be off for P1D",
@@ -126,27 +119,10 @@ lines:
 }
 
 func TestFitReportsBlocksWithoutDescriptionsAsNotJudged(t *testing.T) {
-	placement := `
-awml: "0.3"
-title: Mail placement
-view: platform
-groups:
-  - {id: machine, label: Machine, platform: host}
-  - {id: phone, label: Phone}
-parts:
-  - {id: hourly, kind: trigger, label: Hourly}
-  - {id: bring, kind: code, op: bring-in, label: Bring in, in: machine}
-  - {id: mail, kind: connector, label: Mail, in: machine}
-  - {id: notes, kind: context, label: Notes, in: machine}
-  - {id: choose, kind: ai, op: sort, label: Choose, in: machine}
-lines:
-  - {from: hourly, to: bring, kind: start}
-  - {from: mail, to: bring, kind: data}
-  - {from: bring, to: choose, kind: publish}
-  - {from: notes, to: choose, kind: data}
-`
-	docs := fitDocs(t, fitSecurity, placement)
-	report := Judge(docs[0], docs[1], nil)
+	doc, placement := placedView(t, `      - {id: machine, label: Machine, platform: host, parts: [bring, mail, notes, choose]}
+      - {id: phone, label: Phone, parts: []}
+`)
+	report := Judge(doc, placement, nil)
 	want := FitReport{
 		Results: []FitResult{
 			{Platform: "machine", Reasons: []string{`platform "host" wasn't described`}, Models: map[string][]string{}},

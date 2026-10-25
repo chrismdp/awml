@@ -13,8 +13,8 @@ func Check(doc any) []string {
 	return found.messages()
 }
 
-// Unsound finds the mistakes that stop a document being drawn: every one Check finds, except, in a
-// 0.6 file, a line that breaks a rule, which Draw draws red.
+// Unsound finds the mistakes that stop a document being drawn: every one Check finds, except a line
+// that breaks a rule, which Draw draws red.
 func Unsound(doc any) []string {
 	found, _ := checkDoc(doc)
 	var unsound mistakeList
@@ -27,8 +27,8 @@ func Unsound(doc any) []string {
 }
 
 // mistake is one thing Check reports, with the id of the check that found it. A mistake that is a
-// line breaking a rule in a 0.6 file also has the lines, and breach, the check's words for what's
-// wrong, which the line's label adds.
+// line breaking a rule also has the lines, and breach, the check's words for what's wrong, which the
+// line's label adds.
 type mistake struct {
 	check, message string
 	lines          []*Map
@@ -54,40 +54,56 @@ func (m mistakeList) messages() []string {
 	return messages
 }
 
-// checkDoc gives the mistakes in a document, and whether a broken list stopped the checks that
-// follow those of the file's own fields.
-func checkDoc(doc any) (mistakeList, bool) { return checkView(doc, false, "") }
+// The version of the file format this release reads, and the older ones awml convert upgrades.
+const currentFormat = "0.6"
 
-// checkView checks a document as checkDoc does. projected is whether it's a 0.4, 0.5 or 0.6 file's
-// platform view, whose fields the file's own checks have already held under the names the file
-// uses, so they aren't reported again as a group's or a part's. format is the version of the file
-// a view was projected from, and "" for a legacy view. From 0.5, a block may name a registered
-// platform, and in a 0.6 file a part may be marked untrusted or cleans.
-func checkView(doc any, projected bool, format string) (mistakeList, bool) {
+var olderFormats = []string{"0.2", "0.3", "0.4", "0.5"}
+
+// checkDoc gives the mistakes in a document, and whether a mistake stopped the checks that follow
+// those of the file's own fields: a version this release doesn't read, or a broken list.
+func checkDoc(doc any) (mistakeList, bool) {
 	file, ok := doc.(*Map)
 	if !ok {
 		return mistakeList{{check: "file.yaml", message: "the file must be a mapping of fields, starting with awml"}}, true
 	}
-	if IsCanonical(file) {
-		return checkCanonical(file)
+	if wrong := checkVersion(file); wrong != nil {
+		return wrong, true
 	}
 	if file.has("platform") {
 		return checkPlatformDescription(file), false
 	}
+	return checkCanonical(file)
+}
+
+// checkVersion reports an awml that isn't the current version. An older file is upgraded with awml
+// convert. A file with no awml is left to the checks of its fields.
+func checkVersion(file *Map) mistakeList {
+	if !file.has("awml") {
+		return nil
+	}
+	version, ok := file.get("awml").(string)
+	switch {
+	case !ok:
+		return mistakeList{{check: "file.version", message: fmt.Sprintf("awml: YAML read it as %s, not text: put it in quotes", show(file.get("awml")))}}
+	case isOneOf(version, olderFormats...):
+		return mistakeList{{check: "file.version", message: fmt.Sprintf(`awml is "%s", which this release no longer reads: upgrade the file with awml convert`, version)}}
+	case version != currentFormat:
+		return mistakeList{{check: "file.version", message: fmt.Sprintf(`awml must be "%s", not "%s"`, currentFormat, version)}}
+	}
+	return nil
+}
+
+// checkView checks a view projected from a workflow. projected is whether it's a platform view,
+// whose fields the file's own checks have already held under the names the file uses, so they
+// aren't reported again as a group's or a part's.
+func checkView(file *Map, projected bool) (mistakeList, bool) {
 	var errors mistakeList
-	fileVersion := show(file.get("awml"))
 	checkFields := func(what, name string, item *Map) {
 		if !projected {
-			fields(what, name, item, fileVersion, format, &errors)
+			fields(what, name, item, &errors)
 		}
 	}
 	checkFields("file", "the file", file)
-	if file.has("awml") && fileVersion != "0.2" && fileVersion != "0.3" {
-		errors.add("file.version", fmt.Sprintf(`awml must be "0.2" or "0.3", not "%s"`, fileVersion))
-	}
-	if file.has("view") && !isOneOf(file.get("view"), "security", "platform") {
-		errors.add("file.version", fmt.Sprintf(`view must be "security" or "platform", not "%s"`, show(file.get("view"))))
-	}
 	var lists [3][]*Map
 	var broken mistakeList
 	for n, kw := range [3][2]string{{"groups", "group"}, {"parts", "part"}, {"lines", "line"}} {
@@ -144,26 +160,18 @@ func checkView(doc any, projected bool, format string) (mistakeList, bool) {
 		if in := g.get("in"); in != nil && !groupIDs[keyOf(in)] {
 			errors.add("references.known", fmt.Sprintf(`%s is in unknown group "%s"`, name, show(in)))
 		}
-		if fileVersion == "0.3" {
-			// A block's processing is already an unknown field of the block.
-			if g.has("processing") && !projected {
-				if file.get("view") != "security" {
-					errors.add("processing.scopes-only", name+" has processing, but only a group in the security view takes it")
-				} else {
-					_, processingErrors := readProcessing(g.get("processing"), name)
-					errors = append(errors, processingErrors...)
-				}
-			}
-			if g.has("platform") {
-				if file.get("view") != "platform" {
-					errors.add("platform.blocks-only", name+" has a platform, but only a group in the platform view takes one")
-				} else if s, ok := g.get("platform").(string); !ok {
-					errors.add("values.text", fmt.Sprintf("%s: YAML read its platform as %s, not text: put it in quotes", name, show(g.get("platform"))))
-				} else if since05(format) && !companyID.MatchString(s) && !registeredPlatform.MatchString(s) {
-					errors.add("ids.written", fmt.Sprintf(`%s: platform "%s" must be a company id, or owner/platforms/slug for a registered platform`, name, s))
-				} else if !since05(format) && !companyID.MatchString(s) {
-					errors.add("ids.written", fmt.Sprintf(`%s: platform "%s" must be a company id`, name, s))
-				}
+		// A block's processing is already an unknown field of the block.
+		if g.has("processing") && !projected {
+			_, processingErrors := readProcessing(g.get("processing"), name)
+			errors = append(errors, processingErrors...)
+		}
+		if g.has("platform") {
+			if file.get("view") != "platform" {
+				errors.add("platform.blocks-only", name+" has a platform, but only a group in the platform view takes one")
+			} else if s, ok := g.get("platform").(string); !ok {
+				errors.add("values.text", fmt.Sprintf("%s: YAML read its platform as %s, not text: put it in quotes", name, show(g.get("platform"))))
+			} else if !companyID.MatchString(s) && !registeredPlatform.MatchString(s) {
+				errors.add("ids.written", fmt.Sprintf(`%s: platform "%s" must be a company id, or owner/platforms/slug for a registered platform`, name, s))
 			}
 		}
 	}
@@ -191,12 +199,11 @@ func checkView(doc any, projected bool, format string) (mistakeList, bool) {
 		name := fmt.Sprintf(`part "%s"`, show(p.get("id")))
 		checkFields("part", name, p)
 		if p.has("kind") {
-			// A standing approval is a part only from 0.5.
-			if k, ok := p.get("kind").(string); !ok || shapes[k] == "" || k == "approval" && !since05(format) {
+			if k, ok := p.get("kind").(string); !ok || shapes[k] == "" {
 				errors.add("kinds.known", fmt.Sprintf(`%s has unknown kind "%s"`, name, show(p.get("kind"))))
 			}
 		}
-		if format == "0.6" && !projected {
+		if !projected {
 			errors = append(errors, marks(name, p)...)
 		}
 		if in := p.get("in"); in != nil && !groupIDs[keyOf(in)] {
@@ -209,14 +216,14 @@ func checkView(doc any, projected bool, format string) (mistakeList, bool) {
 				errors.add("ops.known", fmt.Sprintf(`%s has unknown op "%s"`, name, show(op)))
 			}
 		}
-		if fileVersion == "0.3" && p.has("wait") {
+		if p.has("wait") {
 			if p.get("kind") != "trigger" {
 				errors.add("wait.duration", name+" has a wait, but only a trigger takes one")
 			} else if wait, ok := p.get("wait").(string); !ok || !validDuration(wait) {
 				errors.add("wait.duration", fmt.Sprintf(`%s: wait must be an ISO 8601 duration using weeks, days, hours, minutes or seconds, not "%s"`, name, show(p.get("wait"))))
 			}
 		}
-		if fileVersion == "0.3" && p.has("at") {
+		if p.has("at") {
 			if p.get("kind") != "context" {
 				errors.add("at.path", name+" has an at, but only a context takes one")
 			} else if at, ok := p.get("at").(string); !ok || !validPath(at) {
@@ -228,11 +235,6 @@ func checkView(doc any, projected bool, format string) (mistakeList, bool) {
 	for n, l := range lines {
 		name := lineName(n, l)
 		checkFields("line", name, l)
-		if b := l.get("breaks"); b != nil && format != "0.6" {
-			if _, ok := b.(bool); !ok {
-				errors.add("lines.breaks", fmt.Sprintf(`%s: breaks must be true or false, not "%s"`, name, show(b)))
-			}
-		}
 		for _, end := range [2][2]string{{"from", "starts"}, {"to", "ends"}} {
 			if _, ok := kinds[keyOf(l.get(end[0]))]; l.has(end[0]) && !ok {
 				errors.add("references.known", fmt.Sprintf(`%s %s at unknown part "%s"`, name, end[1], show(l.get(end[0]))))
@@ -264,24 +266,9 @@ func checkView(doc any, projected bool, format string) (mistakeList, bool) {
 		}
 	}
 	errors = append(errors, operations(parts, lines)...)
-	if since05(format) && file.get("view") == "security" {
-		errors = append(errors, tiers(parts, lines)...)
-	}
 	if file.get("view") == "security" {
-		// From 0.6 a data line that leaves its scope is a publish, and drawn as one.
-		if format != "0.6" {
-			errors = append(errors, scopes(groups, parts, lines)...)
-		}
-		if fileVersion == "0.3" {
-			errors = append(errors, nestedProcessing(groups)...)
-		}
-	}
-	// Before 0.6, a red line is marked by hand, so a line that breaks a rule unmarked is a mistake
-	// like any other.
-	if format != "0.6" {
-		for i := range errors {
-			errors[i].lines = nil
-		}
+		errors = append(errors, tiers(parts, lines)...)
+		errors = append(errors, nestedProcessing(groups)...)
 	}
 	return errors, false
 }
@@ -402,42 +389,6 @@ func nestedProcessing(groups []*Map) mistakeList {
 	return errors
 }
 
-// scopes holds each data line in the security view to the boxes it moves between. A move narrows
-// only into the box it starts in or one inside it, and narrowing is routing, drawn as an ordinary
-// line. Any other move adds viewers or loosens the terms, so it's publishing, or a read the design
-// refuses. A part in no box sits outside every box, so it's wider than any of them, and a trigger
-// with none is in the box of what it starts. A line marked red by hand in a file before 0.6 draws
-// what a live system did, not the design, so this rule doesn't hold it.
-func scopes(groups, parts, lines []*Map) mistakeList {
-	parent := map[string]string{}
-	for _, g := range groups {
-		parent[str(g, "id")] = str(g, "in")
-	}
-	known := map[string]bool{}
-	for _, p := range parts {
-		known[str(p, "id")] = true
-	}
-	where := placed(parts, lines)
-	var errors mistakeList
-	for _, l := range lines {
-		from, to := str(l, "from"), str(l, "to")
-		if l.get("kind") != "data" || l.get("breaks") == true || !known[from] || !known[to] {
-			continue
-		}
-		source, target := where[from], where[to]
-		if insideBox(parent, target, source) {
-			continue
-		}
-		into := fmt.Sprintf(`into group "%s", which isn't inside it`, target)
-		if target == "" {
-			into = "to the top level, outside every group"
-		}
-		errors.add("lines.data-narrows", fmt.Sprintf(`the line from "%s" to "%s" moves content from group "%s" %s: draw it as publish, or as refused if the design refuses the read`,
-			from, to, source, into))
-	}
-	return errors
-}
-
 // The operations a step may name, each with the emoji it is drawn with, and the kinds of part that
 // are steps. other is for work that fits none of the nine, and is held to no operation's rules.
 var ops = map[string]string{
@@ -446,18 +397,15 @@ var ops = map[string]string{
 }
 var steps = setOf([]string{"ai", "code", "person"})
 
-// lineLeads is whether a line starts something, moves data or publishes. A line marked red by hand
-// in a file before 0.6 is a finding about a live system, not part of the design. From 0.6 a red
-// line is one the check has reported, so it leads like any other.
+// lineLeads is whether a line starts something, moves data or publishes. A red line is one the
+// check has reported, so it leads like any other.
 func lineLeads(line *Map) bool {
-	kind := line.get("kind")
-	return (kind == "start" || kind == "data" || kind == "publish") && line.get("breaks") != true
+	return isOneOf(line.get("kind"), "start", "data", "publish")
 }
 
 // operations holds each step to what its op must not do, wherever the drawing shows it. Only a do
 // step leads to an outside action, directly or through a review, a standing approval or a fork,
-// and an answer or check step never writes to a context. A line marked red by hand in a file before
-// 0.6 draws what a live system did, not the design, so these rules don't hold it.
+// and an answer or check step never writes to a context.
 func operations(parts, lines []*Map) mistakeList {
 	byID := map[any]*Map{}
 	for _, p := range parts {
@@ -606,14 +554,9 @@ func tiers(parts, lines []*Map) mistakeList {
 
 var fieldSets = map[string][2][]string{
 	"file":  {{"awml", "title", "view", "parts"}, {"groups", "lines"}},
-	"group": {{"id", "label"}, {"in"}},
-	"part":  {{"id", "kind", "label"}, {"in", "op"}},
-	"line":  {{"from", "to", "kind"}, {"label", "breaks"}},
-}
-
-var fields03 = map[string][]string{
-	"group": {"processing", "platform"},
-	"part":  {"wait", "at"},
+	"group": {{"id", "label"}, {"in", "processing", "platform"}},
+	"part":  {{"id", "kind", "label"}, {"in", "op", "wait", "at", "untrusted", "cleans"}},
+	"line":  {{"from", "to", "kind"}, {"label"}},
 }
 
 // The fields that must be text, when they're given at all.
@@ -622,25 +565,9 @@ var textFields = map[string]bool{"title": true, "view": true, "id": true, "label
 // Mermaid reads anything else in an id as part of the syntax around it.
 var id = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`)
 
-// The fields a 0.6 file adds.
-var fields06 = map[string][]string{
-	"part": {"untrusted", "cleans"},
-}
-
 // fields reports what an item lacks, what it has that it shouldn't, and what YAML didn't read as text.
-// version is the view's own, and format the version of the file it was projected from.
-func fields(what, name string, item *Map, version, format string, errors *mistakeList) {
+func fields(what, name string, item *Map, errors *mistakeList) {
 	need, may := setOf(fieldSets[what][0]), setOf(fieldSets[what][1])
-	if version == "0.3" {
-		for _, field := range fields03[what] {
-			may[field] = true
-		}
-	}
-	if format == "0.6" {
-		for _, field := range fields06[what] {
-			may[field] = true
-		}
-	}
 	// A fork is a bare bar, so it needs no label.
 	if what == "part" && item.get("kind") == "fork" {
 		delete(need, "label")
@@ -656,13 +583,10 @@ func fields(what, name string, item *Map, version, format string, errors *mistak
 	for _, f := range missing {
 		errors.add("fields.known", fmt.Sprintf("%s has no %s", name, f))
 	}
-	// From 0.6 the check works out which lines are red, so none is marked by hand.
-	if what == "line" && format == "0.6" {
-		delete(may, "breaks")
-	}
 	for _, f := range item.Keys() {
-		if what == "line" && f == "breaks" && !may[f] {
-			errors.add("fields.known", name+" has breaks, but from 0.6 awml check works out which lines break a rule, and awml draw draws them red")
+		// The check works out which lines are red, so none is marked by hand.
+		if what == "line" && f == "breaks" {
+			errors.add("fields.known", name+" has breaks, but awml check works out which lines break a rule, and awml draw draws them red")
 		} else if !need[f] && !may[f] {
 			errors.add("fields.known", fmt.Sprintf(`%s has unknown field "%s"`, name, f))
 		}
@@ -678,8 +602,7 @@ func fields(what, name string, item *Map, version, format string, errors *mistak
 
 var companyID = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 
-// A platform published to the registry is named owner/platforms/slug, which files allow from 0.5.
-// The owner and slug follow the registry's rule for names: lower-case letters, digits and
+// A platform published to the registry is named owner/platforms/slug. The owner and slug follow the registry's rule for names: lower-case letters, digits and
 // hyphens, up to 40 characters, starting and ending with a letter or a digit.
 var registeredPlatform = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?/platforms/[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$`)
 var pathName = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)

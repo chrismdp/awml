@@ -9,9 +9,15 @@ import (
 	"testing"
 )
 
+// pageDoc is a workflow of one AI step, which an implementation places on a server if the view
+// asked for is platform.
 func pageDoc(t *testing.T, title, view, label string) *Map {
 	t.Helper()
-	return parsed(t, fmt.Sprintf("{awml: \"0.2\", title: %q, view: %s, parts: [{id: a, kind: ai, label: %q}]}", title, view, label))
+	implementations := ""
+	if view == "platform" {
+		implementations = ", implementations: {home: {label: Home, blocks: [{id: server, label: Server, parts: [a]}]}}"
+	}
+	return parsed(t, fmt.Sprintf("{awml: \"0.6\", title: %q, parts: [{id: a, kind: ai, label: %q}]%s}", title, label, implementations))
 }
 
 func drawings(t *testing.T, html string) []string {
@@ -37,12 +43,13 @@ func TestAPageStandsAloneAndDrawsWithMermaid1141(t *testing.T) {
 }
 
 func TestAPageHoldsEachDrawingInOrder(t *testing.T) {
-	docs := []*Map{pageDoc(t, "Dinners", "security", "Plan"), pageDoc(t, "Dinners", "platform", "Plan"), pageDoc(t, "A question", "security", "Plan")}
+	docs := []*Map{pageDoc(t, "Dinners", "platform", "Plan"), pageDoc(t, "A question", "security", "Plan")}
 	html := Page(docs)
-	var want []string
-	for _, d := range docs {
-		want = append(want, Draw(d))
+	placed, err := View(docs[0], "home")
+	if err != nil {
+		t.Fatal(err)
 	}
+	want := []string{Draw(docs[0]), Draw(placed), Draw(docs[1])}
 	if got := drawings(t, html); !reflect.DeepEqual(got, want) {
 		t.Errorf("drawings = %q", got)
 	}
@@ -64,7 +71,7 @@ func TestEachDrawingIsOnAWhitePanel(t *testing.T) {
 }
 
 func TestThePageIsNamedAfterItsWorkflowOrSimplyWorkflows(t *testing.T) {
-	has(t, Page([]*Map{pageDoc(t, "Dinners", "security", "Plan"), pageDoc(t, "Dinners", "platform", "Plan")}), "<title>Dinners</title>")
+	has(t, Page([]*Map{pageDoc(t, "Dinners", "platform", "Plan")}), "<title>Dinners</title>")
 	has(t, Page([]*Map{pageDoc(t, "Dinners", "security", "Plan"), pageDoc(t, "A question", "security", "Plan")}), "<title>Workflows</title>")
 }
 
@@ -93,7 +100,7 @@ func TestALabelCantEndTheScriptEarly(t *testing.T) {
 }
 
 func TestTheDrawingsAreWrittenInPlainASCII(t *testing.T) {
-	html := Page([]*Map{pageDoc(t, "Dinners", "security", "Fill the basket: Allow under £180 «🛒»"), pageDoc(t, "Dinners", "platform", "Plan")})
+	html := Page([]*Map{pageDoc(t, "Dinners", "security", "Fill the basket: Allow under £180 «🛒»"), pageDoc(t, "Dinners", "security", "Plan")})
 	has(t, html, `Fill the basket#58; Allow under \u00a3180 \u00ab\ud83d\uded2\u00bb`)
 	has(t, html, `bottom: 30\n---\nflowchart TB\n  a(\"\u003csmall style='color:rgb(61,67,79)'>\ud83e\udd16\u003c/small>\u003cbr>Plan\")`)
 	has(t, html, `"`+`, "---\nconfig:`)

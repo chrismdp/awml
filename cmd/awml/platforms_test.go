@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-const pulledDescription = `awml: "0.5"
+const pulledDescription = `awml: "0.6"
 platform: { id: acme/platforms/ops-runner, label: "The ops runner" }
 off_for_up_to: PT0S
 steps: code
@@ -28,7 +28,7 @@ func TestPushSendsAWorkflowNamingARegisteredPlatform(t *testing.T) {
 	}))
 	defer server.Close()
 	loginForTest(t, server.URL, "token")
-	source := strings.Replace(strings.Replace(canonicalFile, `awml: "0.4"`, `awml: "0.5"`, 1), "platform: scripts", "platform: acme/platforms/ops-runner", 1)
+	source := strings.Replace(canonicalFile, "platform: scripts", "platform: acme/platforms/ops-runner", 1)
 	r := awmlRun("push", "acme/bread", write(t, "bread.yaml", source), "--registry", server.URL)
 	if r != (result{0, "Pushed acme/bread version 1: /acme/bread/v/1\n", ""}) {
 		t.Fatalf("push gave %+v", r)
@@ -92,7 +92,7 @@ func TestPullRefusesAnotherThreePartName(t *testing.T) {
 
 // A block that names a registered platform not given to awml fit says how to pull it.
 func TestFitHintsAtPullingARegisteredPlatform(t *testing.T) {
-	source := strings.Replace(strings.Replace(canonicalFile, `awml: "0.4"`, `awml: "0.5"`, 1), "platform: scripts", "platform: acme/platforms/ops-runner", 1)
+	source := strings.Replace(canonicalFile, "platform: scripts", "platform: acme/platforms/ops-runner", 1)
 	workflow := write(t, "bread.yaml", source)
 	other := write(t, "other.yaml", strings.Replace(pulledDescription, "acme/platforms/ops-runner", "other", 1))
 	r := awmlRun("fit", "--implementation", "home", workflow, other)

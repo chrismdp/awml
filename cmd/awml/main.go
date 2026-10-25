@@ -29,10 +29,10 @@ positional arguments:
   {draw,page,check,fit,summary,convert,login,push,pull}
     draw             print a file's Mermaid
     page             write one HTML page that draws each file
-    check            report warnings, structural mistakes and differences between views
+    check            report warnings and structural mistakes
     fit              judge where a workflow can run
     summary          count the parts and lines in one workflow
-    convert          join a legacy pair into one 0.4 workflow
+    convert          upgrade an older file, or join a legacy pair, into one 0.6 file
     login            save a registry API token
     push             push a new workflow version
     pull             download a workflow or platform version
@@ -53,12 +53,17 @@ options:
   --implementation ID  draw one implementation
   --untrusted  draw where untrusted text reaches
 `},
-	"convert": {"usage: awml convert [-h] [--implementation ID] SECURITY PLATFORM\n", `
-Join a legacy security and platform pair into one 0.4 file.
+	"convert": {"usage: awml convert [-h] [--implementation ID] file [PLATFORM]\n", `
+Upgrade a file of an older version into one 0.6 file, or join a legacy security view and platform
+view into one.
+
+positional arguments:
+  file
+  PLATFORM    the platform view of a legacy pair, after its security view
 
 options:
   -h, --help  show this help message and exit
-  --implementation ID  name the implementation (default: default)
+  --implementation ID  name a legacy pair's implementation (default: default)
 `},
 	"page": {"usage: awml page [-h] -o OUT files [files ...]\n", `
 positional arguments:
@@ -76,11 +81,10 @@ options:
   -h, --help  show this help message and exit
   --json      print every check and its result as JSON
 `},
-	"fit": {"usage: awml fit [-h] [--json] [--implementation ID] SECURITY [PLATFORM_VIEW] [DESC ...]\n", `
+	"fit": {"usage: awml fit [-h] [--json] [--implementation ID] file [DESC ...]\n", `
 positional arguments:
-  SECURITY
+  file
   DESC
-  PLATFORM_VIEW
 
 options:
   -h, --help  show this help message and exit
@@ -207,11 +211,11 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	var missing []string
 	if len(files) == 0 && command != "login" {
-		fit := "SECURITY, DESC"
+		fit := "file, DESC"
 		if implementation != "" {
-			fit = "SECURITY"
+			fit = "file"
 		}
-		missing = append(missing, map[string]string{"draw": "file", "page": "files", "check": "files", "fit": fit, "convert": "SECURITY, PLATFORM", "summary": "files", "push": "owner/slug, file", "pull": "owner/slug[@n]"}[command])
+		missing = append(missing, map[string]string{"draw": "file", "page": "files", "check": "files", "fit": fit, "convert": "file", "summary": "files", "push": "owner/slug, file", "pull": "owner/slug[@n]"}[command])
 	} else if command == "fit" && len(files) == 1 && implementation == "" {
 		missing = append(missing, "DESC")
 	}
@@ -221,8 +225,11 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if missing != nil {
 		return fail(commands[command].usage, "awml "+command, "the following arguments are required: "+strings.Join(missing, ", "))
 	}
-	if command == "convert" && len(files) != 2 {
-		return fail(commands[command].usage, "awml convert", "expected SECURITY and PLATFORM")
+	if command == "convert" && len(files) > 2 {
+		return fail(commands[command].usage, "awml convert", "expected one file, or a security view and its PLATFORM view")
+	}
+	if command == "convert" && len(files) == 1 && implementation != "" {
+		return fail(commands[command].usage, "awml convert", "argument --implementation: only a legacy pair has an implementation to name")
 	}
 	if command == "draw" && untrusted && implementation != "" {
 		return fail(commands[command].usage, "awml draw", "argument --untrusted: not allowed with argument --implementation")
@@ -262,61 +269,25 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return checkJSON(files, stdout, stderr)
 	}
 	if command == "check" {
-		type checkedFile struct {
-			path     string
-			doc      *awml.Map
-			errs     []string
-			warnings []string
-		}
-		checked := make([]checkedFile, 0, len(files))
-		docs := make([]*awml.Map, 0, len(files))
+		code := 0
 		for _, path := range files {
 			doc, errs := read(path)
-			checked = append(checked, checkedFile{path, doc, errs, awml.Warnings(doc)})
-			docs = append(docs, doc)
-		}
-
-		type comparison struct {
-			security int
-			platform int
-			mistakes []string
-		}
-		var comparisons []comparison
-		failedComparison := make([]bool, len(checked))
-		for _, pair := range awml.ViewPairs(docs) {
-			security, platform := pair[0], pair[1]
-			mistakes := awml.CompareViews(checked[security].doc, checked[platform].doc)
-			if len(mistakes) == 0 {
+			for _, warning := range awml.Warnings(doc) {
+				fmt.Fprintf(stdout, "%s: warning: %s\n", path, warning)
+			}
+			if len(errs) == 0 {
+				fmt.Fprintf(stdout, "%s: ok\n", path)
 				continue
 			}
-			failedComparison[security], failedComparison[platform] = true, true
-			comparisons = append(comparisons, comparison{security, platform, mistakes})
-		}
-
-		code := 0
-		for i, file := range checked {
-			for _, warning := range file.warnings {
-				fmt.Fprintf(stdout, "%s: warning: %s\n", file.path, warning)
-			}
-			if len(file.errs) == 0 {
-				if !failedComparison[i] {
-					fmt.Fprintf(stdout, "%s: ok\n", file.path)
-				}
-				continue
-			}
-			for _, e := range file.errs {
-				fmt.Fprintf(stdout, "%s: %s\n", file.path, e)
-			}
-			code = 1
-		}
-		for _, comparison := range comparisons {
-			security, platform := checked[comparison.security], checked[comparison.platform]
-			for _, mistake := range comparison.mistakes {
-				fmt.Fprintf(stdout, "%s and %s: %s\n", security.path, platform.path, mistake)
+			for _, e := range errs {
+				fmt.Fprintf(stdout, "%s: %s\n", path, e)
 			}
 			code = 1
 		}
 		return code
+	}
+	if command == "convert" {
+		return convert(files, implementation, stdout, stderr)
 	}
 	docs, ok := sound(files, stderr, command == "draw" || command == "page" || command == "summary")
 	if !ok {
@@ -334,38 +305,9 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, awml.Draw(view))
 		return 0
 	}
-	if command == "convert" {
-		name := implementation
-		if name == "" {
-			name = "default"
-		}
-		converted, err := awml.ConvertWithImplementation(docs[0], docs[1], name)
-		if err != nil {
-			fmt.Fprintln(stderr, err)
-			return 1
-		}
-		data, err := awml.Marshal(converted)
-		if err != nil {
-			fmt.Fprintln(stderr, err)
-			return 1
-		}
-		for _, path := range files {
-			src, _ := os.ReadFile(path)
-			comments, err := awml.Comments(src)
-			if err != nil {
-				fmt.Fprintln(stderr, err)
-				return 1
-			}
-			for _, comment := range comments {
-				fmt.Fprintln(stdout, comment)
-			}
-		}
-		fmt.Fprint(stdout, string(data))
-		return 0
-	}
 	if command == "fit" {
-		if !awml.IsCanonical(docs[0]) && strField(docs[0], "view") != "security" {
-			fmt.Fprintf(stderr, "%s: must be a security view\n", files[0])
+		if !awml.IsCanonical(docs[0]) {
+			fmt.Fprintf(stderr, "%s: must be a workflow\n", files[0])
 			return 1
 		}
 		var placement *awml.Map
@@ -377,9 +319,6 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 				fmt.Fprintln(stderr, err)
 				return 1
 			}
-		} else if !awml.IsCanonical(docs[0]) && len(docs) > 1 && strField(docs[1], "view") == "platform" {
-			placement = docs[1]
-			start = 2
 		}
 		if placement == nil && start == len(docs) {
 			fmt.Fprintf(stderr, "awml fit: no platform descriptions were given\n")
@@ -454,17 +393,75 @@ func checkJSON(files []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
+// convert prints one 0.6 file, upgraded from a file of an older version or joined from a legacy
+// pair, with the YAML comments of each file at its top. It fails when the files can't be
+// converted, and when the converted file has mistakes, which newer versions' rules can find in a
+// file that older ones passed. It lists those on standard error.
+func convert(files []string, implementation string, stdout, stderr io.Writer) int {
+	var parsed []any
+	var comments []string
+	for _, path := range files {
+		src, err := os.ReadFile(path)
+		if err != nil {
+			fmt.Fprintf(stderr, "%s: can't be read: %s\n", path, reason(err))
+			return 1
+		}
+		doc, err := awml.Parse(src)
+		if err != nil {
+			fmt.Fprintf(stderr, "%s: isn't YAML: %s\n", path, strings.Join(strings.Fields(err.Error()), " "))
+			return 1
+		}
+		found, err := awml.Comments(src)
+		if err != nil {
+			fmt.Fprintf(stderr, "%s: %s\n", path, err)
+			return 1
+		}
+		parsed = append(parsed, doc)
+		comments = append(comments, found...)
+	}
+	var converted *awml.Map
+	var err error
+	if len(parsed) == 1 {
+		if converted, err = awml.Upgrade(parsed[0]); err != nil {
+			fmt.Fprintf(stderr, "%s: %s\n", files[0], err)
+			return 1
+		}
+	} else {
+		if implementation == "" {
+			implementation = "default"
+		}
+		security, _ := parsed[0].(*awml.Map)
+		platform, _ := parsed[1].(*awml.Map)
+		if converted, err = awml.ConvertWithImplementation(security, platform, implementation); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+	}
+	data, err := awml.Marshal(converted)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	for _, comment := range comments {
+		fmt.Fprintln(stdout, comment)
+	}
+	fmt.Fprint(stdout, string(data))
+	mistakes := awml.Check(converted)
+	if len(mistakes) == 0 {
+		return 0
+	}
+	fmt.Fprintln(stderr, "awml convert: converted, but awml check finds these mistakes in the result:")
+	for _, mistake := range mistakes {
+		fmt.Fprintf(stderr, "  %s\n", mistake)
+	}
+	return 1
+}
+
 func currentVersion() string {
 	if version != "" {
 		return version
 	}
 	return awml.BuildVersion()
-}
-
-func strField(doc *awml.Map, field string) string {
-	value, _ := doc.Get(field)
-	text, _ := value.(string)
-	return text
 }
 
 func printSummary(out io.Writer, s awml.Summary) {
@@ -524,8 +521,8 @@ func readWith(path string, find func(any) []string) (*awml.Map, []string) {
 }
 
 // sound gives every file's document, or false once any file has mistakes, which are printed. A
-// command that draws or counts red lines takes a 0.6 file whose only mistakes are lines that break
-// a rule.
+// command that draws or counts red lines takes a file whose only mistakes are lines that break a
+// rule.
 func sound(paths []string, stderr io.Writer, drawn bool) ([]*awml.Map, bool) {
 	find := awml.Check
 	if drawn {

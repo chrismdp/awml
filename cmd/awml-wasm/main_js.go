@@ -83,7 +83,7 @@ func main() {
 			return errorJSON(err.Error())
 		}
 		if len(sources) == 0 {
-			return errorJSON("fit needs a security view")
+			return errorJSON("fit needs a workflow")
 		}
 		docs := make([]*awml.Map, 0, len(sources))
 		for _, source := range sources {
@@ -96,30 +96,26 @@ func main() {
 			}
 			docs = append(docs, doc.(*awml.Map))
 		}
-		if !awml.IsCanonical(docs[0]) && field(docs[0], "view") != "security" {
-			return errorJSON("the first file must be a security view")
+		if !awml.IsCanonical(docs[0]) {
+			return errorJSON("the first file must be a workflow")
 		}
 		var placement *awml.Map
-		start := 1
 		if implementation := optionalImplementation(args); implementation != "" {
 			var err error
 			placement, err = awml.View(docs[0], implementation)
 			if err != nil {
 				return errorJSON(err.Error())
 			}
-		} else if !awml.IsCanonical(docs[0]) && len(docs) > 1 && field(docs[1], "view") == "platform" {
-			placement = docs[1]
-			start = 2
 		}
-		if placement == nil && start == len(docs) {
+		if placement == nil && len(docs) == 1 {
 			return errorJSON("no platform descriptions were given")
 		}
-		for _, doc := range docs[start:] {
+		for _, doc := range docs[1:] {
 			if _, ok := doc.Get("platform"); !ok {
-				return errorJSON("fit takes only platform descriptions after its views")
+				return errorJSON("fit takes only platform descriptions after its workflow")
 			}
 		}
-		encoded, err := json.Marshal(awml.Judge(docs[0], placement, docs[start:]))
+		encoded, err := json.Marshal(awml.Judge(docs[0], placement, docs[1:]))
 		if err != nil {
 			return errorJSON(err.Error())
 		}
@@ -148,12 +144,6 @@ func main() {
 		return awml.Draw(view)
 	})
 	select {}
-}
-
-func field(doc *awml.Map, name string) string {
-	value, _ := doc.Get(name)
-	text, _ := value.(string)
-	return text
 }
 
 func expose(name string, call func([]js.Value) string) {
