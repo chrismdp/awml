@@ -8,11 +8,22 @@ import (
 	"strings"
 )
 
-// A Workflow is one workflow file given with others: the path it was given by, which a ref's path
-// is followed from, and its document.
+// A Workflow is one workflow file given with others: the name it was given by, which messages use;
+// Path, where it is as an absolute path, which its refs are followed from and matched against; and
+// its document. A workflow given without a Path, as the WebAssembly build gives each, is taken to be
+// at its name from one root.
 type Workflow struct {
 	File string
+	Path string
 	Doc  *Map
+}
+
+// at gives where a workflow's file is, as a cleaned path from the root, with forward slashes.
+func (w Workflow) at() string {
+	if w.Path != "" {
+		return path.Clean(filepath.ToSlash(w.Path))
+	}
+	return path.Join("/", filepath.ToSlash(w.File))
 }
 
 // partAt is one workflow's copy of a part.
@@ -55,7 +66,7 @@ func link(workflows []Workflow) linked {
 			if !ok || !refKinds[str(p, "kind")] {
 				continue
 			}
-			t := refersTo(workflows, w.File, workflow)
+			t := refersTo(workflows, w, workflow)
 			if t < 0 || !sound[t] {
 				continue
 			}

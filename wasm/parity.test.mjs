@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile, readdir, mkdtemp, writeFile, rm } from "node:fs/promises";
+import { readFile, readdir, mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { createAWML } from "./awml.js";
 
@@ -343,6 +343,17 @@ lines:
   assert.equal(api.fitJSON([...handOff, ...descriptionSources]) + "\n",
     runNative(["fit", "--json", ...descriptions, ...handOffPaths], handOffFit.gaps.length ? 1 : 0), "fit together");
   assert(Object.keys(handOffFit.results.find((result) => result.fits || result.judged).models).every((step) => step.includes("#")));
+  // A ref is followed to where a file is: by awml from the folder it runs in, and by WebAssembly from
+  // one root, so files named from the same folder link the same way in both.
+  await mkdir(`${temporary}/family`);
+  await mkdir(`${temporary}/work`);
+  const located = [
+    { file: "family/plan.yaml", source: plan.replace("shop.yaml#ready", "../work/shop.yaml#readied") },
+    { file: "work/shop.yaml", source: shop.replace("plan.yaml#list", "family/plan#lists") },
+  ];
+  for (const { file, source } of located) await writeFile(`${temporary}/${file}`, source);
+  assert.equal(api.checksJSON(located) + "\n", runNative(["check", "--json", ...located.map(({ file }) => file)], 1, temporary), "checks JSON of files named from one folder");
+  assert.deepEqual(api.checks(located).checks.find((check) => check.id === "refs.known").mistakes.map(({ file }) => file), ["family/plan.yaml", "work/shop.yaml"]);
   const broken = [handOff[0], { file: handOff[1].file, source: shop.replace("plan.yaml#list", "plan.yaml#lists") }];
   await writeFile(broken[1].file, broken[1].source);
   assert.equal(api.checksJSON(broken) + "\n", runNative(["check", "--json", ...handOffPaths], 1), "checks JSON together, with a ref to a part that isn't there");
@@ -413,12 +424,12 @@ async function yamlFiles(directory) {
   return files;
 }
 
-function runNative(args, status = 0) {
-  return runNativeResult(args, status).stdout;
+function runNative(args, status = 0, cwd = undefined) {
+  return runNativeResult(args, status, cwd).stdout;
 }
 
-function runNativeResult(args, status = 0) {
-  const result = spawnSync(native, args, { encoding: "utf8" });
+function runNativeResult(args, status = 0, cwd = undefined) {
+  const result = spawnSync(native, args, { encoding: "utf8", cwd });
   assert.equal(result.status, status, `${args.join(" ")}: ${result.stderr}`);
   return result;
 }
