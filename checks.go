@@ -18,9 +18,10 @@ func BuildVersion() string {
 }
 
 // Source is one file given to CheckSources: its name, its text, and why it couldn't be read, if it
-// couldn't.
+// couldn't. Path is where it is, as a Workflow's Path is.
 type Source struct {
 	File       string
+	Path       string
 	Text       []byte
 	Unreadable string
 }
@@ -137,7 +138,7 @@ func CheckSources(engine string, sources []Source) CheckReport {
 	var at []int
 	for i, file := range checked {
 		if file.view == "workflow" && !file.stopped {
-			given = append(given, Workflow{File: sources[i].File, Doc: file.doc})
+			given = append(given, Workflow{File: sources[i].File, Path: sources[i].Path, Doc: file.doc})
 			at = append(at, i)
 		}
 	}

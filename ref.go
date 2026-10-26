@@ -3,7 +3,6 @@ package awml
 import (
 	"fmt"
 	"path"
-	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -45,17 +44,18 @@ func readRef(value any) (workflow, part string, ok bool) {
 	return "", "", false
 }
 
-// refersTo gives the workflow among those given that a ref from the file named refers to, or -1
-// when none of them is it. A path is followed from the referring file's folder. owner/slug is
-// followed to a file at a path ending owner/slug.yaml, where awml pull -o owner puts it.
-func refersTo(workflows []Workflow, from, workflow string) int {
+// refersTo gives the workflow among those given that a ref from the one named refers to, or -1 when
+// none of them is it. A path is followed from the folder the referring file is in. owner/slug is
+// followed to a file at a path ending owner/slug.yaml, where awml pull -o owner puts it. Both are
+// matched against where each file is, however it was named.
+func refersTo(workflows []Workflow, from Workflow, workflow string) int {
 	want := ""
 	if strings.HasSuffix(workflow, ".yaml") {
-		want = path.Clean(path.Join(path.Dir(filepath.ToSlash(from)), workflow))
+		want = path.Join(path.Dir(from.at()), workflow)
 	}
 	for i, w := range workflows {
-		file := path.Clean(filepath.ToSlash(w.File))
-		if want != "" && file == want || want == "" && (file == workflow+".yaml" || strings.HasSuffix(file, "/"+workflow+".yaml")) {
+		file := w.at()
+		if want != "" && file == want || want == "" && strings.HasSuffix(file, "/"+workflow+".yaml") {
 			return i
 		}
 	}

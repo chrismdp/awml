@@ -281,7 +281,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		for i, path := range files {
 			docs[i], errors[i] = read(path)
 			if awml.IsCanonical(docs[i]) {
-				given = append(given, awml.Workflow{File: path, Doc: docs[i]})
+				given = append(given, workflowAt(path, docs[i]))
 				at = append(at, i)
 			}
 		}
@@ -323,7 +323,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 				fmt.Fprintf(stderr, "%s: %s\n", files[i], err)
 				return 1
 			}
-			given = append(given, awml.Workflow{File: files[i], Doc: doc})
+			given = append(given, workflowAt(files[i], doc))
 		}
 		fmt.Fprintln(stdout, awml.DrawMap(given))
 		return 0
@@ -348,7 +348,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			if _, ok := doc.Get("platform"); ok {
 				descriptions = append(descriptions, doc)
 			} else {
-				given = append(given, awml.Workflow{File: files[i], Doc: doc})
+				given = append(given, workflowAt(files[i], doc))
 			}
 		}
 		if len(given) == 0 {
@@ -393,7 +393,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if command == "summary" {
 		var given []awml.Workflow
 		for i, doc := range docs {
-			given = append(given, awml.Workflow{File: files[i], Doc: doc})
+			given = append(given, workflowAt(files[i], doc))
 		}
 		summary := awml.SummariseTogether(given)
 		if jsonOutput {
@@ -423,7 +423,7 @@ func checkJSON(files []string, stdout, stderr io.Writer) int {
 			sources = append(sources, awml.Source{File: path, Unreadable: "can't be read: " + reason(err)})
 			continue
 		}
-		sources = append(sources, awml.Source{File: path, Text: src})
+		sources = append(sources, awml.Source{File: path, Path: where(path), Text: src})
 	}
 	report := awml.CheckSources(currentVersion(), sources)
 	if err := json.NewEncoder(stdout).Encode(report); err != nil {
@@ -492,6 +492,19 @@ func expandFolders(paths []string) []string {
 		}
 	}
 	return files
+}
+
+// where gives where a file named by path is, as an absolute path, which its refs are followed from.
+func where(path string) string {
+	if abs, err := filepath.Abs(path); err == nil {
+		return abs
+	}
+	return ""
+}
+
+// workflowAt gives a workflow given by path, which messages name it by, and where it is.
+func workflowAt(path string, doc *awml.Map) awml.Workflow {
+	return awml.Workflow{File: path, Path: where(path), Doc: doc}
 }
 
 func isOneOf(s string, choices ...string) bool {

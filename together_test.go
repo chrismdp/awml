@@ -89,6 +89,26 @@ func TestAPathRefIsFollowedFromTheReferringFilesFolder(t *testing.T) {
 		[]string{`part "ready" refers to ../shopping/shop.yaml#readied, but ../shopping/shop.yaml has no part "readied"`}, nil)
 }
 
+// Files given without where they are, as the WebAssembly build gives them, are found from one root,
+// whether their names start there or not.
+func TestAPathRefIsFollowedFromOneRootWhenNoFileSaysWhereItIs(t *testing.T) {
+	shop := strings.Replace(shopWorkflow, "plan.yaml#list", "plan.yaml#lists", 1)
+	togetherFinds(t, together(t, "/meals/plan.yaml", planWorkflow, "meals/./shop.yaml", shop),
+		nil, []string{`part "list" refers to plan.yaml#lists, but plan.yaml has no part "lists"`})
+}
+
+// A file's Path says where it is, however it was named, and its refs are followed from there.
+func TestAPathRefIsFollowedFromWhereTheFileIs(t *testing.T) {
+	shop := strings.Replace(shopWorkflow, "plan.yaml#list", "plan.yaml#lists", 1)
+	workflows := together(t, "plan.yaml", planWorkflow, "../meals/shop.yaml", shop)
+	workflows[0].Path, workflows[1].Path = "/home/ana/meals/plan.yaml", "/home/ana/meals/shop.yaml"
+	togetherFinds(t, workflows, nil, []string{`part "list" refers to plan.yaml#lists, but plan.yaml has no part "lists"`})
+	published := strings.Replace(shopWorkflow, "plan.yaml#list", "meals/plan#lists", 1)
+	workflows = together(t, "plan.yaml", planWorkflow, "../meals/shop.yaml", published)
+	workflows[0].Path, workflows[1].Path = "/home/ana/meals/plan.yaml", "/home/ana/meals/shop.yaml"
+	togetherFinds(t, workflows, nil, []string{`part "list" refers to meals/plan#lists, but meals/plan has no part "lists"`})
+}
+
 func TestAPublishedRefIsFollowedToAFilePulledIntoItsOwnersFolder(t *testing.T) {
 	shop := strings.Replace(shopWorkflow, "ref: plan.yaml#list", "ref: acme/plan#lists", 1)
 	togetherFinds(t, together(t, "pulled/acme/plan.yaml", planWorkflow, "shop.yaml", shop),

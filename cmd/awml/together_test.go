@@ -152,3 +152,45 @@ func TestFitTellsDescriptionsFromWorkflowsByWhatTheyHold(t *testing.T) {
 		t.Errorf("fit --implementation of two gave %+v", got)
 	}
 }
+
+// chdir moves the test into a folder until it ends.
+func chdir(t *testing.T, dir string) {
+	t.Helper()
+	was, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(was) })
+}
+
+// A ref is followed to where a file is, whether it was given by an absolute path, or by a relative
+// one from the folder awml runs in.
+func TestARefIsFollowedToWhereAFileIsHoweverItIsNamed(t *testing.T) {
+	root := t.TempDir()
+	for _, dir := range []string{"family", "work"} {
+		if err := os.Mkdir(filepath.Join(root, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	plan := strings.Replace(planWorkflow, "shop.yaml#ready", "../work/shop.yaml#readied", 1)
+	shop := strings.Replace(shopWorkflow, "plan.yaml#list", "family/plan#lists", 1)
+	for name, text := range map[string]string{"family/plan.yaml": plan, "work/shop.yaml": shop} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	chdir(t, filepath.Join(root, "family"))
+	for _, other := range []string{"../work/shop.yaml", filepath.Join(root, "work", "shop.yaml")} {
+		want := "plan.yaml: part \"ready\" refers to ../work/shop.yaml#readied, but ../work/shop.yaml has no part \"readied\"\n" +
+			other + ": part \"list\" refers to family/plan#lists, but family/plan has no part \"lists\"\n"
+		if got := awmlRun("check", "plan.yaml", other); got != (result{1, want, ""}) {
+			t.Errorf("check plan.yaml %s gave %+v\nwant %q", other, got, want)
+		}
+		if got := awmlRun("check", "--json", "plan.yaml", other); got.code != 1 || !strings.Contains(got.stdout, `family/plan has no part \"lists\"`) {
+			t.Errorf("check --json plan.yaml %s gave %+v", other, got)
+		}
+	}
+}
