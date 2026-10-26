@@ -1,7 +1,8 @@
-# Check by code. Code matches the joint account against the bills expected and reports what's
-# missing or different. It reads and reports, and changes nothing. The parents are fictional.
 awml: "0.6"
 title: The morning bills check
+description: |
+  Check by code. Code matches the joint account against the bills expected and reports what's
+  missing or different. It reads and reports, and changes nothing. The parents are fictional.
 scopes:
   - { id: parents, label: "parents: Mia, Dev" }
 parts:

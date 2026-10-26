@@ -146,7 +146,13 @@ func project(doc *Map, implementation string) (*Map, error) {
 
 func checkCanonical(file *Map) (mistakeList, bool) {
 	var errors mistakeList
-	fieldsExact("the file", file, []string{"awml", "title", "parts"}, []string{"scopes", "lines", "implementations"}, &errors)
+	fieldsExact("the file", file, []string{"awml", "title", "parts"}, []string{"description", "scopes", "lines", "implementations"}, &errors)
+	// A description is Markdown, which awml reads only as text.
+	if file.has("description") {
+		if _, ok := file.get("description").(string); !ok {
+			errors.add("values.text", fmt.Sprintf("the file: YAML read its description as %s, not text: put it in quotes", show(file.get("description"))))
+		}
+	}
 	security, _ := project(file, "")
 	// The outer schema was checked above. Keep the existing messages for all design rules.
 	clean := &Map{}

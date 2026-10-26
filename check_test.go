@@ -374,3 +374,27 @@ func TestACheckPassesItsVerdictOnAndAStepAfterItKeepsIt(t *testing.T) {
 		"  - { from: match, to: mark, kind: start, label: \"[all paid]\" }\n  - { from: mark, to: notes, kind: data }\n"
 	mistakes(t, parsed(t, src))
 }
+
+func TestOnlyATriggerContextConnectorOrSurfaceTakesARef(t *testing.T) {
+	mistakes(t, changed(t, "parts.0.ref", "shopping.yaml#ready", "parts.2.ref", "acme/shopping#list"))
+	mistakes(t, changed(t, "parts.1.ref", "shopping.yaml#plan"),
+		`part "plan" has a ref, but only a trigger, context, connector or surface takes one`)
+}
+
+func TestARefIsWellWritten(t *testing.T) {
+	for _, ref := range []string{"shopping.yaml#list", "../shopping/shopping.yaml#list", "acme/shopping#list", "my-co/weekly-shop#list_2"} {
+		mistakes(t, changed(t, "parts.2.ref", ref))
+	}
+	for _, ref := range []string{"list", "shopping.yaml", "/shopping.yaml#list", "shopping.yml#list", "Acme/shopping#list", "acme/shopping#2nd", "acme/shopping/more#list", "./shopping.yaml#list"} {
+		mistakes(t, changed(t, "parts.2.ref", ref),
+			fmt.Sprintf(`part "mealplan": ref must be owner/slug#id, or a path to a file alongside such as shopping.yaml#list, not "%s"`, ref))
+	}
+	mistakes(t, changed(t, "parts.2.ref", 3.0),
+		`part "mealplan": YAML read its ref as 3, not text: put it in quotes`,
+		`part "mealplan": ref must be owner/slug#id, or a path to a file alongside such as shopping.yaml#list, not "3"`)
+}
+
+func TestAWorkflowMayHaveADescription(t *testing.T) {
+	mistakes(t, changed(t, "description", "The family's *dinners*, planned each Thursday.\n\nThe family is fictional.\n"))
+	mistakes(t, changed(t, "description", true), `the file: YAML read its description as true, not text: put it in quotes`)
+}

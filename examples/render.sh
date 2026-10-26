@@ -34,8 +34,13 @@ CONF
 fi
 printf '@font-face{font-family:"Inter";font-style:normal;font-weight:400;src:url(data:font/woff2;base64,%s) format("woff2")}\n' \
   "$(base64 < examples/fonts/Inter-Regular.woff2 | tr -d '\n')" > "$tmp/inter.css"
+render() {
+  npx -y -p @mermaid-js/mermaid-cli@11.4.1 -p mermaid@11.17.2 mmdc -q -p "$tmp/puppeteer.json" -C "$tmp/inter.css" -b white -i "$1" -o "${1%.mmd}.svg"
+}
 for f in examples/*.yaml examples/tour/*.yaml examples/live/*.yaml; do
   for drawing in $("$tmp/draw" "$f"); do
-  npx -y -p @mermaid-js/mermaid-cli@11.4.1 -p mermaid@11.17.2 mmdc -q -p "$tmp/puppeteer.json" -C "$tmp/inter.css" -b white -i "$drawing" -o "${drawing%.mmd}.svg"
+    render "$drawing"
   done
 done
+# The examples that share a part are drawn together as their map.
+render "$("$tmp/draw" -map examples/family-map.mmd examples/dinners.yaml examples/question.yaml)"

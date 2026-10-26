@@ -52,11 +52,14 @@ func Judge(security, placement *Map, descriptions []*Map) FitReport {
 	return FitReport{Results: results, Gaps: gaps}
 }
 
-func judge(security, placement *Map, descriptions []*Map) (results []FitResult, gaps []string) {
+func judge(security, placement *Map, descriptions []*Map) ([]FitResult, []string) {
 	if IsCanonical(security) {
 		security, _ = View(security, "")
 	}
-	model := newFitModel(security)
+	return judgeModel(newFitModel(security), placement, descriptions)
+}
+
+func judgeModel(model fitModel, placement *Map, descriptions []*Map) (results []FitResult, gaps []string) {
 	if gaps = model.gaps(); len(gaps) != 0 {
 		return nil, gaps
 	}
@@ -131,6 +134,16 @@ type fitModel struct {
 	where      map[string]string
 	scopes     map[string]*Map
 	processing map[string]processingTerms
+	// names gives the name a part or scope is reported by, where it isn't its id.
+	names map[string]string
+}
+
+// name gives the name a part or scope is reported by.
+func (model fitModel) name(id string) string {
+	if name, ok := model.names[id]; ok {
+		return name
+	}
+	return id
 }
 
 func newFitModel(security *Map) fitModel {
@@ -159,17 +172,17 @@ func (model fitModel) gaps() []string {
 	var gaps []string
 	for _, scope := range model.scopesInOrder() {
 		if !scope.has("processing") {
-			gaps = append(gaps, fmt.Sprintf(`group "%s" has no processing`, str(scope, "id")))
+			gaps = append(gaps, fmt.Sprintf(`group "%s" has no processing`, model.name(str(scope, "id"))))
 		}
 	}
 	for _, part := range model.parts {
 		if model.where[str(part, "id")] == "" && isScopedPart(str(part, "kind")) {
-			gaps = append(gaps, fmt.Sprintf(`part "%s" is outside every scope`, str(part, "id")))
+			gaps = append(gaps, fmt.Sprintf(`part "%s" is outside every scope`, model.name(str(part, "id"))))
 		}
 	}
 	for _, part := range model.parts {
 		if str(part, "kind") == "trigger" && !part.has("wait") {
-			gaps = append(gaps, fmt.Sprintf(`trigger "%s" has no wait`, str(part, "id")))
+			gaps = append(gaps, fmt.Sprintf(`trigger "%s" has no wait`, model.name(str(part, "id"))))
 		}
 	}
 	return gaps
@@ -231,7 +244,7 @@ func judgePlatform(name string, platform fitPlatform, model fitModel, own, visib
 		waitText := str(securityPart, "wait")
 		wait, _ := duration(waitText)
 		if wait < platform.off {
-			result.Reasons = append(result.Reasons, fmt.Sprintf("%s may wait %s, but the platform may be off for %s", str(part, "id"), waitText, platform.offText))
+			result.Reasons = append(result.Reasons, fmt.Sprintf("%s may wait %s, but the platform may be off for %s", model.name(str(part, "id")), waitText, platform.offText))
 		}
 	}
 
@@ -249,7 +262,7 @@ func judgePlatform(name string, platform fitPlatform, model fitModel, own, visib
 			key := company + "\x00" + scope
 			if !seenExposure[key] {
 				seenExposure[key] = true
-				result.Reasons = append(result.Reasons, fmt.Sprintf("%s's agents run here, and %s doesn't allow %s", company, scope, company))
+				result.Reasons = append(result.Reasons, fmt.Sprintf("%s's agents run here, and %s doesn't allow %s", company, model.name(scope), company))
 			}
 		}
 	}
@@ -262,9 +275,9 @@ func judgePlatform(name string, platform fitPlatform, model fitModel, own, visib
 		}
 		companies := model.companiesFor(model.where[str(part, "id")], str(securityPart, "op"), platform)
 		if len(companies) == 0 {
-			result.Reasons = append(result.Reasons, fmt.Sprintf("%s has no company it may use", str(part, "id")))
+			result.Reasons = append(result.Reasons, fmt.Sprintf("%s has no company it may use", model.name(str(part, "id"))))
 		} else {
-			result.Models[str(part, "id")] = companies
+			result.Models[model.name(str(part, "id"))] = companies
 		}
 	}
 
@@ -276,7 +289,7 @@ func judgePlatform(name string, platform fitPlatform, model fitModel, own, visib
 		}
 		at := str(securityPart, "at")
 		if !holds(platform.holds, at) {
-			result.Reasons = append(result.Reasons, fmt.Sprintf("%s is kept at %s, which the platform doesn't hold", str(part, "id"), at))
+			result.Reasons = append(result.Reasons, fmt.Sprintf("%s is kept at %s, which the platform doesn't hold", model.name(str(part, "id")), at))
 		}
 	}
 
@@ -285,7 +298,7 @@ func judgePlatform(name string, platform fitPlatform, model fitModel, own, visib
 		var code []string
 		for _, part := range own {
 			if securityPart := model.byID[str(part, "id")]; securityPart != nil && str(securityPart, "kind") == "code" {
-				code = append(code, str(part, "id"))
+				code = append(code, model.name(str(part, "id")))
 			}
 		}
 		if len(code) != 0 {
@@ -304,8 +317,8 @@ func judgePlatform(name string, platform fitPlatform, model fitModel, own, visib
 	}
 
 	for _, part := range own {
-		if _, ok := result.Models[str(part, "id")]; ok {
-			result.steps = append(result.steps, str(part, "id"))
+		if _, ok := result.Models[model.name(str(part, "id"))]; ok {
+			result.steps = append(result.steps, model.name(str(part, "id")))
 		}
 	}
 	result.Fits = len(result.Reasons) == 0

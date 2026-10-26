@@ -1,8 +1,9 @@
-# Untrusted text. Anyone can type into the bakery's order form, so its text could steer an AI step
-# that reads it. A code step that keeps only the cake, the quantity and the date stops that text,
-# and so does Ana's yes to the exact reply. The bakery and its people are fictional.
 awml: "0.6"
 title: A cake order from the website
+description: |
+  Untrusted text. Anyone can type into the bakery's order form, so its text could steer an AI step
+  that reads it. A code step that keeps only the cake, the quantity and the date stops that text,
+  and so does Ana's yes to the exact reply. The bakery and its people are fictional.
 scopes:
   - { id: bakery, label: "bakery: Ana, Ben" }
 parts:

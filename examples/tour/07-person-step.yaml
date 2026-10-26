@@ -1,6 +1,7 @@
-# A step a person does, which reaches them on their list. Ade is fictional.
 awml: "0.6"
 title: The car's MOT
+description: |
+  A step a person does, which reaches them on their list. Ade is fictional.
 scopes:
   - { id: ade, label: "ade: Ade" }
 parts:

@@ -99,11 +99,17 @@ var checkDefinitions = []checkDefinition{
 	{id: "at.path", name: "Every at is a path on a context", about: "at is a relative path of plain names, given only on a context.", appliesTo: workflows},
 	{id: "untrusted.parts", name: "Only a trigger, connector or context is marked untrusted", about: "untrusted is true or false, and is true only on a trigger, connector or context.", appliesTo: workflows},
 	{id: "cleans.code-only", name: "Only a code step cleans", about: "cleans is true or false, and is true only on a code step, since strangers' text can steer an AI step however it's written.", appliesTo: workflows},
+	{id: "refs.written", name: "Every ref is well written", about: "A ref is owner/slug#id for a published workflow, or a path to a file alongside, ending .yaml, then # and the part's id.", appliesTo: workflows},
+	{id: "refs.parts", name: "Only a trigger, context, connector or surface takes a ref", about: "Workflows share what hands work on and what both reach, so only those parts refer to another workflow's.", appliesTo: workflows},
 	{id: "placement.once", name: "No part is placed twice in an implementation", about: "Each part sits in at most one block of each implementation.", appliesTo: workflows},
 	{id: "placement.complete", name: "Every part that needs a block has one", about: "Every part but a trigger or comment sits in a block of each implementation.", appliesTo: workflows},
+	{id: "refs.known", name: "Every ref names a part of the workflow it refers to", about: "A ref to a workflow given with it names a part that workflow has. A ref to a workflow not given is left alone.", appliesTo: workflows},
+	{id: "refs.agree", name: "Every copy agrees with the part it refers to", about: "A part that refers to another workflow's has the same kind, label and at, and a scope with the same people and terms.", appliesTo: workflows},
 	{id: "warn.do-by-code", name: "No do step is decided by AI", about: "A do step should be code acting on what an earlier step decided; this warns and never fails.", appliesTo: workflows, warn: true},
 	{id: "warn.one-change", name: "Each do step makes one change", about: "A do step should lead to one change, counting each outside action and surface and all contexts together as one; this warns and never fails.", appliesTo: workflows, warn: true},
 	{id: "warn.untrusted-outside", name: "No untrusted text reaches an outside action", about: "Text from a part marked untrusted reaches no outside action without a review, a person's own step or a code step marked cleans to stop it; this warns and never fails.", appliesTo: workflows, warn: true},
+	{id: "warn.shared-writers", name: "No context is written by more than one workflow", about: "A context that workflows given together share is written by only one of them, since each may change what another relies on; this warns and never fails.", appliesTo: workflows, warn: true},
+	{id: "warn.shared-readers", name: "No connector is read by more than one workflow", about: "A connector that workflows given together share brings items in for only one of them, since each may take an item another expects; this warns and never fails.", appliesTo: workflows, warn: true},
 	{id: "description.values", name: "Every platform description value is of the right kind", about: "platform is a mapping, off_for_up_to a duration, steps code or agent, agents and calls lists of company ids, and holds a list.", appliesTo: []string{"platform-description"}, none: "no file given is a platform description"},
 	{id: "description.ids", name: "Every company id and path is well written", about: "A platform description's id is a company id or owner/platforms/slug, its company ids are lower-case letters, digits and hyphens, and what it holds are relative paths.", appliesTo: []string{"platform-description"}, none: "no file given is a platform description"},
 }
@@ -114,6 +120,7 @@ type checkedSource struct {
 	view     string
 	stopped  bool
 	mistakes mistakeList
+	doc      *Map
 }
 
 // CheckSources makes every check on the files given and reports each check's result, passing ones
@@ -124,6 +131,18 @@ func CheckSources(engine string, sources []Source) CheckReport {
 	for i, source := range sources {
 		checked[i] = checkSource(source)
 		report.Files = append(report.Files, CheckedFile{source.File, checked[i].view})
+	}
+	// Each ref between the workflows given is followed.
+	var given []Workflow
+	var at []int
+	for i, file := range checked {
+		if file.view == "workflow" && !file.stopped {
+			given = append(given, Workflow{File: sources[i].File, Doc: file.doc})
+			at = append(at, i)
+		}
+	}
+	for n, found := range link(given).found {
+		checked[at[n]].mistakes = append(checked[at[n]].mistakes, found...)
 	}
 
 	for _, definition := range checkDefinitions {
@@ -172,7 +191,7 @@ func checkSource(source Source) checkedSource {
 	if !ok {
 		return checkedSource{mistakes: found, stopped: true}
 	}
-	result := checkedSource{read: true, stopped: stopped, mistakes: append(found, warningList(file)...)}
+	result := checkedSource{read: true, stopped: stopped, mistakes: append(found, warningList(file)...), doc: file}
 	switch {
 	case checkVersion(file) != nil:
 	case file.has("platform"):

@@ -205,6 +205,7 @@ func checkView(file *Map, projected bool) (mistakeList, bool) {
 		}
 		if !projected {
 			errors = append(errors, marks(name, p)...)
+			errors = append(errors, refMistakes(name, p)...)
 		}
 		if in := p.get("in"); in != nil && !groupIDs[keyOf(in)] {
 			errors.add("references.known", fmt.Sprintf(`%s is in unknown group "%s"`, name, show(in)))
@@ -555,12 +556,12 @@ func tiers(parts, lines []*Map) mistakeList {
 var fieldSets = map[string][2][]string{
 	"file":  {{"awml", "title", "view", "parts"}, {"groups", "lines"}},
 	"group": {{"id", "label"}, {"in", "processing", "platform"}},
-	"part":  {{"id", "kind", "label"}, {"in", "op", "wait", "at", "untrusted", "cleans"}},
+	"part":  {{"id", "kind", "label"}, {"in", "op", "wait", "at", "untrusted", "cleans", "ref"}},
 	"line":  {{"from", "to", "kind"}, {"label"}},
 }
 
 // The fields that must be text, when they're given at all.
-var textFields = map[string]bool{"title": true, "view": true, "id": true, "label": true, "in": true, "kind": true, "from": true, "to": true, "op": true}
+var textFields = map[string]bool{"title": true, "view": true, "id": true, "label": true, "in": true, "kind": true, "from": true, "to": true, "op": true, "ref": true}
 
 // Mermaid reads anything else in an id as part of the syntax around it.
 var id = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`)

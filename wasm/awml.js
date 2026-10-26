@@ -50,10 +50,12 @@ async function start(source) {
     checks(files) {
       return JSON.parse(this.checksJSON(files));
     },
+    // summary, fit and draw take one file or several, each its text or { file, source }. Given
+    // together, workflows follow each ref between them, a path ref from the file's name.
     summaryJSON(sourceTexts) {
-      const sources = Array.isArray(sourceTexts) ? sourceTexts : [sourceTexts];
+      const sources = given(sourceTexts);
       for (const sourceText of sources) {
-        const errors = this.unsound(sourceText);
+        const errors = this.unsound(text(sourceText));
         if (errors.length) throw new Error(errors.join("\n"));
       }
       const output = globalThis.__awmlSummary(JSON.stringify(sources));
@@ -64,10 +66,12 @@ async function start(source) {
     summary(sourceTexts) {
       return JSON.parse(this.summaryJSON(sourceTexts));
     },
+    // fit judges each platform described as running every workflow given, telling the two apart by
+    // what they hold.
     fitJSON(sourceTexts, implementation = "") {
-      const sources = Array.isArray(sourceTexts) ? sourceTexts : [sourceTexts];
+      const sources = given(sourceTexts);
       for (const sourceText of sources) {
-        const errors = this.check(sourceText);
+        const errors = this.check(text(sourceText));
         if (errors.length) throw new Error(errors.join("\n"));
       }
       const output = globalThis.__awmlFit(JSON.stringify(sources), implementation);
@@ -93,7 +97,20 @@ async function start(source) {
       }
       return decoded.file;
     },
+    // draw draws one workflow's view, or the map of several workflows drawn together.
     draw(sourceText, implementation = "") {
+      const sources = given(sourceText);
+      if (sources.length > 1) {
+        if (implementation) throw new Error("an implementation is drawn for one workflow, not several");
+        for (const source of sources) {
+          const errors = this.unsound(text(source));
+          if (errors.length) throw new Error(errors.join("\n"));
+        }
+        const output = globalThis.__awmlDrawMap(JSON.stringify(sources));
+        if (output.startsWith("{")) throw new Error(JSON.parse(output).error);
+        return output;
+      }
+      sourceText = text(sources[0]);
       const errors = this.unsound(sourceText);
       if (errors.length) throw new Error(errors.join("\n"));
       const output = globalThis.__awmlDraw(sourceText, implementation);
@@ -109,4 +126,12 @@ async function start(source) {
       return output;
     },
   };
+}
+
+function given(sources) {
+  return Array.isArray(sources) ? sources : [sources];
+}
+
+function text(source) {
+  return typeof source === "string" ? source : source.source;
 }

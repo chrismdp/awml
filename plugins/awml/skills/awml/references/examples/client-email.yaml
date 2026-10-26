@@ -1,8 +1,9 @@
-# This workflow drafts a reply to a client's email. The file holds its design and its office
-# implementation, which runs across a Mac mini, synced notes, a phone and Gmail. The consultant,
-# the associate and the client are fictional.
 awml: "0.6"
 title: A client's email, answered with a draft
+description: |
+  This workflow drafts a reply to a client's email. The file holds its design and its office
+  implementation, which runs across a Mac mini, synced notes, a phone and Gmail. The consultant,
+  the associate and the client are fictional.
 scopes:
   - { id: private, label: "private: the consultant", processing: any }
   - { id: business, label: "business: the consultant, an associate", processing: { anthropic: any } }

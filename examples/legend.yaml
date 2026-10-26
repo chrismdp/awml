@@ -1,6 +1,7 @@
-# Every kind of part, as a key to reading the drawings. The hidden lines only lay it out as a grid.
 awml: "0.6"
 title: The parts of a drawing
+description: |
+  Every kind of part, as a key to reading the drawings. The hidden lines only lay it out as a grid.
 parts:
   - { id: trigger, kind: trigger, label: "A trigger: a time or an event" }
   - { id: ai, kind: ai, label: "A step decided by AI" }

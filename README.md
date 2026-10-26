@@ -445,16 +445,18 @@ awml draw --implementation home examples/dinners.yaml
 awml draw --untrusted examples/tour/14-untrusted-text.yaml
 awml page examples/dinners.yaml -o dinners.html
 awml summary examples/dinners.yaml --json
+awml draw examples/dinners.yaml examples/question.yaml   # the map of workflows that share parts
 awml login
 awml push family/dinners examples/dinners.yaml
 awml pull family/dinners@1 -o dinners
 ```
 
+- `check`, `draw`, `summary` and `fit` take any number of files, and a folder stands for every `.yaml` file directly inside it. Given several workflows, they follow each `ref` between them, as the next section says.
 - `awml check` checks the design and each implementation. It prints each warning before `ok` or the mistakes, and exits 1 only if it finds a mistake. `--json` lists every check it makes, passing ones included, each with a stable id and its result: `pass`, `fail`, `skipped` or `warn`.
-- `awml fit` judges the design against platform descriptions. Add `--implementation ID` to judge that placement, and `--json` for the report's JSON form. An implementation can be given without descriptions, and then each block says it has no platform or that its platform wasn't described.
-- `awml draw` prints the security view's Mermaid. Add `--implementation ID` for a platform view, or `--untrusted` for the untrusted view. It refuses a file with mistakes, and prints them instead.
+- `awml fit` judges the design against platform descriptions, telling the two apart by what each file holds. Given several workflows, it judges each platform as running them all. Add `--implementation ID` to judge one workflow's placement, and `--json` for the report's JSON form. An implementation can be given without descriptions, and then each block says it has no platform or that its platform wasn't described.
+- `awml draw` prints the security view's Mermaid, or the map of several workflows. Add `--implementation ID` for a platform view, or `--untrusted` for the untrusted view. It refuses a file with mistakes, and prints them instead.
 - `awml page` writes one standalone HTML page with the security view, the untrusted view if there is one, then every implementation, each with a heading. Several files appear in the order given. The page takes their shared title, or Workflows when they differ.
-- `awml summary` counts the scopes, platforms, parts and lines in one workflow, and lists every publish with what it adds or loosens. It includes platforms from every implementation and counts the design once, and lists what each untrusted part's text reaches. `--json` prints the registry's JSON form.
+- `awml summary` counts the scopes, platforms, parts and lines in one workflow, and lists every publish with what it adds or loosens. It includes platforms from every implementation and counts the design once, and lists what each untrusted part's text reaches. Given several workflows, it counts each part they share once, and lists those parts and what waits on each person. `--json` prints the registry's JSON form.
 - `awml convert old.yaml` upgrades a file of any older version to 0.6, printed to standard output, and every other command refuses an older file. A `publish` line becomes a `data` line, and a line marked red with `breaks` loses it, gaining a comment if the check doesn't find what it breaks. `awml convert security.yaml platform.yaml` joins a matching 0.3 or 0.2 pair into one file, turning platform groups into blocks of the `default` implementation. Add `--implementation ID` to name the implementation. YAML comments move to the top. If the new version's rules find mistakes in the result, it lists them and exits 1.
 - `awml login` saves an API token for the registry. `awml push` checks and uploads one 0.6 file in the API's workflow field. `awml pull` downloads the latest or a numbered version as `<slug>.yaml`, and `awml pull owner/platforms/slug` does the same for a published platform description. It still downloads an older pair as `security.yaml` and `platform.yaml`. The commands use `https://awml.io` unless `--registry` or `AWML_REGISTRY_URL` says otherwise. Add `--private` to the first push of a private organisation workflow.
 
@@ -479,6 +481,14 @@ npx -y @mermaid-js/mermaid-cli@11.4.1 -b white -i my-workflow.mmd -o my-workflow
 
 `examples/render.sh` redraws every example this way.
 
+### Workflows that share parts
+
+Workflows hand work on through a part both have: a context one writes and another reads, or a trigger one fires and another starts on. The workflow that doesn't create the part keeps its own copy, with `ref` naming the other's, as `shopping.yaml#list` for a file alongside or `owner/slug#id` for a published one. Each file still checks alone. Given together, `awml check` reports a `ref` to a part that isn't there and a copy that differs from the part it names, and warns of a context more than one writes and a connector more than one reads. `awml draw` draws their map, with each shared part once between the workflows:
+
+<img src="examples/family-map.svg" alt="The family's dinners and its question, drawn together">
+
+`awml` never reaches the network: it follows `owner/slug#id` to a file given at a path ending `owner/slug.yaml`, where `awml pull owner/slug -o owner` puts it.
+
 ### Writing a file
 
 One file holds one workflow and its implementations:
@@ -486,6 +496,8 @@ One file holds one workflow and its implementations:
 ```yaml
 awml: "0.6"
 title: The family's dinners
+description: |
+  Plans the family's dinners each Thursday. The family is fictional.
 scopes:
   - { id: carers, label: "carers: + June, Beth" }
   - { id: family, label: "family: parents, kids", in: carers }
@@ -506,9 +518,9 @@ implementations:
       - { id: phone, label: Family phone, parts: [chat] }
 ```
 
-- The file needs `awml`, the version `"0.6"`; `title`, the workflow's name; and `parts`. It may have `scopes`, `lines` and `implementations`. Upgrade a file of an older version with `awml convert`.
+- The file needs `awml`, the version `"0.6"`; `title`, the workflow's name; and `parts`. It may have `description`, what the workflow is for in Markdown, and `scopes`, `lines` and `implementations`. Upgrade a file of an older version with `awml convert`.
 - A **scope** has an `id` and a `label`, and may have `in`, the id of its parent scope, and `processing`, the companies it allows.
-- A **part** has an `id`, a `kind` and a `label`, which a fork doesn't need. Its `in` names its scope. A step may have `op`, a trigger `wait`, and a context `at`. A trigger, connector or context may have `untrusted`, and a code step `cleans`.
+- A **part** has an `id`, a `kind` and a `label`, which a fork doesn't need. Its `in` names its scope. A step may have `op`, a trigger `wait`, and a context `at`. A trigger, connector or context may have `untrusted`, and a code step `cleans`. A trigger, context, connector or surface may have `ref`, the part of another workflow it is.
 - An **implementation** has an id in the `implementations` map, a `label` and `blocks`. Each block has an `id`, a `label` and `parts`, the ids it holds. It may have `in`, its parent block, and `platform`, a platform description id: a bare id for your own, or `owner/platforms/slug` for one published to the registry. Every part except a trigger or comment needs exactly one block per implementation.
 - An implementation may have **comments**, each with `id`, `label`, `in`, its block, and `ties`, a list of design part ids. These comments appear only in its platform view.
 - A **line** has `from` and `to`, the ids of two parts, and a `kind`. It may have a `label`.
@@ -520,11 +532,11 @@ Every id, label, kind and reference to an id is text. `awml` reads YAML 1.2, whi
 
 ### What `awml check` reports
 
-`awml check` reports structural mistakes, invalid operations and tiers that disagree with the drawing. It also checks each implementation's block references, nesting and placement, and its comments' ties. It warns when AI decides a `do` step, when one `do` step leads to more than one change, and when untrusted text reaches an outside action. Warnings leave the exit status alone. A line that breaks a rule, such as one into a Block action, is still a mistake, but `awml draw` draws it red rather than refusing the file. [`SPEC.md`](SPEC.md) gives the exact rules.
+`awml check` reports structural mistakes, invalid operations and tiers that disagree with the drawing. It also checks each implementation's block references, nesting and placement, and its comments' ties, and how each `ref` is written. It warns when AI decides a `do` step, when one `do` step leads to more than one change, and when untrusted text reaches an outside action. Warnings leave the exit status alone. A line that breaks a rule, such as one into a Block action, is still a mistake, but `awml draw` draws it red rather than refusing the file. [`SPEC.md`](SPEC.md) gives the exact rules.
 
 ### Examples to start from
 
-Besides the gallery, [`examples/`](examples) has three workflows to start from: the family's dinners and the consultant's email, each with an implementation, and the question in the family chat. It also has [`examples/legend.yaml`](examples/legend.yaml), the key at the top of [Reading a drawing](#reading-a-drawing). The tests run with `go test ./...`, and they check that every example but the live system's has no mistakes and that its drawings are current.
+Besides the gallery, [`examples/`](examples) has three workflows to start from: the family's dinners and the consultant's email, each with an implementation, and the question in the family chat, which shares the chat with the dinners and is drawn with them in [`examples/family-map.svg`](examples/family-map.svg). It also has [`examples/legend.yaml`](examples/legend.yaml), the key at the top of [Reading a drawing](#reading-a-drawing). The tests run with `go test ./...`, and they check that every example but the live system's has no mistakes and that its drawings are current.
 
 ## What comes next
 

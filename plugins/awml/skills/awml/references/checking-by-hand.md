@@ -4,14 +4,14 @@ Use this only where `awml check` can't run, as in a chat with no shell. It cover
 
 ## The file
 
-1. The file is one YAML mapping with `awml`, `title` and `parts`, and may have `scopes`, `lines` and `implementations`. It has no other field.
+1. The file is one YAML mapping with `awml`, `title` and `parts`, and may have `description`, `scopes`, `lines` and `implementations`. It has no other field.
 2. `awml` is `"0.6"`, in quotes. There is no `view`.
 3. `parts`, and `scopes` and `lines` where given, are lists, and each item in them is a mapping.
 
 ## Scopes and parts
 
 4. Each scope has `id` and `label`, and may have `in` and `processing`. Nothing else.
-5. Each part has `id`, `kind` and `label`, and may have `in`, `op`, `wait`, `at`, `untrusted` and `cleans`. A fork needn't have a label. Nothing else. `untrusted` and `cleans`, where given, are `true` or `false`, with no quotes. Only a `trigger`, `connector` or `context` has `untrusted: true`, and only a `code` step has `cleans: true`.
+5. Each part has `id`, `kind` and `label`, and may have `in`, `op`, `wait`, `at`, `untrusted`, `cleans` and `ref`. A fork needn't have a label. Nothing else. `untrusted` and `cleans`, where given, are `true` or `false`, with no quotes. Only a `trigger`, `connector` or `context` has `untrusted: true`, and only a `code` step has `cleans: true`. Only a `trigger`, `context`, `connector` or `surface` has a `ref`, written `owner/slug#id` or as a path to a file alongside, ending `.yaml`, then `#` and the part's id, as `shopping.yaml#list`. Where the file it names is to hand, that file has a part with that id, of the same kind, label and `at`, in a scope with the same people and terms.
 6. Each id is letters, digits and underscores, starting with a letter: `meal_plan`, never `meal-plan` or `2nd_plan`. No id is used twice, across scopes, parts, blocks and implementation comments.
 7. Each part's `kind` is one of `trigger`, `ai`, `code`, `person`, `review`, `approval`, `fork`, `context`, `connector`, `surface`, `outside` and `comment`.
 8. A design part or scope's `in` names a scope. Follow each scope's `in` upwards: it never comes back to the scope it started from.
@@ -26,7 +26,7 @@ Use this only where `awml check` can't run, as in a chat with no shell. It cover
 
 ## Text
 
-15. Every `title`, `id`, `label`, `kind`, `in`, `from`, `to` and `op` is text. YAML reads some bare values as something else, so each of these is in double quotes: `true` and `false`, numbers such as `12` or `0.5`, and dates such as `2026-10-20`. Quote `yes`, `no`, `on`, `off` and times such as `19:00` too, which YAML 1.1 tools misread.
+15. Every `title`, `description`, `id`, `label`, `kind`, `in`, `from`, `to`, `op` and `ref` is text. YAML reads some bare values as something else, so each of these is in double quotes: `true` and `false`, numbers such as `12` or `0.5`, and dates such as `2026-10-20`. Quote `yes`, `no`, `on`, `off` and times such as `19:00` too, which YAML 1.1 tools misread.
 16. The file is YAML that reads at all. In the `{ id: …, label: … }` form the examples use, a comma ends a value and `: ` starts a new one, so quote any label with a comma, a colon followed by a space, a `#`, or a first character of `[`, `{`, `&`, `*`, `!`, `|`, `>`, `'`, `"`, `%` or `@`. `[yes]` is always quoted.
 
 ## Operations and tiers

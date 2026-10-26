@@ -296,6 +296,57 @@ lines:
   assert.throws(() => api.convert(upgrades["bread-0.4.yaml"], "office"), /^Error: only a legacy pair has an implementation to name$/);
   assert.throws(() => api.convert([security, platform, platform]), /^Error: convert takes one file, or a security view and its platform view$/);
   assert.throws(() => api.convert([]), /^Error: convert takes one file, or a security view and its platform view$/);
+
+  // Workflows given together follow each ref between them, a path from the referring file's folder.
+  const plan = `awml: "0.6"
+title: Dinners
+scopes:
+  - { id: family, label: "family: parents, kids", processing: any }
+parts:
+  - { id: thu, kind: trigger, label: "Thursday 19:00", wait: PT1H }
+  - { id: form, kind: connector, label: The order form, untrusted: true, in: family }
+  - { id: plan, kind: ai, op: draft, label: "Plan next week's dinners", in: family }
+  - { id: list, kind: context, label: Shopping list, at: notes/list, in: family }
+  - { id: ready, kind: trigger, label: The shopping list is ready, ref: shop.yaml#ready }
+lines:
+  - { from: thu, to: plan, kind: start }
+  - { from: form, to: plan, kind: data }
+  - { from: plan, to: list, kind: data }
+  - { from: plan, to: ready, kind: start }
+`;
+  const shop = `awml: "0.6"
+title: Shopping
+scopes:
+  - { id: home, label: "home: parents, kids", processing: any }
+parts:
+  - { id: ready, kind: trigger, label: The shopping list is ready, wait: PT1H }
+  - { id: list, kind: context, label: Shopping list, at: notes/list, in: home, ref: plan.yaml#list }
+  - { id: fill, kind: code, op: do, label: Fill the basket, in: home }
+  - { id: basket, kind: outside, label: "Fill the basket: Allow", in: home }
+lines:
+  - { from: ready, to: fill, kind: start }
+  - { from: list, to: fill, kind: data }
+  - { from: fill, to: list, kind: data }
+  - { from: fill, to: basket, kind: data }
+`;
+  const handOff = [
+    { file: `${temporary}/plan.yaml`, source: plan },
+    { file: `${temporary}/shop.yaml`, source: shop },
+  ];
+  for (const { file, source } of handOff) await writeFile(file, source);
+  const handOffPaths = handOff.map(({ file }) => file);
+  assert.equal(api.checksJSON(handOff) + "\n", runNative(["check", "--json", ...handOffPaths]), "checks JSON together");
+  assert.equal(api.draw(handOff) + "\n", runNative(["draw", ...handOffPaths]), "map Mermaid");
+  assert.throws(() => api.draw(handOff, "home"), /one workflow, not several/);
+  assert.equal(api.summaryJSON(handOff) + "\n", runNative(["summary", "--json", ...handOffPaths]), "summary JSON together");
+  const handOffFit = api.fit([...handOff, ...descriptionSources]);
+  assert.equal(api.fitJSON([...handOff, ...descriptionSources]) + "\n",
+    runNative(["fit", "--json", ...descriptions, ...handOffPaths], handOffFit.gaps.length ? 1 : 0), "fit together");
+  assert(Object.keys(handOffFit.results.find((result) => result.fits || result.judged).models).every((step) => step.includes("#")));
+  const broken = [handOff[0], { file: handOff[1].file, source: shop.replace("plan.yaml#list", "plan.yaml#lists") }];
+  await writeFile(broken[1].file, broken[1].source);
+  assert.equal(api.checksJSON(broken) + "\n", runNative(["check", "--json", ...handOffPaths], 1), "checks JSON together, with a ref to a part that isn't there");
+  assert.equal(api.checks(broken).checks.find((check) => check.id === "refs.known").result, "fail");
 } finally {
   await rm(temporary, { recursive: true });
 }
@@ -342,6 +393,12 @@ const fitPaths = [
 ];
 const fitSources = await Promise.all(fitPaths.map((path) => readFile(new URL(`../${path}`, import.meta.url), "utf8")));
 assert.equal(api.fitJSON(fitSources) + "\n", runNative(["fit", "--json", ...fitPaths]), "fit JSON");
+
+// The examples that share a part are drawn together as their map.
+const familyPaths = ["examples/dinners.yaml", "examples/question.yaml"];
+const family = await Promise.all(familyPaths.map(async (file) => ({ file, source: await readFile(new URL(`../${file}`, import.meta.url), "utf8") })));
+assert.equal(api.draw(family) + "\n", await readFile(new URL("../examples/family-map.mmd", import.meta.url), "utf8"), "the family's map");
+assert.equal(api.summaryJSON(family) + "\n", runNative(["summary", "--json", ...familyPaths]), "the family's summary JSON");
 
 console.log(`Node wasm parity: ${passed} examples passed (check, warnings, summary, convert, Mermaid); ${placements} implementations; ${untrustedViews} untrusted views; ${conversions} conversions; invalid check messages and fit passed`);
 

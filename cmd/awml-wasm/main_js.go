@@ -5,6 +5,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"syscall/js"
 
@@ -55,71 +56,71 @@ func main() {
 		encoded, _ := json.Marshal(warnings)
 		return string(encoded)
 	})
+	// __awmlSummary summarises the workflows given together, as awml summary does.
 	expose("__awmlSummary", func(args []js.Value) string {
-		var sources []string
-		if err := json.Unmarshal([]byte(args[0].String()), &sources); err != nil {
+		workflows, err := readGiven(args[0].String(), awml.Unsound)
+		if err != nil {
 			return errorJSON(err.Error())
 		}
-		docs := make([]*awml.Map, 0, len(sources))
-		for _, source := range sources {
-			doc, err := awml.Parse([]byte(source))
-			if err != nil {
-				return errorJSON("isn't YAML: " + strings.Join(strings.Fields(err.Error()), " "))
-			}
-			if errors := awml.Unsound(doc); len(errors) != 0 {
-				return errorJSON(strings.Join(errors, "\n"))
-			}
-			docs = append(docs, doc.(*awml.Map))
-		}
-		encoded, err := json.Marshal(awml.Summarise(docs...))
+		encoded, err := json.Marshal(awml.SummariseTogether(workflows))
 		if err != nil {
 			return errorJSON(err.Error())
 		}
 		return string(encoded)
 	})
+	// __awmlFit judges each platform described as running every workflow given, telling the two apart
+	// by what they hold, as awml fit does.
 	expose("__awmlFit", func(args []js.Value) string {
-		var sources []string
-		if err := json.Unmarshal([]byte(args[0].String()), &sources); err != nil {
+		docs, err := readGiven(args[0].String(), awml.Check)
+		if err != nil {
 			return errorJSON(err.Error())
 		}
-		if len(sources) == 0 {
-			return errorJSON("fit needs a workflow")
-		}
-		docs := make([]*awml.Map, 0, len(sources))
-		for _, source := range sources {
-			doc, err := awml.Parse([]byte(source))
-			if err != nil {
-				return errorJSON("isn't YAML: " + strings.Join(strings.Fields(err.Error()), " "))
+		var workflows []awml.Workflow
+		var descriptions []*awml.Map
+		for _, doc := range docs {
+			if _, ok := doc.Doc.Get("platform"); ok {
+				descriptions = append(descriptions, doc.Doc)
+			} else {
+				workflows = append(workflows, doc)
 			}
-			if errors := awml.Check(doc); len(errors) != 0 {
-				return errorJSON(strings.Join(errors, "\n"))
-			}
-			docs = append(docs, doc.(*awml.Map))
 		}
-		if !awml.IsCanonical(docs[0]) {
-			return errorJSON("the first file must be a workflow")
+		if len(workflows) == 0 {
+			return errorJSON("no workflow was given")
 		}
-		var placement *awml.Map
+		var report awml.FitReport
 		if implementation := optionalImplementation(args); implementation != "" {
-			var err error
-			placement, err = awml.View(docs[0], implementation)
+			if len(workflows) > 1 {
+				return errorJSON("an implementation is judged for one workflow, not several")
+			}
+			placement, err := awml.View(workflows[0].Doc, implementation)
 			if err != nil {
 				return errorJSON(err.Error())
 			}
-		}
-		if placement == nil && len(docs) == 1 {
+			report = awml.Judge(workflows[0].Doc, placement, descriptions)
+		} else if len(descriptions) == 0 {
 			return errorJSON("no platform descriptions were given")
+		} else {
+			report = awml.JudgeTogether(workflows, descriptions)
 		}
-		for _, doc := range docs[1:] {
-			if _, ok := doc.Get("platform"); !ok {
-				return errorJSON("fit takes only platform descriptions after its workflow")
-			}
-		}
-		encoded, err := json.Marshal(awml.Judge(docs[0], placement, docs[1:]))
+		encoded, err := json.Marshal(report)
 		if err != nil {
 			return errorJSON(err.Error())
 		}
 		return string(encoded)
+	})
+	// __awmlDrawMap draws the map of the workflows given together, as awml draw does given several.
+	expose("__awmlDrawMap", func(args []js.Value) string {
+		workflows, err := readGiven(args[0].String(), awml.Unsound)
+		if err != nil {
+			return errorJSON(err.Error())
+		}
+		for _, workflow := range workflows {
+			if !awml.IsCanonical(workflow.Doc) {
+				_, err := awml.View(workflow.Doc, "")
+				return errorJSON(err.Error())
+			}
+		}
+		return awml.DrawMap(workflows)
 	})
 	// __awmlConvert gives the 0.6 file awml convert writes, from one file or a legacy pair, and the
 	// mistakes the current rules find in it.
@@ -213,6 +214,36 @@ func warningsSource(source string) []string {
 		return []string{}
 	}
 	return warnings
+}
+
+// readGiven reads the files given as a JSON list, each its text or { file, source }. A file's name
+// is what a ref's path is followed from. It fails on the first file find reports mistakes in.
+func readGiven(list string, find func(any) []string) ([]awml.Workflow, error) {
+	var items []json.RawMessage
+	if err := json.Unmarshal([]byte(list), &items); err != nil {
+		return nil, err
+	}
+	workflows := make([]awml.Workflow, 0, len(items))
+	for _, item := range items {
+		var given struct {
+			File   string `json:"file"`
+			Source string `json:"source"`
+		}
+		if err := json.Unmarshal(item, &given.Source); err != nil {
+			if err := json.Unmarshal(item, &given); err != nil {
+				return nil, err
+			}
+		}
+		doc, err := awml.Parse([]byte(given.Source))
+		if err != nil {
+			return nil, errors.New("isn't YAML: " + strings.Join(strings.Fields(err.Error()), " "))
+		}
+		if mistakes := find(doc); len(mistakes) != 0 {
+			return nil, errors.New(strings.Join(mistakes, "\n"))
+		}
+		workflows = append(workflows, awml.Workflow{File: given.File, Doc: doc.(*awml.Map)})
+	}
+	return workflows, nil
 }
 
 func errorJSON(message string) string {

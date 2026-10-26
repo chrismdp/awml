@@ -131,6 +131,29 @@ func TestEachExampleIsSoundAndItsDrawingsAreCurrent(t *testing.T) {
 	}
 }
 
+// The family's dinners and its question share the family chat, so they're drawn together as a map.
+// examples/render.sh draws its SVG.
+func TestTheExamplesThatShareAPartAreDrawnTogether(t *testing.T) {
+	var workflows []Workflow
+	for _, path := range []string{"examples/dinners.yaml", "examples/question.yaml"} {
+		workflows = append(workflows, Workflow{File: path, Doc: readExample(t, path)})
+	}
+	if got := TogetherMistakes(workflows); !reflect.DeepEqual(got, [][]string{nil, nil}) {
+		t.Errorf("together they have mistakes: %q", got)
+	}
+	if got := SummariseTogether(workflows).Shared; len(got) == 0 {
+		t.Error("they share no part")
+	}
+	mmd, err := os.ReadFile("examples/family-map.mmd")
+	if err != nil || string(mmd) != DrawMap(workflows)+"\n" {
+		t.Error("examples/family-map.mmd isn't what awml draw examples/dinners.yaml examples/question.yaml draws now: run examples/render.sh")
+	}
+	script, err := os.ReadFile("examples/render.sh")
+	if err != nil || !strings.Contains(string(script), "-map examples/family-map.mmd examples/dinners.yaml examples/question.yaml") {
+		t.Error("examples/render.sh doesn't draw the family's map")
+	}
+}
+
 // The Mermaid CLI takes any Mermaid 11, so a new release could redraw every example unless
 // render.sh pins Mermaid itself.
 func TestRenderPinsMermaid(t *testing.T) {
