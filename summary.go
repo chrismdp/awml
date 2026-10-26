@@ -24,9 +24,8 @@ type Summary struct {
 	ScopeNames      []string           `json:"scopeNames"`
 	PlatformNames   []string           `json:"platformNames"`
 	Untrusted       []UntrustedSummary `json:"untrusted"`
-	// Only workflows given together have parts they share, and list what waits on people across them.
+	// Only workflows given together have parts they share.
 	Shared []SharedSummary `json:"shared,omitempty"`
-	Waits  []WaitSummary   `json:"waits,omitempty"`
 }
 
 // PersonSummary names a place where a person decides: a person step, a review or a standing

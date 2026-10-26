@@ -44,7 +44,7 @@ Before step 5, read the [spec](SPEC.md) and the [example](examples) nearest your
     11. Does any work that must outlive a person rest on that person's connector?
     12. Does any machine hold something that a company processing content there may not see?
     13. Does every step leave a record that survives a restart, on one clock?
-    14. Given with the workflows it shares parts with, does any context have more than one writer, or any connector more than one workflow taking items from it? `awml check` warns of both, and `awml summary` lists what waits on each person across them.
+    14. Given with the workflows it shares parts with, does any context have more than one writer, or any connector more than one workflow taking items from it? `awml check` warns of both.
 
 11. **Act on each finding.** Take each finding, with its evidence, to the person who answers for the workflow. They decide whether to change the live system. Until it changes, the drawing keeps the finding: a red line for something the live system did, a comment for a gap. When a fix lands, take the red line away.
 

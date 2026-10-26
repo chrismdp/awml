@@ -510,19 +510,9 @@ type SharedSummary struct {
 	Workflows []string `json:"workflows"`
 }
 
-// WaitSummary names a review or standing approval, or a person's own step an Ask action waits on,
-// with the workflow it's in and the triggers that workflow runs on, which say how often it waits.
-type WaitSummary struct {
-	Label    string   `json:"label"`
-	Kind     string   `json:"kind"`
-	Workflow string   `json:"workflow"`
-	Triggers []string `json:"triggers"`
-}
-
 // SummariseTogether summarises workflows given together: each counted as Summarise counts it, a
 // part they share counted once, and untrusted text followed through what they share. It names the
-// shared parts, and what waits on a person in each workflow. One workflow is summarised as
-// Summarise does.
+// shared parts. One workflow is summarised as Summarise does.
 func SummariseTogether(workflows []Workflow) Summary {
 	if len(workflows) == 1 {
 		return Summarise(workflows[0].Doc)
@@ -562,48 +552,6 @@ func SummariseTogether(workflows []Workflow) Summary {
 	}
 	j := l.join()
 	out.Untrusted = summariseUntrusted(j.parts, j.lines)
-	for _, w := range workflows {
-		out.Waits = append(out.Waits, waits(w.Doc)...)
-	}
-	return out
-}
-
-// waits lists what waits on a person in a workflow: each review and standing approval, and each
-// person's own step that leads to an Ask action, straight or through a fork.
-func waits(doc *Map) []WaitSummary {
-	parts, lines := items(doc, "parts"), items(doc, "lines")
-	byID := partsByID(doc)
-	var triggers []string
-	for _, p := range parts {
-		if str(p, "kind") == "trigger" && leadsOutOf(doc, p) {
-			triggers = append(triggers, str(p, "label"))
-		}
-	}
-	asks := func(step *Map) bool {
-		seen := map[*Map]bool{step: true}
-		var follow func(*Map) bool
-		follow = func(from *Map) bool {
-			for _, l := range lines {
-				to := byID[str(l, "to")]
-				if !lineLeads(l) || byID[str(l, "from")] != from || to == nil || seen[to] {
-					continue
-				}
-				seen[to] = true
-				if to.get("kind") == "outside" && outsideTier(str(to, "label")) == "Ask" || to.get("kind") == "fork" && follow(to) {
-					return true
-				}
-			}
-			return false
-		}
-		return follow(step)
-	}
-	var out []WaitSummary
-	for _, p := range parts {
-		kind := str(p, "kind")
-		if kind == "review" || kind == "approval" || kind == "person" && asks(p) {
-			out = append(out, WaitSummary{Label: str(p, "label"), Kind: kind, Workflow: str(doc, "title"), Triggers: triggers})
-		}
-	}
 	return out
 }
 

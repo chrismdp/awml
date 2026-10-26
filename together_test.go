@@ -1,6 +1,7 @@
 package awml
 
 import (
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
@@ -202,14 +203,17 @@ func TestTheSummaryOfSeveralCountsASharedPartOnceAndNamesIt(t *testing.T) {
 	}
 }
 
-func TestTheSummaryOfSeveralListsWhatWaitsOnPeopleWithTheTriggers(t *testing.T) {
+// What waits on a person is no part of a summary, of one workflow or several.
+func TestTheSummaryOfSeveralSaysNothingOfWhatWaitsOnPeople(t *testing.T) {
 	shop := strings.Replace(shopWorkflow, `label: "Fill the basket: Allow"`, `label: "Check out: Ask"`, 1)
 	shop = strings.Replace(shop, "  - { id: basket,", "  - { id: yes, kind: review, label: Owen's yes to the basket, in: home }\n  - { id: basket,", 1)
 	shop = strings.Replace(shop, "{ from: fill, to: basket, kind: data }", "{ from: fill, to: yes, kind: data }\n  - { from: yes, to: basket, kind: data, label: \"[yes]\" }", 1)
-	got := SummariseTogether(together(t, "plan.yaml", planWorkflow, "shop.yaml", shop)).Waits
-	want := []WaitSummary{{Label: "Owen's yes to the basket", Kind: "review", Workflow: "Shopping", Triggers: []string{"The shopping list is ready"}}}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("waits are %+v\nwant %+v", got, want)
+	encoded, err := json.Marshal(SummariseTogether(together(t, "plan.yaml", planWorkflow, "shop.yaml", shop)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), `"waits"`) {
+		t.Errorf("the summary lists what waits on people: %s", encoded)
 	}
 }
 
