@@ -476,18 +476,30 @@ func currentVersion() string {
 }
 
 // expandFolders gives the files named, with each folder standing for every .yaml file directly
-// inside it, in the order of their names. A path that can't be read as a folder is a file.
+// inside it, in the order of their names. A path that can't be read as a folder is a file. A file
+// named twice is given once, where it's first named.
 func expandFolders(paths []string) []string {
 	var files []string
+	seen := map[string]bool{}
+	add := func(path string) {
+		at := where(path)
+		if at == "" {
+			at = path
+		}
+		if !seen[at] {
+			seen[at] = true
+			files = append(files, path)
+		}
+	}
 	for _, path := range paths {
 		entries, err := os.ReadDir(path)
 		if err != nil {
-			files = append(files, path)
+			add(path)
 			continue
 		}
 		for _, entry := range entries {
 			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".yaml") {
-				files = append(files, filepath.Join(path, entry.Name()))
+				add(filepath.Join(path, entry.Name()))
 			}
 		}
 	}

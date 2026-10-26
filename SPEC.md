@@ -192,7 +192,7 @@ A part belongs to the workflow that creates it: a trigger to the workflow it sta
 
 When the registry publishes a workflow, it rewrites each path to a workflow of the same owner, taking the slug from the file's name, so `shopping.yaml#list` becomes `owner/shopping#list`. Refer to a workflow published under another slug as `owner/slug#id` in the first place. A public workflow may refer only to public ones.
 
-**Giving several files.** `awml check`, `awml draw`, `awml summary` and `awml fit` take any number of files, and a folder stands for every `.yaml` file directly inside it. Wildcards are the shell's, as in `awml check shopping/*.yaml`. A file with `platform` is a platform description, and any other is a workflow.
+**Giving several files.** `awml check`, `awml draw`, `awml summary` and `awml fit` take any number of files, and a folder stands for every `.yaml` file directly inside it. A file named twice, as by its folder and by itself, is read once. Wildcards are the shell's, as in `awml check shopping/*.yaml`. A file with `platform` is a platform description, and any other is a workflow.
 
 `awml` never reaches the network. A path is followed from the folder of the file that refers. `owner/slug#id` is followed when a file given is at a path ending `owner/slug.yaml`, where `awml pull owner/slug -o owner` puts it. A reference to a workflow that isn't given is left alone, as it is when the file is checked on its own.
 

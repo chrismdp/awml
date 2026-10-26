@@ -451,7 +451,7 @@ awml push family/dinners examples/dinners.yaml
 awml pull family/dinners@1 -o dinners
 ```
 
-- `check`, `draw`, `summary` and `fit` take any number of files, and a folder stands for every `.yaml` file directly inside it. Given several workflows, they follow each `ref` between them, as the next section says.
+- `check`, `draw`, `summary` and `fit` take any number of files, and a folder stands for every `.yaml` file directly inside it, with a file named twice read once. Given several workflows, they follow each `ref` between them, as the next section says.
 - `awml check` checks the design and each implementation. It prints each warning before `ok` or the mistakes, and exits 1 only if it finds a mistake. `--json` lists every check it makes, passing ones included, each with a stable id and its result: `pass`, `fail`, `skipped` or `warn`.
 - `awml fit` judges the design against platform descriptions, telling the two apart by what each file holds. Given several workflows, it judges each platform as running them all. Add `--implementation ID` to judge one workflow's placement, and `--json` for the report's JSON form. An implementation can be given without descriptions, and then each block says it has no platform or that its platform wasn't described.
 - `awml draw` prints the security view's Mermaid, or the map of several workflows. Add `--implementation ID` for a platform view, or `--untrusted` for the untrusted view. It refuses a file with mistakes, and prints them instead.

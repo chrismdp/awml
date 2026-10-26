@@ -194,3 +194,23 @@ func TestARefIsFollowedToWhereAFileIsHoweverItIsNamed(t *testing.T) {
 		}
 	}
 }
+
+// A file named twice, as by its folder and by itself, is read once, where it's first named.
+func TestAFileGivenTwiceIsReadOnce(t *testing.T) {
+	dir := folder(t, "plan.yaml", planWorkflow, "shop.yaml", shopWorkflow)
+	plan := filepath.Join(dir, "plan.yaml")
+	for _, args := range [][]string{
+		{dir, plan},
+		{dir, filepath.Join(dir, ".", "shop.yaml"), plan},
+	} {
+		for _, command := range []string{"check", "summary"} {
+			if got, want := awmlRun(append([]string{command}, args...)...), awmlRun(command, dir); got != want {
+				t.Errorf("%s %q gave %+v\nwant %+v", command, args, got, want)
+			}
+		}
+	}
+	chdir(t, dir)
+	if got, want := awmlRun("check", "plan.yaml", ".", "./plan.yaml"), awmlRun("check", "plan.yaml", "shop.yaml"); got != want {
+		t.Errorf("check plan.yaml . ./plan.yaml gave %+v\nwant %+v", got, want)
+	}
+}
