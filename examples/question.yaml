@@ -1,6 +1,7 @@
-# A question asked in the family chat, by who may see each part. The family is fictional.
 awml: "0.6"
 title: A question in the family chat
+description: |
+  A question asked in the family chat, by who may see each part. The family is fictional.
 scopes:
   - { id: carers, label: "carers: + June, Beth" }
   - { id: family, label: "family: parents, kids", in: carers }
@@ -11,7 +12,7 @@ parts:
   - { id: family_notes, kind: context, label: "Family notes", in: family }
   - { id: find, kind: code, op: answer, label: "Find the notes that speak to it", in: family }
   - { id: word, kind: ai, op: answer, label: "Word the answer from those notes alone", in: family }
-  - { id: chat, kind: surface, label: "Family chat", in: family }
+  - { id: chat, kind: surface, label: "Family chat", in: family, ref: dinners.yaml#chat }
   - { id: nadia_notes, kind: context, label: "Nadia's own notes", in: nadia }
 lines:
   - { from: ask, to: find, kind: start }

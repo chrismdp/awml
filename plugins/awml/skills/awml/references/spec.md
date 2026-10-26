@@ -1,10 +1,10 @@
 # AWML: the Agentic Workflow Modelling Language
 
-Draft 0.6, 25 October 2026.
+Draft 0.6, 26 October 2026.
 
 AWML describes agentic work as diagrams, written as YAML files and drawn with Mermaid.
 
-**Contents:** [What it describes](#what-it-describes) · [The parts](#the-parts) · [The lines](#the-lines) · [The security view](#the-security-view-who-may-see-each-part) · [Connectors](#connectors) · [The platform view](#the-platform-view-where-each-part-runs) · [Placing a workflow](#placing-a-workflow-where-it-can-run) · [Tiers and yeses](#tiers-and-yeses) · [Standing approvals](#standing-approvals) · [Untrusted text](#untrusted-text-where-strangers-text-reaches) · [Operations](#operations) · [Patterns](#patterns) · [Records](#records) · [The red line](#the-red-line) · [What AWML is not](#what-awml-is-not) · [The file format](#the-file-format)
+**Contents:** [What it describes](#what-it-describes) · [The parts](#the-parts) · [The lines](#the-lines) · [The security view](#the-security-view-who-may-see-each-part) · [Connectors](#connectors) · [The platform view](#the-platform-view-where-each-part-runs) · [Placing a workflow](#placing-a-workflow-where-it-can-run) · [Workflows together](#workflows-together) · [Tiers and yeses](#tiers-and-yeses) · [Standing approvals](#standing-approvals) · [Untrusted text](#untrusted-text-where-strangers-text-reaches) · [Operations](#operations) · [Patterns](#patterns) · [Records](#records) · [The red line](#the-red-line) · [What AWML is not](#what-awml-is-not) · [The file format](#the-file-format)
 
 ## What it describes
 
@@ -155,6 +155,58 @@ worker            no: engagements is kept at notes/engagements, which the platfo
                   no: project is kept at notes/projects, which the platform doesn't hold
 ```
 
+## Workflows together
+
+Some workflows hand work on to each other, or reach the same things. Each stays a workflow of its own, in its own file, and checks alone. Given together, they show what they share.
+
+**A hand-off goes through a part both workflows have.** There's no new kind. It's either:
+
+- a **context**, such as the week's shopping list, which one workflow writes and another reads;
+- or a **trigger**, such as `The shopping list is ready`, which one workflow fires with a line into it and another starts on.
+
+**A reference.** A trigger, context, connector or surface may have `ref`, naming the part of another workflow it is: `owner/slug#id` for a published workflow, or a path to a file alongside, such as `shopping.yaml#list`. The referring workflow keeps its own full copy of the part, with its kind, label and scope, so it still checks alone. Here the dinners write the shopping list and fire the shopping's trigger, and the shopping reads the list:
+
+```yaml
+# dinners.yaml
+parts:
+  - { id: plan, kind: ai, op: draft, label: "Plan next week's dinners", in: family }
+  - { id: list, kind: context, label: "The week's shopping list", in: family }
+  - { id: ready, kind: trigger, label: "The shopping list is ready", ref: shopping.yaml#ready }
+lines:
+  - { from: plan, to: list, kind: data }
+  - { from: plan, to: ready, kind: start }
+```
+
+```yaml
+# shopping.yaml
+parts:
+  - { id: ready, kind: trigger, label: "The shopping list is ready", wait: PT1H }
+  - { id: list, kind: context, label: "The week's shopping list", in: family, ref: dinners.yaml#list }
+  - { id: fill, kind: code, op: do, label: "Fill the basket from the list", in: family }
+lines:
+  - { from: ready, to: fill, kind: start }
+  - { from: list, to: fill, kind: data }
+```
+
+A part belongs to the workflow that creates it: a trigger to the workflow it starts, and a context to its first writer. Every other workflow refers to it. Two parts with the same id and no `ref` aren't linked. A reference follows the latest version of the workflow it names.
+
+When the registry publishes a workflow, it rewrites each path to a workflow of the same owner, taking the slug from the file's name, so `shopping.yaml#list` becomes `owner/shopping#list`. Refer to a workflow published under another slug as `owner/slug#id` in the first place. A public workflow may refer only to public ones.
+
+**Giving several files.** `awml check`, `awml draw`, `awml summary` and `awml fit` take any number of files, and a folder stands for every `.yaml` file directly inside it. Wildcards are the shell's, as in `awml check shopping/*.yaml`. A file with `platform` is a platform description, and any other is a workflow.
+
+`awml` never reaches the network. A path is followed from the folder of the file that refers. `owner/slug#id` is followed when a file given is at a path ending `owner/slug.yaml`, where `awml pull owner/slug -o owner` puts it. A reference to a workflow that isn't given is left alone, as it is when the file is checked on its own.
+
+Given more than one workflow:
+
+- `awml check` checks each one alone, then follows each reference between them. A reference to a part that isn't there is a mistake. So is a copy that differs from the part it refers to in its kind, label or `at`, or whose scope holds other people or has other terms: scopes are compared by what they are, not by their ids. It warns of a context that more than one workflow writes, since each may change what another relies on, and of a connector that more than one brings items in from, since each may take an item another expects. It follows untrusted text through the parts they share, and warns of each outside action the text reaches.
+- `awml draw` draws their **map**: one box for each workflow, with its title and the triggers it runs on, and each part they share drawn once between the boxes. A line runs from each workflow that leads into the part, and to each workflow it leads into.
+- `awml summary` counts each part they share once, and follows untrusted text through them. It lists the parts they share, with the workflows that have each, and what waits on a person in each workflow: every review and standing approval, and every person's own step that leads to an Ask action, with the triggers that workflow runs on, which say how often it waits.
+- `awml fit` judges each platform as running every workflow given, with each part they share placed once, and names each part and scope after its file, as in `dinners#plan`.
+
+<img src="examples/family-map.svg" alt="The family's dinners and its question, drawn together">
+
+Here the family's dinners and a question asked in the family chat share the chat, which both write to.
+
 ## Tiers and yeses
 
 Each outside action has a **tier**, which follows the last colon in its label, as in `Send the mail: Ask`.
@@ -297,6 +349,8 @@ One YAML file holds one workflow's design and any implementations. It has no `vi
 ```yaml
 awml: "0.6"
 title: The family's dinners
+description: |
+  Plans the family's dinners each Thursday. The family is fictional.
 scopes:
   - { id: carers, label: "carers: + June, Beth", processing: any }
   - { id: family, label: "family: parents, kids", in: carers }
@@ -316,10 +370,10 @@ implementations:
       - { id: keys, label: "The server also holds the rota app's key", in: server, ties: [plan] }
 ```
 
-The file needs `awml`, the version `"0.6"`; `title`, the workflow's name; and `parts`. It may have `scopes`, `lines` and `implementations`. Files older than 0.6 are converted with `awml convert`, and every other command refuses them.
+The file needs `awml`, the version `"0.6"`; `title`, the workflow's name; and `parts`. It may have `description`, `scopes`, `lines` and `implementations`. A `description` says what the workflow is for, in Markdown, which the registry shows on the workflow's page. `awml` checks only that it's text, and writes it as a literal block, starting `|`, which keeps each line as written. Files older than 0.6 are converted with `awml convert`, and every other command refuses them.
 
 - A **scope** has an `id` and a `label`, and may have `in`, the id of the scope it sits inside, and `processing`: `any`, `none`, or a map from company ids to `any` or a list of operations.
-- A **part** has an `id`, a `kind` and a `label`, which a fork doesn't need and never shows. It may have `in`, the id of its scope. A step, `ai`, `code` or `person`, may have `op`, its operation. A trigger may have `wait`, an ISO 8601 duration such as `PT5M`. A context may have `at`, a path such as `notes/projects`. A trigger, connector or context may have `untrusted`, and a code step `cleans`, each `true` or `false`.
+- A **part** has an `id`, a `kind` and a `label`, which a fork doesn't need and never shows. It may have `in`, the id of its scope. A step, `ai`, `code` or `person`, may have `op`, its operation. A trigger may have `wait`, an ISO 8601 duration such as `PT5M`. A context may have `at`, a path such as `notes/projects`. A trigger, connector or context may have `untrusted`, and a code step `cleans`, each `true` or `false`. A trigger, context, connector or surface may have `ref`, the part of another workflow it is, as `owner/slug#id` or a path to a file alongside, ending `.yaml`, then `#` and the part's id, as in [Workflows together](#workflows-together). An owner and slug follow the registry's rule for names, and a path is names of letters, digits, dots, hyphens and underscores joined by `/`, which may start by going up with `../`.
 - A **line** has `from` and `to`, the ids of two parts, and a `kind`. It may have a `label`.
 - **Implementations** are a map from an implementation id to a `label`, a list of `blocks` and an optional list of `comments`. The map's order is the order the platform views appear on a page.
 - A **block** has an `id`, a `label` and `parts`, a list of part ids. It may have `platform`, the id of a platform description: a bare id written like a company id, or `owner/platforms/slug` for a published one. It may have `in`, another block in that implementation. Every part except a trigger or comment must appear in exactly one block of each implementation. Triggers and design comments may be unplaced, but may never be placed twice.
@@ -327,13 +381,13 @@ The file needs `awml`, the version `"0.6"`; `title`, the workflow's name; and `p
 
 An id is letters, digits and underscores, starting with a letter. Scope, part, block and comment ids are unique across the file. Implementation ids have their own namespace. Every id, label, kind and reference to an id is text. `awml` reads YAML 1.2, which reads `true`, `false`, numbers and dates such as `2026-10-20` as something other than text, so quote them. YAML 1.1, which many other tools read, also reads `yes`, `no`, `on` and `off` as true or false, and `19:00` as a number, so quoting those too keeps a file the same in every tool. `untrusted` and `cleans` are `true` or `false`, unquoted. The drawing keeps the parts in the order the file lists them, and draws each scope or block after the parts beside it. List the parts in the order the work flows, with its triggers first. A block's `parts` list chooses placement, not drawing order.
 
-`awml check` applies the security rules to the design and the platform rules to each implementation. It reports a missing or unknown field, an unknown kind, an id used twice or badly written, a value YAML didn't read as text, an unknown scope, part or block reference, a scope or block nested in itself, a comment linked by anything but `tie`, a `tie` with no comment at either end, an unknown `op` or one on a part that isn't a step, a step that does what its operation must not, as far as the drawing shows it, an outside action whose label gives no tier after its last colon, a tier that disagrees with what stands in front of the action, a standing approval with no line to a surface, a `processing` that isn't `any`, `none` or a map of company ids to `any` or known operations, an inner scope's `processing` that allows a company or operation its outer scope doesn't, `processing` on a block, `platform` on a scope, a block's `platform` badly written, a `wait` that isn't a duration or is on a part that isn't a trigger, an `at` that isn't a path or is on a part that isn't a context, an `untrusted` or `cleans` that isn't true or false, `untrusted: true` on a part that isn't a trigger, connector or context, and `cleans: true` on a part that isn't a code step. It also reports a part placed twice in an implementation or left unplaced when it needs a block. It warns when AI decides a `do` step, when one `do` step leads to more than one change, and when untrusted text reaches an outside action. Warnings leave the exit status alone. Of these mistakes, a line that does what its operation must not, or whose tier disagrees with what stands in front of the action, is a line that breaks a rule, which `awml draw` draws red. Its messages call a scope or a block a group.
+`awml check` applies the security rules to the design and the platform rules to each implementation. It reports a missing or unknown field, an unknown kind, an id used twice or badly written, a value YAML didn't read as text, an unknown scope, part or block reference, a scope or block nested in itself, a comment linked by anything but `tie`, a `tie` with no comment at either end, an unknown `op` or one on a part that isn't a step, a step that does what its operation must not, as far as the drawing shows it, an outside action whose label gives no tier after its last colon, a tier that disagrees with what stands in front of the action, a standing approval with no line to a surface, a `processing` that isn't `any`, `none` or a map of company ids to `any` or known operations, an inner scope's `processing` that allows a company or operation its outer scope doesn't, `processing` on a block, `platform` on a scope, a block's `platform` badly written, a `wait` that isn't a duration or is on a part that isn't a trigger, an `at` that isn't a path or is on a part that isn't a context, an `untrusted` or `cleans` that isn't true or false, `untrusted: true` on a part that isn't a trigger, connector or context, `cleans: true` on a part that isn't a code step, and a `ref` badly written or on a part that isn't a trigger, context, connector or surface. It also reports a part placed twice in an implementation or left unplaced when it needs a block. It warns when AI decides a `do` step, when one `do` step leads to more than one change, and when untrusted text reaches an outside action. Warnings leave the exit status alone. Of these mistakes, a line that does what its operation must not, or whose tier disagrees with what stands in front of the action, is a line that breaks a rule, which `awml draw` draws red. Its messages call a scope or a block a group.
 
 A **platform description** is a file of its own. It needs `awml`, the version `"0.6"`; `platform`, with an `id`, written like a company id or as `owner/platforms/slug`, and a `label`; `off_for_up_to`, an ISO 8601 duration; `steps`, `code` or `agent`; `agents`, a list of company ids, which may be empty; `calls`, a list of company ids or `any`; and `holds`, a list of paths, which may be empty. It has no workflow fields. `awml check` reports a missing or unknown field, a value of the wrong kind and a company id or path badly written. A company id is lower-case letters, digits and hyphens, starting with a letter. In `owner/platforms/slug`, the owner and slug each follow the registry's rule for names: lower-case letters, digits and hyphens, up to 40 characters, starting and ending with a letter or a digit. A path is names of letters, digits, dots, hyphens and underscores, joined by `/`, with no leading `/` and no `.` or `..` names.
 
-`awml draw file.yaml` draws the security view. `awml draw --untrusted file.yaml` draws the untrusted view, and refuses a file that marks no part untrusted. `awml draw --implementation ID file.yaml` draws one platform view. `awml page` draws the security view, then the untrusted view if the file has one, then every implementation, each with a heading. `awml draw`, `awml page` and `awml summary` take a file whose only mistakes are lines that break a rule, and every other command needs a file with none. `awml summary` counts the workflow once, each red line among it, and includes the platforms from all its implementations. It lists every publish with its label as drawn, saying what it adds or loosens. For each part marked untrusted, it lists the steps its text reaches, the outside actions it reaches and the parts that stop it.
+`awml draw file.yaml` draws the security view. `awml draw --untrusted file.yaml` draws the untrusted view, and refuses a file that marks no part untrusted. `awml draw --implementation ID file.yaml` draws one platform view. Given several workflows, `awml draw` draws their map, and refuses `--untrusted` and `--implementation`. `awml page` draws the security view, then the untrusted view if the file has one, then every implementation, each with a heading. `awml draw`, `awml page` and `awml summary` take a file whose only mistakes are lines that break a rule, and every other command needs a file with none. `awml summary` counts the workflow once, each red line among it, and includes the platforms from all its implementations. It lists every publish with its label as drawn, saying what it adds or loosens. For each part marked untrusted, it lists the steps its text reaches, the outside actions it reaches and the parts that stop it.
 
-`awml fit file.yaml DESC...` judges the design against platform descriptions. With `--implementation ID` it judges the chosen placement. It prints one line for each platform that fits, naming the companies each AI step may use there, and one line for each reason a platform doesn't fit, as in [Placing a workflow](#placing-a-workflow-where-it-can-run). It exits 0 when it could judge every platform, whether or not any fits, and 1 when a file has mistakes or the design has a gap. With `--json` it prints an object whose `results` hold one entry for each platform, or each block of an implementation: its `platform`, whether it was `judged`, whether the workflow `fits`, the `reasons` it doesn't, and in `models` the companies each AI step there may use. Its `gaps` list what kept the workflow from being judged.
+`awml fit FILE...` judges the design of every workflow given against every platform description given. With `--implementation ID` it judges the chosen placement of one workflow. It prints one line for each platform that fits, naming the companies each AI step may use there, and one line for each reason a platform doesn't fit, as in [Placing a workflow](#placing-a-workflow-where-it-can-run). It exits 0 when it could judge every platform, whether or not any fits, and 1 when a file has mistakes or the design has a gap. With `--json` it prints an object whose `results` hold one entry for each platform, or each block of an implementation: its `platform`, whether it was `judged`, whether the workflow `fits`, the `reasons` it doesn't, and in `models` the companies each AI step there may use. Its `gaps` list what kept the workflow from being judged.
 
 `awml convert FILE` prints a file of any version from 0.2 as one 0.6 file, losing nothing. A 0.5 or 0.4 workflow changes in two ways. Each `publish` line becomes a `data` line, since a data line publishes whenever its scopes make it one. A line's `breaks` goes, since `awml check` works out which lines are red, and a line it marked red that the check doesn't find gets a comment tied to both its ends, saying what its label said. A 0.3 or 0.2 security view becomes a workflow whose `groups` are its `scopes`. A platform description changes only its version. A file of the current version comes back as it was.
 

@@ -1,6 +1,7 @@
-# A fork: one input, and two steps that work on it side by side. The family is fictional.
 awml: "0.6"
 title: The school newsletter
+description: |
+  A fork: one input, and two steps that work on it side by side. The family is fictional.
 scopes:
   - { id: family, label: "family: Mia, Dev, the children" }
 parts:

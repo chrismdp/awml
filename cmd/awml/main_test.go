@@ -194,13 +194,13 @@ func TestConvertUpgradesOneOlderFile(t *testing.T) {
 }
 
 func TestConvertGivesA06FileAsItWasWithItsComments(t *testing.T) {
-	path := filepath.Join("..", "..", "examples", "dinners.yaml")
+	path := filepath.Join("..", "..", "examples", "tour", "08-gap.yaml")
 	src, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(string(src), "# ") {
-		t.Fatalf("%s no longer starts with a comment", path)
+	if !strings.Contains(string(src), "\n  # ") || !strings.Contains(string(src), "\ndescription: |\n") {
+		t.Fatalf("%s no longer has a comment and a description", path)
 	}
 	if r := awmlRun("convert", path); r != (result{0, string(src), ""}) {
 		t.Errorf("convert gave %+v\nwant stdout:\n%s", r, src)
@@ -344,10 +344,10 @@ parts: [{id: draft, kind: ai, op: draft, label: Draft, in: business}]
 	if r := awmlRun("fit", "--json", security, platform); r.code != 1 || r.stdout != `{"results":[],"gaps":["group \"business\" has no processing"]}`+"\n" {
 		t.Errorf("gap fit as JSON gave %+v", r)
 	}
-	if r := awmlRun("fit", platform, platform); r.code != 1 || !strings.Contains(r.stderr, "must be a workflow") {
-		t.Errorf("fit of a description gave %+v", r)
+	if r := awmlRun("fit", platform, platform); r.code != 1 || r.stderr != "awml fit: no workflow was given\n" {
+		t.Errorf("fit of descriptions alone gave %+v", r)
 	}
-	if r := awmlRun("fit", security, security); r.code != 1 || !strings.Contains(r.stderr, "must be a platform description") {
+	if r := awmlRun("fit", security, security); r.code != 1 || r.stderr != "awml fit: no platform descriptions were given\n" {
 		t.Errorf("fit of two workflows gave %+v", r)
 	}
 }
@@ -386,7 +386,7 @@ func TestSummaryPrintsJSONForOneOrMoreFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantBoth, err := json.Marshal(awml.Summarise(doc(t, good), doc(t, lunches)))
+	wantBoth, err := json.Marshal(awml.SummariseTogether([]awml.Workflow{{File: dinners, Doc: doc(t, good)}, {File: other, Doc: doc(t, lunches)}}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -592,8 +592,7 @@ func TestAMistakeInTheCommandShowsHowToUseIt(t *testing.T) {
 	}{
 		{nil, "usage: awml [-h] [--version] [--registry URL] {draw,page,check,fit,summary,convert,login,push,pull} ...\nawml: error: the following arguments are required: command\n"},
 		{[]string{"drew", "a.yaml"}, "usage: awml [-h] [--version] [--registry URL] {draw,page,check,fit,summary,convert,login,push,pull} ...\nawml: error: argument command: invalid choice: 'drew' (choose from 'draw', 'page', 'check', 'fit', 'summary', 'convert', 'login', 'push', 'pull')\n"},
-		{[]string{"draw"}, "usage: awml draw [-h] [--implementation ID | --untrusted] file\nawml draw: error: the following arguments are required: file\n"},
-		{[]string{"draw", "a.yaml", "b.yaml"}, "usage: awml [-h] [--version] [--registry URL] {draw,page,check,fit,summary,convert,login,push,pull} ...\nawml: error: unrecognized arguments: b.yaml\n"},
+		{[]string{"draw"}, "usage: awml draw [-h] [--implementation ID | --untrusted] files [files ...]\nawml draw: error: the following arguments are required: files\n"},
 		{[]string{"check"}, "usage: awml check [-h] [--json] files [files ...]\nawml check: error: the following arguments are required: files\n"},
 		{[]string{"page", "a.yaml"}, "usage: awml page [-h] -o OUT files [files ...]\nawml page: error: the following arguments are required: -o/--out\n"},
 		{[]string{"page", "a.yaml", "-o"}, "usage: awml page [-h] -o OUT files [files ...]\nawml page: error: argument -o/--out: expected one argument\n"},
@@ -915,7 +914,7 @@ func TestFitAnImplementationWithoutDescriptions(t *testing.T) {
 	if got := awmlRun("fit", "--json", "--implementation", "home", path); got != (result{0, want, ""}) {
 		t.Errorf("fit --json without descriptions gave %+v", got)
 	}
-	if got := awmlRun("fit", path); got.code != 2 || !strings.Contains(got.stderr, "the following arguments are required: DESC") {
+	if got := awmlRun("fit", path); got != (result{1, "", "awml fit: no platform descriptions were given\n"}) {
 		t.Errorf("design fit without descriptions gave %+v", got)
 	}
 }

@@ -1,7 +1,8 @@
-# A draft, the owner's yes to the exact message, and the send. Ella runs a children's swimming club,
-# and is fictional.
 awml: "0.6"
 title: The club's Friday message
+description: |
+  A draft, the owner's yes to the exact message, and the send. Ella runs a children's swimming club,
+  and is fictional.
 scopes:
   - { id: ella, label: "ella: Ella" }
 parts:

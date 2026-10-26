@@ -60,8 +60,10 @@ func TestTheChecksKeepTheirIDsAndTheSpecsOrder(t *testing.T) {
 		"values.text", "references.known", "nesting.acyclic", "comments.tie-only",
 		"ties.comment", "ops.known", "operations.only-do-acts", "operations.answer-check-read-only",
 		"tiers.written", "tiers.shape", "approvals.listed", "processing.written", "processing.nested",
-		"platform.blocks-only", "wait.duration", "at.path", "untrusted.parts", "cleans.code-only", "placement.once", "placement.complete",
-		"warn.do-by-code", "warn.one-change", "warn.untrusted-outside", "description.values", "description.ids",
+		"platform.blocks-only", "wait.duration", "at.path", "untrusted.parts", "cleans.code-only", "refs.written", "refs.parts", "placement.once", "placement.complete",
+		"refs.known", "refs.agree",
+		"warn.do-by-code", "warn.one-change", "warn.untrusted-outside", "warn.shared-writers", "warn.shared-readers",
+		"description.values", "description.ids",
 	}
 	if !reflect.DeepEqual(ids, want) {
 		t.Errorf("the checks are\n  %s\nwant\n  %s", strings.Join(ids, "\n  "), strings.Join(want, "\n  "))
@@ -255,6 +257,8 @@ parts:
   - { id: n, kind: context, label: N, in: c }
   - { id: m, kind: comment, label: M }
   - { id: f, kind: fork, op: fly }
+  - { id: r, kind: ai, label: R, ref: x.yaml#y }
+  - { id: q, kind: context, label: Q, ref: nope }
 lines:
   - { from: t, to: s, kind: start, breaks: maybe }
   - { from: s, to: n, kind: data }
@@ -360,6 +364,37 @@ lines:
 		sort.Strings(got)
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("%s: the checks hold\n  %s\nbut Check and Warnings give\n  %s", name, strings.Join(got, "\n  "), strings.Join(want, "\n  "))
+		}
+	}
+	// The checks that follow refs between workflows find mistakes only in files given together, and
+	// file each word for word as awml check prints it.
+	planMore := strings.Replace(planWorkflow, "  - { id: list,", "  - { id: inbox, kind: connector, label: Inbox, in: family }\n  - { id: list,", 1)
+	planMore = strings.Replace(planMore, "lines:\n", "lines:\n  - { from: inbox, to: plan, kind: data }\n", 1)
+	shopMore := strings.Replace(shopWorkflow, "  - { from: fill, to: basket", "  - { from: fill, to: list, kind: data }\n  - { from: fill, to: basket", 1)
+	shopMore = strings.Replace(shopMore, "  - { id: fill,", "  - { id: inbox, kind: connector, label: Inbox, in: home, ref: plan.yaml#inbox }\n  - { id: fill,", 1)
+	shopMore = strings.Replace(shopMore, "lines:\n", "lines:\n  - { from: inbox, to: fill, kind: data }\n", 1)
+	for _, pair := range [][2]string{
+		{planMore, shopMore},
+		{strings.Replace(planWorkflow, "shop.yaml#ready", "shop.yaml#gone", 1), strings.Replace(shopWorkflow, "label: Shopping list", "label: The list", 1)},
+	} {
+		workflows := together(t, "plan.yaml", pair[0], "shop.yaml", pair[1])
+		mistakes, warnings := TogetherMistakes(workflows), TogetherWarnings(workflows)
+		for i, file := range []string{"plan.yaml", "shop.yaml"} {
+			want := append(append([]string{}, mistakes[i]...), warnings[i]...)
+			got := []string{}
+			for _, check := range CheckSources("dev", []Source{source("plan.yaml", pair[0]), source("shop.yaml", pair[1])}).Checks {
+				for _, mistake := range check.Mistakes {
+					if mistake.File == file && isOneOf(check.ID, "refs.known", "refs.agree", "warn.shared-writers", "warn.shared-readers") {
+						got = append(got, mistake.Message)
+						failed[check.ID] = true
+					}
+				}
+			}
+			sort.Strings(want)
+			sort.Strings(got)
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("%s together: the checks hold %q, but TogetherMistakes and TogetherWarnings give %q", file, got, want)
+			}
 		}
 	}
 	// A file that isn't YAML is tested on its own above.

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"syscall"
@@ -30,8 +31,8 @@ positional arguments:
     draw             print a file's Mermaid
     page             write one HTML page that draws each file
     check            report warnings and structural mistakes
-    fit              judge where a workflow can run
-    summary          count the parts and lines in one workflow
+    fit              judge where workflows can run
+    summary          count the parts and lines in workflows
     convert          upgrade an older file, or join a legacy pair, into one 0.6 file
     login            save a registry API token
     push             push a new workflow version
@@ -44,14 +45,16 @@ options:
 `
 
 var commands = map[string]struct{ usage, help string }{
-	"draw": {"usage: awml draw [-h] [--implementation ID | --untrusted] file\n", `
+	"draw": {"usage: awml draw [-h] [--implementation ID | --untrusted] files [files ...]\n", `
+Draw a workflow's security view, or the map of several workflows drawn together.
+
 positional arguments:
-  file
+  files       workflows, or folders of them
 
 options:
   -h, --help  show this help message and exit
-  --implementation ID  draw one implementation
-  --untrusted  draw where untrusted text reaches
+  --implementation ID  draw one implementation of one workflow
+  --untrusted  draw where untrusted text reaches in one workflow
 `},
 	"convert": {"usage: awml convert [-h] [--implementation ID] file [PLATFORM]\n", `
 Upgrade a file of an older version into one 0.6 file, or join a legacy security view and platform
@@ -75,16 +78,17 @@ options:
 `},
 	"check": {"usage: awml check [-h] [--json] files [files ...]\n", `
 positional arguments:
-  files
+  files       files, or folders of them, checked together
 
 options:
   -h, --help  show this help message and exit
   --json      print every check and its result as JSON
 `},
-	"fit": {"usage: awml fit [-h] [--json] [--implementation ID] file [DESC ...]\n", `
+	"fit": {"usage: awml fit [-h] [--json] [--implementation ID] files [files ...]\n", `
+Judge each platform described as running every workflow given.
+
 positional arguments:
-  file
-  DESC
+  files       workflows and platform descriptions, told apart by what they hold, or folders of them
 
 options:
   -h, --help  show this help message and exit
@@ -93,7 +97,7 @@ options:
 `},
 	"summary": {"usage: awml summary [-h] [--json] files [files ...]\n", `
 positional arguments:
-  files
+  files       workflows, or folders of them, summarised together
 
 options:
   -h, --help  show this help message and exit
@@ -209,15 +213,12 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if command == "" {
 		return fail(usage, "awml", "the following arguments are required: command")
 	}
+	if isOneOf(command, "check", "draw", "fit", "summary", "page") {
+		files = expandFolders(files)
+	}
 	var missing []string
 	if len(files) == 0 && command != "login" {
-		fit := "file, DESC"
-		if implementation != "" {
-			fit = "file"
-		}
-		missing = append(missing, map[string]string{"draw": "file", "page": "files", "check": "files", "fit": fit, "convert": "file", "summary": "files", "push": "owner/slug, file", "pull": "owner/slug[@n]"}[command])
-	} else if command == "fit" && len(files) == 1 && implementation == "" {
-		missing = append(missing, "DESC")
+		missing = append(missing, map[string]string{"draw": "files", "page": "files", "check": "files", "fit": "files", "convert": "file", "summary": "files", "push": "owner/slug, file", "pull": "owner/slug[@n]"}[command])
 	}
 	if command == "page" && out == nil {
 		missing = append(missing, "-o/--out")
@@ -234,8 +235,11 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if command == "draw" && untrusted && implementation != "" {
 		return fail(commands[command].usage, "awml draw", "argument --untrusted: not allowed with argument --implementation")
 	}
-	if command == "draw" && len(files) > 1 {
-		unknown = append(files[1:], unknown...)
+	if command == "draw" && len(files) > 1 && untrusted {
+		return fail(commands[command].usage, "awml draw", "argument --untrusted: draws one workflow, not several")
+	}
+	if command == "draw" && len(files) > 1 && implementation != "" {
+		return fail(commands[command].usage, "awml draw", "argument --implementation: draws one workflow, not several")
 	}
 	if command == "login" && len(files) > 0 {
 		unknown = append(files, unknown...)
@@ -270,9 +274,27 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	if command == "check" {
 		code := 0
-		for _, path := range files {
-			doc, errs := read(path)
-			for _, warning := range awml.Warnings(doc) {
+		docs := make([]*awml.Map, len(files))
+		errors := make([][]string, len(files))
+		var given []awml.Workflow
+		var at []int
+		for i, path := range files {
+			docs[i], errors[i] = read(path)
+			if awml.IsCanonical(docs[i]) {
+				given = append(given, awml.Workflow{File: path, Doc: docs[i]})
+				at = append(at, i)
+			}
+		}
+		// Each ref between the workflows given is followed.
+		warnings := make([][]string, len(files))
+		mistakes, shared := awml.TogetherMistakes(given), awml.TogetherWarnings(given)
+		for n, i := range at {
+			errors[i] = append(errors[i], mistakes[n]...)
+			warnings[i] = shared[n]
+		}
+		for i, path := range files {
+			doc, errs := docs[i], errors[i]
+			for _, warning := range append(awml.Warnings(doc), warnings[i]...) {
 				fmt.Fprintf(stdout, "%s: warning: %s\n", path, warning)
 			}
 			if len(errs) == 0 {
@@ -293,6 +315,19 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if !ok {
 		return 1
 	}
+	if command == "draw" && len(docs) > 1 {
+		var given []awml.Workflow
+		for i, doc := range docs {
+			if !awml.IsCanonical(doc) {
+				_, err := awml.View(doc, "")
+				fmt.Fprintf(stderr, "%s: %s\n", files[i], err)
+				return 1
+			}
+			given = append(given, awml.Workflow{File: files[i], Doc: doc})
+		}
+		fmt.Fprintln(stdout, awml.DrawMap(given))
+		return 0
+	}
 	if command == "draw" {
 		view, err := awml.View(docs[0], implementation)
 		if untrusted {
@@ -306,31 +341,37 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 0
 	}
 	if command == "fit" {
-		if !awml.IsCanonical(docs[0]) {
-			fmt.Fprintf(stderr, "%s: must be a workflow\n", files[0])
+		// A file with platform is a platform description, and any other is a workflow.
+		var given []awml.Workflow
+		var descriptions []*awml.Map
+		for i, doc := range docs {
+			if _, ok := doc.Get("platform"); ok {
+				descriptions = append(descriptions, doc)
+			} else {
+				given = append(given, awml.Workflow{File: files[i], Doc: doc})
+			}
+		}
+		if len(given) == 0 {
+			fmt.Fprintln(stderr, "awml fit: no workflow was given")
 			return 1
 		}
-		var placement *awml.Map
-		start := 1
+		if implementation != "" && len(given) > 1 {
+			return fail(commands[command].usage, "awml fit", "argument --implementation: judges one workflow, not several")
+		}
+		var report awml.FitReport
 		if implementation != "" {
-			var err error
-			placement, err = awml.View(docs[0], implementation)
+			placement, err := awml.View(given[0].Doc, implementation)
 			if err != nil {
 				fmt.Fprintln(stderr, err)
 				return 1
 			}
-		}
-		if placement == nil && start == len(docs) {
-			fmt.Fprintf(stderr, "awml fit: no platform descriptions were given\n")
+			report = awml.Judge(given[0].Doc, placement, descriptions)
+		} else if len(descriptions) == 0 {
+			fmt.Fprintln(stderr, "awml fit: no platform descriptions were given")
 			return 1
+		} else {
+			report = awml.JudgeTogether(given, descriptions)
 		}
-		for i := start; i < len(docs); i++ {
-			if _, ok := docs[i].Get("platform"); !ok {
-				fmt.Fprintf(stderr, "%s: must be a platform description\n", files[i])
-				return 1
-			}
-		}
-		report := awml.Judge(docs[0], placement, docs[start:])
 		output := awml.FitLines(report.Results)
 		code := 0
 		if len(report.Gaps) != 0 {
@@ -350,7 +391,11 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return code
 	}
 	if command == "summary" {
-		summary := awml.Summarise(docs...)
+		var given []awml.Workflow
+		for i, doc := range docs {
+			given = append(given, awml.Workflow{File: files[i], Doc: doc})
+		}
+		summary := awml.SummariseTogether(given)
 		if jsonOutput {
 			if err := json.NewEncoder(stdout).Encode(summary); err != nil {
 				fmt.Fprintf(stderr, "awml summary: can't write its output: %s\n", err)
@@ -358,7 +403,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			}
 			return 0
 		}
-		printSummary(stdout, summary)
+		printSummary(stdout, summary, len(given) > 1)
 		return 0
 	}
 	if err := os.WriteFile(*out, []byte(awml.Page(docs)), 0o644); err != nil {
@@ -430,7 +475,37 @@ func currentVersion() string {
 	return awml.BuildVersion()
 }
 
-func printSummary(out io.Writer, s awml.Summary) {
+// expandFolders gives the files named, with each folder standing for every .yaml file directly
+// inside it, in the order of their names. A path that can't be read as a folder is a file.
+func expandFolders(paths []string) []string {
+	var files []string
+	for _, path := range paths {
+		entries, err := os.ReadDir(path)
+		if err != nil {
+			files = append(files, path)
+			continue
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".yaml") {
+				files = append(files, filepath.Join(path, entry.Name()))
+			}
+		}
+	}
+	return files
+}
+
+func isOneOf(s string, choices ...string) bool {
+	for _, c := range choices {
+		if s == c {
+			return true
+		}
+	}
+	return false
+}
+
+// printSummary prints a summary. Workflows given together also have the parts they share, and what
+// waits on people across them.
+func printSummary(out io.Writer, s awml.Summary, together bool) {
 	fmt.Fprintf(out, "steps: AI %d, code %d, person %d\n", s.Steps.AI, s.Steps.Code, s.Steps.Person)
 	var operations []string
 	for op, count := range s.Operations {
@@ -462,6 +537,20 @@ func printSummary(out io.Writer, s awml.Summary) {
 			for _, name := range names {
 				fmt.Fprintf(out, "      %s\n", name)
 			}
+		}
+	}
+	if !together {
+		return
+	}
+	fmt.Fprintf(out, "shared parts: %d\n", len(s.Shared))
+	for _, shared := range s.Shared {
+		fmt.Fprintf(out, "  %s (%s): %s\n", shared.Label, shared.Kind, strings.Join(shared.Workflows, ", "))
+	}
+	fmt.Fprintf(out, "waiting on people: %d\n", len(s.Waits))
+	for _, wait := range s.Waits {
+		fmt.Fprintf(out, "  %s (%s), in %s, run by:\n", wait.Label, wait.Kind, wait.Workflow)
+		for _, trigger := range wait.Triggers {
+			fmt.Fprintf(out, "    %s\n", trigger)
 		}
 	}
 }

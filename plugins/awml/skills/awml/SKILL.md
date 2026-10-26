@@ -47,7 +47,9 @@ Some judgements need care:
 
 Write the design first, then add its implementations in the same file. Name it after the workflow, as `standup.yaml`, and save it where the person keeps their work. In a chat with no files, give it in a `yaml` code block.
 
-Start with a comment saying what the file shows, then `awml: "0.6"`, `title`, `scopes`, `parts` and `lines`. Write the parts in the order the work flows. Quote every label. Ids are short words joined by underscores, such as `meal_plan`. Give each step an `op` where one fits, using the spec's table of operations for what each produces and must not do. A scope's `processing`, a trigger's `wait` and a context's `at` let `awml fit` judge where the design can run. Mark a trigger, connector or context that takes in text anyone can write `untrusted: true`, and a code step that passes on only what's safe from it `cleans: true`, as the spec's "Untrusted text" says.
+Start with `awml: "0.6"`, `title`, a `description` saying what the workflow is for, written as a literal block starting `|`, then `scopes`, `parts` and `lines`. Write the parts in the order the work flows. Quote every label. Ids are short words joined by underscores, such as `meal_plan`. Give each step an `op` where one fits, using the spec's table of operations for what each produces and must not do. A scope's `processing`, a trigger's `wait` and a context's `at` let `awml fit` judge where the design can run. Mark a trigger, connector or context that takes in text anyone can write `untrusted: true`, and a code step that passes on only what's safe from it `cleans: true`, as the spec's "Untrusted text" says.
+
+Where the workflow hands work to another, or reaches the same note, account or surface, draw that part in both. It belongs to the workflow that creates it: a trigger to the one it starts, a context to its first writer. In every other workflow, give its copy a `ref` naming that part, as `shopping.yaml#list` for a file alongside or `owner/slug#id` for a published one, and keep its kind, label, `at` and scope the same. The spec's "Workflows together" says how.
 
 Add `implementations` as a map of ids to entries with a `label` and `blocks`. Each block has `id`, `label` and `parts`, a list of design part ids; it may have `platform`, the id of its platform description, and `in`, its parent block. Every part except a trigger or comment needs exactly one block per implementation. Keep the design's parts and lines once. An implementation may add `comments`, each with `id`, `label`, `in`, its block, and `ties`, the design part ids it explains. Scope, part, block and comment ids must be unique across the file.
 
@@ -85,7 +87,7 @@ If you have a shell, see whether `awml` is there and which release it is with `a
 awml check standup.yaml
 ```
 
-It prints `ok` for each sound file, or one line for each mistake, naming the part or line it is in. Fix every one and run it again until the file prints `ok`. In a drawing of a live system, a line that breaks a rule because the system really did that stays, and is drawn red. If it says the file is of a version it no longer reads, upgrade it with `awml convert old.yaml > new.yaml`, then check the new file.
+Give workflows that share parts together, as `awml check dinners.yaml shopping.yaml` or their folder, so it follows each `ref` between them. It prints `ok` for each sound file, or one line for each mistake, naming the part or line it is in. Fix every one and run it again until the file prints `ok`. In a drawing of a live system, a line that breaks a rule because the system really did that stays, and is drawn red. If it says the file is of a version it no longer reads, upgrade it with `awml convert old.yaml > new.yaml`, then check the new file.
 
 If you have no shell, or `awml` can't be installed, go through `references/checking-by-hand.md` for each file instead. Then say plainly that the files were checked by hand, not by `awml check`, and that `awml check` will confirm them.
 
@@ -96,6 +98,7 @@ In the security view, a `data` line into a box that isn't the source's or one in
 - `awml draw standup.yaml` prints the file's Mermaid, which needs Mermaid 11.4.1 or later. Where the host renders Mermaid, show it in a `mermaid` code block.
 - `awml draw --implementation ID standup.yaml` prints that implementation's platform view.
 - `awml draw --untrusted standup.yaml` prints the untrusted view, for a file that marks a part untrusted.
+- `awml draw dinners.yaml shopping.yaml` prints the map of workflows that share parts: a box for each, and each shared part once between them.
 - `awml page standup.yaml -o standup.html` writes one standalone HTML page with the security view and every implementation, to share or open in a browser.
 - For an SVG, save the Mermaid to `standup.mmd` and run `npx -y @mermaid-js/mermaid-cli@11.4.1 -b white -i standup.mmd -o standup.svg`, which needs Node.
 
@@ -121,7 +124,7 @@ The files stay where the person keeps their work; if they want to share the work
 - **Unquoted values YAML reads as something else.** A date or a number as a label gives `YAML read its label as …, not text: put it in quotes`. An unquoted label with `: ` in it isn't YAML at all, one with a comma is split in two and shows up as an unknown field, and an unquoted `[yes]` is read as a list. Quote every label.
 - **A line to an unknown part.** Usually a typo, or a line drawn to a group's id. Lines join parts only.
 - **A connector in the wrong place.** In the security view it sits in the scope its inputs take, not wherever the service is. In the platform view it sits in the block of the service it reaches. Its label says whose access it is, as `"Owen's supermarket account"`.
-- **Kinds and fields from other notations.** `agent`, `human`, `decision` and `note` aren't kinds, and `description` and `colour` aren't fields. Use only the kinds and fields the spec lists.
+- **Kinds and fields from other notations.** `agent`, `human`, `decision` and `note` aren't kinds, and `colour` and `shared` aren't fields. Use only the kinds and fields the spec lists.
 - **Hyphens in ids.** `meal-plan` isn't an id, but `meal_plan` is. An `op` such as `bring-in` isn't an id, so its hyphen is right.
 - **An `op` on a part that isn't a step.** Only `ai`, `code` and `person` parts take one. A review needs none.
 - **A comment joined by a `data` line.** A comment takes `tie` lines only.

@@ -265,6 +265,10 @@ func writeBlockMap(out *strings.Builder, value *Map, indent int, root bool) {
 				out.WriteByte('\n')
 			}
 		default:
+			if block, ok := literalBlock(field); ok {
+				writeLiteral(out, block, indent+2)
+				continue
+			}
 			out.WriteByte(' ')
 			writeScalar(out, field, key, value)
 			out.WriteByte('\n')
@@ -276,7 +280,7 @@ func marshalKeys(value *Map, root bool) []string {
 	if !root || !IsCanonical(value) {
 		return value.Keys()
 	}
-	ordered := []string{"awml", "title", "scopes", "parts", "lines", "implementations"}
+	ordered := []string{"awml", "title", "description", "scopes", "parts", "lines", "implementations"}
 	var keys []string
 	seen := map[string]bool{}
 	for _, key := range ordered {
@@ -291,6 +295,35 @@ func marshalKeys(value *Map, root bool) []string {
 		}
 	}
 	return keys
+}
+
+// literalBlock gives text written in lines, such as a description, as the lines of a literal block,
+// which keeps each line as written. Text a literal block can't hold as it is, such as text that
+// starts with a space or ends with blank lines, isn't one.
+func literalBlock(value any) ([]string, bool) {
+	text, ok := value.(string)
+	if !ok || !strings.Contains(text, "\n") ||
+		strings.HasPrefix(text, " ") || strings.HasSuffix(text, "\n\n") || strings.ContainsAny(text, "\r\t") {
+		return nil, false
+	}
+	return strings.Split(text, "\n"), true
+}
+
+// writeLiteral writes a literal block: | when the text ends with a newline, and |- when it doesn't.
+func writeLiteral(out *strings.Builder, lines []string, indent int) {
+	if lines[len(lines)-1] == "" {
+		out.WriteString(" |\n")
+		lines = lines[:len(lines)-1]
+	} else {
+		out.WriteString(" |-\n")
+	}
+	for _, line := range lines {
+		if line != "" {
+			writeIndent(out, indent)
+			out.WriteString(line)
+		}
+		out.WriteByte('\n')
+	}
 }
 
 func flowMapKey(key string) bool {
