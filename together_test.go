@@ -129,6 +129,53 @@ func TestARefToItsOwnWorkflowIsAMistake(t *testing.T) {
 	togetherFinds(t, together(t, "meals/plan.yaml", plan, "meals/shop.yaml", shopWorkflow), want, nil)
 }
 
+// notes is a workflow that writes notes, which it refers to another workflow for, or owns when ref is
+// empty.
+func notes(title, ref string) string {
+	if ref != "" {
+		ref = ", ref: " + ref
+	}
+	return `awml: "0.6"
+title: ` + title + `
+scopes:
+  - { id: s, label: "s: Ana", processing: any }
+parts:
+  - { id: go, kind: trigger, label: "Go", wait: PT1H }
+  - { id: step, kind: code, op: sort, label: Sort, in: s }
+  - { id: notes, kind: context, label: Notes, in: s` + ref + ` }
+lines:
+  - { from: go, to: step, kind: start }
+  - { from: step, to: notes, kind: data }
+`
+}
+
+// A part's refs lead to the one copy that owns it, so refs that go round in a circle are a mistake
+// in each file on the circle.
+func TestRefsThatGoRoundInACircleAreAMistake(t *testing.T) {
+	togetherFinds(t, together(t, "a.yaml", notes("A", "b.yaml#notes"), "b.yaml", notes("B", "a.yaml#notes")),
+		[]string{`part "notes" refers to b.yaml#notes, but its refs go round in a circle through b.yaml, so no workflow owns it: the owner's copy has no ref`},
+		[]string{`part "notes" refers to a.yaml#notes, but its refs go round in a circle through a.yaml, so no workflow owns it: the owner's copy has no ref`})
+	workflows := together(t, "a.yaml", notes("A", "b.yaml#notes"), "b.yaml", notes("B", "c.yaml#notes"), "c.yaml", notes("C", "a.yaml#notes"), "d.yaml", notes("D", "a.yaml#notes"))
+	togetherFinds(t, workflows,
+		[]string{`part "notes" refers to b.yaml#notes, but its refs go round in a circle through b.yaml and c.yaml, so no workflow owns it: the owner's copy has no ref`},
+		[]string{`part "notes" refers to c.yaml#notes, but its refs go round in a circle through c.yaml and a.yaml, so no workflow owns it: the owner's copy has no ref`},
+		[]string{`part "notes" refers to a.yaml#notes, but its refs go round in a circle through a.yaml and b.yaml, so no workflow owns it: the owner's copy has no ref`},
+		nil)
+	// Every copy is still one part.
+	want := [][]string{{`context "notes" is written by a.yaml, b.yaml, c.yaml and d.yaml: each may change what another relies on`}, nil, nil, nil}
+	if got := TogetherWarnings(workflows); !reflect.DeepEqual(got, want) {
+		t.Errorf("TogetherWarnings gave %q\nwant %q", got, want)
+	}
+	// The first copy on the circle given stands in for the owner, wherever the refs are followed from.
+	workflows = together(t, "d.yaml", notes("D", "b.yaml#notes"), "a.yaml", notes("A", "b.yaml#notes"), "b.yaml", notes("B", "a.yaml#notes"))
+	want = [][]string{nil, {`context "notes" is written by a.yaml, d.yaml and b.yaml: each may change what another relies on`}, nil}
+	if got := TogetherWarnings(workflows); !reflect.DeepEqual(got, want) {
+		t.Errorf("TogetherWarnings gave %q\nwant %q", got, want)
+	}
+	// A chain of refs that ends at an owner is no circle.
+	togetherFinds(t, together(t, "a.yaml", notes("A", "b.yaml#notes"), "b.yaml", notes("B", "c.yaml#notes"), "c.yaml", notes("C", "")))
+}
+
 func TestACopyThatDisagreesWithThePartItRefersToIsAMistake(t *testing.T) {
 	for _, tc := range []struct{ from, to, want string }{
 		{"label: Shopping list, at", "label: The list, at", `part "list" refers to plan.yaml#list, but its label is "The list" here and "Shopping list" there`},

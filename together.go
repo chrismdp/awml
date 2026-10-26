@@ -57,6 +57,7 @@ func link(workflows []Workflow) linked {
 		}
 	}
 	to := map[*Map]partAt{}
+	var referring []partAt
 	for i, w := range workflows {
 		if !sound[i] {
 			continue
@@ -84,17 +85,21 @@ func link(workflows []Workflow) linked {
 				l.found[i].add("refs.agree", name+clause)
 			}
 			to[p] = partAt{t, target}
+			referring = append(referring, partAt{i, p})
 		}
 	}
-	// Each copy leads back along its refs to the one that refers to nothing given.
-	rootOf := func(p partAt) partAt {
-		seen := map[*Map]bool{}
-		for next, ok := to[p.part]; ok && !seen[next.part]; next, ok = to[p.part] {
-			seen[p.part] = true
-			p = next
+	roots, circles := owners(to, referring)
+	for _, circle := range circles {
+		for n, c := range circle {
+			var through []string
+			for k := 1; k < len(circle); k++ {
+				through = append(through, workflows[circle[(n+k)%len(circle)].workflow].File)
+			}
+			l.found[c.workflow].add("refs.owner", fmt.Sprintf(`part "%s" refers to %s, but its refs go round in a circle through %s, so no workflow owns it: the owner's copy has no ref`,
+				str(c.part, "id"), str(c.part, "ref"), naturalList(through)))
 		}
-		return p
 	}
+	rootOf := func(p partAt) partAt { return roots[p.part] }
 	byRoot := map[*Map]int{}
 	for i, w := range workflows {
 		if !sound[i] {
@@ -151,6 +156,54 @@ func link(workflows []Workflow) linked {
 	l.warnShared()
 	l.warnUntrusted()
 	return l
+}
+
+// owners follows each copy that refers, given in order, along its refs to the copy that owns the
+// part, the one that refers to nothing given. Refs that go round in a circle lead to no owner, so it
+// gives each circle, from the first of its copies given, and that copy stands in for the owner.
+func owners(to map[*Map]partAt, referring []partAt) (map[*Map]partAt, [][]partAt) {
+	roots := map[*Map]partAt{}
+	given := map[*Map]int{}
+	for n, c := range referring {
+		given[c.part] = n
+	}
+	var circles [][]partAt
+	for _, start := range referring {
+		var path []partAt
+		on := map[*Map]int{}
+		p, root := start, start
+		for {
+			if known, ok := roots[p.part]; ok {
+				root = known
+				break
+			}
+			next, refers := to[p.part]
+			if !refers {
+				root = p
+				break
+			}
+			if n, ok := on[p.part]; ok {
+				circle := path[n:]
+				first := 0
+				for k, c := range circle {
+					if given[c.part] < given[circle[first].part] {
+						first = k
+					}
+				}
+				circle = append(append([]partAt{}, circle[first:]...), circle[:first]...)
+				circles = append(circles, circle)
+				root = circle[0]
+				break
+			}
+			on[p.part] = len(path)
+			path = append(path, p)
+			p = next
+		}
+		for _, c := range path {
+			roots[c.part] = root
+		}
+	}
+	return roots, circles
 }
 
 // disagreements says how a copy differs from the part it refers to: its kind, label or at, or its
