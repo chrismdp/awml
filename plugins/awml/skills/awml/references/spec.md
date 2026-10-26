@@ -200,7 +200,7 @@ Given more than one workflow:
 
 - `awml check` checks each one alone, then follows each reference between them. A reference to a part that isn't there is a mistake. So is a copy that differs from the part it refers to in its kind, label or `at`, or whose scope holds other people or has other terms: scopes are compared by what they are, not by their ids. It warns of a context that more than one workflow writes, since each may change what another relies on, and of a connector that more than one brings items in from, since each may take an item another expects. It follows untrusted text through the parts they share, and warns of each outside action the text reaches.
 - `awml draw` draws their **map**: one box for each workflow, with its title and the triggers it runs on, and each part they share drawn once between the boxes. A line runs from each workflow that leads into the part, and to each workflow it leads into.
-- `awml summary` counts each part they share once, and follows untrusted text through them. It lists the parts they share, with the workflows that have each, and what waits on a person in each workflow: every review and standing approval, and every person's own step that leads to an Ask action, with the triggers that workflow runs on, which say how often it waits.
+- `awml summary` counts each part they share once, and follows untrusted text through them. It lists the parts they share, with the workflows that have each.
 - `awml fit` judges each platform as running every workflow given, with each part they share placed once, and names each part and scope after its file, as in `dinners#plan`.
 
 <img src="examples/family-map.svg" alt="The family's dinners and its question, drawn together">

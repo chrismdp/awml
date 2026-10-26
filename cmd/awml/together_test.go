@@ -130,7 +130,7 @@ func TestSummaryOfSeveralWorkflowsNamesWhatTheyShare(t *testing.T) {
 		t.Errorf("summary --json gave %+v", got)
 	}
 	got := awmlRun("summary", plan, shopping)
-	if got.code != 0 || !strings.Contains(got.stdout, "shared parts: 2\n  Shopping list (context): Dinners, Shopping\n  The shopping list is ready (trigger): Dinners, Shopping\n") {
+	if got.code != 0 || !strings.HasSuffix(got.stdout, "shared parts: 2\n  Shopping list (context): Dinners, Shopping\n  The shopping list is ready (trigger): Dinners, Shopping\n") {
 		t.Errorf("summary gave %+v", got)
 	}
 }

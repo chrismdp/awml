@@ -503,8 +503,7 @@ func isOneOf(s string, choices ...string) bool {
 	return false
 }
 
-// printSummary prints a summary. Workflows given together also have the parts they share, and what
-// waits on people across them.
+// printSummary prints a summary. Workflows given together also have the parts they share.
 func printSummary(out io.Writer, s awml.Summary, together bool) {
 	fmt.Fprintf(out, "steps: AI %d, code %d, person %d\n", s.Steps.AI, s.Steps.Code, s.Steps.Person)
 	var operations []string
@@ -545,13 +544,6 @@ func printSummary(out io.Writer, s awml.Summary, together bool) {
 	fmt.Fprintf(out, "shared parts: %d\n", len(s.Shared))
 	for _, shared := range s.Shared {
 		fmt.Fprintf(out, "  %s (%s): %s\n", shared.Label, shared.Kind, strings.Join(shared.Workflows, ", "))
-	}
-	fmt.Fprintf(out, "waiting on people: %d\n", len(s.Waits))
-	for _, wait := range s.Waits {
-		fmt.Fprintf(out, "  %s (%s), in %s, run by:\n", wait.Label, wait.Kind, wait.Workflow)
-		for _, trigger := range wait.Triggers {
-			fmt.Fprintf(out, "    %s\n", trigger)
-		}
 	}
 }
 
