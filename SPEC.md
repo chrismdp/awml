@@ -188,7 +188,7 @@ lines:
   - { from: list, to: fill, kind: data }
 ```
 
-A part belongs to the workflow that creates it: a trigger to the workflow it starts, and a context to its first writer. Every other workflow refers to it. Two parts with the same id and no `ref` aren't linked. A reference follows the latest version of the workflow it names.
+A part belongs to the workflow that creates it: a trigger to the workflow it starts, and a context to its first writer. Every other workflow refers to it, and a `ref` that names its own workflow is a mistake. Two parts with the same id and no `ref` aren't linked. A reference follows the latest version of the workflow it names.
 
 When the registry publishes a workflow, it rewrites each path to a workflow of the same owner, taking the slug from the file's name, so `shopping.yaml#list` becomes `owner/shopping#list`. Refer to a workflow published under another slug as `owner/slug#id` in the first place. A public workflow may refer only to public ones.
 

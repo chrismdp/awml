@@ -61,7 +61,7 @@ func TestTheChecksKeepTheirIDsAndTheSpecsOrder(t *testing.T) {
 		"ties.comment", "ops.known", "operations.only-do-acts", "operations.answer-check-read-only",
 		"tiers.written", "tiers.shape", "approvals.listed", "processing.written", "processing.nested",
 		"platform.blocks-only", "wait.duration", "at.path", "untrusted.parts", "cleans.code-only", "refs.written", "refs.parts", "placement.once", "placement.complete",
-		"refs.known", "refs.agree",
+		"refs.known", "refs.agree", "refs.owner",
 		"warn.do-by-code", "warn.one-change", "warn.untrusted-outside", "warn.shared-writers", "warn.shared-readers",
 		"description.values", "description.ids",
 	}
@@ -376,6 +376,7 @@ lines:
 	for _, pair := range [][2]string{
 		{planMore, shopMore},
 		{strings.Replace(planWorkflow, "shop.yaml#ready", "shop.yaml#gone", 1), strings.Replace(shopWorkflow, "label: Shopping list", "label: The list", 1)},
+		{strings.Replace(planWorkflow, "shop.yaml#ready", "plan.yaml#thu", 1), shopWorkflow},
 	} {
 		workflows := together(t, "plan.yaml", pair[0], "shop.yaml", pair[1])
 		mistakes, warnings := TogetherMistakes(workflows), TogetherWarnings(workflows)
@@ -384,7 +385,7 @@ lines:
 			got := []string{}
 			for _, check := range CheckSources("dev", []Source{source("plan.yaml", pair[0]), source("shop.yaml", pair[1])}).Checks {
 				for _, mistake := range check.Mistakes {
-					if mistake.File == file && isOneOf(check.ID, "refs.known", "refs.agree", "warn.shared-writers", "warn.shared-readers") {
+					if mistake.File == file && isOneOf(check.ID, "refs.known", "refs.agree", "refs.owner", "warn.shared-writers", "warn.shared-readers") {
 						got = append(got, mistake.Message)
 						failed[check.ID] = true
 					}

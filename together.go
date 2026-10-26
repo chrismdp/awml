@@ -67,6 +67,10 @@ func link(workflows []Workflow) linked {
 				continue
 			}
 			t := refersTo(workflows, w, workflow)
+			if t == i {
+				l.found[i].add("refs.owner", fmt.Sprintf(`part "%s" refers to %s#%s, which is in its own workflow: a ref names a part of another workflow`, str(p, "id"), workflow, id))
+				continue
+			}
 			if t < 0 || !sound[t] {
 				continue
 			}

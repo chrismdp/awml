@@ -116,6 +116,19 @@ func TestAPublishedRefIsFollowedToAFilePulledIntoItsOwnersFolder(t *testing.T) {
 	togetherFinds(t, together(t, "pulled/other/plan.yaml", planWorkflow, "shop.yaml", shop))
 }
 
+// A ref names a part of another workflow, so one that names its own is a mistake, whether or not the
+// part is there.
+func TestARefToItsOwnWorkflowIsAMistake(t *testing.T) {
+	plan := strings.Replace(planWorkflow, "  - { id: ready,", "  - { id: copy, kind: context, label: Shopping list, at: notes/list, in: family, ref: plan.yaml#list }\n"+
+		"  - { id: gone, kind: context, label: Old list, in: family, ref: ../meals/plan.yaml#gone }\n  - { id: ready,", 1)
+	want := []string{
+		`part "copy" refers to plan.yaml#list, which is in its own workflow: a ref names a part of another workflow`,
+		`part "gone" refers to ../meals/plan.yaml#gone, which is in its own workflow: a ref names a part of another workflow`,
+	}
+	togetherFinds(t, together(t, "meals/plan.yaml", plan), want)
+	togetherFinds(t, together(t, "meals/plan.yaml", plan, "meals/shop.yaml", shopWorkflow), want, nil)
+}
+
 func TestACopyThatDisagreesWithThePartItRefersToIsAMistake(t *testing.T) {
 	for _, tc := range []struct{ from, to, want string }{
 		{"label: Shopping list, at", "label: The list, at", `part "list" refers to plan.yaml#list, but its label is "The list" here and "Shopping list" there`},
