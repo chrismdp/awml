@@ -1,4 +1,4 @@
-awml: "0.6"
+awml: "0.7"
 title: The parts of a drawing
 description: |
   Every kind of part, as a key to reading the drawings. The hidden lines only lay it out as a grid.

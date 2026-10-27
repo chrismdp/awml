@@ -1,6 +1,6 @@
 # A drawing of a live system whose line into a Block action breaks a rule, so check fails and draw
 # draws it red. The bakery is fictional.
-awml: "0.6"
+awml: "0.7"
 title: The bakery's old files
 scopes:
   - { id: bakery, label: "bakery: Ana, Ben", processing: any }

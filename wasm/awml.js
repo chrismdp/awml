@@ -86,15 +86,18 @@ async function start(source) {
       return JSON.parse(this.fitJSON(sourceTexts, implementation));
     },
     // convert upgrades one file of an older version, or joins a legacy security view and its
-    // platform view given as [security, platform], into one 0.6 file, as awml convert does. When the
-    // current rules find mistakes in the file, it throws them, one to a line, and the error's
+    // platform view given as [security, platform], into one 0.7 file, as awml convert does. When it
+    // notes something it couldn't carry over, or the current rules find mistakes in the file, it
+    // throws them, one to a line, notes first. The error's notes and mistakes hold each, and its
     // converted holds the file, which awml convert still writes.
     convert(sourceTexts, implementation = "") {
       const sources = Array.isArray(sourceTexts) ? sourceTexts : [sourceTexts];
       const decoded = JSON.parse(globalThis.__awmlConvert(JSON.stringify(sources), implementation));
       if (decoded.error) throw new Error(decoded.error);
-      if (decoded.mistakes.length) {
-        const error = new Error(decoded.mistakes.join("\n"));
+      if (decoded.notes.length || decoded.mistakes.length) {
+        const error = new Error([...decoded.notes, ...decoded.mistakes].join("\n"));
+        error.notes = decoded.notes;
+        error.mistakes = decoded.mistakes;
         error.converted = decoded.file;
         throw error;
       }

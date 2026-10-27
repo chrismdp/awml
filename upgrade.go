@@ -12,11 +12,28 @@ import (
 // version comes back as it is. The file needn't pass Check, and the result may not either, since
 // newer versions hold a file to rules older ones didn't.
 //
-// From 0.5, each publish line becomes a data line, since a data line publishes whenever its scopes
-// make it one. A line's breaks goes, since the check works out which lines are red. A line marked
-// red that the check doesn't find gets a comment tied to both its ends, so the finding stays on
-// the drawing.
+// From 0.6, a trigger of another workflow that only do steps lead into becomes their outside action,
+// which refers to it, since a trigger is never a destination. From 0.5, each publish line becomes a
+// data line, since a data line publishes whenever its scopes make it one. A line's breaks goes,
+// since the check works out which lines are red. A line marked red that the check doesn't find gets
+// a comment tied to both its ends, so the finding stays on the drawing.
 func Upgrade(doc any) (*Map, error) {
+	file, _, err := upgrade(doc)
+	return file, err
+}
+
+// upgrade upgrades a file as Upgrade does, and gives a note of what it couldn't carry over, for the
+// author to do by hand.
+func upgrade(doc any) (*Map, []string, error) {
+	file, err := upgradeFile(doc)
+	if err != nil || file == doc {
+		return file, nil, err
+	}
+	notes := startOutsideActions(file)
+	return file, notes, nil
+}
+
+func upgradeFile(doc any) (*Map, error) {
 	file, ok := doc.(*Map)
 	if !ok {
 		return nil, errors.New("the file must be a mapping of fields, starting with awml")
@@ -74,6 +91,111 @@ func Upgrade(doc any) (*Map, error) {
 	}
 	commentRedLines(out, red)
 	return out, nil
+}
+
+// startOutsideActions turns each trigger of another workflow, which only do steps lead into and
+// nothing leads out of, into their outside action, which refers to it as the trigger did. A do step
+// leads to it with no review in front, so it's Allow. It waits for nothing, so its wait goes. It sits
+// in the scope of the first do step that leads to it, where it has none, and in that step's block in
+// each implementation that doesn't place it. Only a trigger, connector or context is marked
+// untrusted, so its mark goes too, and it gives a note saying the mark belongs on the trigger it
+// starts. Any other line into a trigger stays, for the check to report and the author to redraw.
+func startOutsideActions(file *Map) []string {
+	parts, ok := file.get("parts").([]any)
+	if !ok || file.has("platform") {
+		return nil
+	}
+	parts = append([]any{}, parts...)
+	byID := map[string]*Map{}
+	for _, p := range soundMaps(parts) {
+		byID[str(p, "id")] = p
+	}
+	lines := soundMaps(file.get("lines"))
+	var notes []string
+	for n, item := range parts {
+		p, ok := item.(*Map)
+		if !ok || p.get("kind") != "trigger" || !p.has("ref") {
+			continue
+		}
+		var from []*Map
+		onlyDo := true
+		for _, l := range lines {
+			if !lineLeads(l) {
+				continue
+			}
+			if l.get("from") == p.get("id") {
+				onlyDo = false
+			}
+			if l.get("to") == p.get("id") {
+				step := byID[str(l, "from")]
+				onlyDo = onlyDo && step != nil && steps[str(step, "kind")] && step.get("op") == "do"
+				from = append(from, step)
+			}
+		}
+		if len(from) == 0 || !onlyDo {
+			continue
+		}
+		action := copyMap(p, "wait", "untrusted")
+		action.set("kind", "outside")
+		action.set("label", str(p, "label")+": Allow")
+		if !p.has("in") && from[0].has("in") {
+			action.set("in", from[0].get("in"))
+		}
+		if p.get("untrusted") == true {
+			notes = append(notes, fmt.Sprintf(`part "%s" was a trigger marked untrusted, and an outside action isn't: mark the trigger it starts, %s, untrusted instead`, str(p, "id"), show(p.get("ref"))))
+		}
+		parts[n] = action
+		placeBeside(file, str(action, "id"), str(from[0], "id"))
+	}
+	file.set("parts", parts)
+	return notes
+}
+
+// placeBeside places a part in the block of another, in each implementation that doesn't place it.
+func placeBeside(file *Map, id, beside string) {
+	implementations, ok := file.get("implementations").(*Map)
+	if !ok {
+		return
+	}
+	out := &Map{}
+	for _, name := range implementations.Keys() {
+		impl, ok := implementations.get(name).(*Map)
+		var blocks []any
+		if ok {
+			blocks, ok = impl.get("blocks").([]any)
+		}
+		if !ok {
+			out.set(name, implementations.get(name))
+			continue
+		}
+		placed, at := false, -1
+		for n, block := range blocks {
+			b, ok := block.(*Map)
+			if !ok {
+				continue
+			}
+			ids, _ := b.get("parts").([]any)
+			for _, part := range ids {
+				placed = placed || part == id
+				if part == beside && at < 0 {
+					at = n
+				}
+			}
+		}
+		if placed || at < 0 {
+			out.set(name, impl)
+			continue
+		}
+		block := copyMap(blocks[at].(*Map))
+		ids, _ := block.get("parts").([]any)
+		block.set("parts", append(append([]any{}, ids...), id))
+		blocks = append([]any{}, blocks...)
+		blocks[at] = block
+		impl = copyMap(impl)
+		impl.set("blocks", blocks)
+		out.set(name, impl)
+	}
+	file.set("implementations", out)
 }
 
 // soundLists reports the first of a file's lists that isn't a list of mappings, which no version
@@ -162,37 +284,37 @@ func commentRedLines(file *Map, red []*Map) {
 // or from a legacy security view followed by its platform view, whose implementation is named
 // default unless it's given. A file of the current version comes back as it was. Otherwise each
 // YAML comment of the files moves to the top once, in the files' order. It also gives the mistakes
-// Check finds in the result, since newer rules can find mistakes in a file that older ones passed.
-// A mistake in one of the files starts with its name, when it has one.
-func ConvertSources(sources []Source, implementation string) ([]byte, []string, error) {
+// Check finds in the result, since newer rules can find mistakes in a file that older ones passed,
+// and before those its notes of what it couldn't carry over, for the author to do by hand. A
+// mistake in one of the files starts with its name, when it has one.
+func ConvertSources(sources []Source, implementation string) (file []byte, notes, mistakes []string, err error) {
 	if len(sources) == 0 || len(sources) > 2 {
-		return nil, nil, errors.New("convert takes one file, or a security view and its platform view")
+		return nil, nil, nil, errors.New("convert takes one file, or a security view and its platform view")
 	}
 	if len(sources) == 1 && implementation != "" {
-		return nil, nil, errors.New("only a legacy pair has an implementation to name")
+		return nil, nil, nil, errors.New("only a legacy pair has an implementation to name")
 	}
 	var docs []any
 	var comments []string
 	for _, source := range sources {
 		doc, err := Parse(source.Text)
 		if err != nil {
-			return nil, nil, named(source, errors.New("isn't YAML: "+strings.Join(strings.Fields(err.Error()), " ")))
+			return nil, nil, nil, named(source, errors.New("isn't YAML: "+strings.Join(strings.Fields(err.Error()), " ")))
 		}
 		found, err := Comments(source.Text)
 		if err != nil {
-			return nil, nil, named(source, err)
+			return nil, nil, nil, named(source, err)
 		}
 		docs = append(docs, doc)
 		comments = append(comments, found...)
 	}
 	var converted *Map
-	var err error
 	if len(docs) == 1 {
 		if file, ok := docs[0].(*Map); ok && file.get("awml") == currentFormat {
-			return sources[0].Text, Check(file), nil
+			return sources[0].Text, nil, Check(file), nil
 		}
-		if converted, err = Upgrade(docs[0]); err != nil {
-			return nil, nil, named(sources[0], err)
+		if converted, notes, err = upgrade(docs[0]); err != nil {
+			return nil, nil, nil, named(sources[0], err)
 		}
 	} else {
 		if implementation == "" {
@@ -201,20 +323,20 @@ func ConvertSources(sources []Source, implementation string) ([]byte, []string, 
 		security, _ := docs[0].(*Map)
 		platform, _ := docs[1].(*Map)
 		if converted, err = ConvertWithImplementation(security, platform, implementation); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
 	dropComments(converted)
 	data, err := Marshal(converted)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	var out bytes.Buffer
 	for _, comment := range comments {
 		out.WriteString(comment + "\n")
 	}
 	out.Write(data)
-	return out.Bytes(), Check(converted), nil
+	return out.Bytes(), notes, Check(converted), nil
 }
 
 // named starts a mistake in one file with the file's name, when it has one.

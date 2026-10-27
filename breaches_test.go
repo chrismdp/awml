@@ -6,9 +6,9 @@ import (
 	"testing"
 )
 
-// The swimming club's Friday message as the live system ran it one week, written in 0.6. The design
+// The swimming club's Friday message as the live system ran it one week, written in 0.7. The design
 // waits for Ella's yes, but the system sent the draft straight out. Ella is fictional.
-const fridaySent = `awml: "0.6"
+const fridaySent = `awml: "0.7"
 title: The club's Friday message, one week
 scopes:
   - { id: ella, label: "ella: Ella" }
@@ -80,7 +80,7 @@ func TestARedLineWithNoLabelHasTheChecksWordsAlone(t *testing.T) {
 
 func TestEachRuleALineBreaksDrawsItRed(t *testing.T) {
 	for _, c := range []struct{ name, src, line, words, style string }{
-		{"a line into a Block action", `awml: "0.6"
+		{"a line into a Block action", `awml: "0.7"
 title: T
 parts:
   - { id: act, kind: code, op: do, label: Act }
@@ -88,7 +88,7 @@ parts:
 lines:
   - { from: act, to: out, kind: start }
 `, "act -->", `outside action #34;out#34; is Block#44; but part #34;act#34; leads to it`, "0"},
-		{"an Allow action behind a review", `awml: "0.6"
+		{"an Allow action behind a review", `awml: "0.7"
 title: T
 parts:
   - { id: act, kind: code, op: do, label: Act }
@@ -98,7 +98,7 @@ lines:
   - { from: act, to: yes, kind: start }
   - { from: yes, to: out, kind: start }
 `, "yes -->", `outside action #34;out#34; is Allow#44; but review #34;yes#34; stands in front of it`, "1"},
-		{"an answer writing to a context", `awml: "0.6"
+		{"an answer writing to a context", `awml: "0.7"
 title: T
 parts:
   - { id: answer, kind: ai, op: answer, label: Answer }
@@ -143,7 +143,7 @@ func TestUntrustedTextGoesAlongALineThatBreaksARule(t *testing.T) {
 }
 
 func TestADoStepsWarningsCountALineThatBreaksARule(t *testing.T) {
-	doc := parsed(t, `awml: "0.6"
+	doc := parsed(t, `awml: "0.7"
 title: T
 parts:
   - { id: act, kind: code, op: do, label: Act }

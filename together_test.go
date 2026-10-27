@@ -9,10 +9,9 @@ import (
 	"testing"
 )
 
-// Two workflows that hand work on: the plan writes the shopping list and fires the trigger the
-// shopping starts on. The shopping owns the trigger and the plan owns the list, so each refers to
-// the other's part.
-const planWorkflow = `awml: "0.6"
+// Two workflows that hand work on: the plan writes the shopping list, which the shopping refers
+// to, and a do step asks the shopping to start, with an outside action that names its trigger.
+const planWorkflow = `awml: "0.7"
 title: Dinners
 scopes:
   - { id: family, label: "family: parents, kids", processing: any }
@@ -20,14 +19,16 @@ parts:
   - { id: thu, kind: trigger, label: "Thursday 19:00", wait: PT1H }
   - { id: plan, kind: ai, op: draft, label: "Plan next week's dinners", in: family }
   - { id: list, kind: context, label: Shopping list, at: notes/list, in: family }
-  - { id: ready, kind: trigger, label: The shopping list is ready, ref: shop.yaml#ready }
+  - { id: tell, kind: code, op: do, label: Tell the shopping the list is ready, in: family }
+  - { id: ready, kind: outside, label: "Start the shopping: Allow", in: family, ref: shop.yaml#ready }
 lines:
   - { from: thu, to: plan, kind: start }
   - { from: plan, to: list, kind: data }
-  - { from: plan, to: ready, kind: start }
+  - { from: plan, to: tell, kind: start }
+  - { from: tell, to: ready, kind: start }
 `
 
-const shopWorkflow = `awml: "0.6"
+const shopWorkflow = `awml: "0.7"
 title: Shopping
 scopes:
   - { id: home, label: "home: parents, kids", processing: any }
@@ -137,7 +138,7 @@ func notes(title, ref string) string {
 	if ref != "" {
 		ref = ", ref: " + ref
 	}
-	return `awml: "0.6"
+	return `awml: "0.7"
 title: ` + title + `
 scopes:
   - { id: s, label: "s: Ana", processing: any }
@@ -198,18 +199,39 @@ func TestACopyThatDisagreesWithThePartItRefersToIsAMistake(t *testing.T) {
 	}
 }
 
-// A trigger's copy is held to its scope as every other part's is.
-func TestATriggersCopyIsHeldToItsScope(t *testing.T) {
-	plan := strings.Replace(planWorkflow, "label: The shopping list is ready, ref", "label: The shopping list is ready, in: family, ref", 1)
-	shop := strings.Replace(shopWorkflow, "label: The shopping list is ready, wait: PT1H", "label: The shopping list is ready, wait: PT1H, in: parents", 1)
-	shop = strings.Replace(shop, "scopes:\n", "scopes:\n  - { id: parents, label: \"parents: parents\", processing: none }\n", 1)
-	togetherFinds(t, together(t, "plan.yaml", plan, "shop.yaml", shop), []string{
-		`part "ready" refers to shop.yaml#ready, but its scope holds kids and parents here and parents there`,
-		`part "ready" refers to shop.yaml#ready, but its scope allows any company here and no company there`,
-	}, nil)
+// An outside action that starts another workflow names that workflow's trigger. It's a part of its
+// own, not a copy, so its kind, label and scope are its own.
+func TestAnOutsideActionsRefNamesTheTriggerOfTheWorkflowItStarts(t *testing.T) {
+	plan := strings.Replace(planWorkflow, "ref: shop.yaml#ready", "ref: shop.yaml#fill", 1)
 	togetherFinds(t, together(t, "plan.yaml", plan, "shop.yaml", shopWorkflow), []string{
-		`part "ready" refers to shop.yaml#ready, but it's in scope "family" here and outside every scope there`,
+		`part "ready" refers to shop.yaml#fill, but that's a code step: an outside action's ref names the trigger of the workflow it starts`,
 	}, nil)
+	plan = strings.Replace(planWorkflow, "ref: shop.yaml#ready", "ref: shop.yaml#readied", 1)
+	togetherFinds(t, together(t, "plan.yaml", plan, "shop.yaml", shopWorkflow), []string{
+		`part "ready" refers to shop.yaml#readied, but shop.yaml has no part "readied"`,
+	}, nil)
+	plan = strings.Replace(planWorkflow, "ref: shop.yaml#ready", "ref: plan.yaml#thu", 1)
+	togetherFinds(t, together(t, "plan.yaml", plan, "shop.yaml", shopWorkflow), []string{
+		`part "ready" refers to plan.yaml#thu, which is in its own workflow: a ref names a part of another workflow`,
+	}, nil)
+	// The action and the trigger it starts are two parts, so neither counts as shared.
+	if got := SummariseTogether(together(t, "plan.yaml", planWorkflow, "shop.yaml", shopWorkflow)).Shared; len(got) != 1 || got[0].Kind != "context" {
+		t.Errorf("the shared parts are %+v, want the list alone", got)
+	}
+}
+
+// Starting another workflow is an outside action, which carries nothing into it: the text it starts
+// with is the other workflow's to mark, on its own trigger.
+func TestUntrustedTextDoesntFollowAnOutsideActionIntoTheWorkflowItStarts(t *testing.T) {
+	plan := strings.Replace(planWorkflow, "  - { id: tell,", "  - { id: form, kind: connector, label: The order form, untrusted: true, in: family }\n  - { id: tell,", 1)
+	plan = strings.Replace(plan, "lines:\n", "lines:\n  - { from: form, to: tell, kind: data }\n", 1)
+	workflows := together(t, "plan.yaml", plan, "shop.yaml", shopWorkflow)
+	if got := TogetherWarnings(workflows); !reflect.DeepEqual(got, [][]string{nil, nil}) {
+		t.Errorf("TogetherWarnings gave %q", got)
+	}
+	if got := SummariseTogether(workflows).Untrusted; len(got) != 1 || !reflect.DeepEqual(got[0].OutsideActions, []string{"Start the shopping: Allow"}) {
+		t.Errorf("the summary's untrusted parts are %+v", got)
+	}
 }
 
 // Labels that list no one are the same scope when they're written the same.
@@ -236,8 +258,8 @@ func TestPartsWithTheSameIdAndNoRefAreNotLinked(t *testing.T) {
 		t.Errorf("TogetherWarnings gave %q", got)
 	}
 	summary := SummariseTogether(workflows)
-	if want := []SharedSummary{{Label: "The shopping list is ready", Kind: "trigger", Workflows: []string{"Dinners", "Shopping"}}}; !reflect.DeepEqual(summary.Shared, want) {
-		t.Errorf("the shared parts are %+v\nwant %+v", summary.Shared, want)
+	if summary.Shared != nil {
+		t.Errorf("the shared parts are %+v, want none", summary.Shared)
 	}
 	if summary.Contexts != 2 {
 		t.Errorf("the summary counts %d contexts, want 2", summary.Contexts)
@@ -269,16 +291,17 @@ func TestUntrustedTextIsFollowedAcrossWorkflows(t *testing.T) {
 	plan := strings.Replace(planWorkflow, "  - { id: list,", "  - { id: form, kind: connector, label: The order form, untrusted: true, in: family }\n  - { id: list,", 1)
 	plan = strings.Replace(plan, "lines:\n", "lines:\n  - { from: form, to: plan, kind: data }\n", 1)
 	workflows := together(t, "plan.yaml", plan, "shop.yaml", shopWorkflow)
-	if got := Warnings(workflows[0].Doc); len(got) != 0 {
+	stop := `: a review, a person's own step or a code step marked cleans in between would stop it`
+	if got := Warnings(workflows[0].Doc); !reflect.DeepEqual(got, []string{`untrusted text from part "form" reaches outside action "ready"` + stop}) {
 		t.Fatalf("the plan alone warns %q", got)
 	}
 	got := TogetherWarnings(workflows)
-	want := [][]string{nil, {`untrusted text from part "form" in plan.yaml reaches outside action "basket": a review, a person's own step or a code step marked cleans in between would stop it`}}
+	want := [][]string{nil, {`untrusted text from part "form" in plan.yaml reaches outside action "basket"` + stop}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("TogetherWarnings gave %q\nwant %q", got, want)
 	}
 	summary := SummariseTogether(workflows)
-	if len(summary.Untrusted) != 1 || !reflect.DeepEqual(summary.Untrusted[0].OutsideActions, []string{"Fill the basket: Allow"}) {
+	if len(summary.Untrusted) != 1 || !reflect.DeepEqual(summary.Untrusted[0].OutsideActions, []string{"Start the shopping: Allow", "Fill the basket: Allow"}) {
 		t.Errorf("the summary's untrusted parts are %+v", summary.Untrusted)
 	}
 }
@@ -286,7 +309,7 @@ func TestUntrustedTextIsFollowedAcrossWorkflows(t *testing.T) {
 // The inbox sorter owns the shop's inbox, and tags each mail and sorts it into a queue. The replier
 // reads the queue and sends a reply, and its copy of the inbox marks it untrusted, as anyone can
 // write to it.
-const sorterWorkflow = `awml: "0.6"
+const sorterWorkflow = `awml: "0.7"
 title: Inbox sorter
 scopes:
   - { id: office, label: "office: Ana", processing: any }
@@ -305,7 +328,7 @@ lines:
   - { from: tag, to: label, kind: data }
 `
 
-const replierWorkflow = `awml: "0.6"
+const replierWorkflow = `awml: "0.7"
 title: Replier
 scopes:
   - { id: office, label: "office: Ana", processing: any }
@@ -359,11 +382,11 @@ func TestAPartIsUntrustedIfAnyCopyIsMarked(t *testing.T) {
 func TestTheMapDrawsABoxForEachWorkflowAndEachSharedPartOnce(t *testing.T) {
 	got := DrawMap(together(t, "plan.yaml", planWorkflow, "shop.yaml", shopWorkflow))
 	for _, want := range []string{
-		"  subgraph w1[\"Dinners\"]\n    direction TB\n    w1_thu([\"Thursday 19#58;00\"])\n  end\n",
-		"  subgraph w2[\"Shopping\"]\n    direction TB\n  end\n",
-		"  s1[(\"Shopping list\")]\n  s2([\"The shopping list is ready\"])\n",
-		"  w1 -.-> s1\n  s1 -.-> w2\n  w1 --> s2\n  s2 --> w2\n",
-		"  class w1_thu,s2 trig\n  class s1 ctx\n",
+		"  subgraph w1[\"Dinners\"]\n    direction TB\n    w1_thu([\"Thursday 19#58;00\"])\n    w1_ready>\"Start the shopping#58; Allow\"]\n  end\n",
+		"  subgraph w2[\"Shopping\"]\n    direction TB\n    w2_ready([\"The shopping list is ready\"])\n  end\n",
+		"  s1[(\"Shopping list\")]\n",
+		"  w1 -.-> s1\n  s1 -.-> w2\n  w1_ready --> w2_ready\n",
+		"  class w1_thu,w2_ready trig\n  class s1 ctx\n  class w1_ready out\n",
 		"  style w1 " + workflowBox + "\n  style w2 " + workflowBox,
 	} {
 		if !strings.Contains(got, want) {
@@ -375,11 +398,12 @@ func TestTheMapDrawsABoxForEachWorkflowAndEachSharedPartOnce(t *testing.T) {
 	}
 }
 
-// A box holds the triggers its workflow runs on, those with a line out of them, and never one it
-// only fires.
-func TestTheMapDrawsOnlyTheTriggersAWorkflowRunsOn(t *testing.T) {
-	sorting := strings.Replace(notes("Sorting", ""), "  - { id: notes,", "  - { id: done, kind: trigger, label: Sorting is done, ref: elsewhere.yaml#start }\n  - { id: notes,", 1)
-	sorting = strings.Replace(sorting, "lines:\n", "lines:\n  - { from: step, to: done, kind: start }\n", 1)
+// A box holds the triggers its workflow runs on, and an outside action only where it starts a
+// workflow given: the map draws the hand-off as a line from the action to the trigger it starts.
+func TestTheMapDrawsAnOutsideActionOnlyWhereItStartsAWorkflowGiven(t *testing.T) {
+	sorting := strings.Replace(notes("Sorting", ""), "  - { id: notes,", "  - { id: tell, kind: code, op: do, label: Say sorting is done, in: s }\n"+
+		"  - { id: done, kind: outside, label: \"Start the filing: Allow\", in: s, ref: elsewhere.yaml#start }\n  - { id: notes,", 1)
+	sorting = strings.Replace(sorting, "lines:\n", "lines:\n  - { from: step, to: tell, kind: start }\n  - { from: tell, to: done, kind: start }\n", 1)
 	got := DrawMap(together(t, "plan.yaml", planWorkflow, "sorting.yaml", sorting))
 	for _, want := range []string{
 		"  subgraph w1[\"Dinners\"]\n    direction TB\n    w1_thu([\"Thursday 19#58;00\"])\n  end\n",
@@ -389,22 +413,19 @@ func TestTheMapDrawsOnlyTheTriggersAWorkflowRunsOn(t *testing.T) {
 			t.Errorf("the map lacks\n%s\nin\n%s", want, got)
 		}
 	}
-	for _, fired := range []string{"The shopping list is ready", "Sorting is done"} {
-		if strings.Contains(got, fired) {
-			t.Errorf("the map draws %q, which its workflow only fires:\n%s", fired, got)
-		}
+	if strings.Contains(got, "-->") {
+		t.Errorf("the map draws a hand-off to a workflow not given:\n%s", got)
 	}
 }
 
 func TestTheSummaryOfSeveralCountsASharedPartOnceAndNamesIt(t *testing.T) {
 	workflows := together(t, "plan.yaml", planWorkflow, "shop.yaml", shopWorkflow)
 	got := SummariseTogether(workflows)
-	if got.Triggers != 2 || got.Contexts != 1 || got.Scopes != 2 || got.Steps != (StepCounts{AI: 1, Code: 1}) {
+	if got.Triggers != 2 || got.Contexts != 1 || got.Scopes != 2 || got.Steps != (StepCounts{AI: 1, Code: 2}) {
 		t.Errorf("the summary counts %+v", got)
 	}
 	want := []SharedSummary{
 		{Label: "Shopping list", Kind: "context", Workflows: []string{"Dinners", "Shopping"}},
-		{Label: "The shopping list is ready", Kind: "trigger", Workflows: []string{"Dinners", "Shopping"}},
 	}
 	if !reflect.DeepEqual(got.Shared, want) {
 		t.Errorf("shared parts are %+v\nwant %+v", got.Shared, want)
@@ -434,7 +455,7 @@ func TestTheSummaryOfOneWorkflowIsItsOwn(t *testing.T) {
 	}
 }
 
-const laptop = `awml: "0.6"
+const laptop = `awml: "0.7"
 platform: { id: laptop, label: A laptop }
 off_for_up_to: PT0S
 steps: agent
@@ -447,7 +468,7 @@ func TestFitJudgesEachPlatformAsRunningEveryWorkflowGiven(t *testing.T) {
 	report := JudgeTogether(together(t, "plan.yaml", planWorkflow, "shop.yaml", shopWorkflow), fitDocs(t, laptop))
 	want := []FitResult{{Platform: "laptop", Judged: true, Reasons: []string{
 		"plan#list is kept at notes/list, which the platform doesn't hold",
-		"shop#fill is a code step, which anthropic's agent would carry out",
+		"plan#tell and shop#fill are code steps, which anthropic's agent would carry out",
 	}, Models: map[string][]string{"plan#plan": {"anthropic"}}, steps: []string{"plan#plan"}}}
 	if len(report.Gaps) != 0 || !reflect.DeepEqual(report.Results, want) {
 		t.Errorf("fit gave %+v\nwant %+v", report, want)
@@ -480,8 +501,7 @@ func fitModels(t *testing.T, workflows []Workflow) []string {
 // Each workflow is named by the shortest end of its path, without .yaml, that no other file given
 // shares, and one given as text alone by where it comes among them.
 func TestFitNamesEachWorkflowByTheShortestEndOfItsPathThatsItsOwn(t *testing.T) {
-	plan := strings.Replace(planWorkflow, "  - { id: ready, kind: trigger, label: The shopping list is ready, ref: shop.yaml#ready }\n", "", 1)
-	plan = strings.Replace(plan, "  - { from: plan, to: ready, kind: start }\n", "", 1)
+	plan := planWorkflow
 	other := strings.Replace(plan, "Plan next week's dinners", "Plan the week's dinners", 1)
 	for _, tc := range []struct {
 		files, paths, want []string
@@ -519,7 +539,7 @@ func specHandOff(t *testing.T) (dinners, shopping string) {
 			t.Fatalf("SPEC.md has no %s", name)
 		}
 		parts, _, _ := strings.Cut(after, "```")
-		return `awml: "0.6"
+		return `awml: "0.7"
 title: ` + title + `
 scopes:
   - { id: family, label: "family: parents, kids", processing: any }
@@ -528,7 +548,7 @@ scopes:
 	return block("dinners.yaml", "Dinners"), block("shopping.yaml", "Shopping")
 }
 
-const codeServer = `awml: "0.6"
+const codeServer = `awml: "0.7"
 platform: { id: server, label: Scripts on a server }
 off_for_up_to: P1D
 steps: code
@@ -537,19 +557,17 @@ calls: any
 holds: []
 `
 
-// A trigger a workflow only fires, with a line into it and none out, waits for nothing in it, so fit
-// asks for no wait on it, and judges no wait of it against the platform.
-func TestFitNeedsAWaitOnlyOnTheTriggersAWorkflowRunsOn(t *testing.T) {
+// The spec's two workflows check together. Starting the shopping is an outside action of the
+// dinners, which waits for nothing in them, so the shopping's trigger alone is judged against the
+// platform.
+func TestTheSpecsHandOffStartsTheShoppingWithAnOutsideAction(t *testing.T) {
 	dinners, shopping := specHandOff(t)
 	workflows := together(t, "dinners.yaml", dinners, "shopping.yaml", shopping)
+	togetherFinds(t, workflows)
 	want := FitReport{Results: []FitResult{{Platform: "server", Judged: true, Fits: true, Reasons: []string{},
 		Models: map[string][]string{"plan": {"any"}}, steps: []string{"plan"}}}, Gaps: []string{}}
 	if got := JudgeTogether(workflows[:1], fitDocs(t, codeServer)); !reflect.DeepEqual(got, want) {
 		t.Errorf("fit of the dinners gave %+v\nwant %+v", got, want)
-	}
-	waits := together(t, "dinners.yaml", strings.Replace(dinners, "ref: shopping.yaml#ready", "wait: PT1H, ref: shopping.yaml#ready", 1))
-	if got := JudgeTogether(waits, fitDocs(t, codeServer)); !reflect.DeepEqual(got, want) {
-		t.Errorf("fit of the dinners, with a wait on the trigger it fires, gave %+v\nwant %+v", got, want)
 	}
 	if got := JudgeTogether(workflows[1:], fitDocs(t, codeServer)); len(got.Gaps) != 0 || len(got.Results) != 1 || got.Results[0].Fits {
 		t.Errorf("fit of the shopping gave %+v, but it may wait PT1H on a platform off for P1D", got)

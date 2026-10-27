@@ -101,7 +101,7 @@ try {
 
   // An older file is refused, with a pointer to awml convert, in both engines.
   const older = [
-    { file: `${temporary}/older.yaml`, source: canonicalSource.replace('awml: "0.6"', 'awml: "0.5"') },
+    { file: `${temporary}/older.yaml`, source: canonicalSource.replace('awml: "0.7"', 'awml: "0.5"') },
     { file: `${temporary}/security.yaml`, source: "awml: \"0.3\"\ntitle: Pair\nview: security\nparts:\n  - { id: t, kind: trigger, label: T }\n" },
     { file: `${temporary}/broken.yaml`, source: "parts: [\n" },
   ];
@@ -111,7 +111,7 @@ try {
   assert.equal(api.checksJSON(older) + "\n", runNative(["check", "--json", ...older.map(({ file }) => file)], 1), "checks JSON for older files");
   assert.throws(() => api.draw(older[0].source), /upgrade the file with awml convert/);
 
-  // convert upgrades a file of each older version into one 0.6 file, workflow or platform
+  // convert upgrades a file of each older version into one 0.7 file, workflow or platform
   // description, and gives the file awml convert writes, byte for byte.
   const dinners = (version) => `# The family's dinners.
 awml: "${version}"
@@ -138,7 +138,7 @@ holds: [notes]
   const upgrades = {
     "dinners-0.2.yaml": dinners("0.2"),
     "dinners-0.3.yaml": dinners("0.3"),
-    "bread-0.4.yaml": canonicalSource.replace('awml: "0.6"', 'awml: "0.4"'),
+    "bread-0.4.yaml": canonicalSource.replace('awml: "0.7"', 'awml: "0.4"'),
     "renewals-0.5.yaml": `awml: "0.5"
 title: Renewals
 scopes:
@@ -180,6 +180,16 @@ lines:
     "description-0.3.yaml": description("0.3"),
     "description-0.4.yaml": description("0.4"),
     "description-0.5.yaml": description("0.5"),
+    "description-0.6.yaml": description("0.6"),
+    // A do step's line into another workflow's trigger becomes its outside action.
+    "hand-off-0.6.yaml": `awml: "0.6"
+title: Dinners
+parts:
+  - {id: tell, kind: code, op: do, label: Tell the shopping}
+  - {id: ready, kind: trigger, label: The list is ready, wait: PT1H, ref: shopping.yaml#ready}
+lines:
+  - {from: tell, to: ready, kind: start}
+`,
   };
   for (const [name, source] of Object.entries(upgrades)) {
     await writeFile(`${temporary}/${name}`, source);
@@ -187,11 +197,11 @@ lines:
     conversions++;
   }
 
-  // A file already at 0.6 comes back unchanged.
+  // A file already at 0.7 comes back unchanged.
   const current = api.convert(upgrades["bread-0.4.yaml"]);
   await writeFile(`${temporary}/current.yaml`, current);
-  assert.equal(api.convert(current), current, "convert of a 0.6 file");
-  assert.equal(runNative(["convert", `${temporary}/current.yaml`]), current, "awml convert of a 0.6 file");
+  assert.equal(api.convert(current), current, "convert of a 0.7 file");
+  assert.equal(runNative(["convert", `${temporary}/current.yaml`]), current, "awml convert of a 0.7 file");
 
   // A legacy security view joins with its platform view, under the implementation named or default.
   const security = `# A bakery plans tomorrow's loaves. The bakery is fictional.
@@ -272,6 +282,32 @@ lines:
     conversions++;
   }
 
+  // What convert couldn't carry over comes before the mistakes, in both engines.
+  const noted = `awml: "0.6"
+title: Dinners
+parts:
+  - {id: plan, kind: ai, op: draft, label: Plan}
+  - {id: tell, kind: code, op: do, label: Tell the shopping}
+  - {id: ready, kind: trigger, label: The list is ready, untrusted: true, ref: shopping.yaml#ready}
+  - {id: done, kind: trigger, label: The plan is done, ref: notify.yaml#done}
+lines:
+  - {from: plan, to: tell, kind: start}
+  - {from: tell, to: ready, kind: start}
+  - {from: plan, to: done, kind: start}
+`;
+  await writeFile(`${temporary}/noted-0.6.yaml`, noted);
+  const nativeNoted = runNativeResult(["convert", `${temporary}/noted-0.6.yaml`], 1);
+  assert.throws(() => api.convert(noted), (error) => {
+    assert.equal(error.converted, nativeNoted.stdout, "convert with a note: the file");
+    assert.equal(error.notes.length, 1, "convert with a note: its note");
+    assert.equal("awml convert: converted, but do this by hand:\n" + error.notes.map((note) => `  ${note}\n`).join("") +
+      "awml convert: converted, but awml check finds these mistakes in the result:\n" + error.mistakes.map((mistake) => `  ${mistake}\n`).join(""),
+      nativeNoted.stderr, "convert with a note: its notes and mistakes");
+    assert.equal(error.message, [...error.notes, ...error.mistakes].join("\n"));
+    return true;
+  });
+  conversions++;
+
   // A file that can't be converted throws why, as awml convert says it.
   const unconvertible = {
     "platform-view.yaml": platform,
@@ -299,7 +335,7 @@ lines:
   assert.throws(() => api.convert([]), /^Error: convert takes one file, or a security view and its platform view$/);
 
   // Workflows given together follow each ref between them, a path from the referring file's folder.
-  const plan = `awml: "0.6"
+  const plan = `awml: "0.7"
 title: Dinners
 scopes:
   - { id: family, label: "family: parents, kids", processing: any }
@@ -308,14 +344,16 @@ parts:
   - { id: form, kind: connector, label: The order form, untrusted: true, in: family }
   - { id: plan, kind: ai, op: draft, label: "Plan next week's dinners", in: family }
   - { id: list, kind: context, label: Shopping list, at: notes/list, in: family }
-  - { id: ready, kind: trigger, label: The shopping list is ready, ref: shop.yaml#ready }
+  - { id: tell, kind: code, op: do, label: Tell the shopping the list is ready, in: family }
+  - { id: ready, kind: outside, label: "Start the shopping: Allow", in: family, ref: shop.yaml#ready }
 lines:
   - { from: thu, to: plan, kind: start }
   - { from: form, to: plan, kind: data }
   - { from: plan, to: list, kind: data }
-  - { from: plan, to: ready, kind: start }
+  - { from: plan, to: tell, kind: start }
+  - { from: tell, to: ready, kind: start }
 `;
-  const shop = `awml: "0.6"
+  const shop = `awml: "0.7"
 title: Shopping
 scopes:
   - { id: home, label: "home: parents, kids", processing: any }
@@ -374,7 +412,7 @@ lines:
     });
   }
   // A part they share is untrusted if any workflow's copy of it is marked untrusted.
-  const sorter = `awml: "0.6"
+  const sorter = `awml: "0.7"
 title: Inbox sorter
 scopes:
   - { id: office, label: "office: Ana", processing: any }
@@ -388,7 +426,7 @@ lines:
   - { from: mail, to: sort, kind: data }
   - { from: sort, to: queue, kind: data }
 `;
-  const replier = `awml: "0.6"
+  const replier = `awml: "0.7"
 title: Replier
 scopes:
   - { id: office, label: "office: Ana", processing: any }
@@ -413,10 +451,11 @@ lines:
   assert.equal(api.draw(inbox) + "\n", runNative(["draw", ...inboxPaths]), "map of a part marked untrusted by a copy");
   assert.deepEqual(api.summary(inbox).untrusted.map(({ outsideActions }) => outsideActions), [["Send the reply: Allow"]]);
 
-  // A box holds only the triggers its workflow runs on, so not the plan's, which it only fires.
-  const fired = [handOff[0], inbox[0]];
-  assert.equal(api.draw(fired) + "\n", runNative(["draw", ...fired.map(({ file }) => file)]), "map of a workflow that fires a trigger");
-  assert(!api.draw(fired).includes("The shopping list is ready"), "the map draws a trigger its workflow only fires");
+  // A box holds an outside action only where it starts a workflow given, so not the plan's here.
+  const starting = [handOff[0], inbox[0]];
+  assert.equal(api.draw(starting) + "\n", runNative(["draw", ...starting.map(({ file }) => file)]), "map of a workflow that starts one not given");
+  assert(!api.draw(starting).includes("Start the shopping"), "the map draws an action that starts a workflow not given");
+  assert(api.draw(handOff).includes("w1_ready --> w2_ready"), "the map draws no line from the action to the trigger it starts");
 
   // fit names each workflow by the shortest end of its path that's its own, and one given as text
   // alone by where it comes.
@@ -430,20 +469,20 @@ lines:
   assert.deepEqual(Object.keys(alikeFit.results.find((result) => result.fits).models), ["x/sorter#sort", "y/sorter#sort"]);
   assert.deepEqual(Object.keys(api.fit([...alike.map(({ source }) => source), ...descriptionSources]).results.find((result) => result.fits).models), ["1#sort", "2#sort"]);
 
-  // A trigger's copy is held to its scope too.
-  const scoped = [
-    { file: handOff[0].file, source: plan.replace("label: The shopping list is ready, ref", "label: The shopping list is ready, in: family, ref") },
+  // An outside action's ref names the trigger of the workflow it starts.
+  const misnamed = [
+    { file: handOff[0].file, source: plan.replace("shop.yaml#ready", "shop.yaml#fill") },
     handOff[1],
   ];
-  for (const { file, source } of scoped) await writeFile(file, source);
-  assert.equal(api.checksJSON(scoped) + "\n", runNative(["check", "--json", ...handOffPaths], 1), "checks JSON of a trigger's copy in another scope");
-  assert.equal(api.checks(scoped).checks.find((check) => check.id === "refs.agree").result, "fail");
+  for (const { file, source } of misnamed) await writeFile(file, source);
+  assert.equal(api.checksJSON(misnamed) + "\n", runNative(["check", "--json", ...handOffPaths], 1), "checks JSON of an outside action whose ref names a step");
+  assert.equal(api.checks(misnamed).checks.find((check) => check.id === "refs.starts").result, "fail");
   for (const { file, source } of broken) await writeFile(file, source);
 
-  // A trigger the plan only fires needs no wait, so the plan alone can be fitted.
+  // Starting the shopping waits for nothing in the plan, so the plan alone can be fitted.
   const firing = api.fit([handOff[0], ...descriptionSources]);
-  assert.deepEqual(firing.gaps, [], "fit asks for a wait on a trigger the workflow only fires");
-  assert.equal(api.fitJSON([handOff[0], ...descriptionSources]) + "\n", runNative(["fit", "--json", handOff[0].file, ...descriptions]), "fit of a workflow that fires a trigger");
+  assert.deepEqual(firing.gaps, [], "fit asks for a wait on an outside action");
+  assert.equal(api.fitJSON([handOff[0], ...descriptionSources]) + "\n", runNative(["fit", "--json", handOff[0].file, ...descriptions]), "fit of a workflow that starts another");
 
   // One file given by name is held to a ref it makes to itself.
   const self = { file: `${temporary}/self.yaml`, source: plan.replace("shop.yaml#ready", "self.yaml#thu") };

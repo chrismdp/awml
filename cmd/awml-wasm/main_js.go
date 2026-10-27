@@ -127,8 +127,8 @@ func main() {
 		}
 		return awml.DrawMap(workflows)
 	})
-	// __awmlConvert gives the 0.6 file awml convert writes, from one file or a legacy pair, and the
-	// mistakes the current rules find in it.
+	// __awmlConvert gives the 0.7 file awml convert writes, from one file or a legacy pair, what it
+	// notes it couldn't carry over, and the mistakes the current rules find in it.
 	expose("__awmlConvert", func(args []js.Value) string {
 		var texts []string
 		if err := json.Unmarshal([]byte(args[0].String()), &texts); err != nil {
@@ -138,17 +138,21 @@ func main() {
 		for _, text := range texts {
 			sources = append(sources, awml.Source{Text: []byte(text)})
 		}
-		file, mistakes, err := awml.ConvertSources(sources, optionalImplementation(args))
+		file, notes, mistakes, err := awml.ConvertSources(sources, optionalImplementation(args))
 		if err != nil {
 			return errorJSON(err.Error())
+		}
+		if notes == nil {
+			notes = []string{}
 		}
 		if mistakes == nil {
 			mistakes = []string{}
 		}
 		encoded, err := json.Marshal(struct {
 			File     string   `json:"file"`
+			Notes    []string `json:"notes"`
 			Mistakes []string `json:"mistakes"`
-		}{string(file), mistakes})
+		}{string(file), notes, mistakes})
 		if err != nil {
 			return errorJSON(err.Error())
 		}

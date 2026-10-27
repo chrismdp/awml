@@ -1,4 +1,4 @@
-awml: "0.6"
+awml: "0.7"
 title: The morning bills check
 description: |
   Check by code. Code matches the joint account against the bills expected and reports what's

@@ -55,9 +55,9 @@ func (m mistakeList) messages() []string {
 }
 
 // The version of the file format this release reads, and the older ones awml convert upgrades.
-const currentFormat = "0.6"
+const currentFormat = "0.7"
 
-var olderFormats = []string{"0.2", "0.3", "0.4", "0.5"}
+var olderFormats = []string{"0.2", "0.3", "0.4", "0.5", "0.6"}
 
 // checkDoc gives the mistakes in a document, and whether a mistake stopped the checks that follow
 // those of the file's own fields: a version this release doesn't read, or a broken list.
@@ -264,6 +264,11 @@ func checkView(file *Map, projected bool) (mistakeList, bool) {
 		}
 		if k == "tie" && len(comments) == 0 {
 			errors.add("ties.comment", fmt.Sprintf(`the tie from "%s" to "%s" has no comment at either end`, show(l.get("from")), show(l.get("to"))))
+		}
+		// A trigger only starts its own workflow, so only a tie or a hidden line, which lead nowhere,
+		// goes into it.
+		if k != "tie" && k != "hidden" && kinds[keyOf(l.get("to"))] == "trigger" {
+			errors.add("triggers.no-line-in", fmt.Sprintf(`%s goes into trigger "%s": a trigger only starts its own workflow, so start another workflow with an outside action whose ref names its trigger`, name, show(l.get("to"))))
 		}
 	}
 	errors = append(errors, operations(parts, lines)...)

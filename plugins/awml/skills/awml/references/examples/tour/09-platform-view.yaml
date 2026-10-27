@@ -1,4 +1,4 @@
-awml: "0.6"
+awml: "0.7"
 title: The family's photos, by where each part runs
 description: |
   This workflow sorts a family's photos into albums. The file holds its design and its home

@@ -10,7 +10,7 @@ import (
 // A bakery's order form, which anyone can write in. What they type is read by an AI step, kept in
 // the orders and planned from, and a code step that keeps only the order number and quantity
 // passes on what the label is made from.
-const orderForm = `awml: "0.6"
+const orderForm = `awml: "0.7"
 title: Cake orders
 scopes:
   - { id: bakery, label: "bakery: Ana, Ben", processing: any }
@@ -40,7 +40,7 @@ lines:
 func TestA06FileIsAWorkflowThatMayMarkPartsUntrustedAndCodeStepsCleans(t *testing.T) {
 	doc := parsed(t, orderForm)
 	if !IsCanonical(doc) {
-		t.Fatal("a 0.6 file isn't read as a workflow")
+		t.Fatal("a 0.7 file isn't read as a workflow")
 	}
 	mistakes(t, doc)
 	for _, kind := range []string{"trigger", "connector", "context"} {

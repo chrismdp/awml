@@ -136,8 +136,7 @@ type fitModel struct {
 	processing map[string]processingTerms
 	// names gives the name a part or scope is reported by, where it isn't its id.
 	names map[string]string
-	// runsOn holds the triggers the workflow runs on, those with a line out of them. One it only
-	// fires waits for nothing in it.
+	// runsOn holds the triggers the workflow runs on, those with a line out of them.
 	runsOn map[string]bool
 }
 

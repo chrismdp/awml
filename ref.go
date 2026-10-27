@@ -15,17 +15,21 @@ var (
 	pathRef      = regexp.MustCompile(`^((?:\.\./)*(?:[A-Za-z0-9_-][A-Za-z0-9_.-]*/)*[A-Za-z0-9_-][A-Za-z0-9_.-]*\.yaml)#([A-Za-z][A-Za-z0-9_]*)$`)
 )
 
-// The kinds of part a workflow can share with another: what hands work on, and what both reach.
-var refKinds = setOf([]string{"trigger", "context", "connector", "surface"})
+// The kinds of part that refer to another workflow's: a context, connector or surface both
+// workflows reach, and an outside action that starts another workflow, which names its trigger.
+var refKinds = setOf([]string{"context", "connector", "surface", "outside"})
 
-// refMistakes holds a part's ref to how it's written and the kinds of part that take one.
+// refMistakes holds a part's ref to how it's written and the kinds of part that take one. A trigger
+// belongs to the workflow it starts, so it never refers.
 func refMistakes(name string, p *Map) mistakeList {
 	if !p.has("ref") {
 		return nil
 	}
 	var errors mistakeList
-	if k, _ := p.get("kind").(string); !refKinds[k] {
-		errors.add("refs.parts", name+" has a ref, but only a trigger, context, connector or surface takes one")
+	if k, _ := p.get("kind").(string); k == "trigger" {
+		errors.add("refs.parts", name+" has a ref, but a trigger belongs to the workflow it starts: start another workflow with an outside action whose ref names its trigger")
+	} else if !refKinds[k] {
+		errors.add("refs.parts", name+" has a ref, but only a context, connector, surface or outside action takes one")
 	}
 	if _, _, ok := readRef(p.get("ref")); !ok {
 		errors.add("refs.written", fmt.Sprintf(`%s: ref must be owner/slug#id, or a path to a file alongside such as shopping.yaml#list, not "%s"`, name, show(p.get("ref"))))
