@@ -293,8 +293,8 @@ func publishedNames(workflows []Workflow) []string {
 
 // Mermaid draws the graph, so every drawing uses the same shapes and colours. It draws from the
 // graph's fields alone, so a graph read back from its JSON draws the same. At each level it writes
-// the parts in the order the graph lists them, then the comments, then the groups, and it writes
-// each line from its from to its to.
+// the parts in the order the graph lists them, then the comments, then the groups. It writes each
+// line from its from to its to, but a tie from its part to its comment.
 func (g Graph) Mermaid() string {
 	out := append([]string{}, header...)
 	type node struct {
@@ -343,7 +343,12 @@ func (g Graph) Mermaid() string {
 		return l.Kind
 	}
 	for _, l := range g.Lines {
-		kind := kindOf(l)
+		from, to, kind := l.From, l.To, kindOf(l)
+		// A tie has no direction, so it runs from the part to the comment, and the comment hangs
+		// below or beside what it explains.
+		if kind == "tie" && kinds[from] == "comment" && kinds[to] != "comment" {
+			from, to = to, from
+		}
 		arrow := arrows[kind]
 		if aside(l) && dottedArrows[kind] != "" {
 			arrow = dottedArrows[kind]
@@ -366,7 +371,7 @@ func (g Graph) Mermaid() string {
 		if words != nil {
 			mid = fmt.Sprintf(`|"%s"|`, strings.Join(words, "<br>"))
 		}
-		out = append(out, fmt.Sprintf("  %s %s%s %s", l.From, arrow, mid, l.To))
+		out = append(out, fmt.Sprintf("  %s %s%s %s", from, arrow, mid, to))
 	}
 	out = append(out, defs)
 	if g.View == "untrusted" {

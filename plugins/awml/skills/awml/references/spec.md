@@ -49,7 +49,7 @@ In either view, a trigger or design comment given no scope or block is drawn bes
 
 A line's style says where it goes, not its kind. A line that reads from or writes to a context, a connector or a surface is dotted: that's information moving in and out. Any other line, such as one from a trigger or from one step to the next, is solid: that's the path the work takes. A line that publishes is thick either way, and a `refused` line keeps its cross.
 
-A line may carry a label. Words in square brackets are a guard, the condition the line is taken on, as in UML: `[yes]` leaves a review. A comment moves nothing, so only `tie` lines link it.
+A line may carry a label. Words in square brackets are a guard, the condition the line is taken on, as in UML: `[yes]` leaves a review. A comment moves nothing, so only `tie` lines link it. A tie has no direction, so whichever way the file writes it, it's drawn from the part to the comment, and the comment hangs below or beside what it explains.
 
 A drawing says what happens, not how a platform schedules it. Several `start` lines into one step mean any of them can lead to it. Where the step waits for all of them, its label says so, as in `Once both reviews are done, sort their findings`.
 

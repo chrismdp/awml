@@ -77,7 +77,7 @@ First find each publish in the security view's scopes. Skip any line that isn't 
 
 A line with no label of its own takes only what it does, as `adds an associate`.
 
-After the parts and groups, leave one empty line, then write each line in the file's order, indented two spaces, from its `from` to its `to`, wherever its ends come in `parts`: `from ARROW to`, or with a label, `from ARROW|"label"| to`. A line is solid from one step to the next, and dotted when either end is a `context`, a `connector` or a `surface`.
+After the parts and groups, leave one empty line, then write each line in the file's order, indented two spaces, from its `from` to its `to`, wherever its ends come in `parts`: `from ARROW to`, or with a label, `from ARROW|"label"| to`. A `tie` has no direction, so write it from the part to the comment, whichever way the file lists it, unless both ends are comments. A line is solid from one step to the next, and dotted when either end is a `context`, a `connector` or a `surface`.
 
 | Line `kind` | Arrow | Dotted arrow |
 |---|---|---|
