@@ -2,6 +2,7 @@ package awml
 
 import (
 	"encoding/json"
+	"os"
 	"reflect"
 	"sort"
 	"strings"
@@ -492,6 +493,61 @@ func TestFitNamesEachWorkflowByTheShortestEndOfItsPathThatsItsOwn(t *testing.T) 
 		if got := fitModels(t, workflows); !reflect.DeepEqual(got, tc.want) {
 			t.Errorf("%q: fit names %q, want %q", tc.files, got, tc.want)
 		}
+	}
+}
+
+// specHandOff gives the spec's two workflows that hand work on, each with the family's scope, which
+// the spec leaves out.
+func specHandOff(t *testing.T) (dinners, shopping string) {
+	t.Helper()
+	spec, err := os.ReadFile("SPEC.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	block := func(name, title string) string {
+		_, after, found := strings.Cut(string(spec), "```yaml\n# "+name+"\n")
+		if !found {
+			t.Fatalf("SPEC.md has no %s", name)
+		}
+		parts, _, _ := strings.Cut(after, "```")
+		return `awml: "0.6"
+title: ` + title + `
+scopes:
+  - { id: family, label: "family: parents, kids", processing: any }
+` + parts
+	}
+	return block("dinners.yaml", "Dinners"), block("shopping.yaml", "Shopping")
+}
+
+const codeServer = `awml: "0.6"
+platform: { id: server, label: Scripts on a server }
+off_for_up_to: P1D
+steps: code
+agents: []
+calls: any
+holds: []
+`
+
+// A trigger a workflow only fires, with a line into it and none out, waits for nothing in it, so fit
+// asks for no wait on it, and judges no wait of it against the platform.
+func TestFitNeedsAWaitOnlyOnTheTriggersAWorkflowRunsOn(t *testing.T) {
+	dinners, shopping := specHandOff(t)
+	workflows := together(t, "dinners.yaml", dinners, "shopping.yaml", shopping)
+	want := FitReport{Results: []FitResult{{Platform: "server", Judged: true, Fits: true, Reasons: []string{},
+		Models: map[string][]string{"plan": {"any"}}, steps: []string{"plan"}}}, Gaps: []string{}}
+	if got := JudgeTogether(workflows[:1], fitDocs(t, codeServer)); !reflect.DeepEqual(got, want) {
+		t.Errorf("fit of the dinners gave %+v\nwant %+v", got, want)
+	}
+	waits := together(t, "dinners.yaml", strings.Replace(dinners, "ref: shopping.yaml#ready", "wait: PT1H, ref: shopping.yaml#ready", 1))
+	if got := JudgeTogether(waits, fitDocs(t, codeServer)); !reflect.DeepEqual(got, want) {
+		t.Errorf("fit of the dinners, with a wait on the trigger it fires, gave %+v\nwant %+v", got, want)
+	}
+	if got := JudgeTogether(workflows[1:], fitDocs(t, codeServer)); len(got.Gaps) != 0 || len(got.Results) != 1 || got.Results[0].Fits {
+		t.Errorf("fit of the shopping gave %+v, but it may wait PT1H on a platform off for P1D", got)
+	}
+	got := JudgeTogether(workflows, fitDocs(t, strings.Replace(codeServer, "P1D", "PT0S", 1)))
+	if len(got.Gaps) != 0 || len(got.Results) != 1 || !got.Results[0].Fits {
+		t.Errorf("fit of both gave %+v", got)
 	}
 }
 
