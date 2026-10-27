@@ -9,13 +9,16 @@ name: Review a pull request
 
 # Before it works, a repository needs the CLAUDE_CODE_OAUTH_TOKEN secret that build.yml lists.
 #
-# The review job holds a token that only reads, and checks out main, never the branch. It brings in
-# the pull request's patch through the Actions token, as data, and applies it to the commit of main
-# the branch started from, so the sessions read the change as the build's own reviews read a build's.
-# The post job holds a token that may only write checks, and checks out and runs nothing: it reads
-# the two reviews' findings from the review job's artifact, and checks them before it posts them.
+# GitHub runs this from main's copy on pull_request_target, whatever the branch holds, so a branch
+# can't rewrite how it's reviewed. The jobs hold main's secret and tokens, so no job checks out or
+# fetches anything from the pull request's head, or runs it. The review job holds a token that only
+# reads, and checks out main. It brings in the patch of the event's head commit through the Actions
+# token, as data, and applies it to the commit of main the branch started from, so the sessions read
+# the change as the build's own reviews read a build's. The post job holds a token that may only
+# write checks, and checks out and runs nothing: it reads the two reviews' findings from the review
+# job's artifact, and checks them before it posts them on that same head commit.
 on:
-  pull_request:
+  pull_request_target:
     branches: [main]
     types: [opened, synchronize, reopened]
 
@@ -51,6 +54,7 @@ jobs:
       # GitHub's diff of the head commit against the commit of main the branch started from, so it
       # applies there as it is, and `git diff --cached` shows the whole change.
       - name: Bring in the pull request's patch against main, and main's REVIEW.md and review prompts
+        id: bring
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
