@@ -17,9 +17,9 @@ parts:
   - { id: send, kind: outside, label: "Send the reply: Ask", in: bakery }
 lines:
   - { from: form, to: keep, kind: start }
-  - { from: keep, to: book, kind: data }
+  - { from: keep, to: book, kind: start }
   - { from: book, to: rota, kind: data }
   - { from: form, to: draft, kind: start }
-  - { from: draft, to: ask, kind: data }
-  - { from: ask, to: approve, kind: data }
+  - { from: draft, to: ask, kind: start }
+  - { from: ask, to: approve, kind: start }
   - { from: approve, to: send, kind: data, label: "[yes]" }

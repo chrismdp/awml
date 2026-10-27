@@ -122,7 +122,7 @@ func TestACodeStepThatDoesntCleanLetsUntrustedTextThrough(t *testing.T) {
 
 func TestCheckWarnsOfEachOutsideActionUntrustedTextReaches(t *testing.T) {
 	want := []string{`untrusted text from part "form" reaches outside action "board": a review, a person's own step or a code step marked cleans in between would stop it`}
-	if got := Warnings(parsed(t, orderForm)); !reflect.DeepEqual(got, want) {
+	if got := warningsOf(parsed(t, orderForm), "warn.untrusted-outside"); !reflect.DeepEqual(got, want) {
 		t.Errorf("warnings = %q\nwant %q", got, want)
 	}
 	report := CheckSources("dev", []Source{source("orders.yaml", orderForm)})

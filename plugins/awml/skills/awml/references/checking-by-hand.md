@@ -40,6 +40,15 @@ For these, skip any `hidden`, `refused` or `tie` line: only `start` and `data` l
 21. **Each tier agrees with what stands in front of it.** For each `outside` part, find the parts whose lines lead into it, passing back through any fork. For an Ask action, each of them is a `review`, an `approval` or a `person` step. For an Allow action, none of them is a `review` or an `approval`. For a Block action, there are none.
 22. **Each standing approval lists its actions.** A line leads from each `approval` part straight to a `surface`.
 
+## Warnings
+
+These are warnings, which `awml check` prints without failing. Tell the person of each one you find. A trigger's **run** is every part you reach from it by following `start` lines forward, through any kind of part. A `data` line never carries a run on, even from one step straight to another.
+
+23. **The file holds one workflow.** Put two triggers together when their runs share any part. If the triggers fall into more than one group, the file holds several workflows: split it at its triggers into files that refer to each other. A file with one trigger is one workflow.
+24. **Every part is linked to a trigger.** From the triggers, follow every line either way, through any part, leaving out comments and their ties. Each part you never reach has no line linking it to a trigger: connect it or remove it.
+25. **Every comment is tied to a part.** Each `comment` has a `tie` to a part. Tie it to what it explains, or remove it.
+26. **Every step is started by a trigger.** Each `ai`, `code` or `person` step, `review`, `approval` and `fork` is in some trigger's run, whether item 24 found it or not. For one that isn't, add the start line it's missing, or split its work into a workflow of its own that an outside action starts.
+
 ## Placement and fit fields
 
 A scope's `processing` is `any`, `none` or a map from company ids to `any` or known operations. An inner scope never permits more than its outer scope. Only a trigger has `wait`, a fixed ISO 8601 duration; only a context has `at`, a relative path with no `.` or `..` names.

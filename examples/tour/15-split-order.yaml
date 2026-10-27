@@ -1,0 +1,23 @@
+awml: "0.7"
+title: The bakery's morning order
+description: |
+  The second of the two workflows, split out at its trigger. Each morning AI drafts the supplier
+  order from the stock levels the evening count keeps, which it reads by ref, and Ana says yes to
+  the exact order before it's placed. The bakery is fictional.
+scopes:
+  - { id: bakery, label: "bakery: Ana, Sam" }
+parts:
+  - { id: morning, kind: trigger, label: "Every day 07:00" }
+  - { id: stock, kind: context, label: "Stock levels", in: bakery, ref: 15-split-count.yaml#stock }
+  - { id: draft, kind: ai, op: draft, label: "Draft the order", in: bakery }
+  - { id: ask, kind: code, op: do, label: "Ask Ana to place it", in: bakery }
+  - { id: approve, kind: review, label: "Ana's yes to the exact order", in: bakery }
+  - { id: place, kind: outside, label: "Place the order: Ask", in: bakery }
+  - { id: supplier, kind: connector, label: "The bakery's supplier account", in: bakery }
+lines:
+  - { from: morning, to: draft, kind: start }
+  - { from: stock, to: draft, kind: data }
+  - { from: draft, to: ask, kind: start, label: the draft }
+  - { from: ask, to: approve, kind: start }
+  - { from: approve, to: place, kind: data, label: "[yes]" }
+  - { from: place, to: supplier, kind: data }

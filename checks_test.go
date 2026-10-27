@@ -62,7 +62,8 @@ func TestTheChecksKeepTheirIDsAndTheSpecsOrder(t *testing.T) {
 		"tiers.written", "tiers.shape", "approvals.listed", "processing.written", "processing.nested",
 		"platform.blocks-only", "wait.duration", "at.path", "untrusted.parts", "cleans.code-only", "refs.written", "refs.parts", "placement.once", "placement.complete",
 		"refs.known", "refs.agree", "refs.starts", "refs.owner",
-		"warn.do-by-code", "warn.one-change", "warn.untrusted-outside", "warn.shared-writers", "warn.shared-readers",
+		"warn.do-by-code", "warn.one-change", "warn.untrusted-outside",
+			"warn.several-workflows", "warn.unlinked-part", "warn.untied-comment", "warn.unstarted-step", "warn.shared-writers", "warn.shared-readers",
 		"description.values", "description.ids",
 	}
 	if !reflect.DeepEqual(ids, want) {

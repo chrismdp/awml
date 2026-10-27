@@ -13,7 +13,7 @@ parts:
   - { id: send, kind: outside, label: "Send it to the parents: Ask", in: ella }
 lines:
   - { from: fri, to: write, kind: start }
-  - { from: write, to: ask, kind: data, label: the draft }
-  - { from: ask, to: approve, kind: data }
+  - { from: write, to: ask, kind: start, label: the draft }
+  - { from: ask, to: approve, kind: start }
   - { from: approve, to: send, kind: data, label: "[yes]" }
   - { from: write, to: send, kind: data, label: "sent without Ella's yes" }

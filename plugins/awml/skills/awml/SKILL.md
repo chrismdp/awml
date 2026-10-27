@@ -11,7 +11,7 @@ AWML describes one workflow in one YAML file, with a design and its implementati
 Before you write or fix a file, read `references/spec.md` in full. It is short, and it is the authority: wherever this skill and the spec differ, the spec is right. Then read the examples nearest the person's workflow, in both views:
 
 - `references/examples/client-email.yaml`: a consultant's email, with two scopes side by side and a send the consultant does themselves.
-- `references/examples/dinners.yaml`: a family's dinners and money, with nested scopes, a review before checkout, a standing rule and a gap.
+- `references/examples/dinners.yaml`: a family's dinners, with nested scopes, a standing rule and a gap.
 
 Each example's security drawing sits beside it as `.mmd`, and each implementation drawing adds `-ID.mmd`. The question in `references/examples/question.yaml` and photos in `references/examples/tour/09-platform-view.yaml` give smaller examples.
 
@@ -64,8 +64,8 @@ Add `implementations` as a map of ids to entries with a `label` and `blocks`. Ea
 
 Choose each line's kind by what it does:
 
-- `start` runs from a trigger to the step it starts. Several `start` lines into one step mean any of them can lead to it. Where the step waits for all of them, its label says so, as `"Once both reviews are done, sort their findings"`.
-- `data` moves content. Where it moves content into a wider scope, a box it isn't already inside, it publishes, and `awml draw` draws it thick and adds to its label who it adds or what it loosens. Label each publish with the standing rule that allows it and whose words it moves, who must have agreed to that target, as `"co-op notes, under the bakery's rule, for customers who ticked the box"`, or say what yes releases it, as `"the consultant takes the reply"`.
+- `start` runs from a trigger to the step it starts, and on to whatever runs next, through steps, reviews, standing approvals and forks. A trigger's run follows only `start` lines, so every step, review, standing approval and fork needs one leading into it from the run. Several `start` lines into one step mean any of them can lead to it. Where the step waits for all of them, its label says so, as `"Once both reviews are done, sort their findings"`.
+- `data` moves content, and never carries the run on. Where work moves on to a step and its content moves into a wider scope, draw both a `start` line and a `data` line. Where it moves content into a wider scope, a box it isn't already inside, it publishes, and `awml draw` draws it thick and adds to its label who it adds or what it loosens. Label each publish with the standing rule that allows it and whose words it moves, who must have agreed to that target, as `"co-op notes, under the bakery's rule, for customers who ticked the box"`, or say what yes releases it, as `"the consultant takes the reply"`.
 - `refused` is a read from a narrower scope that the design refuses, with a label such as `never read here`.
 - The one line out of each review is labelled `"[yes]"`.
 - A standing approval sits between the `do` step and the actions it covers, with a `data` line to the surface where each action is listed with how to undo it.
@@ -87,7 +87,7 @@ If you have a shell, see whether `awml` is there and which release it is with `a
 awml check standup.yaml
 ```
 
-Give workflows that share parts together, as `awml check dinners.yaml shopping.yaml` or their folder, so it follows each `ref` between them, and untrusted text through the parts they share and into each workflow one starts. It prints `ok` for each sound file, or one line for each mistake, naming the part or line it is in. Fix every one and run it again until the file prints `ok`. In a drawing of a live system, a line that breaks a rule because the system really did that stays, and is drawn red. If it says the file is of a version it no longer reads, upgrade it with `awml convert old.yaml > new.yaml`, then check the new file.
+Give workflows that share parts together, as `awml check dinners.yaml shopping.yaml` or their folder, so it follows each `ref` between them, and untrusted text through the parts they share and into each workflow one starts. It prints `ok` for each sound file, or one line for each mistake, naming the part or line it is in. Fix every one and run it again until the file prints `ok`. Read each warning too. Where the file holds several workflows, split it at its triggers into files that refer to each other. Where no line links a part to a trigger, connect it or remove it. Where a comment is tied to nothing, tie it or remove it. Where no trigger starts a step, add the start line it's missing, or split its work out into a workflow of its own that an outside action starts. In a drawing of a live system, a line that breaks a rule because the system really did that stays, and is drawn red. If it says the file is of a version it no longer reads, upgrade it with `awml convert old.yaml > new.yaml`, then check the new file.
 
 If you have no shell, or `awml` can't be installed, go through `references/checking-by-hand.md` for each file instead. Then say plainly that the files were checked by hand, not by `awml check`, and that `awml check` will confirm them.
 
@@ -128,5 +128,6 @@ The files stay where the person keeps their work; if they want to share the work
 - **Hyphens in ids.** `meal-plan` isn't an id, but `meal_plan` is. An `op` such as `bring-in` isn't an id, so its hyphen is right.
 - **An `op` on a part that isn't a step.** Only `ai`, `code` and `person` parts take one. A review needs none.
 - **A comment joined by a `data` line.** A comment takes `tie` lines only.
+- **Steps joined only by `data` lines.** A run follows `start` lines, so `awml check` warns that no trigger starts the later step. Draw a `start` line to it from the step before.
 - **Posting to a chat drawn as an outside action.** Delivery to a surface is a `data` line.
 - **Boxes nested when the scopes only overlap.** Two scopes that each have someone the other lacks sit side by side.

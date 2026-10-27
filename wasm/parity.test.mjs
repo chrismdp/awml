@@ -546,7 +546,7 @@ const fitSources = await Promise.all(fitPaths.map((path) => readFile(new URL(`..
 assert.equal(api.fitJSON(fitSources) + "\n", runNative(["fit", "--json", ...fitPaths]), "fit JSON");
 
 // The examples that share a part are drawn together as their map.
-const familyPaths = ["examples/dinners.yaml", "examples/question.yaml"];
+const familyPaths = ["examples/dinners.yaml", "examples/shopping.yaml", "examples/bills.yaml", "examples/pickups.yaml", "examples/question.yaml"];
 const family = await Promise.all(familyPaths.map(async (file) => ({ file, source: await readFile(new URL(`../${file}`, import.meta.url), "utf8") })));
 assert.equal(api.draw(family) + "\n", await readFile(new URL("../examples/family-map.mmd", import.meta.url), "utf8"), "the family's map");
 assert.equal(api.summaryJSON(family) + "\n", runNative(["summary", "--json", ...familyPaths]), "the family's summary JSON");

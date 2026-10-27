@@ -1,0 +1,30 @@
+awml: "0.7"
+title: The bakery's stock count and morning order, in one file
+description: |
+  Two workflows drawn as one. Each evening code counts what the day's baking used, and each morning
+  AI drafts the supplier order from the stock levels, which Ana says yes to before it's placed.
+  Nothing runs from the count to the order, so awml check warns that the file holds two workflows.
+  The bakery is fictional.
+scopes:
+  - { id: bakery, label: "bakery: Ana, Sam" }
+parts:
+  - { id: evening, kind: trigger, label: "Every day 18:00" }
+  - { id: morning, kind: trigger, label: "Every day 07:00" }
+  - { id: till, kind: connector, label: "The till's sales", in: bakery }
+  - { id: count, kind: code, op: bring-in, label: "Work out what the day's baking used", in: bakery }
+  - { id: stock, kind: context, label: "Stock levels", in: bakery }
+  - { id: draft, kind: ai, op: draft, label: "Draft the order", in: bakery }
+  - { id: ask, kind: code, op: do, label: "Ask Ana to place it", in: bakery }
+  - { id: approve, kind: review, label: "Ana's yes to the exact order", in: bakery }
+  - { id: place, kind: outside, label: "Place the order: Ask", in: bakery }
+  - { id: supplier, kind: connector, label: "The bakery's supplier account", in: bakery }
+lines:
+  - { from: evening, to: count, kind: start }
+  - { from: till, to: count, kind: data }
+  - { from: count, to: stock, kind: data }
+  - { from: morning, to: draft, kind: start }
+  - { from: stock, to: draft, kind: data }
+  - { from: draft, to: ask, kind: start, label: the draft }
+  - { from: ask, to: approve, kind: start }
+  - { from: approve, to: place, kind: data, label: "[yes]" }
+  - { from: place, to: supplier, kind: data }

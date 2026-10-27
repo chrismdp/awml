@@ -11,6 +11,7 @@ config:
 flowchart TB
   subgraph bakery["bakery#58; Jo#44; Ben#44; Lou"]
     direction TB
+    monday(["Every Monday 09#58;00"])
     invoices[("The bakery#39;s invoices")]
     checklist[("Jo#39;s checklist for chasing")]
     chase("<small style='color:rgb(61,67,79)'>🤖 ✏️ draft</small><br>Draft a reminder for each late invoice")
@@ -21,6 +22,8 @@ flowchart TB
     remind("<small style='color:rgb(61,67,79)'>🤖 ✏️ draft</small><br>Draft a reminder for each late order")
   end
 
+  monday --> chase
+  monday --> remind
   invoices -.-> chase
   checklist -.-> chase
   checklist ==>|"the checklist#44; with no names in it · adds Kit"| shop_notes
@@ -35,8 +38,9 @@ flowchart TB
   classDef person fill:#f7d79a,stroke:#9a6100,color:#16171b
   classDef uml fill:#16171b,stroke:#16171b,color:#16171b
   classDef gap fill:#ffffff,stroke:#8a93a3,stroke-dasharray:4 3,color:#6b7280
+  class monday trig
   class invoices,checklist,shop_notes ctx
   class chase,remind ai
   style bakery fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
   style pottery fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
-  linkStyle 2 stroke-dasharray:3
+  linkStyle 4 stroke-dasharray:3

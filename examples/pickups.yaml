@@ -1,0 +1,26 @@
+awml: "0.7"
+title: The family's pickups
+description: |
+  When a pickup changes in Nadia's calendar, code copies the pickups into the family's notes, and
+  the kitchen screen shows them beside the week's dinners. The family is fictional.
+scopes:
+  - { id: carers, label: "carers: + June, Beth" }
+  - { id: family, label: "family: parents, kids", in: carers }
+parts:
+  - { id: changed, kind: trigger, label: "A pickup changes in Nadia's calendar" }
+  - { id: calendar, kind: connector, label: "Nadia's calendar", in: carers }
+  - { id: copy, kind: code, op: bring-in, label: "Copy the pickups calendar", in: carers }
+  - { id: pickups, kind: context, label: "Pickups", in: carers }
+  - { id: screen, kind: surface, label: "Kitchen screen", in: carers, ref: dinners.yaml#screen }
+lines:
+  - { from: changed, to: copy, kind: start }
+  - { from: calendar, to: copy, kind: data }
+  - { from: copy, to: pickups, kind: data }
+  - { from: pickups, to: screen, kind: data }
+implementations:
+  home:
+    label: At home
+    blocks:
+      - { id: server, label: "Server", parts: [copy, pickups] }
+      - { id: calendars, label: "The calendar", parts: [calendar] }
+      - { id: wall, label: "The kitchen screen", parts: [screen] }

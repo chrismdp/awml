@@ -21,7 +21,8 @@ flowchart TB
 
   nightly --> bring
   bring -.-> new
-  new -.->|"when the laptop is on"| sort
+  bring -->|"when the laptop is on"| sort
+  new -.-> sort
   sort -.-> albums
   sort -.- wait
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
@@ -40,4 +41,4 @@ flowchart TB
   class bring code
   class wait gap
   style family fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
-  linkStyle 4 stroke:#8a93a3
+  linkStyle 5 stroke:#8a93a3

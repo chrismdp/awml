@@ -96,10 +96,12 @@ func TestDrawRefusesAFileWithMistakes(t *testing.T) {
 const live = `awml: "0.7"
 title: Old files
 parts:
+  - { id: night, kind: trigger, label: "Every night" }
   - { id: tidy, kind: code, op: do, label: "Tidy the old files" }
   - { id: wipe, kind: outside, label: "Delete a file: Block" }
 lines:
   - { from: tidy, to: wipe, kind: start, label: "one night in June" }
+  - { from: night, to: tidy, kind: start }
 `
 
 func TestALineThatBreaksARuleFailsTheCheckButIsDrawnRed(t *testing.T) {
@@ -136,10 +138,18 @@ func TestCheckPrintsWarningsBeforeOkWithoutFailing(t *testing.T) {
 	}
 }
 
+// The line with a mistake in it links nothing, so bad's plan step is left on its own.
+const (
+	unlinkedPlan  = `part "plan" has no line linking it to a trigger: connect it or remove it`
+	unstartedPlan = `step "plan" is started by no trigger: add the start line it's missing, or split its work into a workflow of its own that an outside action starts`
+)
+
 func TestCheckPrintsWarningsBeforeMistakesAndStillFailsForTheMistakes(t *testing.T) {
 	src := strings.Replace(bad, "kind: ai, label:", "kind: ai, op: do, label:", 1)
 	f := write(t, "warning-and-mistake.yaml", src)
 	want := f + `: warning: step "plan" is a do step decided by AI: a do step should be code acting on what an earlier step decided` + "\n" +
+		f + `: warning: ` + unlinkedPlan + "\n" +
+		f + `: warning: ` + unstartedPlan + "\n" +
 		f + `: the line from "thu" to "plann" ends at unknown part "plann"` + "\n"
 	if r := awmlRun("check", f); r != (result{1, want, ""}) {
 		t.Errorf("check gave %+v", r)
@@ -149,7 +159,8 @@ func TestCheckPrintsWarningsBeforeMistakesAndStillFailsForTheMistakes(t *testing
 func TestCheckReportsEachMistakeAndFails(t *testing.T) {
 	g, b := write(t, "good.yaml", good), write(t, "bad.yaml", bad)
 	r := awmlRun("check", g, b)
-	want := result{1, g + ": ok\n" + b + `: the line from "thu" to "plann" ends at unknown part "plann"` + "\n", ""}
+	want := result{1, g + ": ok\n" + b + ": warning: " + unlinkedPlan + "\n" + b + ": warning: " + unstartedPlan + "\n" +
+		b + `: the line from "thu" to "plann" ends at unknown part "plann"` + "\n", ""}
 	if r != want {
 		t.Errorf("check gave %+v", r)
 	}
