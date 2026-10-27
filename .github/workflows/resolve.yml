@@ -15,6 +15,16 @@
 # requests as a bot's, from a build/issue- branch in this repository. Comments use the Actions
 # token.
 #
+# Each pull request it redoes gets a status comment of this run's own, marked with a hidden
+# <!-- factory-resolve-status -->. A job posts it as soon as the find job names the pull request,
+# saying that main has moved on, that the pull request now clashes with it and that it is being
+# redone on top of main, with a link to the run. That job checks out nothing and runs only gh, and
+# nothing waits for it, so the rebase goes on even if it can't comment. When the push job ends, it
+# edits the comment to say either that the new branch was pushed and CI is running again, or that
+# the redo failed. It finds the comment by this run's link, so a later run posts a new comment and
+# never edits an older run's. The comments saying how it went are still posted as well, because
+# GitHub sends no notification for an edit.
+#
 # Before it works, a repository needs the GitHub App, its two secrets and the
 # CLAUDE_CODE_OAUTH_TOKEN secret that build.yml lists.
 name: Rebase conflicting pull requests
@@ -82,6 +92,43 @@ jobs:
 
           echo "pulls=$pulls" >> "$GITHUB_OUTPUT"
           echo "main_sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+
+  # Says on each pull request that it clashes with main and is being redone, while Claude starts on
+  # it. Each run posts a new comment, which the push job edits when the run ends. It checks out
+  # nothing and runs only gh. No job waits for it, so if it can't comment, the rebase goes on.
+  start:
+    needs: find
+    if: ${{ needs.find.outputs.pulls != '[]' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        pull: ${{ fromJSON(needs.find.outputs.pulls) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
+      # A push to main names the commit's message, whose first line has the merged pull request's
+      # number when it was squashed. A run started by hand has only the commit.
+      - name: Post the status comment
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAIN_MESSAGE: ${{ github.event.head_commit.message }}
+          MAIN_SHA: ${{ needs.find.outputs.main_sha }}
+          PR_NUMBER: ${{ matrix.pull.number }}
+        run: |
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          title="$(printf '%s\n' "$MAIN_MESSAGE" | head -n 1 | cut -c 1-200)"
+          moved="$MAIN_SHA"
+          [ -z "$title" ] || moved="$MAIN_SHA, \"$title\","
+          {
+            echo "<!-- factory-resolve-status -->"
+            echo "**Redoing this pull request on top of \`main\`.** [The run]($run_url)"
+            echo
+            echo "\`main\` has moved on to $moved and this pull request now clashes with it."
+          } > "$RUNNER_TEMP/status.md"
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/status.md"
 
   draft:
     needs: find
@@ -332,7 +379,8 @@ jobs:
         pull: ${{ fromJSON(needs.find.outputs.pulls) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # The Actions token only reads and comments here. The app's token pushes.
+    # The Actions token only reads, comments and edits the status comment here. The app's token
+    # pushes.
     permissions:
       contents: read
       pull-requests: write
@@ -429,6 +477,7 @@ jobs:
           private-key: ${{ secrets.FACTORY_APP_KEY }}
 
       - name: Push the rebased branch
+        id: push
         env:
           BRANCH: ${{ matrix.pull.branch }}
           GH_TOKEN: ${{ steps.app.outputs.token }}
@@ -493,3 +542,35 @@ jobs:
           } > "$RUNNER_TEMP/resolve-failure-comment.md"
           gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
             --body-file "$RUNNER_TEMP/resolve-failure-comment.md"
+
+      # The status comment this run posted says how it ended, going by whether the branch was
+      # pushed. The comments above say so too, since GitHub sends no notification for an edit. The
+      # comment is found by this run's link, so an older run's is never touched, and if the start
+      # job posted none, there is nothing to edit.
+      - name: Edit the status comment
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ matrix.pull.number }}
+          PUSHED: ${{ steps.push.outcome }}
+        run: |
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          {
+            echo "<!-- factory-resolve-status -->"
+            if [ "$PUSHED" = success ]; then
+              echo "**Redone on top of \`main\`.** The new branch is pushed, and CI is running on it again. The comment below has the details and how to undo it. [The run]($run_url)"
+            else
+              echo "**The redo failed**, so this pull request needs resolving by hand. The comment below says why. [The run]($run_url)"
+            fi
+          } > "$RUNNER_TEMP/status.md"
+          id="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" |
+            jq -r --arg link "($run_url)" '.[] | select(.user.login == "github-actions[bot]"
+              and (.body | contains("<!-- factory-resolve-status -->")) and (.body | contains($link))) | .id' |
+            tail -n 1)"
+          if [ -z "$id" ]; then
+            echo "This run posted no status comment on #$PR_NUMBER, so there is none to edit."
+            exit 0
+          fi
+          jq -n --rawfile body "$RUNNER_TEMP/status.md" '{body: $body}' |
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" --input - > /dev/null
