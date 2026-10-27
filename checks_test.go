@@ -63,7 +63,7 @@ func TestTheChecksKeepTheirIDsAndTheSpecsOrder(t *testing.T) {
 		"platform.blocks-only", "wait.duration", "at.path", "untrusted.parts", "cleans.code-only", "refs.written", "refs.parts", "placement.once", "placement.complete",
 		"refs.known", "refs.agree", "refs.starts", "refs.owner",
 		"warn.do-by-code", "warn.one-change", "warn.untrusted-outside",
-			"warn.several-workflows", "warn.unlinked-part", "warn.untied-comment", "warn.unstarted-step", "warn.shared-writers", "warn.shared-readers",
+		"warn.several-workflows", "warn.unlinked-part", "warn.untied-comment", "warn.unstarted-step", "warn.shared-writers", "warn.shared-readers",
 		"description.values", "description.ids",
 	}
 	if !reflect.DeepEqual(ids, want) {
@@ -388,7 +388,7 @@ lines:
 			got := []string{}
 			for _, check := range CheckSources("dev", []Source{source("plan.yaml", pair[0]), source("shop.yaml", pair[1])}).Checks {
 				for _, mistake := range check.Mistakes {
-					if mistake.File == file && isOneOf(check.ID, "refs.known", "refs.agree", "refs.starts", "refs.owner","warn.shared-writers", "warn.shared-readers") {
+					if mistake.File == file && isOneOf(check.ID, "refs.known", "refs.agree", "refs.starts", "refs.owner", "warn.shared-writers", "warn.shared-readers") {
 						got = append(got, mistake.Message)
 						failed[check.ID] = true
 					}
