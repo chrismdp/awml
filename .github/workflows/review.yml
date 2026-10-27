@@ -87,28 +87,53 @@ jobs:
           jq -r '"# \(.pull_request.title)\n\n\(.pull_request.body // "")"' "$GITHUB_EVENT_PATH" \
             > "$review/pull-request.md"
           git checkout -q --detach "$base"
-          # GitHub's diff names a binary file without its contents, so git can't apply it. Apply the
-          # rest, and tell the reviewers which binary files changed.
-          binaries="$review/binaries.txt"
-          sed -nE -e 's#^Binary files .* and b/(.*) differ$#\1#p' \
-            -e 's#^Binary files a/(.*) and /dev/null differ$#\1#p' "$review/change.patch" \
-            | sort -u > "$binaries"
-          skip=()
-          while IFS= read -r path; do
-            [ -n "$path" ] && skip+=("--exclude=$path")
-          done < "$binaries"
-          git apply --index "${skip[@]}" "$review/change.patch"
-          if [ -s "$binaries" ]; then
+          # Every path the patch touches, as git reads it, with renames counted by both names.
+          paths=()
+          binaries=()
+          while IFS= read -r -d '' record; do
+            added="${record%%$'\t'*}"
+            path="${record#*$'\t'}"
+            path="${path#*$'\t'}"
+            if [ -z "$path" ]; then
+              IFS= read -r -d '' old
+              IFS= read -r -d '' path
+              paths+=("$old")
+            fi
+            paths+=("$path")
+            [ "$added" = "-" ] && binaries+=("$path")
+          done < <(git apply --numstat -z "$review/change.patch")
+          claudes='(^|/)\.claude(/|$)|(^|/)\.mcp\.json$|(^|/)CLAUDE(\.local)?\.md$'
+          if [ "${#paths[@]}" -gt 0 ] && printf '%s\0' "${paths[@]}" | grep -zqE "$claudes"; then
+            echo "The patch changes Claude Code's own settings, servers or instructions, which a review session would load, so it isn't reviewed:"
+            printf '%s\0' "${paths[@]}" | grep -zE "$claudes" | tr '\0' '\n'
+            exit 1
+          fi
+          # GitHub's diff names a binary file without its contents, so git can't apply it. Leave out
+          # each binary file's section, apply the rest, and tell the reviewers which binary files
+          # changed. Then check that every other file the patch touches is staged.
+          awk 'function flush() { if (section != "" && !binary) printf "%s", section; section = ""; binary = 0 }
+            /^diff --git / { flush() }
+            { section = section $0 "\n" }
+            /^Binary files .* differ$/ || /^GIT binary patch$/ { binary = 1 }
+            END { flush() }' "$review/change.patch" > "$review/text.patch"
+          if [ -s "$review/text.patch" ]; then
+            git apply --index "$review/text.patch"
+          fi
+          staged="$(git diff --cached --name-only --no-renames -z | tr '\0' '\n')"
+          for path in "${paths[@]}"; do
+            for binary in "${binaries[@]}"; do
+              [ "$path" = "$binary" ] && continue 2
+            done
+            if ! grep -qxF -- "$path" <<< "$staged"; then
+              echo "The patch touches $path, but it wasn't applied, so the reviews wouldn't see it."
+              exit 1
+            fi
+          done
+          if [ "${#binaries[@]}" -gt 0 ]; then
             {
               printf '\n## Binary files, changed but not shown in the patch\n\n'
-              sed 's/^/- /' "$binaries"
+              printf -- '- %s\n' "${binaries[@]}"
             } >> "$review/pull-request.md"
-          fi
-          claudes='(^|/)\.claude(/|$)|(^|/)\.mcp\.json$|(^|/)CLAUDE(\.local)?\.md$'
-          if git diff --cached --name-only --no-renames -z | grep -zqE "$claudes"; then
-            echo "The patch changes Claude Code's own settings, servers or instructions, which a review session would load, so it isn't reviewed:"
-            git diff --cached --name-only --no-renames -z | grep -zE "$claudes" | tr '\0' '\n'
-            exit 1
           fi
 
       # Claude Code runs its commands in a sandbox, bubblewrap with socat for its network, so that it
