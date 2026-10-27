@@ -249,6 +249,79 @@ func TestUntrustedTextIsFollowedAcrossWorkflows(t *testing.T) {
 	}
 }
 
+// The inbox sorter owns the shop's inbox, and tags each mail and sorts it into a queue. The replier
+// reads the queue and sends a reply, and its copy of the inbox marks it untrusted, as anyone can
+// write to it.
+const sorterWorkflow = `awml: "0.6"
+title: Inbox sorter
+scopes:
+  - { id: office, label: "office: Ana", processing: any }
+parts:
+  - { id: arrive, kind: trigger, label: "Mail arrives", wait: PT1H }
+  - { id: mail, kind: connector, label: The shop inbox, in: office }
+  - { id: sort, kind: code, op: sort, label: Sort the mail, in: office }
+  - { id: queue, kind: context, label: Sorted mail, at: notes/queue, in: office }
+  - { id: tag, kind: code, op: do, label: Tag the mail, in: office }
+  - { id: label, kind: outside, label: "Label the mail: Allow", in: office }
+lines:
+  - { from: arrive, to: sort, kind: start }
+  - { from: mail, to: sort, kind: data }
+  - { from: sort, to: queue, kind: data }
+  - { from: mail, to: tag, kind: data }
+  - { from: tag, to: label, kind: data }
+`
+
+const replierWorkflow = `awml: "0.6"
+title: Replier
+scopes:
+  - { id: office, label: "office: Ana", processing: any }
+parts:
+  - { id: hourly, kind: trigger, label: "Every hour", wait: PT1H }
+  - { id: mail, kind: connector, label: The shop inbox, in: office, untrusted: true, ref: sorter.yaml#mail }
+  - { id: queue, kind: context, label: Sorted mail, at: notes/queue, in: office, ref: sorter.yaml#queue }
+  - { id: draft, kind: ai, op: draft, label: Draft a reply, in: office }
+  - { id: go, kind: code, op: do, label: Send it, in: office }
+  - { id: send, kind: outside, label: "Send the reply: Allow", in: office }
+lines:
+  - { from: hourly, to: draft, kind: start }
+  - { from: queue, to: draft, kind: data }
+  - { from: draft, to: go, kind: data }
+  - { from: go, to: send, kind: data }
+  - { from: send, to: mail, kind: data }
+`
+
+// A part they share is untrusted if any workflow's copy of it is marked untrusted, and its text is
+// followed from there, into every workflow.
+func TestAPartIsUntrustedIfAnyCopyIsMarked(t *testing.T) {
+	workflows := together(t, "sorter.yaml", sorterWorkflow, "replier.yaml", replierWorkflow)
+	stop := `: a review, a person's own step or a code step marked cleans in between would stop it`
+	want := [][]string{
+		{`untrusted text from part "mail" in replier.yaml reaches outside action "label"` + stop},
+		{`untrusted text from part "mail" in replier.yaml reaches outside action "send"` + stop},
+	}
+	if got := TogetherWarnings(workflows); !reflect.DeepEqual(got, want) {
+		t.Errorf("TogetherWarnings gave %q\nwant %q", got, want)
+	}
+	untrusted := []UntrustedSummary{{Part: "The shop inbox", Steps: []string{"Sort the mail", "Tag the mail", "Draft a reply", "Send it"},
+		OutsideActions: []string{"Label the mail: Allow", "Send the reply: Allow"}}}
+	if got := SummariseTogether(workflows).Untrusted; !reflect.DeepEqual(got, untrusted) {
+		t.Errorf("the summary's untrusted parts are %+v\nwant %+v", got, untrusted)
+	}
+	if got := DrawMap(workflows); !strings.Contains(got, `s1{{"The shop inbox ⚠️"}}`) {
+		t.Errorf("the map doesn't mark the inbox untrusted:\n%s", got)
+	}
+	// Where the owner's copy is marked too, what it reaches in its own workflow is warned of there.
+	marked := strings.Replace(sorterWorkflow, "label: The shop inbox, in: office }", "label: The shop inbox, in: office, untrusted: true }", 1)
+	workflows = together(t, "sorter.yaml", marked, "replier.yaml", replierWorkflow)
+	if got := Warnings(workflows[0].Doc); !reflect.DeepEqual(got, []string{`untrusted text from part "mail" reaches outside action "label"` + stop}) {
+		t.Fatalf("the sorter alone warns %q", got)
+	}
+	want = [][]string{nil, {`untrusted text from part "mail" in sorter.yaml reaches outside action "send"` + stop}}
+	if got := TogetherWarnings(workflows); !reflect.DeepEqual(got, want) {
+		t.Errorf("TogetherWarnings gave %q\nwant %q", got, want)
+	}
+}
+
 func TestTheMapDrawsABoxForEachWorkflowAndEachSharedPartOnce(t *testing.T) {
 	got := DrawMap(together(t, "plan.yaml", planWorkflow, "shop.yaml", shopWorkflow))
 	for _, want := range []string{

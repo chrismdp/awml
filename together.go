@@ -396,7 +396,7 @@ func (l linked) join() joined {
 			if root, ok := l.root[p]; ok && root.part != p {
 				continue
 			}
-			c := copyMap(p, "ref")
+			c := copyMap(l.sharedPart(partAt{w, p}), "ref")
 			c.set("id", idOf(w, p))
 			j.names[str(c, "id")] = name(w, str(p, "id"))
 			j.from[str(c, "id")] = partAt{w, p}
@@ -419,8 +419,57 @@ func (l linked) join() joined {
 	return j
 }
 
+// copiesOf gives every copy of a part, the one every ref leads back to first: just that one, where
+// no other workflow shares it.
+func (l linked) copiesOf(root partAt) []partAt {
+	for _, copies := range l.shared {
+		if copies[0].part == root.part {
+			return copies
+		}
+	}
+	return []partAt{root}
+}
+
+// marked gives the first copy of a part that's marked untrusted, the owner's first, and whether any
+// copy is. A part they share is untrusted if any workflow's copy of it is marked untrusted.
+func (l linked) marked(root partAt) (partAt, bool) {
+	for _, c := range l.copiesOf(root) {
+		if c.part.get("untrusted") == true {
+			return c, true
+		}
+	}
+	return partAt{}, false
+}
+
+// sharedPart gives the part a copy every ref leads back to stands for: the copy, marked untrusted
+// where any copy of it is.
+func (l linked) sharedPart(root partAt) *Map {
+	if _, ok := l.marked(root); !ok || root.part.get("untrusted") == true {
+		return root.part
+	}
+	p := copyMap(root.part)
+	p.set("untrusted", true)
+	return p
+}
+
+// warnedAlone is whether a workflow's own check warns that a part's text reaches one of its outside
+// actions: whether its own copy of the part is marked untrusted, and reaches the action within it.
+func (l linked) warnedAlone(source, action partAt) bool {
+	doc := l.workflows[action.workflow].Doc
+	for _, c := range l.copiesOf(source) {
+		if c.workflow != action.workflow || c.part.get("untrusted") != true {
+			continue
+		}
+		if alone, _ := reach(c.part, items(doc, "parts"), items(doc, "lines")); alone[action.part] {
+			return true
+		}
+	}
+	return false
+}
+
 // warnUntrusted warns of each outside action that untrusted text reaches through a part shared with
-// another workflow, which no workflow's own check sees.
+// another workflow, which no workflow's own check sees. It names the part the text comes from by
+// the first copy marked untrusted.
 func (l *linked) warnUntrusted() {
 	if len(l.shared) == 0 {
 		return
@@ -429,14 +478,12 @@ func (l *linked) warnUntrusted() {
 	from := map[*Map][]partAt{}
 	for _, source := range untrustedParts(j.parts) {
 		reached, _ := reach(source, j.parts, j.lines)
-		origin := j.from[str(source, "id")]
-		// What the text reaches within its own workflow, that workflow's check already warns of.
-		doc := l.workflows[origin.workflow].Doc
-		alone, _ := reach(origin.part, items(doc, "parts"), items(doc, "lines"))
+		root := j.from[str(source, "id")]
+		named, _ := l.marked(root)
 		for _, p := range j.parts {
 			action := j.from[str(p, "id")]
-			if reached[p] && p.get("kind") == "outside" && (action.workflow != origin.workflow || !alone[action.part]) {
-				from[action.part] = append(from[action.part], origin)
+			if reached[p] && p.get("kind") == "outside" && !l.warnedAlone(root, action) {
+				from[action.part] = append(from[action.part], named)
 			}
 		}
 	}
@@ -514,7 +561,7 @@ func DrawMap(workflows []Workflow) string {
 		root := copies[0].part
 		node[root] = fmt.Sprintf("s%d", n+1)
 		drawn = append(drawn, root)
-		out = append(out, "  "+node[root]+fmt.Sprintf(shapes[str(root, "kind")], label(root, false)))
+		out = append(out, "  "+node[root]+fmt.Sprintf(shapes[str(root, "kind")], label(l.sharedPart(copies[0]), false)))
 	}
 	out = append(out, "")
 	for n, copies := range l.shared {

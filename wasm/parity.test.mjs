@@ -373,6 +373,46 @@ lines:
       return true;
     });
   }
+  // A part they share is untrusted if any workflow's copy of it is marked untrusted.
+  const sorter = `awml: "0.6"
+title: Inbox sorter
+scopes:
+  - { id: office, label: "office: Ana", processing: any }
+parts:
+  - { id: arrive, kind: trigger, label: "Mail arrives", wait: PT1H }
+  - { id: mail, kind: connector, label: The shop inbox, in: office }
+  - { id: sort, kind: code, op: sort, label: Sort the mail, in: office }
+  - { id: queue, kind: context, label: Sorted mail, at: notes/queue, in: office }
+lines:
+  - { from: arrive, to: sort, kind: start }
+  - { from: mail, to: sort, kind: data }
+  - { from: sort, to: queue, kind: data }
+`;
+  const replier = `awml: "0.6"
+title: Replier
+scopes:
+  - { id: office, label: "office: Ana", processing: any }
+parts:
+  - { id: hourly, kind: trigger, label: "Every hour", wait: PT1H }
+  - { id: mail, kind: connector, label: The shop inbox, in: office, untrusted: true, ref: sorter.yaml#mail }
+  - { id: queue, kind: context, label: Sorted mail, at: notes/queue, in: office, ref: sorter.yaml#queue }
+  - { id: draft, kind: ai, op: draft, label: Draft a reply, in: office }
+  - { id: go, kind: code, op: do, label: Send it, in: office }
+  - { id: send, kind: outside, label: "Send the reply: Allow", in: office }
+lines:
+  - { from: hourly, to: draft, kind: start }
+  - { from: queue, to: draft, kind: data }
+  - { from: draft, to: go, kind: data }
+  - { from: go, to: send, kind: data }
+`;
+  const inbox = [{ file: `${temporary}/sorter.yaml`, source: sorter }, { file: `${temporary}/replier.yaml`, source: replier }];
+  for (const { file, source } of inbox) await writeFile(file, source);
+  const inboxPaths = inbox.map(({ file }) => file);
+  assert.equal(api.checksJSON(inbox) + "\n", runNative(["check", "--json", ...inboxPaths]), "checks JSON of a part marked untrusted by a copy");
+  assert.equal(api.summaryJSON(inbox) + "\n", runNative(["summary", "--json", ...inboxPaths]), "summary JSON of a part marked untrusted by a copy");
+  assert.equal(api.draw(inbox) + "\n", runNative(["draw", ...inboxPaths]), "map of a part marked untrusted by a copy");
+  assert.deepEqual(api.summary(inbox).untrusted.map(({ outsideActions }) => outsideActions), [["Send the reply: Allow"]]);
+
   // One file given by name is held to a ref it makes to itself.
   const self = { file: `${temporary}/self.yaml`, source: plan.replace("shop.yaml#ready", "self.yaml#thu") };
   await writeFile(self.file, self.source);
