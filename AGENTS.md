@@ -25,6 +25,7 @@ Work through the open issues one at a time. Their labels say what kind of work e
 - **Build `tool` and `guide` issues, and decided `spec` ones, by adding the `build` label.** The build workflow drafts, checks and opens the pull request. Build by hand only a change the workflow can't push, which is a change under `.github/workflows/`.
 - **A change to a workflow under `.github/workflows/` starts as an AWML drawing,** published to awml.io. Build it only after the maintainer has checked the drawing and said so.
 - **Each pull request says which issues it closes,** with `Closes #n`.
+- **A pull request that another replaces is closed,** with a comment naming the pull request or rebuild that replaces it.
 - **Something new turns up while you work:** open an issue for it, rather than widening the change.
 
 ## How AWML is designed
