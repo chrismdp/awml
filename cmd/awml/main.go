@@ -214,7 +214,10 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return fail(usage, "awml", "the following arguments are required: command")
 	}
 	if isOneOf(command, "check", "draw", "fit", "summary", "page") {
-		files = expandFolders(files)
+		var empty string
+		if files, empty = expandFolders(files); empty != "" {
+			return fail(commands[command].usage, "awml "+command, empty+" holds no .yaml files")
+		}
 	}
 	var missing []string
 	if len(files) == 0 && command != "login" {
@@ -475,8 +478,9 @@ func currentVersion() string {
 
 // expandFolders gives the files named, with each folder standing for every .yaml file directly
 // inside it, in the order of their names. A path that can't be read as a folder is a file. A file
-// named twice is given once, where it's first named.
-func expandFolders(paths []string) []string {
+// named twice is given once, where it's first named. It also gives the first folder that holds no
+// .yaml file, if there is one.
+func expandFolders(paths []string) ([]string, string) {
 	var files []string
 	seen := map[string]bool{}
 	add := func(path string) {
@@ -495,13 +499,18 @@ func expandFolders(paths []string) []string {
 			add(path)
 			continue
 		}
+		held := false
 		for _, entry := range entries {
 			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".yaml") {
 				add(filepath.Join(path, entry.Name()))
+				held = true
 			}
 		}
+		if !held {
+			return nil, path
+		}
 	}
-	return files
+	return files, ""
 }
 
 // where gives where a file named by path is, as an absolute path, which its refs are followed from.

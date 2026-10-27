@@ -225,13 +225,22 @@ func TestScopesWithTheSamePeopleAndTermsAgreeWhateverTheirIds(t *testing.T) {
 	togetherFinds(t, together(t, "plan.yaml", planWorkflow, "shop.yaml", shop))
 }
 
+// Two parts with the same id, kind, label and scope, and no ref, are two parts: nothing reports them
+// shared, counts them once or warns that both workflows write the one list.
 func TestPartsWithTheSameIdAndNoRefAreNotLinked(t *testing.T) {
 	shop := strings.Replace(shopWorkflow, ", ref: plan.yaml#list", "", 1)
-	shop = strings.Replace(shop, "label: Shopping list", "label: Something else", 1)
+	shop = strings.Replace(shop, "  - { from: fill, to: basket", "  - { from: fill, to: list, kind: data }\n  - { from: fill, to: basket", 1)
 	workflows := together(t, "plan.yaml", planWorkflow, "shop.yaml", shop)
 	togetherFinds(t, workflows)
-	if strings.Contains(DrawMap(workflows), "Something else") {
-		t.Error("the map draws a part no ref links")
+	if got := TogetherWarnings(workflows); !reflect.DeepEqual(got, [][]string{nil, nil}) {
+		t.Errorf("TogetherWarnings gave %q", got)
+	}
+	summary := SummariseTogether(workflows)
+	if want := []SharedSummary{{Label: "The shopping list is ready", Kind: "trigger", Workflows: []string{"Dinners", "Shopping"}}}; !reflect.DeepEqual(summary.Shared, want) {
+		t.Errorf("the shared parts are %+v\nwant %+v", summary.Shared, want)
+	}
+	if summary.Contexts != 2 {
+		t.Errorf("the summary counts %d contexts, want 2", summary.Contexts)
 	}
 }
 

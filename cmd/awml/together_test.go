@@ -282,3 +282,18 @@ func TestFitNamesFilesOfTheSameNameByTheirFolders(t *testing.T) {
 		t.Errorf("fit gave %+v\nwant %q", got, want)
 	}
 }
+
+// A folder with no .yaml file in it is a mistake in the command, which says so.
+func TestAFolderWithNoYamlFilesIsAMistakeInTheCommand(t *testing.T) {
+	empty := folder(t, "notes.txt", "not a workflow")
+	plan := write(t, "plan.yaml", planWorkflow)
+	for _, command := range []string{"check", "draw", "summary", "fit"} {
+		for _, args := range [][]string{{empty}, {plan, empty}} {
+			got := awmlRun(append([]string{command}, args...)...)
+			want := commands[command].usage + "awml " + command + ": error: " + empty + " holds no .yaml files\n"
+			if got != (result{2, "", want}) {
+				t.Errorf("%s %q gave %+v\nwant stderr %q", command, args, got, want)
+			}
+		}
+	}
+}
