@@ -266,6 +266,28 @@ func TestTheGoCacheIsNeverShared(t *testing.T) {
 
 // Every step that runs Claude Code holds the maintainer's login token, so Claude Code strips it,
 // and any other credential, from the commands it starts, which text in an issue could steer.
+// Claude Code needs bubblewrap to scrub its token from the commands it runs, and stops without it,
+// so every job that installs Claude Code installs bubblewrap with it and checks that it works.
+func TestEveryJobThatRunsClaudeHasBubblewrap(t *testing.T) {
+	files, err := filepath.Glob(".github/workflows/*.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range files {
+		file := filepath.Base(path)
+		for name, job := range readFactoryWorkflow(t, file).Jobs {
+			for _, step := range job.Steps {
+				if !strings.Contains(step.Run, "npm install -g @anthropic-ai/claude-code") {
+					continue
+				}
+				if !strings.Contains(step.Run, "apt-get install -y bubblewrap") || !strings.Contains(step.Run, "bwrap --") {
+					t.Errorf("%s's %s installs Claude Code without installing and checking bubblewrap", file, name)
+				}
+			}
+		}
+	}
+}
+
 func TestClaudesCommandsNeverSeeItsToken(t *testing.T) {
 	files, err := filepath.Glob(".github/workflows/*.yml")
 	if err != nil {

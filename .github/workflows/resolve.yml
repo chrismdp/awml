@@ -191,9 +191,17 @@ jobs:
           fi
           echo "conflicts=true" >> "$GITHUB_OUTPUT"
 
-      - name: Install Claude Code
+      # Claude Code scrubs its login token from the commands it runs inside bubblewrap, and stops
+      # without it. Ubuntu's runners restrict the user namespaces bubblewrap needs, so allow them on
+      # this throwaway machine, and check bubblewrap works before Claude starts.
+      - name: Install Claude Code and bubblewrap
         if: ${{ steps.rebase.outputs.conflicts == 'true' }}
-        run: npm install -g @anthropic-ai/claude-code
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          bwrap --dev-bind / / --unshare-pid true
+          npm install -g @anthropic-ai/claude-code
 
       - name: Resolve the conflicts
         if: ${{ steps.rebase.outputs.conflicts == 'true' }}
