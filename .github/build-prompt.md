@@ -21,6 +21,9 @@ found, fix each Important finding, and any other you agree with.
   after changing any source it copies.
 - Run every check AGENTS.md lists until they all pass. If `awml draw`'s output changes, regenerate
   the .mmd files, but don't run examples/render.sh yourself.
+- If your change alters how something is drawn and no example shows it, change an example, or
+  add a small one to examples/tour/, so that one does: the pull request's pictures come from the
+  examples, and a reviewer should see the change, not only read the test that asks for it.
 - Once the checks pass, if your change alters an example's .mmd or the renderer under
   examples/render*, run `.github/picture-drawings.sh BUILD_DIR`. It redraws the drawings your
   change alters into the working tree, puts every other SVG back, and pictures, before and after,
