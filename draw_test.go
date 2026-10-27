@@ -212,6 +212,147 @@ func TestMarkdownPunctuationIsAnEntityInLabelText(t *testing.T) {
 	}
 }
 
+// The line and paragraph separators, U+2028 and U+2029, which YAML and Mermaid read as line breaks.
+const ls, ps = "\xe2\x80\xa8", "\xe2\x80\xa9"
+
+// Mermaid ends a row at a line break, so each run of them in a label, with the whitespace around
+// it, is one space, and the label's ends are trimmed.
+func TestLineBreaksInLabelTextFoldIntoOneSpace(t *testing.T) {
+	for _, c := range [][2]string{
+		{"a\nb", "a b"},
+		{"a\r\nb", "a b"},
+		{"a\rb", "a b"},
+		{"a" + ls + "b", "a b"},
+		{"a" + ps + "b", "a b"},
+		{"a \t\n " + ls + "\r\n b", "a b"},
+		{"a\n\nb\nc", "a b c"},
+		{"Plan\n", "Plan"},
+		{"\n", ""},
+		{"\nend\n", "end"},
+		{"  Plan  ", "Plan"},
+	} {
+		if got := text(c[0]); got != c[1] {
+			t.Errorf("text(%q) = %q, want %q", c[0], got, c[1])
+		}
+	}
+}
+
+// A file whose labels hold line breaks, each written as %[1]s, and its twin, whose labels are the
+// same with each run of breaks one space. The outer scope's label is a row of its own holding end,
+// which would close its subgraph, and the step's is a block that keeps its last line break.
+const brokenLabels = `awml: "0.7"
+title: "Bakery%[1]sreplies"
+scopes:
+  - { id: shop, label: "%[1]send%[1]s" }
+  - { id: owner, label: "owner:%[1]sAna", in: shop }
+parts:
+  - { id: mail, kind: trigger, label: "A customer%[1]s%[1]semails" }
+  - id: draft
+    kind: ai
+    op: draft
+    in: owner
+    label: |
+      Draft a reply
+  - { id: board, kind: surface, label: "The shop's %[1]s board", in: shop }
+  - { id: gap, kind: comment, label: "Nobody%[1]sreads it" }
+lines:
+  - { from: mail, to: draft, kind: start }
+  - { from: draft, to: board, kind: data, label: " posted%[1]s%[1]s to the board " }
+  - { from: gap, to: board, kind: tie }
+implementations:
+  home:
+    label: At home
+    blocks:
+      - { id: laptop, label: "Ana's%[1]slaptop", parts: [draft, board] }
+    comments:
+      - { id: tried, label: "Tried%[1]sonce", in: laptop, ties: [draft] }
+`
+
+const foldedLabels = `awml: "0.7"
+title: "Bakery replies"
+scopes:
+  - { id: shop, label: "end" }
+  - { id: owner, label: "owner: Ana", in: shop }
+parts:
+  - { id: mail, kind: trigger, label: "A customer emails" }
+  - { id: draft, kind: ai, op: draft, label: "Draft a reply", in: owner }
+  - { id: board, kind: surface, label: "The shop's board", in: shop }
+  - { id: gap, kind: comment, label: "Nobody reads it" }
+lines:
+  - { from: mail, to: draft, kind: start }
+  - { from: draft, to: board, kind: data, label: "posted to the board" }
+  - { from: gap, to: board, kind: tie }
+implementations:
+  home:
+    label: At home
+    blocks:
+      - { id: laptop, label: "Ana's laptop", parts: [draft, board] }
+    comments:
+      - { id: tried, label: "Tried once", in: laptop, ties: [draft] }
+`
+
+// Each kind of line break in a part's, a comment's, a scope's, a block's, a line's or a map box's
+// label draws as the same label with one space for each run of them: one row each, and the
+// subgraphs end where they did. awml check finds nothing wrong with them.
+func TestTheMermaidFoldsLineBreaksInLabels(t *testing.T) {
+	folded := parsed(t, foldedLabels)
+	for _, c := range []struct{ name, escape, written string }{
+		{"LF", `\n`, "\n"}, {"CRLF", `\r\n`, "\r\n"}, {"CR", `\r`, "\r"},
+		{"U+2028", "\\u" + "2028", ls}, {"U+2029", "\\u" + "2029", ps},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			src := fmt.Sprintf(brokenLabels, c.escape)
+			broken := parsed(t, src)
+			if mistakes := Unsound(broken); len(mistakes) != 0 {
+				t.Fatal(mistakes)
+			}
+			// The graph gives each label as the file wrote it, line breaks and all.
+			if got, want := graphOf(t, src, "").Comments[0].Label, "Nobody"+c.written+"reads it"; got != want {
+				t.Errorf("the graph gives the comment as %q, not %q", got, want)
+			}
+			for _, implementation := range []string{"", "home"} {
+				got, want := graphOf(t, src, implementation).Mermaid(), graphOf(t, foldedLabels, implementation).Mermaid()
+				if got != want {
+					t.Errorf("the %q view draws\n%s\nnot\n%s", implementation, got, want)
+				}
+				if strings.ContainsAny(got, "\r"+ls+ps) {
+					t.Errorf("the %q view keeps a line break:\n%s", implementation, got)
+				}
+				subgraphs, ends := 0, 0
+				for _, row := range strings.Split(got, "\n") {
+					if strings.HasPrefix(strings.TrimSpace(row), "subgraph ") {
+						subgraphs++
+					}
+					if strings.TrimSpace(row) == "end" {
+						ends++
+					}
+				}
+				if subgraphs != ends || subgraphs == 0 {
+					t.Errorf("the %q view has %d subgraphs and %d ends:\n%s", implementation, subgraphs, ends, got)
+				}
+			}
+			if got, want := Draw(broken), Draw(folded); got != want {
+				t.Errorf("awml draw draws\n%s\nnot\n%s", got, want)
+			}
+			got := GraphMap(together(t, "a.yaml", src, "b.yaml", src)).Mermaid()
+			want := GraphMap(together(t, "a.yaml", foldedLabels, "b.yaml", foldedLabels)).Mermaid()
+			if got != want {
+				t.Errorf("the map draws\n%s\nnot\n%s", got, want)
+			}
+		})
+	}
+}
+
+// A line whose label is only a line break draws with no label.
+func TestALineLabelledOnlyByALineBreakDrawsNoLabel(t *testing.T) {
+	g := Graph{
+		View:  "security",
+		Parts: []GraphPart{{ID: "a", Kind: "code", Label: "A"}, {ID: "b", Kind: "code", Label: "B"}},
+		Lines: []GraphLine{{From: "a", To: "b", Kind: "data", Label: "\r\n", Points: "to"}},
+	}
+	has(t, g.Mermaid()+"\n", "\n  a --> b\n")
+}
+
 func TestRedLinesAreCountedAmongAllLinesHiddenOnesToo(t *testing.T) {
 	out := drawing(t, "security", `
 parts: [{id: a, kind: code, label: a}, {id: b, kind: code, label: b}, {id: c, kind: code, label: c}, {id: d, kind: code, label: d}]

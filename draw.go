@@ -2,6 +2,7 @@ package awml
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -89,12 +90,23 @@ var deciders = map[string]string{"ai": "🤖", "code": "⚙️", "person": "👤
 // approval's 📜 standing approval, which no operation uses.
 const operation = "<small style='color:rgb(61,67,79)'>%s</small><br>"
 
-// text keeps Mermaid from reading a label as Markdown or HTML. CommonMark syntax is made entirely
-// from ASCII punctuation, so entity-encoding every such mark leaves no syntax for its parser while
-// Mermaid still renders the original character. The operation HTML is added after this function.
+// lineBreak is a run of line breaks, with the whitespace around it.
+var lineBreak = regexp.MustCompile(`[\s\v\x{85}\pZ]*[\n\r\x{2028}\x{2029}][\s\v\x{85}\pZ]*`)
+
+// fold makes each run of line breaks in a label one space, and trims its ends. Mermaid ends a row at
+// a line break, so a label that kept one would break its node's row, and one holding end on a row
+// of its own would close its subgraph.
+func fold(s string) string {
+	return strings.TrimSpace(lineBreak.ReplaceAllString(s, " "))
+}
+
+// text keeps Mermaid from reading a label as Markdown or HTML, once its line breaks are folded.
+// CommonMark syntax is made entirely from ASCII punctuation, so entity-encoding every such mark
+// leaves no syntax for its parser while Mermaid still renders the original character. The operation
+// HTML is added after this function.
 func text(s string) string {
 	var out strings.Builder
-	for _, r := range s {
+	for _, r := range fold(s) {
 		if r >= '!' && r <= '/' || r >= ':' && r <= '@' || r >= '[' && r <= '`' || r >= '{' && r <= '~' {
 			fmt.Fprintf(&out, "#%d;", r)
 		} else {
