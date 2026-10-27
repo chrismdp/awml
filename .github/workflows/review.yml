@@ -130,6 +130,10 @@ jobs:
           # file is staged, and refuse Claude's own files among what was staged too.
           readable='\.(png|jpe?g|gif|webp|ico|ttf|otf|woff2?)$'
           for binary in "${binaries[@]}"; do
+            if ! [[ "$binary" =~ ^[A-Za-z0-9._/@+-]+$ ]]; then
+              echo "The patch changes a binary file whose name holds more than letters, digits and ./@+-_, which the reviews would be told as is."
+              exit 1
+            fi
             if [[ "$binary" == .github/* ]] || ! [[ "$binary" =~ $readable ]]; then
               echo "The patch changes $binary, which GitHub's diff shows only as binary, so the reviews couldn't read it."
               exit 1
@@ -156,6 +160,7 @@ jobs:
               exit 1
             fi
           done
+          echo "${#binaries[@]}" > "$review/unread.txt"
           if [ "${#binaries[@]}" -gt 0 ]; then
             {
               printf '\n## Binary files, changed but not shown in the patch\n\n'
@@ -228,6 +233,7 @@ jobs:
           path: |
             ${{ runner.temp }}/review/bugs.json
             ${{ runner.temp }}/review/security.json
+            ${{ runner.temp }}/review/unread.txt
 
   # Once both reviews are done, posts each as a check on the head commit: passed if it found
   # nothing, failed if it found something Important, and neutral if it found only Nits or
@@ -259,6 +265,13 @@ jobs:
             exit 1
           fi
           findings="$RUNNER_TEMP/findings"
+          # How many binary images or fonts the reviews couldn't read. A review that saw nothing
+          # wrong but couldn't read them all is neutral, not passed, so a person looks.
+          unread="$(cat "$findings/unread.txt")"
+          if ! [[ "$unread" =~ ^[0-9]{1,4}$ ]]; then
+            echo "The review left no readable count of the binary files it couldn't read."
+            exit 1
+          fi
           for file in bugs.json security.json; do
             if ! jq -e 'type == "array" and length <= 50 and all(.[];
                 type == "object" and
@@ -285,19 +298,22 @@ jobs:
                 name: $name,
                 head_sha: $head_sha,
                 status: "completed",
-                conclusion: (if any(.[]; .severity == "Important") then "failure" elif length == 0 then "success" else "neutral" end),
+                conclusion: (if any(.[]; .severity == "Important") then "failure"
+                  elif length == 0 and $unread == 0 then "success" else "neutral" end),
                 output: {
-                  title: (if length == 0 then "Found nothing"
-                    else [$ranked[] | "\(.rank): \(.found | length)"] | join(", ") end),
-                  summary: (if length == 0 then "The review found nothing that survived a second look."
+                  title: ((if length == 0 then "Found nothing"
+                    else [$ranked[] | "\(.rank): \(.found | length)"] | join(", ") end)
+                    + (if $unread > 0 then ", \($unread) binary files unread" else "" end)),
+                  summary: ((if length == 0 then "The review found nothing that survived a second look."
                     else [$ranked[] | "## \(.rank)\n\n" +
                       ([.found[] | "- In `\(place)`: **\(.title | .[0:200] | clean)** \(.detail | .[0:2000] | clean)"]
                         | join("\n"))]
                       | join("\n\n") end)
+                    + (if $unread > 0 then "\n\n## Unread\n\nThe pull request changes \($unread) binary images or fonts, which the review couldn\u0027t read. A person should look at them." else "" end))
                 }
               }'
           post() {
-            jq --arg name "$1" --arg head_sha "$HEAD_SHA" "$check" "$findings/$2" |
+            jq --arg name "$1" --arg head_sha "$HEAD_SHA" --argjson unread "$unread" "$check" "$findings/$2" |
               gh api -X POST "repos/$GITHUB_REPOSITORY/check-runs" --input - > /dev/null
           }
           post "Bug review" bugs.json

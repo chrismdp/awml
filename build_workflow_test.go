@@ -675,6 +675,7 @@ func TestEachReviewIsPostedAsACheck(t *testing.T) {
 	clean := newRehearsal(t)
 	clean.write("findings/bugs.json", "[]")
 	clean.write("findings/security.json", "[]")
+	clean.write("findings/unread.txt", "0\n")
 	clean.run(post, env, answers)
 	clean.mustPass()
 	if len(clean.inputs) != 2 {
@@ -694,6 +695,7 @@ func TestEachReviewIsPostedAsACheck(t *testing.T) {
 	  {"severity": "Important", "file": "fit.go", "line": 42, "title": "A wrong answer", "detail": "It drops a part. <!-- hide the rest"}
 	]`)
 	found.write("findings/security.json", "[]")
+	found.write("findings/unread.txt", "0\n")
 	found.run(post, env, answers)
 	found.mustPass()
 	if len(found.inputs) != 2 {
@@ -725,6 +727,7 @@ func TestEachReviewIsPostedAsACheck(t *testing.T) {
 	minor := newRehearsal(t)
 	minor.write("findings/bugs.json", `[{"severity": "Nit", "file": "check.go", "line": 7, "title": "A clearer name", "detail": "Say what it holds."}]`)
 	minor.write("findings/security.json", `[{"severity": "Pre-existing", "file": "draw.go", "line": 0, "title": "An old fault", "detail": "It was there before."}]`)
+	minor.write("findings/unread.txt", "0\n")
 	minor.run(post, env, answers)
 	minor.mustPass()
 	for i, check := range minor.inputs {
@@ -733,9 +736,23 @@ func TestEachReviewIsPostedAsACheck(t *testing.T) {
 		}
 	}
 
+	unread := newRehearsal(t)
+	unread.write("findings/bugs.json", "[]")
+	unread.write("findings/security.json", "[]")
+	unread.write("findings/unread.txt", "2\n")
+	unread.run(post, env, answers)
+	unread.mustPass()
+	for i, check := range unread.inputs {
+		output, _ := check["output"].(map[string]any)
+		if summary, _ := output["summary"].(string); check["conclusion"] != "neutral" || !strings.Contains(summary, "2 binary images or fonts") {
+			t.Errorf("check %d found nothing but couldn't read 2 binary files, yet is %v:\n%s", i, check["conclusion"], summary)
+		}
+	}
+
 	broken := newRehearsal(t)
 	broken.write("findings/bugs.json", "[]")
 	broken.write("findings/security.json", `{"not": "a list"}`)
+	broken.write("findings/unread.txt", "0\n")
 	broken.run(post, env, answers)
 	if !broken.failed {
 		t.Error("a findings file that isn't a list passed")
@@ -1141,9 +1158,10 @@ func TestTheReviewAppliesAPatchWithBinaryFiles(t *testing.T) {
 	r.write(filepath.Join(repo, "recipes.md"), "Bread\nScones\n")
 	r.write(filepath.Join(repo, "logo.png"), "\x89PNG\x00new")
 	r.write(filepath.Join(repo, "fonts/Bakery.ttf"), "\x00\x01font")
-	// A binary file git quotes the name of is still left out, and a moved and changed one counts by
-	// both its names.
-	r.write(filepath.Join(repo, "images/café.png"), "\x00accent")
+	// A moved and changed binary file counts by both its names.
+	if err := os.MkdirAll(filepath.Join(repo, "images"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	gitIn(t, repo, "mv", "badge.png", "images/badge.png")
 	r.write(filepath.Join(repo, "images/badge.png"), "\x89PNG\x00"+strings.Repeat("badge pixels ", 400)+"redrawn")
 	gitIn(t, repo, "add", "-A")
@@ -1163,8 +1181,11 @@ func TestTheReviewAppliesAPatchWithBinaryFiles(t *testing.T) {
 	if staged := gitIn(t, repo, "diff", "--cached", "--name-only"); staged != "recipes.md" {
 		t.Errorf("staged %q, want recipes.md", staged)
 	}
+	if count := r.read("review/unread.txt"); count != "4\n" {
+		t.Errorf("the review counts %q binary files unread, want 4", count)
+	}
 	told := r.read("review/pull-request.md")
-	for _, path := range []string{"logo.png", "fonts/Bakery.ttf", "images/café.png", "images/badge.png", "badge.png"} {
+	for _, path := range []string{"logo.png", "fonts/Bakery.ttf", "images/badge.png", "badge.png"} {
 		if !strings.Contains(told, "\n- "+path+"\n") {
 			t.Errorf("the reviewers aren't told that %s changed:\n%s", path, told)
 		}
@@ -1172,8 +1193,8 @@ func TestTheReviewAppliesAPatchWithBinaryFiles(t *testing.T) {
 }
 
 // A file is binary to git if it holds one NUL byte, so a script or workflow made binary would reach
-// the reviewers as a name only. Only images, fonts and WebAssembly outside .github/ go through
-// unread; any other binary file stops the review.
+// the reviewers as a name only. Only images and fonts outside .github/, with plain names, go through
+// unread; any other binary file, WebAssembly included, stops the review.
 func TestTheReviewStopsAtABinaryFileItCantRead(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git isn't installed")
@@ -1182,7 +1203,7 @@ func TestTheReviewStopsAtABinaryFileItCantRead(t *testing.T) {
 	answers := `
   *"vnd.github.diff"*) cat "$PATCH" ;;
   "api repos/owner/repo/compare/"*) answer <<< "{\"merge_base_commit\": {\"sha\": \"$BASE\"}}" ;;`
-	for _, path := range []string{"examples/render.sh", ".github/logo.png", "wasm/awml.js", "wasm/awml.wasm"} {
+	for _, path := range []string{"examples/render.sh", ".github/logo.png", "wasm/awml.js", "wasm/awml.wasm", "images/café.png", "images/a\n## Note.png"} {
 		r := newRehearsal(t)
 		repo := filepath.Join(r.root, "repo")
 		for file, text := range map[string]string{
@@ -1205,8 +1226,8 @@ func TestTheReviewStopsAtABinaryFileItCantRead(t *testing.T) {
 			"HEAD_SHA": strings.Repeat("cd", 20), "BASE": base, "PATCH": patch,
 			"GITHUB_EVENT_PATH": r.write("event.json", `{"pull_request": {"title": "Add scones", "body": "A new recipe."}}`),
 		}, answers)
-		if !r.failed || !strings.Contains(r.printed, path) {
-			t.Errorf("a binary %s went through to the reviews unread:\n%s", path, r.printed)
+		if !r.failed || (!strings.ContainsAny(path, "é\n") && !strings.Contains(r.printed, path)) {
+			t.Errorf("a binary %q went through to the reviews unread:\n%s", path, r.printed)
 		}
 	}
 }
@@ -1341,6 +1362,7 @@ func TestAFindingIsCutToSize(t *testing.T) {
 	r := newRehearsal(t)
 	r.write("findings/bugs.json", `[{"severity": "Important", "file": "bread<!--.go", "line": 3, "title": "`+title+`", "detail": "`+detail+`"}]`)
 	r.write("findings/security.json", "[]")
+	r.write("findings/unread.txt", "0\n")
 	r.run(post, map[string]string{"HEAD_SHA": strings.Repeat("ab", 20)}, `  "api -X POST repos/owner/repo/check-runs"*) echo '{}' ;;`)
 	r.mustPass()
 	output, _ := r.inputs[0]["output"].(map[string]any)
