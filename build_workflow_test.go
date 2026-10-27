@@ -283,10 +283,9 @@ func TestTheGoCacheIsNeverShared(t *testing.T) {
 	}
 }
 
-// Every step that runs Claude Code holds the maintainer's login token, so Claude Code strips it,
-// and any other credential, from the commands it starts, which text in an issue could steer.
-// Claude Code needs bubblewrap to scrub its token from the commands it runs, and stops without it,
-// so every job that installs Claude Code installs bubblewrap with it and checks that it works.
+// Claude Code runs its commands in a sandbox, bubblewrap with socat for its network, so that it can
+// scrub its login token from them, and they can't start without both. So every job that installs
+// Claude Code installs both with it and checks that bubblewrap works.
 func TestEveryJobThatRunsClaudeHasBubblewrap(t *testing.T) {
 	files, err := filepath.Glob(".github/workflows/*.yml")
 	if err != nil {
@@ -307,6 +306,8 @@ func TestEveryJobThatRunsClaudeHasBubblewrap(t *testing.T) {
 	}
 }
 
+// Every step that runs Claude Code holds the maintainer's login token, so Claude Code strips it,
+// and any other credential, from the commands it starts, which text in an issue could steer.
 func TestClaudesCommandsNeverSeeItsToken(t *testing.T) {
 	files, err := filepath.Glob(".github/workflows/*.yml")
 	if err != nil {
