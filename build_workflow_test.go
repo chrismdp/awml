@@ -299,8 +299,8 @@ func TestEveryJobThatRunsClaudeHasBubblewrap(t *testing.T) {
 				if !strings.Contains(step.Run, "npm install -g @anthropic-ai/claude-code") {
 					continue
 				}
-				if !strings.Contains(step.Run, "apt-get install -y bubblewrap") || !strings.Contains(step.Run, "bwrap --") {
-					t.Errorf("%s's %s installs Claude Code without installing and checking bubblewrap", file, name)
+				if !strings.Contains(step.Run, "apt-get install -y bubblewrap socat") || !strings.Contains(step.Run, "bwrap --") {
+					t.Errorf("%s's %s installs Claude Code without installing bubblewrap and socat and checking bubblewrap", file, name)
 				}
 			}
 		}
