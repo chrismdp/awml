@@ -29,24 +29,140 @@ func TestEvaluateStraightforwardPatch(t *testing.T) {
 	repo := newRepo(t)
 	stage(t, repo, "main.go", "package main\n")
 
-	got, err := evaluate(repo, config{MaxChangedLines: 400}, "")
+	got, err := evaluate(repo, config{MaxChangedLines: 400}, inputs{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	assertVerdict(t, got, false, "No review rule matched this change.")
 }
 
-func TestEvaluateReviewNote(t *testing.T) {
-	repo := newRepo(t)
-	stage(t, repo, "main.go", "package main\n")
-	review := filepath.Join(t.TempDir(), "review.md")
-	writeFile(t, review, "I chose the slower option.\nThe issue did not settle it.\n")
-
-	got, err := evaluate(repo, config{MaxChangedLines: 400}, review)
-	if err != nil {
-		t.Fatal(err)
+func TestEvaluateOpenFindings(t *testing.T) {
+	tests := []struct {
+		name     string
+		findings string
+		review   bool
+		reason   string
+	}{
+		{
+			name:     "an Important finding",
+			findings: `[{"severity": "Important"}]`,
+			review:   true,
+			reason:   "The reviews left 1 finding open.",
+		},
+		{
+			name:     "a Nit and an Important finding",
+			findings: `[{"severity": "Nit"}, {"severity": "Important"}]`,
+			review:   true,
+			reason:   "The reviews left 2 findings open.",
+		},
+		{
+			name:     "only a pre-existing finding",
+			findings: `[{"severity": "Pre-existing"}]`,
+			review:   false,
+			reason:   "No review rule matched this change.",
+		},
+		{
+			name:     "no findings",
+			findings: `[]`,
+			review:   false,
+			reason:   "No review rule matched this change.",
+		},
 	}
-	assertVerdict(t, got, true, "Claude asked for a review: see Claude's note.")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := newRepo(t)
+			stage(t, repo, "main.go", "package main\n")
+			findings := filepath.Join(t.TempDir(), "findings.json")
+			writeFile(t, findings, tt.findings)
+
+			got, err := evaluate(repo, config{MaxChangedLines: 400}, inputs{Findings: findings})
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertVerdict(t, got, tt.review, tt.reason)
+		})
+	}
+}
+
+func TestEvaluateClassifier(t *testing.T) {
+	t.Run("asks for review", func(t *testing.T) {
+		repo := newRepo(t)
+		stage(t, repo, "main.go", "package main\n")
+		classification := filepath.Join(t.TempDir(), "classification.json")
+		writeFile(t, classification, `{"needs_review": true, "reasons": ["It changes how the parser reads scopes."]}`)
+
+		got, err := evaluate(repo, config{MaxChangedLines: 400}, inputs{Classification: classification})
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertVerdict(t, got, true, "The classifier asked for a review.")
+	})
+
+	t.Run("can't skip a review the rules require", func(t *testing.T) {
+		repo := newRepo(t)
+		stage(t, repo, "SPEC.md", "changed\n")
+		classification := filepath.Join(t.TempDir(), "classification.json")
+		writeFile(t, classification, `{"needs_review": false, "reasons": ["It is a small fix."]}`)
+
+		got, err := evaluate(repo, config{ReviewPaths: []string{"SPEC.md"}, MaxChangedLines: 400},
+			inputs{Classification: classification})
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertVerdict(t, got, true, "SPEC.md is a path that always needs review.")
+	})
+
+	t.Run("finding nothing adds nothing", func(t *testing.T) {
+		repo := newRepo(t)
+		stage(t, repo, "main.go", "package main\n")
+		classification := filepath.Join(t.TempDir(), "classification.json")
+		writeFile(t, classification, `{"needs_review": false, "reasons": ["It is a small fix."]}`)
+
+		got, err := evaluate(repo, config{MaxChangedLines: 400}, inputs{Classification: classification})
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertVerdict(t, got, false, "No review rule matched this change.")
+	})
+}
+
+func TestEvaluateRejectsUnreadableRecords(t *testing.T) {
+	tests := []struct {
+		name           string
+		findings       string
+		classification string
+	}{
+		{name: "unknown severity", findings: `[{"severity": "Minor"}]`},
+		{name: "findings not a list", findings: `{"severity": "Nit"}`},
+		{name: "missing findings file", findings: "missing"},
+		{name: "no needs_review", classification: `{"reasons": []}`},
+		{name: "needs_review not a boolean", classification: `{"needs_review": "yes"}`},
+		{name: "missing classification file", classification: "missing"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := newRepo(t)
+			stage(t, repo, "main.go", "package main\n")
+			dir := t.TempDir()
+			var in inputs
+			if tt.findings != "" {
+				in.Findings = filepath.Join(dir, "findings.json")
+				if tt.findings != "missing" {
+					writeFile(t, in.Findings, tt.findings)
+				}
+			}
+			if tt.classification != "" {
+				in.Classification = filepath.Join(dir, "classification.json")
+				if tt.classification != "missing" {
+					writeFile(t, in.Classification, tt.classification)
+				}
+			}
+
+			if got, err := evaluate(repo, config{MaxChangedLines: 400}, in); err == nil {
+				t.Fatalf("evaluate() = %#v, want an error", got)
+			}
+		})
+	}
 }
 
 func TestEvaluateReviewPaths(t *testing.T) {
@@ -66,7 +182,7 @@ func TestEvaluateReviewPaths(t *testing.T) {
 			got, err := evaluate(repo, config{
 				ReviewPaths:     []string{"SPEC.md", ".github/"},
 				MaxChangedLines: 400,
-			}, "")
+			}, inputs{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -121,7 +237,7 @@ func TestEvaluateDeletedTests(t *testing.T) {
 				stage(t, repo, tt.path, *tt.after)
 			}
 
-			got, err := evaluate(repo, config{MaxChangedLines: 400}, "")
+			got, err := evaluate(repo, config{MaxChangedLines: 400}, inputs{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -137,7 +253,7 @@ func TestEvaluateChangedLineLimit(t *testing.T) {
 		commit(t, repo)
 		stage(t, repo, "large.txt", numberedLines("new", 201))
 
-		got, err := evaluate(repo, config{MaxChangedLines: 400}, "")
+		got, err := evaluate(repo, config{MaxChangedLines: 400}, inputs{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -151,7 +267,7 @@ func TestEvaluateChangedLineLimit(t *testing.T) {
 		commit(t, repo)
 		stage(t, repo, path, numberedLines("new", 201))
 
-		got, err := evaluate(repo, config{MaxChangedLines: 400}, "")
+		got, err := evaluate(repo, config{MaxChangedLines: 400}, inputs{})
 		if err != nil {
 			t.Fatal(err)
 		}

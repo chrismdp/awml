@@ -4,8 +4,10 @@ wanted now.
 
 The issue, with only the comments of the repository's own people, is in BUILD_DIR/issue.md. Read
 it, then read AGENTS.md and follow it, and read SPEC.md before changing anything it describes.
+Read REVIEW.md too: once the checks pass, two fresh reviews hold the change to it.
 If issue.md ends with a section saying the last try failed, your job is to make a change that
-passes where that try failed, not to start over without a reason.
+passes where that try failed, not to start over without a reason. If it lists what the reviews
+found, fix each Important finding, and any other you agree with.
 
 - For a `spec` issue, build what the maintainer decided in their comments. If they haven't said
   which option they chose, change nothing, and say so in the message.
@@ -13,26 +15,25 @@ passes where that try failed, not to start over without a reason.
 - Keep the skill's copies of SPEC.md, GUIDE.md and the examples in step: run `make references`
   after changing any source it copies.
 - Run every check AGENTS.md lists until they all pass. If `awml draw`'s output changes, regenerate
-  the .mmd files but leave the SVGs alone: a later job redraws them with examples/render.sh and
-  pictures what changed.
-- Don't commit, push or open anything. Leave the change in the working tree. A later job applies
-  it, runs the checks again and opens the pull request.
+  the .mmd files, but don't run examples/render.sh yourself.
+- Once the checks pass, if your change alters an example's .mmd or the renderer under
+  examples/render*, run `.github/picture-drawings.sh BUILD_DIR`. It redraws the drawings your
+  change alters into the working tree, puts every other SVG back, and pictures, before and after,
+  those that look different, into BUILD_DIR/pictures. Leave the SVGs and the pictures as it wrote
+  them: they go into the pull request.
+- Don't commit, push or open anything. Leave the change in the working tree. Later jobs apply it,
+  run the checks again, review it and open the pull request.
 - Something new that the issue doesn't ask for goes in the message as a suggested issue, not in
   the change.
 
-If the change needs the maintainer's eyes, write BUILD_DIR/review.md and say why. It needs their
-eyes if you made a decision the issue and its comments didn't settle, chose between options,
-changed behaviour beyond what the issue asks, or aren't sure. Otherwise don't write that file.
-Your note can send a change to review, but it can never skip a review required by the build rules.
-Write it in GitHub Markdown for the reviewer, with each decision as its own bullet and what you'd
-like them to look at, and don't wrap lines by hand. It goes into the pull request as you wrote it.
-
 Write BUILD_DIR/message.md: a first line under 70 characters saying what changed, a blank line,
 then plainly what changed and why, as a commit message in this repository would. Don't add
-"Closes"; the next job adds it.
+"Closes"; a later job adds it.
 
 Finally, write BUILD_DIR/pull-request.md, the pull request's description, in GitHub Markdown with
 no hard wrapping: each paragraph and each bullet on one line. Open with a short paragraph saying
 what the change does and why. Then `## What changed`, as bullets. Then `## Decisions`, as bullets,
-only if you made decisions the issue and its comments didn't settle. Leave out a title, review
-reasons, pictures and "Closes": the next job adds them.
+only if you made a decision the issue and its comments didn't settle, chose between options,
+changed behaviour beyond what the issue asks, or aren't sure, saying for each what you'd like the
+reviewer to look at. Leave out a title, review reasons, pictures and "Closes": a later job adds
+them. You don't decide whether the change needs review: the build rule does, after the reviews.
