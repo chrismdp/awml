@@ -341,6 +341,27 @@ func TestTheMapDrawsABoxForEachWorkflowAndEachSharedPartOnce(t *testing.T) {
 	}
 }
 
+// A box holds the triggers its workflow runs on, those with a line out of them, and never one it
+// only fires.
+func TestTheMapDrawsOnlyTheTriggersAWorkflowRunsOn(t *testing.T) {
+	sorting := strings.Replace(notes("Sorting", ""), "  - { id: notes,", "  - { id: done, kind: trigger, label: Sorting is done, ref: elsewhere.yaml#start }\n  - { id: notes,", 1)
+	sorting = strings.Replace(sorting, "lines:\n", "lines:\n  - { from: step, to: done, kind: start }\n", 1)
+	got := DrawMap(together(t, "plan.yaml", planWorkflow, "sorting.yaml", sorting))
+	for _, want := range []string{
+		"  subgraph w1[\"Dinners\"]\n    direction TB\n    w1_thu([\"Thursday 19#58;00\"])\n  end\n",
+		"  subgraph w2[\"Sorting\"]\n    direction TB\n    w2_go([\"Go\"])\n  end\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the map lacks\n%s\nin\n%s", want, got)
+		}
+	}
+	for _, fired := range []string{"The shopping list is ready", "Sorting is done"} {
+		if strings.Contains(got, fired) {
+			t.Errorf("the map draws %q, which its workflow only fires:\n%s", fired, got)
+		}
+	}
+}
+
 func TestTheSummaryOfSeveralCountsASharedPartOnceAndNamesIt(t *testing.T) {
 	workflows := together(t, "plan.yaml", planWorkflow, "shop.yaml", shopWorkflow)
 	got := SummariseTogether(workflows)
