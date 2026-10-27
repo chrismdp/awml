@@ -344,11 +344,20 @@ parts: [{id: draft, kind: ai, op: draft, label: Draft, in: business}]
 	if r := awmlRun("fit", "--json", security, platform); r.code != 1 || r.stdout != `{"results":[],"gaps":["group \"business\" has no processing"]}`+"\n" {
 		t.Errorf("gap fit as JSON gave %+v", r)
 	}
-	if r := awmlRun("fit", platform, platform); r.code != 1 || r.stderr != "awml fit: no workflow was given\n" {
-		t.Errorf("fit of descriptions alone gave %+v", r)
-	}
-	if r := awmlRun("fit", security, security); r.code != 1 || r.stderr != "awml fit: no platform descriptions were given\n" {
-		t.Errorf("fit of two workflows gave %+v", r)
+	// A fit with nothing to judge, or nothing to judge it against, is a mistake in the command.
+	usage := "usage: awml fit [-h] [--json] [--implementation ID] files [files ...]\nawml fit: error: "
+	for _, tc := range []struct {
+		files []string
+		want  string
+	}{
+		{[]string{platform}, "no workflow was given"},
+		{[]string{platform, platform}, "no workflow was given"},
+		{[]string{security}, "no platform descriptions were given"},
+		{[]string{security, security}, "no platform descriptions were given"},
+	} {
+		if r := awmlRun(append([]string{"fit"}, tc.files...)...); r != (result{2, "", usage + tc.want + "\n"}) {
+			t.Errorf("fit of %d files gave %+v", len(tc.files), r)
+		}
 	}
 }
 
@@ -914,7 +923,7 @@ func TestFitAnImplementationWithoutDescriptions(t *testing.T) {
 	if got := awmlRun("fit", "--json", "--implementation", "home", path); got != (result{0, want, ""}) {
 		t.Errorf("fit --json without descriptions gave %+v", got)
 	}
-	if got := awmlRun("fit", path); got != (result{1, "", "awml fit: no platform descriptions were given\n"}) {
+	if got := awmlRun("fit", path); got != (result{2, "", "usage: awml fit [-h] [--json] [--implementation ID] files [files ...]\nawml fit: error: no platform descriptions were given\n"}) {
 		t.Errorf("design fit without descriptions gave %+v", got)
 	}
 }
