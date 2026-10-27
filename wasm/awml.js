@@ -133,7 +133,41 @@ async function start(source) {
       if (output.startsWith("{")) throw new Error(JSON.parse(output).error);
       return output;
     },
+    // graph gives what draw draws, with nothing laid out, as awml graph does: one workflow's view,
+    // or the map of several workflows given together. It takes what draw takes, and throws what draw
+    // throws.
+    graphJSON(sourceText, implementation = "") {
+      const sources = given(sourceText);
+      if (sources.length > 1 && implementation) throw new Error("an implementation is given for one workflow, not several");
+      for (const source of sources) {
+        const errors = this.unsound(text(source));
+        if (errors.length) throw new Error(errors.join("\n"));
+      }
+      if (sources.length > 1) return graphOutput(globalThis.__awmlGraphMap(JSON.stringify(sources)));
+      return graphOutput(typeof sources[0] === "string"
+        ? globalThis.__awmlGraph(text(sources[0]), implementation)
+        : globalThis.__awmlGraph(text(sources[0]), implementation, sources[0].file || ""));
+    },
+    graph(sourceText, implementation = "") {
+      return JSON.parse(this.graphJSON(sourceText, implementation));
+    },
+    // graphUntrusted gives what drawUntrusted draws, as awml graph --untrusted does.
+    graphUntrustedJSON(sourceText) {
+      const errors = this.unsound(sourceText);
+      if (errors.length) throw new Error(errors.join("\n"));
+      return graphOutput(globalThis.__awmlGraphUntrusted(sourceText));
+    },
+    graphUntrusted(sourceText) {
+      return JSON.parse(this.graphUntrustedJSON(sourceText));
+    },
   };
+}
+
+// graphOutput gives a graph's JSON, or throws the error given in its place.
+function graphOutput(output) {
+  const decoded = JSON.parse(output);
+  if (decoded.error) throw new Error(decoded.error);
+  return output;
 }
 
 function given(sources) {

@@ -1,0 +1,298 @@
+package awml
+
+import (
+	"encoding/json"
+	"reflect"
+	"strings"
+	"testing"
+)
+
+// A reply the bakery's owner drafts and sends: its line to the outside action breaks two rules, its
+// line to the shop's board publishes into the wider scope, a comment marks a gap, and its home
+// implementation places the parts on two platforms, with a comment tied to the draft.
+const bakeryReplies = `awml: "0.7"
+title: Bakery replies
+scopes:
+  - { id: shop, label: "shop: Ana, Ben" }
+  - { id: owner, label: "owner: Ana", in: shop }
+parts:
+  - { id: mail, kind: trigger, label: "A customer emails", untrusted: true }
+  - { id: draft, kind: ai, op: draft, label: "Draft a reply", in: owner }
+  - { id: notes, kind: context, label: "Ana's notes", in: owner }
+  - { id: send, kind: outside, label: "Send the reply: Ask, once a day", in: owner }
+  - { id: board, kind: surface, label: "The shop's board", in: shop }
+  - { id: gap, kind: comment, label: "Missing from the design: nobody reads the replies" }
+lines:
+  - { from: mail, to: draft, kind: start }
+  - { from: notes, to: draft, kind: data }
+  - { from: draft, to: send, kind: data, label: the reply }
+  - { from: draft, to: board, kind: data, label: posted }
+  - { from: gap, to: send, kind: tie }
+implementations:
+  home:
+    label: At home
+    blocks:
+      - { id: laptop, label: "Ana's laptop", parts: [draft, notes] }
+      - { id: mailer, label: The mail service, parts: [send, board] }
+    comments:
+      - { id: tried, label: "For example: tried on a second model", in: laptop, ties: [draft] }
+`
+
+func graphOf(t *testing.T, src, implementation string) Graph {
+	t.Helper()
+	doc := parsed(t, src)
+	if mistakes := Unsound(doc); len(mistakes) != 0 {
+		t.Fatal(mistakes)
+	}
+	view, err := View(doc, implementation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return bare(GraphOf(view))
+}
+
+// bare leaves out where each part, comment and group comes in the drawing, which only its Mermaid
+// uses, so a graph can be compared with one written out.
+func bare(g Graph) Graph {
+	for i := range g.Parts {
+		g.Parts[i].at = 0
+	}
+	for i := range g.Comments {
+		g.Comments[i].at = 0
+	}
+	for i := range g.Groups {
+		g.Groups[i].at = 0
+	}
+	return g
+}
+
+func TestTheGraphOfAWorkflowHasItsParts(t *testing.T) {
+	g := graphOf(t, bakeryReplies, "")
+	if g.View != "security" {
+		t.Errorf("view is %q", g.View)
+	}
+	want := []GraphPart{
+		{ID: "mail", Kind: "trigger", Label: "A customer emails", In: "owner", Untrusted: true},
+		{ID: "draft", Kind: "ai", Label: "Draft a reply", In: "owner", Decider: "ai", Op: "draft"},
+		{ID: "notes", Kind: "context", Label: "Ana's notes", In: "owner"},
+		{ID: "send", Kind: "outside", Label: "Send the reply: Ask, once a day", In: "owner", Tier: "Ask"},
+		{ID: "board", Kind: "surface", Label: "The shop's board", In: "shop"},
+	}
+	if !reflect.DeepEqual(g.Parts, want) {
+		t.Errorf("parts are\n%+v", g.Parts)
+	}
+	review := graphOf(t, `awml: "0.7"
+title: T
+parts:
+  - { id: ok, kind: review, label: "Ana's yes" }
+  - { id: fork, kind: fork }
+`, "").Parts
+	if review[0].Decider != "person" || review[1].Label != "" {
+		t.Errorf("a review and a fork are %+v", review)
+	}
+}
+
+func TestTheGraphOfAWorkflowHasItsGroups(t *testing.T) {
+	want := []GraphGroup{{ID: "shop", Label: "shop: Ana, Ben"}, {ID: "owner", Label: "owner: Ana", In: "shop"}}
+	if g := graphOf(t, bakeryReplies, ""); !reflect.DeepEqual(g.Groups, want) || len(g.Places) != 0 {
+		t.Errorf("groups are %+v and places %+v", g.Groups, g.Places)
+	}
+}
+
+func TestTheGraphOfAWorkflowHasItsLines(t *testing.T) {
+	g := graphOf(t, bakeryReplies, "")
+	want := []GraphLine{
+		{From: "mail", To: "draft", Kind: "start", Points: "to"},
+		{From: "notes", To: "draft", Kind: "data", Points: "to"},
+		{From: "draft", To: "send", Kind: "data", Label: "the reply", Points: "to", Breaks: g.Lines[2].Breaks},
+		{From: "draft", To: "board", Kind: "data", Label: "posted", Points: "to", Publishes: true, Widens: []string{"adds Ben"}},
+		{From: "gap", To: "send", Kind: "tie", Points: "none"},
+	}
+	if !reflect.DeepEqual(g.Lines, want) {
+		t.Errorf("lines are\n%+v", g.Lines)
+	}
+	if breaks := g.Lines[2].Breaks; len(breaks) != 2 || !strings.Contains(breaks[0], "draft") {
+		t.Errorf("the red line breaks %q", breaks)
+	}
+}
+
+func TestTheGraphOfAWorkflowHasItsComments(t *testing.T) {
+	want := []GraphComment{{ID: "gap", Label: "Missing from the design: nobody reads the replies", In: "owner", Gap: true, Ties: []string{"send"}}}
+	if g := graphOf(t, bakeryReplies, ""); !reflect.DeepEqual(g.Comments, want) {
+		t.Errorf("comments are %+v", g.Comments)
+	}
+}
+
+func TestTheGraphOfAPlatformViewHasItsBlocksAndPlaces(t *testing.T) {
+	g := graphOf(t, bakeryReplies, "home")
+	if g.View != "platform" {
+		t.Errorf("view is %q", g.View)
+	}
+	groups := []GraphGroup{{ID: "laptop", Label: "Ana's laptop"}, {ID: "mailer", Label: "The mail service"}}
+	places := []GraphPlace{{ID: "laptop", Fill: "#e3ebfa", Stroke: "#b9c8e8"}, {ID: "mailer", Fill: "#fbe9df", Stroke: "#ecc7b2"}}
+	if !reflect.DeepEqual(g.Groups, groups) || !reflect.DeepEqual(g.Places, places) {
+		t.Errorf("groups are %+v and places %+v", g.Groups, g.Places)
+	}
+	if g.Parts[1].In != "laptop" || g.Parts[3].In != "mailer" || g.Parts[4].In != "mailer" {
+		t.Errorf("parts are %+v", g.Parts)
+	}
+	comments := []GraphComment{
+		{ID: "gap", Label: "Missing from the design: nobody reads the replies", In: "mailer", Gap: true, Ties: []string{"send"}},
+		{ID: "tried", Label: "For example: tried on a second model", In: "laptop", Ties: []string{"draft"}},
+	}
+	if !reflect.DeepEqual(g.Comments, comments) {
+		t.Errorf("comments are %+v", g.Comments)
+	}
+	if last := g.Lines[len(g.Lines)-1]; !reflect.DeepEqual(last, GraphLine{From: "tried", To: "draft", Kind: "tie", Points: "none"}) {
+		t.Errorf("the last line is %+v", last)
+	}
+}
+
+func TestTheGraphOfTheUntrustedViewSaysWhatTheTextReaches(t *testing.T) {
+	doc := parsed(t, ordersForGraph)
+	view, err := UntrustedView(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := GraphOf(view)
+	if g.View != "untrusted" {
+		t.Errorf("view is %q", g.View)
+	}
+	got := map[string][3]bool{}
+	for _, p := range g.Parts {
+		got[p.ID] = [3]bool{p.Untrusted, p.Reached, p.Stops}
+	}
+	want := map[string][3]bool{"form": {true, true, false}, "keep": {false, false, true}, "book": {}, "rota": {},
+		"draft": {false, true, false}, "send": {false, true, false}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("untrusted, reached and stops are %v", got)
+	}
+	// Only the untrusted view says what the text reaches.
+	for _, p := range GraphOf(mustView(t, doc, "")).Parts {
+		if p.Reached || p.Stops {
+			t.Errorf("the security view says %+v", p)
+		}
+	}
+}
+
+const ordersForGraph = `awml: "0.7"
+title: Orders
+scopes:
+  - { id: bakery, label: "bakery: Ana, Ben" }
+parts:
+  - { id: form, kind: trigger, label: "An order on the form", untrusted: true }
+  - { id: keep, kind: code, op: bring-in, label: "Keep only the cake", in: bakery, cleans: true }
+  - { id: book, kind: code, op: do, label: "Book the bake", in: bakery }
+  - { id: rota, kind: outside, label: "Add it to the rota: Allow", in: bakery }
+  - { id: draft, kind: code, op: do, label: "Write the reply", in: bakery }
+  - { id: send, kind: outside, label: "Send the reply: Allow", in: bakery }
+lines:
+  - { from: form, to: keep, kind: start }
+  - { from: keep, to: book, kind: data }
+  - { from: book, to: rota, kind: data }
+  - { from: form, to: draft, kind: start }
+  - { from: draft, to: send, kind: data }
+`
+
+func mustView(t *testing.T, doc *Map, implementation string) *Map {
+	t.Helper()
+	view, err := View(doc, implementation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return view
+}
+
+func TestTheGraphOfAMapHasEachWorkflowsBox(t *testing.T) {
+	g := bare(GraphMap(together(t, "plan.yaml", planWorkflow, "shop.yaml", shopWorkflow)))
+	if g.View != "map" {
+		t.Errorf("view is %q", g.View)
+	}
+	groups := []GraphGroup{{ID: "w1", Label: "Dinners", File: "plan.yaml"}, {ID: "w2", Label: "Shopping", File: "shop.yaml"}}
+	if !reflect.DeepEqual(g.Groups, groups) {
+		t.Errorf("groups are %+v", g.Groups)
+	}
+	parts := []GraphPart{
+		{ID: "w1_thu", Kind: "trigger", Label: "Thursday 19:00"},
+		{ID: "w1_ready", Kind: "outside", Label: "Start the shopping: Allow", In: "w1", Tier: "Allow"},
+		{ID: "w2_ready", Kind: "trigger", Label: "The shopping list is ready"},
+		{ID: "s1", Kind: "context", Label: "Shopping list"},
+	}
+	if !reflect.DeepEqual(g.Parts, parts) {
+		t.Errorf("parts are\n%+v", g.Parts)
+	}
+	lines := []GraphLine{
+		{From: "w1_thu", To: "w1", Kind: "start", Points: "to", Joins: []string{"w1_plan"}},
+		{From: "w2_ready", To: "w2", Kind: "start", Points: "to", Joins: []string{"w2_fill"}},
+		{From: "w1", To: "s1", Kind: "data", Points: "to", Joins: []string{"w1_plan"}},
+		{From: "s1", To: "w2", Kind: "data", Points: "to", Joins: []string{"w2_fill"}},
+		{From: "w1_ready", To: "w2_ready", Kind: "start", Points: "to"},
+	}
+	if !reflect.DeepEqual(g.Lines, lines) {
+		t.Errorf("lines are\n%+v", g.Lines)
+	}
+	if len(g.Comments) != 0 || len(g.Places) != 0 {
+		t.Errorf("a map has comments %+v and places %+v", g.Comments, g.Places)
+	}
+}
+
+func TestTheGraphOfAMapSaysWhichWayALinePoints(t *testing.T) {
+	both := strings.Replace(shopWorkflow, "  - { from: fill, to: basket, kind: data }\n", "  - { from: fill, to: basket, kind: data }\n  - { from: fill, to: list, kind: data }\n", 1)
+	g := GraphMap(together(t, "plan.yaml", planWorkflow, "shop.yaml", both))
+	if l := g.Lines[3]; l.From != "w2" || l.To != "s1" || l.Points != "both" || !reflect.DeepEqual(l.Joins, []string{"w2_fill"}) {
+		t.Errorf("a two-way line is %+v", l)
+	}
+	has(t, g.Mermaid(), "\n  w2 <-.-> s1\n")
+	neither := strings.Replace(shopWorkflow, "  - { from: list, to: fill, kind: data }\n", "  - { from: list, to: fill, kind: hidden }\n", 1)
+	g = GraphMap(together(t, "plan.yaml", planWorkflow, "shop.yaml", neither))
+	if l := g.Lines[3]; l.From != "w2" || l.To != "s1" || l.Points != "none" || l.Joins != nil {
+		t.Errorf("a line with no way is %+v", l)
+	}
+	has(t, g.Mermaid(), "\n  w2 -.- s1\n")
+}
+
+func TestTheGraphOfAMapNamesAWorkflowARefPublishes(t *testing.T) {
+	plan := strings.Replace(planWorkflow, "ref: shop.yaml#ready", "ref: bakery/shopping#ready", 1)
+	shop := strings.Replace(shopWorkflow, "ref: plan.yaml#list", "ref: ../plan.yaml#list", 1)
+	g := GraphMap(together(t, "plan.yaml", plan, "bakery/shopping.yaml", shop))
+	if g.Groups[0].Published != "" || g.Groups[1].Published != "bakery/shopping" {
+		t.Errorf("groups are %+v", g.Groups)
+	}
+}
+
+// The JSON names each field as the spec lists it, and leaves out what a part, group or line
+// doesn't have.
+func TestTheGraphsJSONNamesItsFields(t *testing.T) {
+	encoded, err := json.Marshal(graphOf(t, bakeryReplies, "home"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`{"view":"platform","groups":[{"id":"laptop","label":"Ana's laptop"}`,
+		`{"id":"send","kind":"outside","label":"Send the reply: Ask, once a day","in":"mailer","tier":"Ask"}`,
+		`{"id":"draft","kind":"ai","label":"Draft a reply","in":"laptop","decider":"ai","op":"draft"}`,
+		`{"from":"draft","to":"board","kind":"data","label":"posted","points":"to","publishes":true,"widens":["adds Ben"]}`,
+		`{"from":"draft","to":"send","kind":"data","label":"the reply","points":"to","breaks":["part \"draft\" leads to outside action \"send\", but its op is draft",`,
+		`{"from":"gap","to":"send","kind":"tie","points":"none"}`,
+		`"comments":[{"id":"gap","label":"Missing from the design: nobody reads the replies","in":"mailer","gap":true,"ties":["send"]}`,
+		`"places":[{"id":"laptop","fill":"#e3ebfa","stroke":"#b9c8e8"}`} {
+		if !strings.Contains(string(encoded), want) {
+			t.Errorf("the JSON has no %s in\n%s", want, encoded)
+		}
+	}
+	empty, _ := json.Marshal(graphOf(t, "awml: \"0.7\"\ntitle: T\nparts:\n  - { id: a, kind: ai, label: A }\n", ""))
+	if want := `{"view":"security","groups":[],"parts":[{"id":"a","kind":"ai","label":"A","decider":"ai"}],"lines":[],"comments":[],"places":[]}`; string(empty) != want {
+		t.Errorf("the JSON of a lone step is\n%s", empty)
+	}
+}
+
+// Draw draws the graph, so the Mermaid and the JSON can't disagree.
+func TestDrawDrawsTheGraph(t *testing.T) {
+	view := mustView(t, parsed(t, bakeryReplies), "home")
+	if Draw(view) != GraphOf(view).Mermaid() {
+		t.Error("Draw doesn't draw the graph")
+	}
+	workflows := together(t, "plan.yaml", planWorkflow, "shop.yaml", shopWorkflow)
+	if DrawMap(workflows) != GraphMap(workflows).Mermaid() {
+		t.Error("DrawMap doesn't draw the graph")
+	}
+}

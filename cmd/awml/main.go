@@ -21,15 +21,16 @@ func main() {
 	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
 
-const usage = "usage: awml [-h] [--version] [--registry URL] {draw,page,check,fit,summary,convert,login,push,pull} ...\n"
+const usage = "usage: awml [-h] [--version] [--registry URL] {draw,graph,page,check,fit,summary,convert,login,push,pull} ...\n"
 
 const help = usage + `
 Draw agentic workflows written in AWML.
 
 positional arguments:
-  {draw,page,check,fit,summary,convert,login,push,pull}
+  {draw,graph,page,check,fit,summary,convert,login,push,pull}
     draw             print a file's Mermaid
-    page             write one HTML page that draws each file
+    graph            print what a file's drawing shows, as JSON
+    page            write one HTML page that draws each file
     check            report warnings and structural mistakes
     fit              judge where workflows can run
     summary          count the parts and lines in workflows
@@ -55,6 +56,18 @@ options:
   -h, --help  show this help message and exit
   --implementation ID  draw one implementation of one workflow
   --untrusted  draw where untrusted text reaches in one workflow
+`},
+	"graph": {"usage: awml graph [-h] [--implementation ID | --untrusted] files [files ...]\n", `
+Print what awml draw would draw, as JSON with nothing laid out: its groups, parts, lines, comments
+and places.
+
+positional arguments:
+  files       workflows, or folders of them
+
+options:
+  -h, --help  show this help message and exit
+  --implementation ID  give one implementation of one workflow
+  --untrusted  give where untrusted text reaches in one workflow
 `},
 	"convert": {"usage: awml convert [-h] [--implementation ID] file [PLATFORM]\n", `
 Upgrade a file of an older version into one 0.7 file, or join a legacy security view and platform
@@ -145,6 +158,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	private := false
 	var registryFlag *string
 	flags := true
+	// graph takes what draw takes, and refuses what it refuses.
+	drawing := func() bool { return command == "draw" || command == "graph" }
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {
@@ -160,13 +175,13 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 				fmt.Fprint(stdout, commands[command].usage+commands[command].help)
 			}
 			return 0
-		case flags && (command == "draw" || command == "fit" || command == "convert") && a == "--implementation":
+		case flags && (drawing() || command == "fit" || command == "convert") && a == "--implementation":
 			if i+1 == len(args) || strings.HasPrefix(args[i+1], "-") {
 				return fail(commands[command].usage, "awml "+command, "argument --implementation: expected one argument")
 			}
 			i++
 			implementation = args[i]
-		case flags && (command == "draw" || command == "fit" || command == "convert") && strings.HasPrefix(a, "--implementation="):
+		case flags && (drawing() || command == "fit" || command == "convert") && strings.HasPrefix(a, "--implementation="):
 			implementation = strings.TrimPrefix(a, "--implementation=")
 		case flags && a == "--registry":
 			if i+1 == len(args) || (strings.HasPrefix(args[i+1], "-") && args[i+1] != "-") {
@@ -195,7 +210,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			out = &v
 		case flags && (command == "summary" || command == "fit" || command == "check") && a == "--json":
 			jsonOutput = true
-		case flags && command == "draw" && a == "--untrusted":
+		case flags && drawing() && a == "--untrusted":
 			untrusted = true
 		case flags && command == "push" && a == "--private":
 			private = true
@@ -203,7 +218,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			unknown = append(unknown, a)
 		case command == "":
 			if _, ok := commands[a]; !ok {
-				return fail(usage, "awml", fmt.Sprintf("argument command: invalid choice: '%s' (choose from 'draw', 'page', 'check', 'fit', 'summary', 'convert', 'login', 'push', 'pull')", a))
+				return fail(usage, "awml", fmt.Sprintf("argument command: invalid choice: '%s' (choose from 'draw', 'graph', 'page', 'check', 'fit', 'summary', 'convert', 'login', 'push', 'pull')", a))
 			}
 			command = a
 		default:
@@ -213,7 +228,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if command == "" {
 		return fail(usage, "awml", "the following arguments are required: command")
 	}
-	if isOneOf(command, "check", "draw", "fit", "summary", "page") {
+	if isOneOf(command, "check", "draw", "graph", "fit", "summary", "page") {
 		var empty string
 		if files, empty = expandFolders(files); empty != "" {
 			return fail(commands[command].usage, "awml "+command, empty+" holds no .yaml files")
@@ -221,7 +236,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	var missing []string
 	if len(files) == 0 && command != "login" {
-		missing = append(missing, map[string]string{"draw": "files", "page": "files", "check": "files", "fit": "files", "convert": "file", "summary": "files", "push": "owner/slug, file", "pull": "owner/slug[@n]"}[command])
+		missing = append(missing, map[string]string{"draw": "files", "graph": "files", "page": "files", "check": "files", "fit": "files", "convert": "file", "summary": "files", "push": "owner/slug, file", "pull": "owner/slug[@n]"}[command])
 	}
 	if command == "page" && out == nil {
 		missing = append(missing, "-o/--out")
@@ -235,14 +250,15 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if command == "convert" && len(files) == 1 && implementation != "" {
 		return fail(commands[command].usage, "awml convert", "argument --implementation: only a legacy pair has an implementation to name")
 	}
-	if command == "draw" && untrusted && implementation != "" {
-		return fail(commands[command].usage, "awml draw", "argument --untrusted: not allowed with argument --implementation")
+	if drawing() && untrusted && implementation != "" {
+		return fail(commands[command].usage, "awml "+command, "argument --untrusted: not allowed with argument --implementation")
 	}
-	if command == "draw" && len(files) > 1 && untrusted {
-		return fail(commands[command].usage, "awml draw", "argument --untrusted: draws one workflow, not several")
+	several := map[string]string{"draw": "draws", "graph": "takes"}[command] + " one workflow, not several"
+	if drawing() && len(files) > 1 && untrusted {
+		return fail(commands[command].usage, "awml "+command, "argument --untrusted: "+several)
 	}
-	if command == "draw" && len(files) > 1 && implementation != "" {
-		return fail(commands[command].usage, "awml draw", "argument --implementation: draws one workflow, not several")
+	if drawing() && len(files) > 1 && implementation != "" {
+		return fail(commands[command].usage, "awml "+command, "argument --implementation: "+several)
 	}
 	if command == "login" && len(files) > 0 {
 		unknown = append(files, unknown...)
@@ -314,33 +330,42 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if command == "convert" {
 		return convert(files, implementation, stdout, stderr)
 	}
-	docs, ok := sound(files, stderr, command == "draw" || command == "page" || command == "summary")
+	docs, ok := sound(files, stderr, drawing() || command == "page" || command == "summary")
 	if !ok {
 		return 1
 	}
-	if command == "draw" && len(docs) > 1 {
-		var given []awml.Workflow
-		for i, doc := range docs {
-			if !awml.IsCanonical(doc) {
-				_, err := awml.View(doc, "")
-				fmt.Fprintf(stderr, "%s: %s\n", files[i], err)
+	if drawing() {
+		var graph awml.Graph
+		if len(docs) > 1 {
+			var given []awml.Workflow
+			for i, doc := range docs {
+				if !awml.IsCanonical(doc) {
+					_, err := awml.View(doc, "")
+					fmt.Fprintf(stderr, "%s: %s\n", files[i], err)
+					return 1
+				}
+				given = append(given, workflowAt(files[i], doc))
+			}
+			graph = awml.GraphMap(given)
+		} else {
+			view, err := awml.View(docs[0], implementation)
+			if untrusted {
+				view, err = awml.UntrustedView(docs[0])
+			}
+			if err != nil {
+				fmt.Fprintln(stderr, err)
 				return 1
 			}
-			given = append(given, workflowAt(files[i], doc))
+			graph = awml.GraphOf(view)
 		}
-		fmt.Fprintln(stdout, awml.DrawMap(given))
-		return 0
-	}
-	if command == "draw" {
-		view, err := awml.View(docs[0], implementation)
-		if untrusted {
-			view, err = awml.UntrustedView(docs[0])
+		if command == "draw" {
+			fmt.Fprintln(stdout, graph.Mermaid())
+			return 0
 		}
-		if err != nil {
-			fmt.Fprintln(stderr, err)
+		if err := json.NewEncoder(stdout).Encode(graph); err != nil {
+			fmt.Fprintf(stderr, "awml graph: can't write its output: %s\n", err)
 			return 1
 		}
-		fmt.Fprintln(stdout, awml.Draw(view))
 		return 0
 	}
 	if command == "fit" {

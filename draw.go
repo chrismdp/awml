@@ -7,136 +7,9 @@ import (
 
 // Draw turns a workflow, or one of its views, into Mermaid, so every drawing uses the same shapes
 // and colours. A workflow is drawn as its security view. It must have no mistakes but lines that
-// break a rule: check it with Unsound first.
+// break a rule: check it with Unsound first. It draws what GraphOf gives.
 func Draw(doc *Map) string {
-	if IsCanonical(doc) {
-		doc, _ = View(doc, "")
-	}
-	groups, parts, lines := items(doc, "groups"), items(doc, "parts"), items(doc, "lines")
-	where := placed(parts, lines)
-	partOrder := map[string]int{}
-	for i, p := range parts {
-		partOrder[str(p, "id")] = i
-	}
-	out := append([]string{}, header...)
-	// The untrusted view tints each part untrusted text reaches and marks each part that stops it.
-	untrusted := str(doc, "view") == "untrusted"
-	tinted, stopper := map[string]string{}, map[string]bool{}
-	if untrusted {
-		tinted, stopper = untrustedLooks(parts, lines)
-	}
-
-	var emit func(parent, indent string)
-	emit = func(parent, indent string) {
-		for _, p := range parts {
-			if where[str(p, "id")] == parent {
-				out = append(out, indent+str(p, "id")+fmt.Sprintf(shapes[str(p, "kind")], label(p, stopper[str(p, "id")])))
-			}
-		}
-		for _, g := range groups {
-			if str(g, "in") == parent {
-				out = append(out, fmt.Sprintf(`%ssubgraph %s["%s"]`, indent, str(g, "id"), text(str(g, "label"))))
-				// Mermaid turns a box with no links outside it on its side unless told otherwise.
-				out = append(out, indent+"  direction TB")
-				emit(str(g, "id"), indent+"  ")
-				out = append(out, indent+"end")
-			}
-		}
-	}
-	emit("", "  ")
-	out = append(out, "")
-	kinds := map[string]string{}
-	for _, p := range parts {
-		kinds[str(p, "id")] = str(p, "kind")
-	}
-	// A line's style says where it goes: solid from one step to the next, dotted into or out of a
-	// context, a connector or a surface.
-	aside := func(l *Map) bool { return beside[kinds[str(l, "from")]] || beside[kinds[str(l, "to")]] }
-	for _, l := range lines {
-		from, to, arrow := str(l, "from"), str(l, "to"), arrows[str(l, "kind")]
-		if aside(l) && dottedArrows[str(l, "kind")] != "" {
-			arrow = dottedArrows[str(l, "kind")]
-		}
-		if partOrder[from] > partOrder[to] {
-			from, to = to, from
-			if flipped := backwardsArrows[arrow]; flipped != "" {
-				arrow = flipped
-			}
-		}
-		var words []string
-		if str(l, "label") != "" {
-			words = append(words, text(str(l, "label")))
-		}
-		// A line the check reports adds its words for each rule the line breaks, each on a row.
-		breaches, _ := l.get("breaks").([]any)
-		for _, breach := range breaches {
-			words = append(words, text(show(breach)))
-		}
-		mid := ""
-		if words != nil {
-			mid = fmt.Sprintf(`|"%s"|`, strings.Join(words, "<br>"))
-		}
-		out = append(out, fmt.Sprintf("  %s %s%s %s", from, arrow, mid, to))
-	}
-	out = append(out, defs)
-	if untrusted {
-		out = append(out, "  classDef taint "+taint, "  classDef taintout "+taintOut)
-	}
-	for _, cls := range []string{"trig", "ctx", "con", "surf", "out", "ai", "code", "person", "uml", "gap", "taint", "taintout"} {
-		var ids []string
-		for _, p := range parts {
-			own := classes[str(p, "kind")]
-			if tint := tinted[str(p, "id")]; tint != "" {
-				own = tint
-			}
-			if own == cls {
-				ids = append(ids, str(p, "id"))
-			}
-		}
-		if ids != nil {
-			out = append(out, fmt.Sprintf("  class %s %s", strings.Join(ids, ","), cls))
-		}
-	}
-	for i, g := range groups {
-		look := scope
-		if str(doc, "view") == "platform" {
-			look = pastel[i%len(pastel)] + ",color:#16171b"
-		}
-		out = append(out, fmt.Sprintf("  style %s %s", str(g, "id"), look))
-	}
-	// linkStyle counts every line, hidden ones too, and a line's last linkStyle replaces any before
-	// it, so each line gets its whole style at once. Lines of the same style share a linkStyle, in
-	// the order of the first of them. A backwards arrow is drawn with a head at both ends, then loses
-	// the head at its drawn end, leaving the one at the real target.
-	var looks []string
-	numbers := map[string][]string{}
-	for i, l := range lines {
-		var look []string
-		switch {
-		case drawnRed(l):
-			look = append(look, red)
-		case str(l, "kind") == "tie":
-			look = append(look, grey)
-		}
-		if str(l, "kind") == "publish" && aside(l) {
-			look = append(look, dotted)
-		}
-		if partOrder[str(l, "from")] > partOrder[str(l, "to")] && backwardsArrows[arrows[str(l, "kind")]] != "" {
-			look = append(look, "marker-end:none")
-		}
-		if look == nil {
-			continue
-		}
-		key := strings.Join(look, ",")
-		if numbers[key] == nil {
-			looks = append(looks, key)
-		}
-		numbers[key] = append(numbers[key], fmt.Sprint(i))
-	}
-	for _, look := range looks {
-		out = append(out, fmt.Sprintf("  linkStyle %s %s", strings.Join(numbers[look], ","), look))
-	}
-	return strings.Join(out, "\n")
+	return GraphOf(doc).Mermaid()
 }
 
 // drawnRed is whether a view draws a line red: one that View found breaking a rule.
@@ -176,6 +49,10 @@ var dottedArrows = map[string]string{"start": "-.->", "data": "-.->", "refused":
 // the edge in file order with two heads; linkStyle removes the head at the real source.
 var backwardsArrows = map[string]string{"-->": "<-->", "-.->": "<-.->", "==>": "<==>", "--x": "x--x", "-.-x": "x-.-x"}
 
+// A map's line between a workflow and a part it shares, where no line in the workflow leads into
+// the part or out of it, has no head.
+var headless = map[string]string{"-->": "---", "-.->": "-.-"}
+
 const defs = `  classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
   classDef con fill:#eceef2,stroke:#5d6472,color:#16171b
@@ -214,24 +91,6 @@ var deciders = map[string]string{"ai": "🤖", "code": "⚙️", "person": "👤
 // smaller and softer than the label beneath it. A review's holds ✅ review, and a standing
 // approval's 📜 standing approval, which no operation uses.
 const operation = "<small style='color:rgb(61,67,79)'>%s</small><br>"
-
-// label is a part's label as Mermaid reads it, with its marks. A step's, a review's or a standing
-// approval's sits under its own line. stopper is whether the untrusted view marks it as stopping
-// untrusted text.
-func label(p *Map, stopper bool) string {
-	who, words := deciders[str(p, "kind")], untrustedLabel(p, text(str(p, "label")), stopper)
-	if who == "" {
-		return words
-	}
-	if str(p, "kind") == "review" {
-		who += " ✅ review"
-	} else if str(p, "kind") == "approval" {
-		who += " 📜 standing approval"
-	} else if op := str(p, "op"); op != "" {
-		who += " " + ops[op] + " " + op
-	}
-	return fmt.Sprintf(operation, who) + words
-}
 
 // text keeps Mermaid from reading a label as Markdown or HTML. CommonMark syntax is made entirely
 // from ASCII punctuation, so entity-encoding every such mark leaves no syntax for its parser while

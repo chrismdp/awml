@@ -115,17 +115,20 @@ func main() {
 	})
 	// __awmlDrawMap draws the map of the workflows given together, as awml draw does given several.
 	expose("__awmlDrawMap", func(args []js.Value) string {
-		workflows, err := readGiven(args[0].String(), awml.Unsound)
+		graph, err := mapOf(args)
 		if err != nil {
 			return errorJSON(err.Error())
 		}
-		for _, workflow := range workflows {
-			if !awml.IsCanonical(workflow.Doc) {
-				_, err := awml.View(workflow.Doc, "")
-				return errorJSON(err.Error())
-			}
+		return graph.Mermaid()
+	})
+	// __awmlGraphMap gives what the map of the workflows given together draws, as awml graph does
+	// given several.
+	expose("__awmlGraphMap", func(args []js.Value) string {
+		graph, err := mapOf(args)
+		if err != nil {
+			return errorJSON(err.Error())
 		}
-		return awml.DrawMap(workflows)
+		return graphJSON(graph)
 	})
 	// __awmlConvert gives the 0.7 file awml convert writes, from one file or a legacy pair, what it
 	// notes it couldn't carry over, and the mistakes the current rules find in it.
@@ -161,33 +164,86 @@ func main() {
 	// __awmlDraw draws one workflow's view. Given the file's name too, it refuses a ref the file makes
 	// to itself, as awml draw does.
 	expose("__awmlDraw", func(args []js.Value) string {
-		doc, err := awml.Parse([]byte(args[0].String()))
-		if err != nil || len(awml.Unsound(doc)) != 0 {
-			return ""
-		}
-		if len(args) > 2 && args[2].Type() == js.TypeString {
-			if err := refMistakes([]awml.Workflow{{File: args[2].String(), Doc: doc.(*awml.Map)}}); err != nil {
-				return errorJSON(err.Error())
-			}
-		}
-		view, err := awml.View(doc.(*awml.Map), optionalImplementation(args))
-		if err != nil {
-			return errorJSON(err.Error())
+		view, err := viewOf(args, false)
+		if err != nil || view == nil {
+			return errorText(err)
 		}
 		return awml.Draw(view)
 	})
 	expose("__awmlDrawUntrusted", func(args []js.Value) string {
-		doc, err := awml.Parse([]byte(args[0].String()))
-		if err != nil || len(awml.Unsound(doc)) != 0 {
-			return ""
-		}
-		view, err := awml.UntrustedView(doc.(*awml.Map))
-		if err != nil {
-			return errorJSON(err.Error())
+		view, err := viewOf(args, true)
+		if err != nil || view == nil {
+			return errorText(err)
 		}
 		return awml.Draw(view)
 	})
+	// __awmlGraph and __awmlGraphUntrusted give what __awmlDraw and __awmlDrawUntrusted draw, as awml
+	// graph does.
+	expose("__awmlGraph", func(args []js.Value) string {
+		view, err := viewOf(args, false)
+		if err != nil || view == nil {
+			return errorText(err)
+		}
+		return graphJSON(awml.GraphOf(view))
+	})
+	expose("__awmlGraphUntrusted", func(args []js.Value) string {
+		view, err := viewOf(args, true)
+		if err != nil || view == nil {
+			return errorText(err)
+		}
+		return graphJSON(awml.GraphOf(view))
+	})
 	select {}
+}
+
+// viewOf gives the view of one workflow that draw draws: its untrusted view, or the implementation
+// given, or its security view. Given the file's name too, it refuses a ref the file makes to itself,
+// as awml draw does. It gives no view for a file with mistakes, which the caller checks first.
+func viewOf(args []js.Value, untrusted bool) (*awml.Map, error) {
+	doc, err := awml.Parse([]byte(args[0].String()))
+	if err != nil || len(awml.Unsound(doc)) != 0 {
+		return nil, nil
+	}
+	if untrusted {
+		return awml.UntrustedView(doc.(*awml.Map))
+	}
+	if len(args) > 2 && args[2].Type() == js.TypeString {
+		if err := refMistakes([]awml.Workflow{{File: args[2].String(), Doc: doc.(*awml.Map)}}); err != nil {
+			return nil, err
+		}
+	}
+	return awml.View(doc.(*awml.Map), optionalImplementation(args))
+}
+
+// mapOf gives the map of the workflows given together, which draw draws given several.
+func mapOf(args []js.Value) (awml.Graph, error) {
+	workflows, err := readGiven(args[0].String(), awml.Unsound)
+	if err != nil {
+		return awml.Graph{}, err
+	}
+	for _, workflow := range workflows {
+		if !awml.IsCanonical(workflow.Doc) {
+			_, err := awml.View(workflow.Doc, "")
+			return awml.Graph{}, err
+		}
+	}
+	return awml.GraphMap(workflows), nil
+}
+
+func graphJSON(graph awml.Graph) string {
+	encoded, err := json.Marshal(graph)
+	if err != nil {
+		return errorJSON(err.Error())
+	}
+	return string(encoded)
+}
+
+// errorText gives an error as JSON, or nothing for a file with mistakes, which has no view.
+func errorText(err error) string {
+	if err == nil {
+		return ""
+	}
+	return errorJSON(err.Error())
 }
 
 func expose(name string, call func([]js.Value) string) {

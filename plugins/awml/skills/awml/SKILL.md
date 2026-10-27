@@ -99,6 +99,7 @@ In the security view, a `data` line into a box that isn't the source's or one in
 - `awml draw --implementation ID standup.yaml` prints that implementation's platform view.
 - `awml draw --untrusted standup.yaml` prints the untrusted view, for a file that marks a part untrusted.
 - `awml draw dinners.yaml shopping.yaml` prints the map of workflows that share parts: a box for each, each trigger outside its workflow's box with a line into it, each shared part once between them, and a line from each outside action that starts another workflow to the trigger it starts.
+- `awml graph standup.yaml` takes what `awml draw` takes, and prints what it would draw as JSON with nothing laid out, for a tool that lays the drawing out itself. The spec lists its fields.
 - `awml page standup.yaml -o standup.html` writes one standalone HTML page with the security view and every implementation, to share or open in a browser.
 - For an SVG, save the Mermaid to `standup.mmd` and run `npx -y @mermaid-js/mermaid-cli@11.4.1 -b white -i standup.mmd -o standup.svg`, which needs Node.
 

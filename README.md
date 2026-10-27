@@ -460,15 +460,17 @@ awml draw --untrusted examples/tour/14-untrusted-text.yaml
 awml page examples/dinners.yaml -o dinners.html
 awml summary examples/dinners.yaml --json
 awml draw examples/dinners.yaml examples/question.yaml   # the map of workflows that share parts
+awml graph examples/dinners.yaml         # what the drawing shows, as JSON
 awml login
 awml push family/dinners examples/dinners.yaml
 awml pull family/dinners@1 -o dinners
 ```
 
-- `check`, `draw`, `summary` and `fit` take any number of files, and a folder stands for every `.yaml` file directly inside it, with a file named twice read once. Given several workflows, they follow each `ref` between them, as the next section says.
+- `check`, `draw`, `graph`, `summary` and `fit` take any number of files, and a folder stands for every `.yaml` file directly inside it, with a file named twice read once. Given several workflows, they follow each `ref` between them, as the next section says.
 - `awml check` checks the design and each implementation. It prints each warning before `ok` or the mistakes, and exits 1 only if it finds a mistake. `--json` lists every check it makes, passing ones included, each with a stable id and its result: `pass`, `fail`, `skipped` or `warn`.
 - `awml fit` judges the design against platform descriptions, telling the two apart by what each file holds. Given several workflows, it judges each platform as running them all, and names each part after its file, as `dinners#plan`, or `x/dinners#plan` where two files share a name. Add `--implementation ID` to judge one workflow's placement, and `--json` for the report's JSON form. An implementation can be given without descriptions, and then each block says it has no platform or that its platform wasn't described.
 - `awml draw` prints the security view's Mermaid, or the map of several workflows. Add `--implementation ID` for a platform view, or `--untrusted` for the untrusted view. It refuses a file with mistakes, and prints them instead.
+- `awml graph` takes what `awml draw` takes, and prints what it would draw as JSON, with nothing laid out, for a tool that lays the drawing out itself. Each id is the one `awml draw` gives it, and the spec lists the fields.
 - `awml page` writes one standalone HTML page with the security view, the untrusted view if there is one, then every implementation, each with a heading. Several files appear in the order given. The page takes their shared title, or Workflows when they differ.
 - `awml summary` counts the scopes, platforms, parts and lines in one workflow, and lists every publish with what it adds or loosens. It includes platforms from every implementation and counts the design once, and lists what each untrusted part's text reaches. Given several workflows, it counts each part they share once, and lists those parts. `--json` prints the registry's JSON form.
 - `awml convert old.yaml` upgrades a file of any older version to 0.7, printed to standard output, and every other command refuses an older file. A trigger of another workflow that only `do` steps lead into becomes their outside action, which starts that workflow, and convert says where any untrusted mark it drops belongs. A `publish` line becomes a `data` line, and a line marked red with `breaks` loses it, gaining a comment if the check doesn't find what it breaks. `awml convert security.yaml platform.yaml` joins a matching 0.3 or 0.2 pair into one file, turning platform groups into blocks of the `default` implementation. Add `--implementation ID` to name the implementation. YAML comments move to the top. If it notes something to do by hand, or the new version's rules find mistakes in the result, it lists them and exits 1.
