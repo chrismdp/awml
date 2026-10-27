@@ -2,10 +2,11 @@
 # repository's own app, is reviewed for bugs and for security each time it's opened or pushed to,
 # and each review is posted as a check on its head commit, beside CI. Two fresh Claude sessions read
 # the patch against main, with main's REVIEW.md and prompts, never the branch's. A review that finds
-# nothing passes, and one with an Important finding fails, so the change takes a fix, or the
-# maintainer's deliberate bypass, to merge. One with only Nits or Pre-existing faults is neutral. A
-# pull request from a fork gets no review, and neither does one opened by anyone else, since the
-# sessions hold the maintainer's login token and read the pull request's description.
+# nothing and read every file passes, and one with an Important finding fails, so the change takes a
+# fix, or the maintainer's deliberate bypass, to merge. One with only Nits or Pre-existing faults,
+# or that couldn't read the binary images or fonts the pull request changes, is neutral. A pull
+# request from a fork gets no review, and neither does one opened by anyone else, since the sessions
+# hold the maintainer's login token and read the pull request's description.
 # Drawn at https://awml.io/chrismdp/review-a-pull-request
 name: Review a pull request
 
@@ -43,6 +44,10 @@ jobs:
       (contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association) ||
       github.event.pull_request.user.login == 'awml-factory[bot]')
     runs-on: ubuntu-latest
+    # How many binary images or fonts the reviews couldn't read, from the bring step, never from
+    # anything the sessions can write.
+    outputs:
+      unread: ${{ steps.bring.outputs.unread }}
     timeout-minutes: 60
     permissions:
       contents: read
@@ -101,6 +106,8 @@ jobs:
             paths+=("$path")
             [ "$added" = "-" ] && binaries+=("$path")
           done < "$review/numstat"
+          # Each binary file once, by its new name, before a renamed one's old name is added.
+          changed="${#binaries[@]}"
           while IFS=$'\t' read -r kind old; do
             if [[ "$old" == \"* ]]; then
               echo "The patch renames or copies a file whose name git quotes, which the review can't check: $old"
@@ -160,7 +167,8 @@ jobs:
               exit 1
             fi
           done
-          echo "${#binaries[@]}" > "$review/unread.txt"
+          # The count goes to the post job as this step's output, out of the sessions' reach.
+          echo "unread=$changed" >> "$GITHUB_OUTPUT"
           if [ "${#binaries[@]}" -gt 0 ]; then
             {
               printf '\n## Binary files, changed but not shown in the patch\n\n'
@@ -233,15 +241,15 @@ jobs:
           path: |
             ${{ runner.temp }}/review/bugs.json
             ${{ runner.temp }}/review/security.json
-            ${{ runner.temp }}/review/unread.txt
 
-  # Once both reviews are done, posts each as a check on the head commit: passed if it found
-  # nothing, failed if it found something Important, and neutral if it found only Nits or
-  # Pre-existing faults, with its findings ranked. An Important finding means the change breaks
-  # something, so it takes a fix, or the maintainer's deliberate bypass, to merge. Each review's file must be a list of findings, each ranked, or nothing is posted, and
-  # findings that carry anything like the login token are refused, never uploaded or posted. Text
-  # the reviews wrote goes into the summary with nothing in it that can hide the rest, each title
-  # cut to 200 characters and each detail to 2,000.
+  # Once both reviews are done, posts each as a check on the head commit: passed if it found nothing
+  # and read every file, failed if it found something Important, and neutral if it found only Nits
+  # or Pre-existing faults, or couldn't read binary images or fonts, with its findings ranked. An
+  # Important finding means the change breaks something, so it takes a fix, or the maintainer's
+  # deliberate bypass, to merge. Each review's file must be a list of findings, each ranked, or
+  # nothing is posted, and findings that carry anything like the login token are refused, never
+  # uploaded or posted. Text the reviews wrote goes into the summary with nothing in it that can
+  # hide the rest, each title cut to 200 characters and each detail to 2,000.
   post:
     needs: review
     runs-on: ubuntu-latest
@@ -259,6 +267,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          UNREAD: ${{ needs.review.outputs.unread }}
         run: |
           if ! [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
             echo "The head commit isn't a commit id: $HEAD_SHA"
@@ -267,7 +276,7 @@ jobs:
           findings="$RUNNER_TEMP/findings"
           # How many binary images or fonts the reviews couldn't read. A review that saw nothing
           # wrong but couldn't read them all is neutral, not passed, so a person looks.
-          unread="$(cat "$findings/unread.txt")"
+          unread="$UNREAD"
           if ! [[ "$unread" =~ ^[0-9]{1,4}$ ]]; then
             echo "The review left no readable count of the binary files it couldn't read."
             exit 1

@@ -662,20 +662,19 @@ func TestTheReviewsReadOnlyMain(t *testing.T) {
 }
 
 // Each review is posted as a check on the pull request's head commit: Bug review and Security
-// review. One that finds nothing passes, one with an Important finding fails, and one with only
-// Nits or Pre-existing faults is neutral, with its findings ranked Important, Nit, Pre-existing,
+// review. One that finds nothing and read every file passes, one with an Important finding fails,
+// and one with only Nits or Pre-existing faults, or that couldn't read binary files, is neutral, with its findings ranked Important, Nit, Pre-existing,
 // and nothing in them can hide the rest. A file that
 // isn't a list of findings posts nothing.
 func TestEachReviewIsPostedAsACheck(t *testing.T) {
 	post, _ := readFactoryWorkflow(t, "review.yml").Jobs["post"].step(t, "post")
 	head := strings.Repeat("ab", 20)
-	env := map[string]string{"HEAD_SHA": head}
+	env := map[string]string{"HEAD_SHA": head, "UNREAD": "0"}
 	answers := `  "api -X POST repos/owner/repo/check-runs"*) echo '{}' ;;`
 
 	clean := newRehearsal(t)
 	clean.write("findings/bugs.json", "[]")
 	clean.write("findings/security.json", "[]")
-	clean.write("findings/unread.txt", "0\n")
 	clean.run(post, env, answers)
 	clean.mustPass()
 	if len(clean.inputs) != 2 {
@@ -695,7 +694,6 @@ func TestEachReviewIsPostedAsACheck(t *testing.T) {
 	  {"severity": "Important", "file": "fit.go", "line": 42, "title": "A wrong answer", "detail": "It drops a part. <!-- hide the rest"}
 	]`)
 	found.write("findings/security.json", "[]")
-	found.write("findings/unread.txt", "0\n")
 	found.run(post, env, answers)
 	found.mustPass()
 	if len(found.inputs) != 2 {
@@ -727,7 +725,6 @@ func TestEachReviewIsPostedAsACheck(t *testing.T) {
 	minor := newRehearsal(t)
 	minor.write("findings/bugs.json", `[{"severity": "Nit", "file": "check.go", "line": 7, "title": "A clearer name", "detail": "Say what it holds."}]`)
 	minor.write("findings/security.json", `[{"severity": "Pre-existing", "file": "draw.go", "line": 0, "title": "An old fault", "detail": "It was there before."}]`)
-	minor.write("findings/unread.txt", "0\n")
 	minor.run(post, env, answers)
 	minor.mustPass()
 	for i, check := range minor.inputs {
@@ -739,8 +736,7 @@ func TestEachReviewIsPostedAsACheck(t *testing.T) {
 	unread := newRehearsal(t)
 	unread.write("findings/bugs.json", "[]")
 	unread.write("findings/security.json", "[]")
-	unread.write("findings/unread.txt", "2\n")
-	unread.run(post, env, answers)
+	unread.run(post, map[string]string{"HEAD_SHA": head, "UNREAD": "2"}, answers)
 	unread.mustPass()
 	for i, check := range unread.inputs {
 		output, _ := check["output"].(map[string]any)
@@ -752,7 +748,6 @@ func TestEachReviewIsPostedAsACheck(t *testing.T) {
 	broken := newRehearsal(t)
 	broken.write("findings/bugs.json", "[]")
 	broken.write("findings/security.json", `{"not": "a list"}`)
-	broken.write("findings/unread.txt", "0\n")
 	broken.run(post, env, answers)
 	if !broken.failed {
 		t.Error("a findings file that isn't a list passed")
@@ -1181,13 +1176,27 @@ func TestTheReviewAppliesAPatchWithBinaryFiles(t *testing.T) {
 	if staged := gitIn(t, repo, "diff", "--cached", "--name-only"); staged != "recipes.md" {
 		t.Errorf("staged %q, want recipes.md", staged)
 	}
-	if count := r.read("review/unread.txt"); count != "4\n" {
-		t.Errorf("the review counts %q binary files unread, want 4", count)
+	if count := r.outputs["unread"]; count != "3" {
+		t.Errorf("the review counts %q binary files unread, want 3, a moved one once", count)
 	}
 	told := r.read("review/pull-request.md")
 	for _, path := range []string{"logo.png", "fonts/Bakery.ttf", "images/badge.png", "badge.png"} {
 		if !strings.Contains(told, "\n- "+path+"\n") {
 			t.Errorf("the reviewers aren't told that %s changed:\n%s", path, told)
+		}
+	}
+}
+
+// The count of binary files the reviews couldn't read reaches the post job as the bring step's
+// output, never as a file the sessions could write.
+func TestTheUnreadCountIsOutOfTheSessionsReach(t *testing.T) {
+	text := readText(t, ".github/workflows/review.yml")
+	if strings.Contains(text, "unread.txt") {
+		t.Error("review.yml keeps the unread count in a file")
+	}
+	for _, want := range []string{"unread: ${{ steps.bring.outputs.unread }}", "UNREAD: ${{ needs.review.outputs.unread }}"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("review.yml doesn't pass the unread count on with %q", want)
 		}
 	}
 }
@@ -1226,7 +1235,11 @@ func TestTheReviewStopsAtABinaryFileItCantRead(t *testing.T) {
 			"HEAD_SHA": strings.Repeat("cd", 20), "BASE": base, "PATCH": patch,
 			"GITHUB_EVENT_PATH": r.write("event.json", `{"pull_request": {"title": "Add scones", "body": "A new recipe."}}`),
 		}, answers)
-		if !r.failed || (!strings.ContainsAny(path, "é\n") && !strings.Contains(r.printed, path)) {
+		said := path
+		if strings.ContainsAny(path, "é\n") {
+			said = "letters, digits"
+		}
+		if !r.failed || !strings.Contains(r.printed, said) {
 			t.Errorf("a binary %q went through to the reviews unread:\n%s", path, r.printed)
 		}
 	}
@@ -1334,7 +1347,7 @@ func TestAReviewThatCarriesTheTokenPostsNothing(t *testing.T) {
 			}
 			r.write(dir+"/bugs.json", "["+finding+"]")
 			r.write(dir+"/security.json", "[]")
-			r.run(files, map[string]string{"HEAD_SHA": strings.Repeat("ab", 20)}, `  "api -X POST repos/owner/repo/check-runs"*) echo '{}' ;;`)
+			r.run(files, map[string]string{"HEAD_SHA": strings.Repeat("ab", 20), "UNREAD": "0"}, `  "api -X POST repos/owner/repo/check-runs"*) echo '{}' ;;`)
 			if !r.failed {
 				t.Errorf("the %s step let through a finding with %s", step, name)
 			}
@@ -1362,8 +1375,7 @@ func TestAFindingIsCutToSize(t *testing.T) {
 	r := newRehearsal(t)
 	r.write("findings/bugs.json", `[{"severity": "Important", "file": "bread<!--.go", "line": 3, "title": "`+title+`", "detail": "`+detail+`"}]`)
 	r.write("findings/security.json", "[]")
-	r.write("findings/unread.txt", "0\n")
-	r.run(post, map[string]string{"HEAD_SHA": strings.Repeat("ab", 20)}, `  "api -X POST repos/owner/repo/check-runs"*) echo '{}' ;;`)
+	r.run(post, map[string]string{"HEAD_SHA": strings.Repeat("ab", 20), "UNREAD": "0"}, `  "api -X POST repos/owner/repo/check-runs"*) echo '{}' ;;`)
 	r.mustPass()
 	output, _ := r.inputs[0]["output"].(map[string]any)
 	summary, _ := output["summary"].(string)
