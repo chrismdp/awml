@@ -352,8 +352,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			}
 		}
 		if len(given) == 0 {
-			fmt.Fprintln(stderr, "awml fit: no workflow was given")
-			return 1
+			return fail(commands[command].usage, "awml fit", "no workflow was given")
 		}
 		if implementation != "" && len(given) > 1 {
 			return fail(commands[command].usage, "awml fit", "argument --implementation: judges one workflow, not several")
@@ -367,8 +366,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			}
 			report = awml.Judge(given[0].Doc, placement, descriptions)
 		} else if len(descriptions) == 0 {
-			fmt.Fprintln(stderr, "awml fit: no platform descriptions were given")
-			return 1
+			return fail(commands[command].usage, "awml fit", "no platform descriptions were given")
 		} else {
 			report = awml.JudgeTogether(given, descriptions)
 		}
