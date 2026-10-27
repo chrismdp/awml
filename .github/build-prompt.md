@@ -11,6 +11,11 @@ found, fix each Important finding, and any other you agree with.
 
 - For a `spec` issue, build what the maintainer decided in their comments. If they haven't said
   which option they chose, change nothing, and say so in the message.
+- If you're not sure, ask: it is always fine to escalate. Where the issue leaves open a choice that
+  changes what a reader sees, such as cutting or rewriting an example, changing the story it tells,
+  or dropping something a page shows, don't choose. Change nothing, and write the message as the
+  question for the maintainer: the choice, the options, and which you'd recommend. It is posted on
+  the issue, and the build waits for their answer there.
 - Test first: write a failing test for each behaviour before the code that passes it.
 - Keep the skill's copies of SPEC.md, GUIDE.md and the examples in step: run `make references`
   after changing any source it copies.
