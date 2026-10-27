@@ -368,7 +368,7 @@ func TestEachOperationIsDrawnWithItsEmoji(t *testing.T) {
 }
 
 const questionFile = `
-awml: "0.6"
+awml: "0.7"
 title: A question in the family chat
 scopes:
   - {id: zCarers, label: "carers: + June, Beth"}

@@ -10,8 +10,9 @@ import (
 	"github.com/chrismdp/awml"
 )
 
-// Two workflows that hand work on through a shopping list and a trigger, as in the package's tests.
-const planWorkflow = `awml: "0.6"
+// Two workflows that hand work on through a shopping list, and an outside action that starts the
+// shopping, as in the package's tests.
+const planWorkflow = `awml: "0.7"
 title: Dinners
 scopes:
   - { id: family, label: "family: parents, kids", processing: any }
@@ -19,14 +20,16 @@ parts:
   - { id: thu, kind: trigger, label: "Thursday 19:00", wait: PT1H }
   - { id: plan, kind: ai, op: draft, label: "Plan next week's dinners", in: family }
   - { id: list, kind: context, label: Shopping list, at: notes/list, in: family }
-  - { id: ready, kind: trigger, label: The shopping list is ready, ref: shop.yaml#ready }
+  - { id: tell, kind: code, op: do, label: Tell the shopping the list is ready, in: family }
+  - { id: ready, kind: outside, label: "Start the shopping: Allow", in: family, ref: shop.yaml#ready }
 lines:
   - { from: thu, to: plan, kind: start }
   - { from: plan, to: list, kind: data }
-  - { from: plan, to: ready, kind: start }
+  - { from: plan, to: tell, kind: start }
+  - { from: tell, to: ready, kind: start }
 `
 
-const shopWorkflow = `awml: "0.6"
+const shopWorkflow = `awml: "0.7"
 title: Shopping
 scopes:
   - { id: home, label: "home: parents, kids", processing: any }
@@ -41,7 +44,7 @@ lines:
   - { from: fill, to: basket, kind: data }
 `
 
-const agentLaptop = `awml: "0.6"
+const agentLaptop = `awml: "0.7"
 platform: { id: laptop, label: A laptop }
 off_for_up_to: PT0S
 steps: agent
@@ -130,7 +133,7 @@ func TestSummaryOfSeveralWorkflowsNamesWhatTheyShare(t *testing.T) {
 		t.Errorf("summary --json gave %+v", got)
 	}
 	got := awmlRun("summary", plan, shopping)
-	if got.code != 0 || !strings.HasSuffix(got.stdout, "shared parts: 2\n  Shopping list (context): Dinners, Shopping\n  The shopping list is ready (trigger): Dinners, Shopping\n") {
+	if got.code != 0 || !strings.HasSuffix(got.stdout, "shared parts: 1\n  Shopping list (context): Dinners, Shopping\n") {
 		t.Errorf("summary gave %+v", got)
 	}
 }
@@ -139,7 +142,7 @@ func TestFitTellsDescriptionsFromWorkflowsByWhatTheyHold(t *testing.T) {
 	dir := folder(t, "plan.yaml", planWorkflow, "shop.yaml", shopWorkflow)
 	laptop := write(t, "laptop.yaml", agentLaptop)
 	want := "laptop  no: plan#list is kept at notes/list, which the platform doesn't hold\n" +
-		"        no: shop#fill is a code step, which anthropic's agent would carry out\n"
+		"        no: plan#tell and shop#fill are code steps, which anthropic's agent would carry out\n"
 	for _, args := range [][]string{
 		{"fit", laptop, filepath.Join(dir, "plan.yaml"), filepath.Join(dir, "shop.yaml")},
 		{"fit", dir, laptop},
@@ -265,8 +268,9 @@ func TestCommandsRefuseFilesWhoseRefsHaveMistakes(t *testing.T) {
 // fit names two files of the same name by the folders they're in.
 func TestFitNamesFilesOfTheSameNameByTheirFolders(t *testing.T) {
 	root := t.TempDir()
-	plan := strings.Replace(planWorkflow, "  - { id: ready, kind: trigger, label: The shopping list is ready, ref: shop.yaml#ready }\n", "", 1)
-	plan = strings.Replace(plan, "  - { from: plan, to: ready, kind: start }\n", "", 1)
+	plan := strings.Replace(planWorkflow, "  - { id: tell, kind: code, op: do, label: Tell the shopping the list is ready, in: family }\n"+
+		"  - { id: ready, kind: outside, label: \"Start the shopping: Allow\", in: family, ref: shop.yaml#ready }\n", "", 1)
+	plan = strings.Replace(plan, "  - { from: plan, to: tell, kind: start }\n  - { from: tell, to: ready, kind: start }\n", "", 1)
 	for _, dir := range []string{"x", "y"} {
 		if err := os.Mkdir(filepath.Join(root, dir), 0o755); err != nil {
 			t.Fatal(err)

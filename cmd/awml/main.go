@@ -33,7 +33,7 @@ positional arguments:
     check            report warnings and structural mistakes
     fit              judge where workflows can run
     summary          count the parts and lines in workflows
-    convert          upgrade an older file, or join a legacy pair, into one 0.6 file
+    convert          upgrade an older file, or join a legacy pair, into one 0.7 file
     login            save a registry API token
     push             push a new workflow version
     pull             download a workflow or platform version
@@ -57,7 +57,7 @@ options:
   --untrusted  draw where untrusted text reaches in one workflow
 `},
 	"convert": {"usage: awml convert [-h] [--implementation ID] file [PLATFORM]\n", `
-Upgrade a file of an older version into one 0.6 file, or join a legacy security view and platform
+Upgrade a file of an older version into one 0.7 file, or join a legacy security view and platform
 view into one.
 
 positional arguments:
@@ -439,10 +439,10 @@ func checkJSON(files []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// convert prints one 0.6 file, upgraded from a file of an older version or joined from a legacy
-// pair, as awml.ConvertSources writes it. It fails when the files can't be converted, and when the
-// converted file has mistakes, which newer versions' rules can find in a file that older ones
-// passed. It lists those on standard error.
+// convert prints one 0.7 file, upgraded from a file of an older version or joined from a legacy
+// pair, as awml.ConvertSources writes it. It fails when the files can't be converted, when it notes
+// something it couldn't carry over, and when the converted file has mistakes, which newer versions'
+// rules can find in a file that older ones passed. It lists those on standard error.
 func convert(files []string, implementation string, stdout, stderr io.Writer) int {
 	var sources []awml.Source
 	for _, path := range files {
@@ -453,18 +453,26 @@ func convert(files []string, implementation string, stdout, stderr io.Writer) in
 		}
 		sources = append(sources, awml.Source{File: path, Text: src})
 	}
-	data, mistakes, err := awml.ConvertSources(sources, implementation)
+	data, notes, mistakes, err := awml.ConvertSources(sources, implementation)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
 	stdout.Write(data)
-	if len(mistakes) == 0 {
+	if len(notes) == 0 && len(mistakes) == 0 {
 		return 0
 	}
-	fmt.Fprintln(stderr, "awml convert: converted, but awml check finds these mistakes in the result:")
-	for _, mistake := range mistakes {
-		fmt.Fprintf(stderr, "  %s\n", mistake)
+	if len(notes) != 0 {
+		fmt.Fprintln(stderr, "awml convert: converted, but do this by hand:")
+		for _, note := range notes {
+			fmt.Fprintf(stderr, "  %s\n", note)
+		}
+	}
+	if len(mistakes) != 0 {
+		fmt.Fprintln(stderr, "awml convert: converted, but awml check finds these mistakes in the result:")
+		for _, mistake := range mistakes {
+			fmt.Fprintf(stderr, "  %s\n", mistake)
+		}
 	}
 	return 1
 }

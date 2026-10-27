@@ -15,7 +15,7 @@ func warnings(t *testing.T, doc any, want ...string) {
 }
 
 const changes = `
-awml: "0.6"
+awml: "0.7"
 title: Changes
 parts:
   - {id: fill, kind: code, op: do, label: Fill}
@@ -87,7 +87,7 @@ func TestWarningsAcceptsAnythingCheckAccepts(t *testing.T) {
 	var file *Map
 	warnings(t, file)
 	warnings(t, []any{"not", "a", "file"})
-	warnings(t, parsed(t, `awml: "0.6"
+	warnings(t, parsed(t, `awml: "0.7"
 platform: {id: worker, label: Worker}
 off_for_up_to: PT0S
 steps: code

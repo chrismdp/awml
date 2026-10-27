@@ -90,7 +90,7 @@ After the parts and groups, leave one empty line, then write each line in the fi
 
 A dotted `publish` line keeps its thick arrow and takes its dots from its style, below.
 
-A line is **red** when it breaks a rule: each line that rule 17, 18 or 20 of [checking by hand](checking-by-hand.md) finds. For 17, that's the lines from the step that isn't a `do` step on its way to the action; for 18, the line into the context; for 20, the lines from each part that breaks the rule on its way to the action. A red line's label adds, for each rule it breaks, `<br>` and the words `awml check` reports for it, up to the colon before its advice, in the order the rules come. For example, `part "write" leads to outside action "send", but its op is draft`. Write the label's own words first, if it has any, and write the punctuation in the added words as entities too, but not the `<br>`.
+A line is **red** when it breaks a rule: each line that rule 18, 19 or 21 of [checking by hand](checking-by-hand.md) finds. For 18, that's the lines from the step that isn't a `do` step on its way to the action; for 19, the line into the context; for 21, the lines from each part that breaks the rule on its way to the action. A red line's label adds, for each rule it breaks, `<br>` and the words `awml check` reports for it, up to the colon before its advice, in the order the rules come. For example, `part "write" leads to outside action "send", but its op is draft`. Write the label's own words first, if it has any, and write the punctuation in the added words as entities too, but not the `<br>`.
 
 ## 4. The colours
 

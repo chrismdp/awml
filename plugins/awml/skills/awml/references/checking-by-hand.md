@@ -5,13 +5,13 @@ Use this only where `awml check` can't run, as in a chat with no shell. It cover
 ## The file
 
 1. The file is one YAML mapping with `awml`, `title` and `parts`, and may have `description`, `scopes`, `lines` and `implementations`. It has no other field.
-2. `awml` is `"0.6"`, in quotes. There is no `view`.
+2. `awml` is `"0.7"`, in quotes. There is no `view`.
 3. `parts`, and `scopes` and `lines` where given, are lists, and each item in them is a mapping.
 
 ## Scopes and parts
 
 4. Each scope has `id` and `label`, and may have `in` and `processing`. Nothing else.
-5. Each part has `id`, `kind` and `label`, and may have `in`, `op`, `wait`, `at`, `untrusted`, `cleans` and `ref`. A fork needn't have a label. Nothing else. `untrusted` and `cleans`, where given, are `true` or `false`, with no quotes. Only a `trigger`, `connector` or `context` has `untrusted: true`, and only a `code` step has `cleans: true`. Only a `trigger`, `context`, `connector` or `surface` has a `ref`, written `owner/slug#id` or as a path to a file alongside, ending `.yaml`, then `#` and the part's id, as `shopping.yaml#list`, and never naming its own file. Following refs from file to file ends at a copy with no `ref`, never coming back round. Where the file it names is to hand, that file has a part with that id, of the same kind, label and `at`, in a scope with the same people and terms.
+5. Each part has `id`, `kind` and `label`, and may have `in`, `op`, `wait`, `at`, `untrusted`, `cleans` and `ref`. A fork needn't have a label. Nothing else. `untrusted` and `cleans`, where given, are `true` or `false`, with no quotes. Only a `trigger`, `connector` or `context` has `untrusted: true`, and only a `code` step has `cleans: true`. Only a `context`, `connector`, `surface` or `outside` part has a `ref`, never a `trigger`, written `owner/slug#id` or as a path to a file alongside, ending `.yaml`, then `#` and the part's id, as `shopping.yaml#list`, and never naming its own file. Following refs from file to file ends at a copy with no `ref`, never coming back round. Where the file it names is to hand, that file has a part with that id. For an `outside` part, it's a `trigger`, the one the action starts. For any other, it's of the same kind, label and `at`, in a scope with the same people and terms.
 6. Each id is letters, digits and underscores, starting with a letter: `meal_plan`, never `meal-plan` or `2nd_plan`. No id is used twice, across scopes, parts, blocks and implementation comments.
 7. Each part's `kind` is one of `trigger`, `ai`, `code`, `person`, `review`, `approval`, `fork`, `context`, `connector`, `surface`, `outside` and `comment`.
 8. A design part or scope's `in` names a scope. Follow each scope's `in` upwards: it never comes back to the scope it started from.
@@ -21,23 +21,24 @@ Use this only where `awml check` can't run, as in a chat with no shell. It cover
 10. Each line has `from`, `to` and `kind`, and may have `label`. Nothing else.
 11. `from` and `to` each name a part in the same file, never a group.
 12. Each line's `kind` is one of `start`, `data`, `refused`, `tie` and `hidden`. There is no `publish`: a `data` line publishes whenever its scopes make it one.
-13. No line has `breaks`. A line that breaks rule 17, 18 or 20 is a mistake, and the drawing shows it red, so a file never marks one by hand.
+13. No line has `breaks`. A line that breaks rule 18, 19 or 21 is a mistake, and the drawing shows it red, so a file never marks one by hand.
 14. A line with a comment at either end is a `tie` or a `hidden` line. A `tie` has a comment at one end or both.
+15. No line but a `tie` or a `hidden` one goes into a `trigger`. A trigger only starts its own workflow, so to start another, a `do` step leads to an `outside` part whose `ref` names the other's trigger.
 
 ## Text
 
-15. Every `title`, `description`, `id`, `label`, `kind`, `in`, `from`, `to`, `op` and `ref` is text. YAML reads some bare values as something else, so each of these is in double quotes: `true` and `false`, numbers such as `12` or `0.5`, and dates such as `2026-10-20`. Quote `yes`, `no`, `on`, `off` and times such as `19:00` too, which YAML 1.1 tools misread.
-16. The file is YAML that reads at all. In the `{ id: …, label: … }` form the examples use, a comma ends a value and `: ` starts a new one, so quote any label with a comma, a colon followed by a space, a `#`, or a first character of `[`, `{`, `&`, `*`, `!`, `|`, `>`, `'`, `"`, `%` or `@`. `[yes]` is always quoted.
+16. Every `title`, `description`, `id`, `label`, `kind`, `in`, `from`, `to`, `op` and `ref` is text. YAML reads some bare values as something else, so each of these is in double quotes: `true` and `false`, numbers such as `12` or `0.5`, and dates such as `2026-10-20`. Quote `yes`, `no`, `on`, `off` and times such as `19:00` too, which YAML 1.1 tools misread.
+17. The file is YAML that reads at all. In the `{ id: …, label: … }` form the examples use, a comma ends a value and `: ` starts a new one, so quote any label with a comma, a colon followed by a space, a `#`, or a first character of `[`, `{`, `&`, `*`, `!`, `|`, `>`, `'`, `"`, `%` or `@`. `[yes]` is always quoted.
 
 ## Operations and tiers
 
 For these, skip any `hidden`, `refused` or `tie` line: only `start` and `data` lines lead anywhere. In a drawing of a live system, a line that breaks one of these rules may be what the system really did. It stays a mistake, and the drawing shows it red, so leave it there until the system changes.
 
-17. **Only a `do` step leads to an outside action.** For each `outside` part, walk back along the lines that lead into it. Pass through any review, standing approval or fork and keep walking back from it. Every step you meet whose `op` is anything but `do` or `other` is a mistake, such as a `draft` step whose line reaches a send through a review. A step with no `op` is held to nothing.
-18. **An `answer` or `check` step never writes to a context.** No line runs from a step whose `op` is `answer` or `check` to a `context`.
-19. **Each outside action's label gives its tier.** The first word after the label's last colon is `Allow`, `Ask` or `Block`, as in `"Send the mail: Ask"` or `"Fill the basket: Allow under £180"`.
-20. **Each tier agrees with what stands in front of it.** For each `outside` part, find the parts whose lines lead into it, passing back through any fork. For an Ask action, each of them is a `review`, an `approval` or a `person` step. For an Allow action, none of them is a `review` or an `approval`. For a Block action, there are none.
-21. **Each standing approval lists its actions.** A line leads from each `approval` part straight to a `surface`.
+18. **Only a `do` step leads to an outside action.** For each `outside` part, walk back along the lines that lead into it. Pass through any review, standing approval or fork and keep walking back from it. Every step you meet whose `op` is anything but `do` or `other` is a mistake, such as a `draft` step whose line reaches a send through a review. A step with no `op` is held to nothing.
+19. **An `answer` or `check` step never writes to a context.** No line runs from a step whose `op` is `answer` or `check` to a `context`.
+20. **Each outside action's label gives its tier.** The first word after the label's last colon is `Allow`, `Ask` or `Block`, as in `"Send the mail: Ask"` or `"Fill the basket: Allow under £180"`.
+21. **Each tier agrees with what stands in front of it.** For each `outside` part, find the parts whose lines lead into it, passing back through any fork. For an Ask action, each of them is a `review`, an `approval` or a `person` step. For an Allow action, none of them is a `review` or an `approval`. For a Block action, there are none.
+22. **Each standing approval lists its actions.** A line leads from each `approval` part straight to a `surface`.
 
 ## Placement and fit fields
 

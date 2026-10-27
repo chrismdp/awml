@@ -457,8 +457,8 @@ awml pull family/dinners@1 -o dinners
 - `awml draw` prints the security view's Mermaid, or the map of several workflows. Add `--implementation ID` for a platform view, or `--untrusted` for the untrusted view. It refuses a file with mistakes, and prints them instead.
 - `awml page` writes one standalone HTML page with the security view, the untrusted view if there is one, then every implementation, each with a heading. Several files appear in the order given. The page takes their shared title, or Workflows when they differ.
 - `awml summary` counts the scopes, platforms, parts and lines in one workflow, and lists every publish with what it adds or loosens. It includes platforms from every implementation and counts the design once, and lists what each untrusted part's text reaches. Given several workflows, it counts each part they share once, and lists those parts. `--json` prints the registry's JSON form.
-- `awml convert old.yaml` upgrades a file of any older version to 0.6, printed to standard output, and every other command refuses an older file. A `publish` line becomes a `data` line, and a line marked red with `breaks` loses it, gaining a comment if the check doesn't find what it breaks. `awml convert security.yaml platform.yaml` joins a matching 0.3 or 0.2 pair into one file, turning platform groups into blocks of the `default` implementation. Add `--implementation ID` to name the implementation. YAML comments move to the top. If the new version's rules find mistakes in the result, it lists them and exits 1.
-- `awml login` saves an API token for the registry. `awml push` checks and uploads one 0.6 file in the API's workflow field. `awml pull` downloads the latest or a numbered version as `<slug>.yaml`, and `awml pull owner/platforms/slug` does the same for a published platform description. It still downloads an older pair as `security.yaml` and `platform.yaml`. The commands use `https://awml.io` unless `--registry` or `AWML_REGISTRY_URL` says otherwise. Add `--private` to the first push of a private organisation workflow.
+- `awml convert old.yaml` upgrades a file of any older version to 0.7, printed to standard output, and every other command refuses an older file. A trigger of another workflow that only `do` steps lead into becomes their outside action, which starts that workflow, and convert says where any untrusted mark it drops belongs. A `publish` line becomes a `data` line, and a line marked red with `breaks` loses it, gaining a comment if the check doesn't find what it breaks. `awml convert security.yaml platform.yaml` joins a matching 0.3 or 0.2 pair into one file, turning platform groups into blocks of the `default` implementation. Add `--implementation ID` to name the implementation. YAML comments move to the top. If it notes something to do by hand, or the new version's rules find mistakes in the result, it lists them and exits 1.
+- `awml login` saves an API token for the registry. `awml push` checks and uploads one 0.7 file in the API's workflow field. `awml pull` downloads the latest or a numbered version as `<slug>.yaml`, and `awml pull owner/platforms/slug` does the same for a published platform description. It still downloads an older pair as `security.yaml` and `platform.yaml`. The commands use `https://awml.io` unless `--registry` or `AWML_REGISTRY_URL` says otherwise. Add `--private` to the first push of a private organisation workflow.
 
 For example, the client email workflow can run on the scheduled scripts platform, while the other descriptions show why they don't fit:
 
@@ -483,7 +483,7 @@ npx -y @mermaid-js/mermaid-cli@11.4.1 -b white -i my-workflow.mmd -o my-workflow
 
 ### Workflows that share parts
 
-Workflows hand work on through a part both have: a context one writes and another reads, or a trigger one fires and another starts on. The workflow that doesn't create the part keeps its own copy, with `ref` naming the other's, as `shopping.yaml#list` for a file alongside or `owner/slug#id` for a published one. Each file still checks alone. Given together, `awml check` reports a `ref` to a part that isn't there, a copy that differs from the part it names, and refs that name their own workflow or go round in a circle, and warns of a context more than one writes and a connector more than one reads. The other commands refuse the files until those mistakes are fixed. `awml draw` draws their map, with each shared part once between the workflows:
+Workflows hand work on through a context one writes and another reads, and may share connectors and surfaces too. The workflow that doesn't create the part keeps its own copy, with `ref` naming the other's, as `shopping.yaml#list` for a file alongside or `owner/slug#id` for a published one. One workflow starts another with an outside action, such as `Start the shopping: Allow`, whose `ref` names the other's trigger, the way it would call any outside service. A trigger only starts its own workflow, so it never has a `ref`, and no line but a tie or a hidden one goes into it. Where a platform starts a workflow by itself, as GitHub does when CI finishes, the trigger names that event and nothing links the two. Each file still checks alone. Given together, `awml check` reports a `ref` to a part that isn't there, a copy that differs from the part it names, an outside action whose `ref` names anything but a trigger, and refs that name their own workflow or go round in a circle, and warns of a context more than one writes and a connector more than one reads. The other commands refuse the files until those mistakes are fixed. `awml draw` draws their map, with each shared part once between the workflows, and a line from each outside action to the trigger it starts:
 
 <img src="examples/family-map.svg" alt="The family's dinners and its question, drawn together">
 
@@ -494,7 +494,7 @@ Workflows hand work on through a part both have: a context one writes and anothe
 One file holds one workflow and its implementations:
 
 ```yaml
-awml: "0.6"
+awml: "0.7"
 title: The family's dinners
 description: |
   Plans the family's dinners each Thursday. The family is fictional.
@@ -518,9 +518,9 @@ implementations:
       - { id: phone, label: Family phone, parts: [chat] }
 ```
 
-- The file needs `awml`, the version `"0.6"`; `title`, the workflow's name; and `parts`. It may have `description`, what the workflow is for in Markdown, and `scopes`, `lines` and `implementations`. Upgrade a file of an older version with `awml convert`.
+- The file needs `awml`, the version `"0.7"`; `title`, the workflow's name; and `parts`. It may have `description`, what the workflow is for in Markdown, and `scopes`, `lines` and `implementations`. Upgrade a file of an older version with `awml convert`.
 - A **scope** has an `id` and a `label`, and may have `in`, the id of its parent scope, and `processing`, the companies it allows.
-- A **part** has an `id`, a `kind` and a `label`, which a fork doesn't need. Its `in` names its scope. A step may have `op`, a trigger `wait`, and a context `at`. A trigger, connector or context may have `untrusted`, and a code step `cleans`. A trigger, context, connector or surface may have `ref`, the part of another workflow it is.
+- A **part** has an `id`, a `kind` and a `label`, which a fork doesn't need. Its `in` names its scope. A step may have `op`, a trigger `wait`, and a context `at`. A trigger, connector or context may have `untrusted`, and a code step `cleans`. A context, connector or surface may have `ref`, the part of another workflow it is, and an outside action `ref`, the trigger of the workflow it starts.
 - An **implementation** has an id in the `implementations` map, a `label` and `blocks`. Each block has an `id`, a `label` and `parts`, the ids it holds. It may have `in`, its parent block, and `platform`, a platform description id: a bare id for your own, or `owner/platforms/slug` for one published to the registry. Every part except a trigger or comment needs exactly one block per implementation.
 - An implementation may have **comments**, each with `id`, `label`, `in`, its block, and `ties`, a list of design part ids. These comments appear only in its platform view.
 - A **line** has `from` and `to`, the ids of two parts, and a `kind`. It may have a `label`.
@@ -546,6 +546,6 @@ Besides the gallery, [`examples/`](examples) has three workflows to start from: 
 
 ## Status and licence
 
-Draft 0.6. The notation and the file format may still change.
+Draft 0.7. The notation and the file format may still change.
 
 MIT. See `LICENSE`.

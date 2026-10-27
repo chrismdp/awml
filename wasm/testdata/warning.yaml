@@ -1,4 +1,4 @@
-awml: "0.6"
+awml: "0.7"
 title: Fill
 parts:
   - {id: fill, kind: ai, op: do, label: Fill}

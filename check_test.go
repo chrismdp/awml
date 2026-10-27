@@ -9,7 +9,7 @@ import (
 )
 
 const good = `
-awml: "0.6"
+awml: "0.7"
 title: The family's dinners
 scopes:
   - { id: carers, label: carers }
@@ -98,7 +98,7 @@ func TestASoundFileHasNoMistakes(t *testing.T) {
 
 func TestLabelsThatMarkdownWouldRecogniseHaveNoMistakes(t *testing.T) {
 	mistakes(t, parsed(t, `
-awml: "0.6"
+awml: "0.7"
 title: Literal labels
 scopes: [{id: group, label: '# Team'}]
 parts:
@@ -130,7 +130,7 @@ func TestTheOldNamesForKindsAreUnknown(t *testing.T) {
 }
 
 func TestAnUnknownVersion(t *testing.T) {
-	mistakes(t, changed(t, "awml", "2"), `awml must be "0.6", not "2"`)
+	mistakes(t, changed(t, "awml", "2"), `awml must be "0.7", not "2"`)
 }
 
 func TestAPartInAnUnknownGroup(t *testing.T) {
@@ -190,11 +190,11 @@ func TestAMissingField(t *testing.T) {
 }
 
 func TestTheVersionIsText(t *testing.T) {
-	mistakes(t, changed(t, "awml", 0.6), `awml: YAML read it as 0.6, not text: put it in quotes`)
+	mistakes(t, changed(t, "awml", 0.7), `awml: YAML read it as 0.7, not text: put it in quotes`)
 }
 
 func TestAFileInAVersionNoReleaseReadIsRefused(t *testing.T) {
-	mistakes(t, changed(t, "awml", "0.1"), `awml must be "0.6", not "0.1"`)
+	mistakes(t, changed(t, "awml", "0.1"), `awml must be "0.7", not "0.1"`)
 }
 
 func TestAnUnknownField(t *testing.T) {
@@ -216,7 +216,7 @@ func TestEveryMistakeIsReportedAtOnce(t *testing.T) {
 
 func TestAValueYAMLReadsAsTrueMustBeQuoted(t *testing.T) {
 	d := parsed(t, `
-awml: "0.6"
+awml: "0.7"
 title: T
 parts:
   - { id: true, kind: review, label: True }
@@ -231,13 +231,13 @@ lines:
 }
 
 func TestANumberMustBeQuoted(t *testing.T) {
-	d := parsed(t, `{awml: "0.6", title: T, parts: [{id: t, kind: trigger, label: 12}]}`)
+	d := parsed(t, `{awml: "0.7", title: T, parts: [{id: t, kind: trigger, label: 12}]}`)
 	mistakes(t, d, `part "t": YAML read its label as 12, not text: put it in quotes`)
 }
 
 func TestYesNoOnOffAndTimesAreText(t *testing.T) {
 	d := parsed(t, `
-awml: "0.6"
+awml: "0.7"
 title: T
 parts:
   - { id: t, kind: trigger, label: 19:00 }
@@ -252,7 +252,7 @@ lines:
 }
 
 const reply = `
-awml: "0.6"
+awml: "0.7"
 title: A reply
 parts:
   - { id: write, kind: ai, op: draft, label: Draft the reply }
@@ -282,7 +282,7 @@ func withLines(t *testing.T, lines ...string) *Map {
 func TestEachOperationNamesAStep(t *testing.T) {
 	for _, op := range []string{"bring-in", "sort", "learn", "prepare", "check", "reflect", "draft", "do", "answer", "other"} {
 		for _, kind := range []string{"ai", "code", "person"} {
-			d := parsed(t, fmt.Sprintf(`{awml: "0.6", title: T, parts: [{id: s, kind: %s, op: %s, label: S}]}`, kind, op))
+			d := parsed(t, fmt.Sprintf(`{awml: "0.7", title: T, parts: [{id: s, kind: %s, op: %s, label: S}]}`, kind, op))
 			mistakes(t, d)
 		}
 	}
@@ -343,7 +343,7 @@ func TestHiddenAndRefusedLinesLeadNowhere(t *testing.T) {
 }
 
 const question = `
-awml: "0.6"
+awml: "0.7"
 title: A question
 parts:
   - { id: notes, kind: context, label: Family notes }
@@ -375,10 +375,43 @@ func TestACheckPassesItsVerdictOnAndAStepAfterItKeepsIt(t *testing.T) {
 	mistakes(t, parsed(t, src))
 }
 
-func TestOnlyATriggerContextConnectorOrSurfaceTakesARef(t *testing.T) {
-	mistakes(t, changed(t, "parts.0.ref", "shopping.yaml#ready", "parts.2.ref", "acme/shopping#list"))
+// The dinners start the shopping by asking it to start, as they would call any outside service.
+const startsShopping = `
+awml: "0.7"
+title: Dinners
+parts:
+  - { id: thu, kind: trigger, label: "Thursday 19:00" }
+  - { id: tell, kind: code, op: do, label: Tell the shopping the list is ready }
+  - { id: shop, kind: outside, label: "Start the shopping: Allow", ref: shopping.yaml#ready }
+lines:
+  - { from: thu, to: tell, kind: start }
+  - { from: tell, to: shop, kind: start }
+`
+
+func TestOnlyAContextConnectorSurfaceOrOutsideActionTakesARef(t *testing.T) {
+	mistakes(t, changed(t, "parts.2.ref", "acme/shopping#list"))
+	mistakes(t, parsed(t, startsShopping))
 	mistakes(t, changed(t, "parts.1.ref", "shopping.yaml#plan"),
-		`part "plan" has a ref, but only a trigger, context, connector or surface takes one`)
+		`part "plan" has a ref, but only a context, connector, surface or outside action takes one`)
+}
+
+// A trigger belongs to the workflow it starts, so nothing else draws it, and it never refers.
+func TestATriggerNeverTakesARef(t *testing.T) {
+	mistakes(t, changed(t, "parts.0.ref", "shopping.yaml#ready"),
+		`part "thu" has a ref, but a trigger belongs to the workflow it starts: start another workflow with an outside action whose ref names its trigger`)
+}
+
+// A trigger only starts its own workflow, so it has lines out and none in, but a tie or a hidden
+// line, which lead nowhere.
+func TestNoLineButATieOrAHiddenOneGoesIntoATrigger(t *testing.T) {
+	for _, kind := range []string{"start", "data", "refused"} {
+		t.Run(kind, func(t *testing.T) {
+			mistakes(t, changed(t, "lines.2.to", "thu", "lines.2.kind", kind),
+				`the line from "mealplan" to "thu" goes into trigger "thu": a trigger only starts its own workflow, so start another workflow with an outside action whose ref names its trigger`)
+		})
+	}
+	mistakes(t, changed(t, "lines.2.to", "thu", "lines.2.kind", "hidden"))
+	mistakes(t, changed(t, "lines.4.kind", "tie"))
 }
 
 func TestARefIsWellWritten(t *testing.T) {
