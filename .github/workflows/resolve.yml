@@ -203,6 +203,9 @@ jobs:
           bwrap --dev-bind / / --unshare-pid true
           npm install -g @anthropic-ai/claude-code
 
+      # Claude works on the branch's tree, so it loads only the user's settings and no MCP servers: a
+      # settings file or a .mcp.json on the branch can't set its hooks or where it sends the login
+      # token.
       - name: Resolve the conflicts
         if: ${{ steps.rebase.outputs.conflicts == 'true' }}
         env:
@@ -214,6 +217,7 @@ jobs:
         run: |
           prompt="$(sed "s|RESOLVE_DIR|$RESOLVE_DIR|g" .github/resolve-prompt.md)"
           claude -p "$prompt" --model opus --max-turns 200 --permission-mode acceptEdits \
+            --setting-sources user --strict-mcp-config \
             --allowedTools "Read" "Edit" "Write" "Glob" "Grep" \
               "Bash(go:*)" "Bash(gofmt:*)" "Bash(make:*)" "Bash(node:*)" \
               "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" \

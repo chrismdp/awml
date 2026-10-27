@@ -33,8 +33,13 @@ jobs:
   # main, and the repository, with no tool that runs anything but git's reads.
   review:
     # A fork's pull request starts nothing here: its author could steer the sessions, which hold the
-    # maintainer's login token.
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    # maintainer's login token. Anyone who can read the repository can open a pull request between
+    # two of its branches, with a title and description the sessions read, so it's reviewed only if
+    # the owner, a member, a collaborator or the build's app opened it.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association) ||
+      github.event.pull_request.user.login == 'awml-factory[bot]')
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -52,7 +57,9 @@ jobs:
       # The reviews read the patch as data and follow main's prompts and REVIEW.md, so a branch
       # can't rewrite what it's held to. They're kept before the patch is applied. The patch is
       # GitHub's diff of the head commit against the commit of main the branch started from, so it
-      # applies there as it is, and `git diff --cached` shows the whole change.
+      # applies there as it is, and `git diff --cached` shows the whole change. A Claude Code session
+      # loads its tree's settings, servers and instructions, so a patch that adds or changes any of
+      # them, anywhere in the tree, is refused before a session starts, and nothing is posted.
       - name: Bring in the pull request's patch against main, and main's REVIEW.md and review prompts
         id: bring
         env:
@@ -79,12 +86,21 @@ jobs:
             > "$review/pull-request.md"
           git checkout -q --detach "$base"
           git apply --index "$review/change.patch"
+          claudes='(^|/)\.claude(/|$)|(^|/)\.mcp\.json$|(^|/)CLAUDE(\.local)?\.md$'
+          if git diff --cached --name-only --no-renames -z | grep -zqE "$claudes"; then
+            echo "The patch changes Claude Code's own settings, servers or instructions, which a review session would load, so it isn't reviewed:"
+            git diff --cached --name-only --no-renames -z | grep -zE "$claudes" | tr '\0' '\n'
+            exit 1
+          fi
 
       - name: Install Claude Code
         run: npm install -g @anthropic-ai/claude-code
 
       # Each review is its own claude run, started together, so neither sees the other's session.
-      # Each session keeps the login token from the commands it runs (awml #121).
+      # Each session keeps the login token from the commands it runs (awml #121). It loads only the
+      # user's settings and no MCP servers, so nothing in the tree can set its hooks or where it
+      # sends the token, and it reads only the working tree and its own folder, never /proc, where
+      # its own environment holds the token.
       - name: Review the patch for bugs and for security, side by side
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -94,8 +110,9 @@ jobs:
           review() {
             prompt="$(sed "s|REVIEW_DIR|$REVIEW_DIR|g" "$RUNNER_TEMP/$1")"
             claude -p "$prompt" --model opus --max-turns 100 --permission-mode acceptEdits \
-              --add-dir "$REVIEW_DIR" \
-              --allowedTools "Read" "Write" "Glob" "Grep" \
+              --setting-sources user --strict-mcp-config --add-dir "$REVIEW_DIR" \
+              --disallowedTools "Read(//proc/**)" \
+              --allowedTools "Read(./**)" "Read(/$REVIEW_DIR/**)" "Write" \
                 "Bash(git diff:*)" "Bash(git log:*)" "Bash(git show:*)" "Bash(git status:*)" \
               > "$RUNNER_TEMP/$1.log" 2>&1
           }
@@ -113,6 +130,18 @@ jobs:
           done
           exit "$status"
 
+      # Anyone who can read the repository can download the artifact, so findings that carry what
+      # looks like the login token aren't kept, and nothing is posted.
+      - name: Keep the findings only if they carry no login token
+        id: keep
+        run: |
+          for file in bugs.json security.json; do
+            if ! jq -e '[.. | strings | select(test("sk-ant-"; "i") or test("[A-Za-z0-9_-]{80,}"))] | length == 0' \
+                "$RUNNER_TEMP/review/$file" > /dev/null 2>&1; then
+              echo "The review's $file can't be read, or carries what looks like a login token, so it isn't kept."
+              exit 1
+            fi
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: findings
@@ -123,8 +152,10 @@ jobs:
   # Once both reviews are done, posts each as a check on the head commit: passed if it found
   # nothing, neutral if it found something, with its findings ranked. Findings never fail the
   # check: the build rule already sends a change with open findings to review, and the maintainer
-  # decides. Each review's file must be a list of findings, each ranked, or nothing is posted. Text
-  # the reviews wrote goes into the summary with nothing in it that can hide the rest.
+  # decides. Each review's file must be a list of findings, each ranked, with nothing in it that
+  # looks like the login token, or nothing is posted. Text the reviews wrote goes into the summary
+  # with nothing in it that can hide the rest, each title cut to 200 characters and each detail to
+  # 2,000.
   post:
     needs: review
     runs-on: ubuntu-latest
@@ -157,10 +188,15 @@ jobs:
               echo "The review left no readable record of its findings in $file."
               exit 1
             fi
+            if ! jq -e '[.. | strings | select(test("sk-ant-"; "i") or test("[A-Za-z0-9_-]{80,}"))] | length == 0' \
+                "$findings/$file" > /dev/null; then
+              echo "A finding in $file carries what looks like a login token, so nothing is posted."
+              exit 1
+            fi
           done
           check='
             def clean: gsub("[\r\n]+"; " ") | gsub("<"; "&lt;");
-            def place: (.file | gsub("`"; "")) + (if .line > 0 then ":\(.line | floor)" else "" end);
+            def place: (.file | gsub("`"; "") | clean) + (if .line > 0 then ":\(.line | floor)" else "" end);
             ["Important", "Nit", "Pre-existing"] as $ranks
             | . as $found
             | [$ranks[] as $rank | {rank: $rank, found: [$found[] | select(.severity == $rank)]}
@@ -175,7 +211,8 @@ jobs:
                     else [$ranked[] | "\(.rank): \(.found | length)"] | join(", ") end),
                   summary: (if length == 0 then "The review found nothing that survived a second look."
                     else [$ranked[] | "## \(.rank)\n\n" +
-                      ([.found[] | "- In `\(place)`: **\(.title | clean)** \(.detail | clean)"] | join("\n"))]
+                      ([.found[] | "- In `\(place)`: **\(.title | .[0:200] | clean)** \(.detail | .[0:2000] | clean)"]
+                        | join("\n"))]
                       | join("\n\n") end)
                 }
               }'

@@ -255,7 +255,8 @@ jobs:
       # Claude Code holds the maintainer's login token for its own calls, and strips it, with any
       # other credential, from the commands it runs, so text that steers Claude can't send it
       # anywhere. A command running as the same user could still read Claude Code's own environment
-      # (awml #121).
+      # (awml #121). It loads only the user's settings and no MCP servers, since Claude Code picks up
+      # a settings file or a .mcp.json that appears in its tree while it runs.
       - name: Draft the change
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -265,6 +266,7 @@ jobs:
         run: |
           prompt="$(sed "s|BUILD_DIR|$BUILD_DIR|g" .github/build-prompt.md)"
           claude -p "$prompt" --model opus --max-turns 200 --permission-mode acceptEdits \
+            --setting-sources user --strict-mcp-config \
             --allowedTools "Read" "Edit" "Write" "Glob" "Grep" \
               "Bash(go:*)" "Bash(gofmt:*)" "Bash(make:*)" "Bash(node:*)" \
               "Bash(.github/picture-drawings.sh:*)" \
@@ -424,7 +426,10 @@ jobs:
 
       # Each review is its own claude run, started together, so neither sees the other's session.
       # As in the draft, each session, and the classifier's below, keeps the login token from the
-      # commands it runs (awml #121).
+      # commands it runs (awml #121), and loads only the user's settings and no MCP servers, so a
+      # settings file or a .mcp.json in the patch can't set its hooks or where it sends the token.
+      # Each reads only the working tree and its own folder, never /proc, where its own environment
+      # holds the token.
       - name: Review the patch for bugs and for security, side by side
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -434,8 +439,9 @@ jobs:
           review() {
             prompt="$(sed "s|REVIEW_DIR|$REVIEW_DIR|g" "$RUNNER_TEMP/$1")"
             claude -p "$prompt" --model opus --max-turns 100 --permission-mode acceptEdits \
-              --add-dir "$REVIEW_DIR" \
-              --allowedTools "Read" "Write" "Glob" "Grep" \
+              --setting-sources user --strict-mcp-config --add-dir "$REVIEW_DIR" \
+              --disallowedTools "Read(//proc/**)" \
+              --allowedTools "Read(./**)" "Read(/$REVIEW_DIR/**)" "Write" \
                 "Bash(git diff:*)" "Bash(git log:*)" "Bash(git show:*)" "Bash(git status:*)" \
               > "$RUNNER_TEMP/$1.log" 2>&1
           }
@@ -501,8 +507,9 @@ jobs:
         run: |
           prompt="$(sed "s|REVIEW_DIR|$REVIEW_DIR|g" "$RUNNER_TEMP/classify-prompt.md")"
           claude -p "$prompt" --model opus --max-turns 100 --permission-mode acceptEdits \
-            --add-dir "$REVIEW_DIR" \
-            --allowedTools "Read" "Write" "Glob" "Grep" \
+            --setting-sources user --strict-mcp-config --add-dir "$REVIEW_DIR" \
+            --disallowedTools "Read(//proc/**)" \
+            --allowedTools "Read(./**)" "Read(/$REVIEW_DIR/**)" "Write" \
               "Bash(git diff:*)" "Bash(git log:*)" "Bash(git show:*)" "Bash(git status:*)"
 
       - name: Read the classifier's verdict
