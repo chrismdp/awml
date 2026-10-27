@@ -20,7 +20,7 @@ parts:
   - { id: list, kind: surface, label: Ana's list, in: owner }
 lines:
   - { from: night, to: merge, kind: start }
-  - { from: merge, to: ana_ok, kind: data }
+  - { from: merge, to: ana_ok, kind: start }
   - { from: ana_ok, to: prices, kind: data, label: "[within limits]" }
   - { from: ana_ok, to: list, kind: data, label: "each change, with how to undo it" }
 `
@@ -128,7 +128,7 @@ func TestOnlyADoStepLeadsToAnOutsideActionThroughAStandingApproval(t *testing.T)
 // The listing surface is where the standing approval reports, not a change the do step makes.
 func TestAStandingApprovalsSurfaceIsntAChangeOfTheDoStep(t *testing.T) {
 	doc := tiered(t, "Send it: Ask", "{ from: act, to: ok, kind: data }", "{ from: ok, to: out, kind: data }")
-	if got := Warnings(doc); len(got) != 0 {
+	if got := warningsOf(doc, "warn.one-change"); len(got) != 0 {
 		t.Errorf("warnings: %v", got)
 	}
 }

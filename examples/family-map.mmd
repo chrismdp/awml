@@ -10,23 +10,43 @@ config:
 ---
 flowchart TB
   w1_thu(["Thursday 19#58;00"])
-  w1_sat(["Saturday 09#58;00"])
-  w1_daily(["Every day 07#58;00"])
   subgraph w1["The family#39;s dinners"]
     direction TB
   end
-  w2_ask(["Someone in the family chat asks what time swimming is"])
-  subgraph w2["A question in the family chat"]
+  w2_sat(["Saturday 09#58;00"])
+  subgraph w2["The family#39;s shopping"]
     direction TB
   end
-  s1@{ shape: win-pane, label: "Family chat" }
+  w3_daily(["Every day 07#58;00"])
+  subgraph w3["The family#39;s bills check"]
+    direction TB
+  end
+  w4_changed(["A pickup changes in Nadia#39;s calendar"])
+  subgraph w4["The family#39;s pickups"]
+    direction TB
+  end
+  w5_ask(["Someone in the family chat asks what time swimming is"])
+  subgraph w5["A question in the family chat"]
+    direction TB
+  end
+  s1@{ shape: win-pane, label: "Kitchen screen" }
+  s2[("Favourites#44; recipes and the shopping list")]
+  s3[("Meal plan")]
+  s4@{ shape: win-pane, label: "Family chat" }
 
   w1_thu --> w1
-  w1_sat --> w1
-  w1_daily --> w1
-  w2_ask --> w2
+  w2_sat --> w2
+  w3_daily --> w3
+  w4_changed --> w4
+  w5_ask --> w5
   w1 -.-> s1
-  w2 -.-> s1
+  w4 -.-> s1
+  s2 -.-> w1
+  s2 -.-> w2
+  w1 <-.-> s3
+  s3 -.-> w2
+  w1 -.-> s4
+  w5 -.-> s4
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
   classDef con fill:#eceef2,stroke:#5d6472,color:#16171b
@@ -37,7 +57,11 @@ flowchart TB
   classDef person fill:#f7d79a,stroke:#9a6100,color:#16171b
   classDef uml fill:#16171b,stroke:#16171b,color:#16171b
   classDef gap fill:#ffffff,stroke:#8a93a3,stroke-dasharray:4 3,color:#6b7280
-  class w1_thu,w1_sat,w1_daily,w2_ask trig
-  class s1 surf
+  class w1_thu,w2_sat,w3_daily,w4_changed,w5_ask trig
+  class s2,s3 ctx
+  class s1,s4 surf
   style w1 fill:#f6f7f9,stroke:#5d6472,color:#16171b
   style w2 fill:#f6f7f9,stroke:#5d6472,color:#16171b
+  style w3 fill:#f6f7f9,stroke:#5d6472,color:#16171b
+  style w4 fill:#f6f7f9,stroke:#5d6472,color:#16171b
+  style w5 fill:#f6f7f9,stroke:#5d6472,color:#16171b

@@ -19,5 +19,5 @@ lines:
   - { from: family_notes, to: find, kind: data }
   - { from: carers_notes, to: find, kind: data }
   - { from: nadia_notes, to: find, kind: refused, label: never read here }
-  - { from: find, to: word, kind: data }
+  - { from: find, to: word, kind: start }
   - { from: word, to: chat, kind: data, label: "the answer, naming its notes" }

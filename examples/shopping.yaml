@@ -1,0 +1,34 @@
+awml: "0.7"
+title: The family's shopping
+description: |
+  Each Saturday, code fills the supermarket basket from the meal plan the family's dinners wrote on
+  Thursday and from the shopping list, and checking out waits for Owen's yes to the exact basket.
+  The family is fictional.
+scopes:
+  - { id: carers, label: "carers: + June, Beth" }
+  - { id: family, label: "family: parents, kids", in: carers }
+parts:
+  - { id: sat, kind: trigger, label: "Saturday 09:00" }
+  - { id: favourites, kind: context, label: "Favourites, recipes and the shopping list", in: family, ref: dinners.yaml#favourites }
+  - { id: mealplan, kind: context, label: "Meal plan", in: family, ref: dinners.yaml#mealplan }
+  - { id: fill, kind: code, op: do, label: "Fill the basket from the plan and the list", in: family }
+  - { id: basket, kind: outside, label: "Fill the basket: Allow under £180", in: family }
+  - { id: approve, kind: review, label: "Owen's yes to the exact basket", in: family }
+  - { id: checkout, kind: outside, label: "Check out: Ask", in: family }
+  - { id: shop, kind: connector, label: "Owen's supermarket account", in: family }
+lines:
+  - { from: sat, to: fill, kind: start }
+  - { from: mealplan, to: fill, kind: data }
+  - { from: favourites, to: fill, kind: data }
+  - { from: fill, to: basket, kind: start }
+  - { from: basket, to: shop, kind: data }
+  - { from: basket, to: approve, kind: start }
+  - { from: approve, to: checkout, kind: data, label: "[yes]" }
+  - { from: checkout, to: shop, kind: data }
+implementations:
+  home:
+    label: At home
+    blocks:
+      - { id: server, label: "Server", parts: [favourites, mealplan, fill] }
+      - { id: app, label: "The family messaging app", parts: [approve] }
+      - { id: supermarket, label: "The supermarket", parts: [basket, checkout, shop] }

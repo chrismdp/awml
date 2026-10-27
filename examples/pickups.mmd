@@ -1,0 +1,44 @@
+---
+config:
+  theme: default
+  fontFamily: Inter, sans-serif
+  flowchart:
+    useMaxWidth: false
+    subGraphTitleMargin:
+      top: 6
+      bottom: 30
+---
+flowchart TB
+  subgraph carers["carers#58; #43; June#44; Beth"]
+    direction TB
+    changed(["A pickup changes in Nadia#39;s calendar"])
+    calendar{{"Nadia#39;s calendar"}}
+    copy("<small style='color:rgb(61,67,79)'>⚙️ 📥 bring-in</small><br>Copy the pickups calendar")
+    pickups[("Pickups")]
+    screen@{ shape: win-pane, label: "Kitchen screen" }
+    subgraph family["family#58; parents#44; kids"]
+      direction TB
+    end
+  end
+
+  changed --> copy
+  calendar -.-> copy
+  copy -.-> pickups
+  pickups -.-> screen
+  classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
+  classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
+  classDef con fill:#eceef2,stroke:#5d6472,color:#16171b
+  classDef surf fill:#ffffff,stroke:#2a2d35,stroke-width:1.5px,color:#16171b
+  classDef out fill:#fde4dc,stroke:#b5532f,color:#16171b
+  classDef ai fill:#cdd3fb,stroke:#3b4bb0,color:#16171b
+  classDef code fill:#c4e3d1,stroke:#2b7a4f,color:#16171b
+  classDef person fill:#f7d79a,stroke:#9a6100,color:#16171b
+  classDef uml fill:#16171b,stroke:#16171b,color:#16171b
+  classDef gap fill:#ffffff,stroke:#8a93a3,stroke-dasharray:4 3,color:#6b7280
+  class changed trig
+  class pickups ctx
+  class calendar con
+  class screen surf
+  class copy code
+  style carers fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
+  style family fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f

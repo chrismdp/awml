@@ -15,9 +15,9 @@ parts:
   - { id: move, kind: outside, label: "Move it to the school folder: Allow", in: kemi }
 lines:
   - { from: arrives, to: sort, kind: start }
-  - { from: sort, to: learn, kind: data, label: a date }
+  - { from: sort, to: learn, kind: start, label: a date }
   - { from: learn, to: notes, kind: data }
-  - { from: sort, to: draft, kind: data, label: a request }
+  - { from: sort, to: draft, kind: start, label: a request }
   - { from: draft, to: drafts, kind: data }
-  - { from: sort, to: file, kind: data }
+  - { from: sort, to: file, kind: start }
   - { from: file, to: move, kind: data }

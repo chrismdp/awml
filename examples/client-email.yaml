@@ -24,14 +24,17 @@ parts:
 lines:
   - { from: weekdays, to: bring, kind: start }
   - { from: mailbox, to: bring, kind: data }
-  - { from: bring, to: rules, kind: data }
+  - { from: bring, to: rules, kind: start }
+  - { from: rules, to: choose, kind: start }
   - { from: rules, to: choose, kind: data, label: "standing rule: a client's email" }
   - { from: engagements, to: choose, kind: data }
-  - { from: choose, to: learn, kind: data }
+  - { from: choose, to: learn, kind: start }
   - { from: learn, to: project, kind: data }
+  - { from: learn, to: draft, kind: start }
   - { from: project, to: draft, kind: data }
-  - { from: draft, to: save, kind: data }
+  - { from: draft, to: save, kind: start }
   - { from: save, to: saved, kind: data }
+  - { from: save, to: edit, kind: start }
   - { from: saved, to: edit, kind: data, label: the consultant takes the reply }
   - { from: edit, to: send, kind: data }
   - { from: send, to: mailbox, kind: data }

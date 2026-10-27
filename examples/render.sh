@@ -43,5 +43,6 @@ for f in examples/*.yaml examples/tour/*.yaml examples/live/*.yaml; do
   done
 done
 # The examples that share a part are drawn together as their map.
-render "$("$tmp/draw" -map examples/family-map.mmd examples/dinners.yaml examples/question.yaml)"
+render "$("$tmp/draw" -map examples/family-map.mmd examples/dinners.yaml examples/shopping.yaml examples/bills.yaml examples/pickups.yaml examples/question.yaml)"
 render "$("$tmp/draw" -map examples/bakery-map.mmd examples/bakery-stock.yaml examples/bakery-order.yaml)"
+render "$("$tmp/draw" -map examples/tour/15-split-map.mmd examples/tour/15-split-count.yaml examples/tour/15-split-order.yaml)"

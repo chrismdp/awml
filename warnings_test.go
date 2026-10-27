@@ -14,6 +14,26 @@ func warnings(t *testing.T, doc any, want ...string) {
 	}
 }
 
+// warningsOf gives the warnings of the checks named, for a test of those checks alone.
+func warningsOf(doc any, checks ...string) []string {
+	var found []string
+	for _, m := range warningList(doc) {
+		if isOneOf(m.check, checks...) {
+			found = append(found, m.message)
+		}
+	}
+	return found
+}
+
+// doWarnings is warnings for a do step's two checks alone.
+func doWarnings(t *testing.T, doc any, want ...string) {
+	t.Helper()
+	got := warningsOf(doc, "warn.do-by-code", "warn.one-change")
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Warnings gave\n  %s\nwant\n  %s", strings.Join(got, "\n  "), strings.Join(want, "\n  "))
+	}
+}
+
 const changes = `
 awml: "0.7"
 title: Changes
@@ -42,14 +62,14 @@ func TestAnAIDoStepWarns(t *testing.T) {
 	doc := withChangeLines(t)
 	parts := doc.get("parts").([]any)
 	parts[0].(*Map).set("kind", "ai")
-	warnings(t, doc, `step "fill" is a do step decided by AI: a do step should be code acting on what an earlier step decided`)
+	doWarnings(t, doc, `step "fill" is a do step decided by AI: a do step should be code acting on what an earlier step decided`)
 	if got := Check(doc); len(got) != 0 {
 		t.Fatalf("Check returned warnings as mistakes: %v", got)
 	}
 }
 
 func TestADoStepThatLeadsToMoreThanOneChangeWarns(t *testing.T) {
-	warnings(t, withChangeLines(t,
+	doWarnings(t, withChangeLines(t,
 		"{from: fill, to: basket, kind: data}",
 		"{from: fill, to: split, kind: start}",
 		"{from: split, to: approve, kind: data}",
@@ -58,10 +78,10 @@ func TestADoStepThatLeadsToMoreThanOneChangeWarns(t *testing.T) {
 }
 
 func TestAllContextsTogetherAreOneChange(t *testing.T) {
-	warnings(t, withChangeLines(t,
+	doWarnings(t, withChangeLines(t,
 		"{from: fill, to: filed, kind: data}",
 		"{from: fill, to: seen, kind: data}"))
-	warnings(t, withChangeLines(t,
+	doWarnings(t, withChangeLines(t,
 		"{from: fill, to: filed, kind: data}",
 		"{from: fill, to: seen, kind: data}",
 		"{from: fill, to: list, kind: data}"),
@@ -69,14 +89,14 @@ func TestAllContextsTogetherAreOneChange(t *testing.T) {
 }
 
 func TestEachSurfaceIsOneChange(t *testing.T) {
-	warnings(t, withChangeLines(t,
+	doWarnings(t, withChangeLines(t,
 		"{from: fill, to: list, kind: data}",
 		"{from: fill, to: basket, kind: data}"),
 		`do step "fill" leads to 2 changes ("basket", "list"): each do step should make one`)
 }
 
 func TestLinesThatDoNotLeadDoNotCauseWarnings(t *testing.T) {
-	warnings(t, withChangeLines(t,
+	doWarnings(t, withChangeLines(t,
 		"{from: fill, to: basket, kind: data}",
 		"{from: fill, to: list, kind: hidden}",
 		"{from: fill, to: filed, kind: refused}"))

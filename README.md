@@ -6,7 +6,9 @@ The file lists the workflow's triggers, the steps that pass work along, the note
 
 ![A family's dinners, by who may see each part](examples/dinners.svg)
 
-A fictional family's dinners. On Thursday evening AI plans next week's dinners and posts the plan in the family chat. On Saturday code fills the supermarket basket, and checking out waits for a parent's yes to the exact basket. Every morning code checks the joint account against the bills expected, which only the parents see. The thick line is the meal plan moving out to a wider scope, so the carers can see it on the kitchen screen. The comment is a gap that drawing it found: nothing keeps that screen current.
+![A family's shopping, by who may see each part](examples/shopping.svg)
+
+A fictional family's dinners and shopping, two workflows that share the meal plan. On Thursday evening AI plans next week's dinners and posts the plan in the family chat. The thick line is the meal plan moving out to a wider scope, so the carers can see it on the kitchen screen. The comment is a gap that drawing it found: nothing keeps that screen current. On Saturday the shopping reads the plan and the shopping list, code fills the supermarket basket, and checking out waits for a parent's yes to the exact basket. The family's bills check and pickups are workflows of their own, and [all of them are drawn together](#workflows-that-share-parts).
 
 [`SPEC.md`](SPEC.md) is the short, exact definition, and wherever it and this README differ, the spec is right.
 
@@ -162,7 +164,7 @@ A workflow whose every step is green ⚙️ has no AI in it, even if AI helped b
 
 | Line | Drawn as | Means |
 |---|---|---|
-| `start` | An arrow | Starts something, as a trigger starts a step |
+| `start` | An arrow | Starts something, as a trigger starts a step, or a step the next |
 | `data` | An arrow, thick where it publishes | Moves data from one part to the next, and publishes where it moves content into a wider scope |
 | `refused` | A line ending in a cross | A read the design refuses |
 | `tie` | A grey dotted line | Links a comment to what it explains |
@@ -171,6 +173,8 @@ A workflow whose every step is green ⚙️ has no AI in it, even if AI helped b
 The solid lines are the path the work takes, from the trigger through each step to the next. A line into or out of a context, a connector or a surface is dotted, since it's information moving in and out. A line that publishes is thick either way, and a `refused` line keeps its cross.
 
 A line may carry a label. Words in square brackets are a **guard**, the condition the line is taken on. A line drawn red is a finding: see [The red line](#the-red-line).
+
+A trigger's **run** is everything its `start` lines reach, through steps, reviews, standing approvals and forks alike. A `data` line says what a step reads, and never carries the run on, so a `start` line leads to each step from the one before. Triggers whose runs share a part start one workflow, and a file whose triggers start more than one is better split, as [the tour shows](#several-workflows-in-one-file).
 
 ## Operations
 
@@ -415,6 +419,16 @@ The family's photos run on two machines: a server that never stops, and Noor's l
 
 ![The family's photos, on a server and a laptop](examples/tour/09-platform-view-home.svg)
 
+### Several workflows in one file
+
+A bakery counts what the day's baking used each evening, and drafts its supplier order each morning for Ana's yes. Drawn in one file, the two read as one workflow, but nothing runs from the count to the order: they share only the stock levels, which the count writes and the order reads. `awml check` follows each trigger's `start` lines and finds that their runs share no part, so it warns that the file holds two workflows, the one started by `Every day 18:00` and the one started by `Every day 07:00`.
+
+![The stock count and the morning order, drawn in one file](examples/tour/15-several-workflows.svg)
+
+Split at the triggers, each file holds one workflow with one line running through it, and checks with no warnings. The count keeps the stock levels, and the order reads them by `ref`. Given together, they're drawn as their map, with the stock levels between them.
+
+![The stock count and the morning order, split and drawn together](examples/tour/15-split-map.svg)
+
 ## Improving one step at a time
 
 Once each step is a box with a known input and a known output, you can improve it on its own.
@@ -485,7 +499,7 @@ npx -y @mermaid-js/mermaid-cli@11.4.1 -b white -i my-workflow.mmd -o my-workflow
 
 Workflows hand work on through a context one writes and another reads, and may share connectors and surfaces too. The workflow that doesn't create the part keeps its own copy, with `ref` naming the other's, as `shopping.yaml#list` for a file alongside or `owner/slug#id` for a published one. One workflow starts another with an outside action, such as `Start the shopping: Allow`, whose `ref` names the other's trigger, the way it would call any outside service. A trigger only starts its own workflow, so it never has a `ref`, and no line but a tie or a hidden one goes into it. Where a platform starts a workflow by itself, as GitHub does when CI finishes, the trigger names that event and nothing links the two. Each file still checks alone. Given together, `awml check` reports a `ref` to a part that isn't there, a copy that differs from the part it names, an outside action whose `ref` names anything but a trigger, and refs that name their own workflow or go round in a circle, and warns of a context more than one writes and a connector more than one reads. It follows untrusted text through the parts they share and from an outside action into the workflow it starts, and warns of each outside action the text reaches there. The other commands refuse the files until those mistakes are fixed. `awml draw` draws their map, with each shared part once between the workflows, each trigger outside its workflow's box with a line into it, and a line from each outside action to the trigger it starts:
 
-<img src="examples/family-map.svg" alt="The family's dinners and its question, drawn together">
+<img src="examples/family-map.svg" alt="The family's dinners, shopping, bills check, pickups and question, drawn together">
 
 `awml` never reaches the network: it follows `owner/slug#id` to a file given at a path ending `owner/slug.yaml`, where `awml pull owner/slug -o owner` puts it.
 
@@ -532,11 +546,11 @@ Every id, label, kind and reference to an id is text. `awml` reads YAML 1.2, whi
 
 ### What `awml check` reports
 
-`awml check` reports structural mistakes, invalid operations and tiers that disagree with the drawing. It also checks each implementation's block references, nesting and placement, and its comments' ties, and how each `ref` is written. It warns when AI decides a `do` step, when one `do` step leads to more than one change, and when untrusted text reaches an outside action. Warnings leave the exit status alone. A line that breaks a rule, such as one into a Block action, is still a mistake, but `awml draw` draws it red rather than refusing the file. [`SPEC.md`](SPEC.md) gives the exact rules.
+`awml check` reports structural mistakes, invalid operations and tiers that disagree with the drawing. It also checks each implementation's block references, nesting and placement, and its comments' ties, and how each `ref` is written. It warns when AI decides a `do` step, when one `do` step leads to more than one change, when untrusted text reaches an outside action, when the file's triggers start more than one workflow, when no line links a part to a trigger, when a comment is tied to nothing, and when no trigger's run reaches a step, review, standing approval or fork. Warnings leave the exit status alone. A line that breaks a rule, such as one into a Block action, is still a mistake, but `awml draw` draws it red rather than refusing the file. [`SPEC.md`](SPEC.md) gives the exact rules.
 
 ### Examples to start from
 
-Besides the gallery, [`examples/`](examples) has three workflows to start from: the family's dinners and the consultant's email, each with an implementation, and the question in the family chat, which shares the chat with the dinners and is drawn with them in [`examples/family-map.svg`](examples/family-map.svg). A bakery's stock count and its supplier order show one workflow starting another: the count's outside action names the order's trigger, and the two are drawn together in [`examples/bakery-map.svg`](examples/bakery-map.svg). It also has [`examples/legend.yaml`](examples/legend.yaml), the key at the top of [Reading a drawing](#reading-a-drawing). The tests run with `go test ./...`, and they check that every example but the live system's has no mistakes and that its drawings are current.
+Besides the gallery, [`examples/`](examples) has workflows to start from. The family's dinners, shopping, bills check and pickups are four workflows, each with an implementation, that share the meal plan, the shopping list and the kitchen screen. The question in the family chat shares the chat with the dinners, and all five are drawn together in [`examples/family-map.svg`](examples/family-map.svg). The consultant's email has an implementation too. A bakery's stock count and its supplier order show one workflow starting another: the count's outside action names the order's trigger, and the two are drawn together in [`examples/bakery-map.svg`](examples/bakery-map.svg). It also has [`examples/legend.yaml`](examples/legend.yaml), the key at the top of [Reading a drawing](#reading-a-drawing). The tests run with `go test ./...`, and they check that every example but the live system's has no mistakes, that each has no warnings but the legend and the tour's file of several workflows, and that its drawings are current.
 
 ## What comes next
 

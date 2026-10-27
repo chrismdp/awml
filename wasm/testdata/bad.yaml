@@ -5,3 +5,4 @@ parts:
   - { id: work, kind: code, label: Work }
 lines:
   - { from: start, to: missing, kind: start }
+  - { from: start, to: work, kind: start }

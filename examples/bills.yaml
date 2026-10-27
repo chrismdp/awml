@@ -1,0 +1,25 @@
+awml: "0.7"
+title: The family's bills check
+description: |
+  Every morning, code matches the joint account against the bills expected and tells the parents in
+  their own chat. The family is fictional.
+scopes:
+  - { id: carers, label: "carers: + June, Beth" }
+  - { id: family, label: "family: parents, kids", in: carers }
+  - { id: household, label: "household: parents", in: family }
+parts:
+  - { id: daily, kind: trigger, label: "Every day 07:00" }
+  - { id: bank, kind: connector, label: "Joint account, on Owen's consent", in: household }
+  - { id: match, kind: code, op: check, label: "Match the account against the bills expected", in: household }
+  - { id: parents_chat, kind: surface, label: "Parents' chat", in: household }
+lines:
+  - { from: daily, to: match, kind: start }
+  - { from: bank, to: match, kind: data }
+  - { from: match, to: parents_chat, kind: data }
+implementations:
+  home:
+    label: At home
+    blocks:
+      - { id: server, label: "Server", parts: [match] }
+      - { id: app, label: "The family messaging app", parts: [parents_chat] }
+      - { id: banking, label: "The bank", parts: [bank] }

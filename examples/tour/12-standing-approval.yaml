@@ -15,7 +15,7 @@ parts:
 lines:
   - { from: morning, to: renew, kind: start }
   - { from: library, to: renew, kind: data, label: books due back }
-  - { from: renew, to: approval, kind: data }
+  - { from: renew, to: approval, kind: start }
   - { from: approval, to: action, kind: data, label: "[within limits]" }
   - { from: action, to: library, kind: data }
   - { from: approval, to: list, kind: data, label: "each renewal, with how to undo it" }

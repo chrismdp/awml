@@ -36,10 +36,11 @@ func TestThereAreExamples(t *testing.T) {
 	for _, p := range examples(t) {
 		names = append(names, strings.TrimSuffix(strings.TrimPrefix(p, "examples/"), ".yaml"))
 	}
-	want := []string{"bakery-order", "bakery-stock", "client-email", "dinners", "legend", "question",
+	want := []string{"bakery-order", "bakery-stock", "bills", "client-email", "dinners", "legend", "pickups", "question", "shopping",
 		"tour/01-draft-and-send", "tour/02-fork", "tour/03-refused-read", "tour/04-publishing", "tour/05-side-by-side",
 		"tour/07-person-step", "tour/08-gap", "tour/09-platform-view", "tour/10-operations",
-		"tour/11-do", "tour/12-standing-approval", "tour/13-check-by-code", "tour/14-untrusted-text"}
+		"tour/11-do", "tour/12-standing-approval", "tour/13-check-by-code", "tour/14-untrusted-text",
+		"tour/15-several-workflows", "tour/15-split-count", "tour/15-split-order"}
 	if !reflect.DeepEqual(names, want) {
 		t.Errorf("examples = %q\nwant %q", names, want)
 	}
@@ -81,8 +82,19 @@ func TestEachExampleIsSoundAndItsDrawingsAreCurrent(t *testing.T) {
 			} else {
 				mistakes(t, doc)
 			}
-			if got := Warnings(doc); len(got) != 0 {
-				t.Errorf("%s has warnings: %v", path, got)
+			var want []string
+			got := Warnings(doc)
+			switch path {
+			case "examples/legend.yaml":
+				// The legend is a key to the shapes, not a workflow, so nothing starts its parts and
+				// its hidden lines only lay them out. It's held to every warning but those of shape.
+				got = warningsOf(doc, "warn.do-by-code", "warn.one-change", "warn.untrusted-outside")
+			case "examples/tour/15-several-workflows.yaml":
+				// The tour shows this warning, and the split that answers it.
+				want = []string{`this file holds 2 workflows: the one started by "Every day 18:00" and the one started by "Every day 07:00": split it at its triggers into workflows that refer to each other`}
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("%s has warnings %q, want %q", path, got, want)
 			}
 			file := doc.(*Map)
 			if !IsCanonical(file) {
@@ -131,8 +143,9 @@ func TestEachExampleIsSoundAndItsDrawingsAreCurrent(t *testing.T) {
 	}
 }
 
-// The family's dinners and its question share the family chat, and the bakery's stock count shares
-// its stock levels with the supplier order and starts it, so each pair is drawn together as a map.
+// The family's workflows share the meal plan, the favourites, the kitchen screen and the family
+// chat, the bakery's stock count shares its stock levels with the supplier order and starts it, and
+// the tour's split count and order share the stock levels, so each set is drawn together as a map.
 // examples/render.sh draws their SVGs.
 func TestTheExamplesThatShareAPartAreDrawnTogether(t *testing.T) {
 	for _, example := range []struct {
@@ -140,17 +153,20 @@ func TestTheExamplesThatShareAPartAreDrawnTogether(t *testing.T) {
 		paths   []string
 		starts  bool
 	}{
-		{"examples/family-map.mmd", []string{"examples/dinners.yaml", "examples/question.yaml"}, false},
+		{"examples/family-map.mmd", []string{"examples/dinners.yaml", "examples/shopping.yaml", "examples/bills.yaml",
+			"examples/pickups.yaml", "examples/question.yaml"}, false},
 		{"examples/bakery-map.mmd", []string{"examples/bakery-stock.yaml", "examples/bakery-order.yaml"}, true},
+		{"examples/tour/15-split-map.mmd", []string{"examples/tour/15-split-count.yaml", "examples/tour/15-split-order.yaml"}, false},
 	} {
 		var workflows []Workflow
 		for _, path := range example.paths {
 			workflows = append(workflows, Workflow{File: path, Doc: readExample(t, path)})
 		}
-		if got := TogetherMistakes(workflows); !reflect.DeepEqual(got, [][]string{nil, nil}) {
+		none := make([][]string, len(workflows))
+		if got := TogetherMistakes(workflows); !reflect.DeepEqual(got, none) {
 			t.Errorf("%s: together they have mistakes: %q", example.drawing, got)
 		}
-		if got := TogetherWarnings(workflows); !reflect.DeepEqual(got, [][]string{nil, nil}) {
+		if got := TogetherWarnings(workflows); !reflect.DeepEqual(got, none) {
 			t.Errorf("%s: together they have warnings: %q", example.drawing, got)
 		}
 		if got := SummariseTogether(workflows).Shared; len(got) == 0 {

@@ -1,0 +1,16 @@
+awml: "0.7"
+title: The bakery's stock count
+description: |
+  The first of the two workflows, split out at its trigger. Each evening code counts what the day's
+  baking used and keeps the stock levels, which the morning order reads. The bakery is fictional.
+scopes:
+  - { id: bakery, label: "bakery: Ana, Sam" }
+parts:
+  - { id: evening, kind: trigger, label: "Every day 18:00" }
+  - { id: till, kind: connector, label: "The till's sales", in: bakery }
+  - { id: count, kind: code, op: bring-in, label: "Work out what the day's baking used", in: bakery }
+  - { id: stock, kind: context, label: "Stock levels", in: bakery }
+lines:
+  - { from: evening, to: count, kind: start }
+  - { from: till, to: count, kind: data }
+  - { from: count, to: stock, kind: data }

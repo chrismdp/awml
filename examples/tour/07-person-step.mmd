@@ -21,6 +21,7 @@ flowchart TB
   monthly --> due
   car_notes -.-> due
   due -.->|"the MOT is due"| list
+  due --> book
   list -.-> book
   car_notes <-.->|"the booking"| book
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
@@ -39,4 +40,4 @@ flowchart TB
   class due code
   class book person
   style ade fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
-  linkStyle 4 marker-end:none
+  linkStyle 5 marker-end:none
