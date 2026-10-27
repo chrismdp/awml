@@ -1,6 +1,10 @@
 package awml
 
 import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,6 +15,7 @@ import (
 type workflowStep struct {
 	ID   string            `yaml:"id"`
 	Name string            `yaml:"name"`
+	If   string            `yaml:"if"`
 	Uses string            `yaml:"uses"`
 	Run  string            `yaml:"run"`
 	With map[string]string `yaml:"with"`
@@ -18,9 +23,22 @@ type workflowStep struct {
 }
 
 type workflowJob struct {
+	If          string            `yaml:"if"`
 	Needs       any               `yaml:"needs"`
 	Permissions map[string]string `yaml:"permissions"`
 	Steps       []workflowStep    `yaml:"steps"`
+}
+
+// step finds a job's step by its id, which stays put when the step's name changes.
+func (j workflowJob) step(t *testing.T, id string) (workflowStep, int) {
+	t.Helper()
+	for i, step := range j.Steps {
+		if step.ID == id {
+			return step, i
+		}
+	}
+	t.Fatalf("the job has no step with id %q", id)
+	return workflowStep{}, -1
 }
 
 type factoryWorkflow struct {
@@ -308,7 +326,7 @@ func TestClaudesCommandsNeverSeeItsToken(t *testing.T) {
 			}
 		}
 	}
-	for _, file := range []string{"build.yml", "resolve.yml"} {
+	for _, file := range []string{"build.yml", "resolve.yml", "review.yml"} {
 		if found[file] == 0 {
 			t.Errorf("no step in %s runs Claude Code with its token", file)
 		}
@@ -339,5 +357,534 @@ func TestRunsAreCheckedBeforeTheirRecordsAreTrusted(t *testing.T) {
 		if !strings.Contains(find, want) {
 			t.Errorf("land.yml's find doesn't check the build run's %s", want)
 		}
+	}
+}
+
+// No step expands an expression in its script. Event, issue, log, Claude and artifact text reaches a
+// script only through env:, quoted, so it can't run as code.
+func TestNoScriptExpandsAnExpression(t *testing.T) {
+	files, err := filepath.Glob(".github/workflows/*.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range files {
+		file := filepath.Base(path)
+		for name, job := range readFactoryWorkflow(t, file).Jobs {
+			for _, step := range job.Steps {
+				if strings.Contains(step.Run, "${{") {
+					t.Errorf("%s's %s step %q expands an expression in its script", file, name, step.Name)
+				}
+			}
+		}
+	}
+}
+
+// A rehearsal runs one step's script as GitHub runs it, with bash -e, in a scratch RUNNER_TEMP, with
+// gh replaced by a stub that logs each call, keeps what each call sends, and answers from the case
+// arms a test gives it. Nothing reaches GitHub.
+type rehearsal struct {
+	t       *testing.T
+	root    string
+	temp    string
+	outputs map[string]string
+	calls   string
+	inputs  []map[string]any
+	printed string
+	failed  bool
+}
+
+const ghStub = `#!/bin/bash
+# Stands in for gh in a rehearsal.
+call="$*"
+printf '%%s\n' "$call" >> "$GH_CALLS"
+query=""
+download=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --jq) query="$2"; shift ;;
+    -D) download="$2"; shift ;;
+    --body-file) sed 's/^/> /' "$2" >> "$GH_CALLS"; shift ;;
+    --input) [ "$2" != - ] || jq -c . >> "$GH_INPUTS"; shift ;;
+  esac
+  shift
+done
+answer() { if [ -n "$query" ]; then jq -r "$query"; else cat; fi; }
+case "$call" in
+%s
+  *) echo "the stub gh has no answer for: $call" >&2; exit 1 ;;
+esac
+`
+
+func newRehearsal(t *testing.T) *rehearsal {
+	t.Helper()
+	for _, tool := range []string{"bash", "jq"} {
+		if _, err := exec.LookPath(tool); err != nil {
+			t.Skipf("%s isn't installed", tool)
+		}
+	}
+	root := t.TempDir()
+	r := &rehearsal{t: t, root: root, temp: filepath.Join(root, "runner")}
+	if err := os.MkdirAll(r.temp, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return r
+}
+
+// write puts a file under the rehearsal's RUNNER_TEMP, or at an absolute path.
+func (r *rehearsal) write(path, text string) string {
+	r.t.Helper()
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(r.temp, path)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		r.t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
+		r.t.Fatal(err)
+	}
+	return path
+}
+
+func (r *rehearsal) read(path string) string {
+	r.t.Helper()
+	data, err := os.ReadFile(filepath.Join(r.temp, path))
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
+func (r *rehearsal) run(step workflowStep, env map[string]string, answers string) {
+	r.t.Helper()
+	bin := filepath.Join(r.root, "bin")
+	r.write(filepath.Join(bin, "gh"), fmt.Sprintf(ghStub, answers))
+	if err := os.Chmod(filepath.Join(bin, "gh"), 0o755); err != nil {
+		r.t.Fatal(err)
+	}
+	script := r.write(filepath.Join(r.root, "step.sh"), step.Run)
+	vars := map[string]string{
+		"PATH":                    bin + string(os.PathListSeparator) + os.Getenv("PATH"),
+		"HOME":                    r.root,
+		"RUNNER_TEMP":             r.temp,
+		"GITHUB_OUTPUT":           filepath.Join(r.root, "output"),
+		"GITHUB_REPOSITORY":       "owner/repo",
+		"GITHUB_REPOSITORY_OWNER": "owner",
+		"GITHUB_SERVER_URL":       "https://github.com",
+		"GITHUB_RUN_ID":           "1000",
+		"GH_TOKEN":                "not-a-token",
+		"GH_CALLS":                filepath.Join(r.root, "calls"),
+		"GH_INPUTS":               filepath.Join(r.root, "inputs"),
+	}
+	for name, value := range env {
+		vars[name] = value
+	}
+	command := exec.Command("bash", "-e", script)
+	command.Dir = r.root
+	for name, value := range vars {
+		command.Env = append(command.Env, name+"="+value)
+	}
+	printed, err := command.CombinedOutput()
+	r.printed = string(printed)
+	r.failed = err != nil
+	r.outputs = map[string]string{}
+	output, _ := os.ReadFile(vars["GITHUB_OUTPUT"])
+	for _, line := range strings.Split(string(output), "\n") {
+		if name, value, ok := strings.Cut(line, "="); ok {
+			r.outputs[name] = value
+		}
+	}
+	calls, _ := os.ReadFile(vars["GH_CALLS"])
+	r.calls = string(calls)
+	inputs, _ := os.ReadFile(vars["GH_INPUTS"])
+	r.inputs = nil
+	for _, line := range strings.Split(strings.TrimSpace(string(inputs)), "\n") {
+		if line == "" {
+			continue
+		}
+		var input map[string]any
+		if err := json.Unmarshal([]byte(line), &input); err != nil {
+			r.t.Fatal(err)
+		}
+		r.inputs = append(r.inputs, input)
+	}
+}
+
+func (r *rehearsal) mustPass() {
+	r.t.Helper()
+	if r.failed {
+		r.t.Fatalf("the step failed:\n%s\ngh was called with:\n%s", r.printed, r.calls)
+	}
+}
+
+// Every pull request from a branch of this repository into main is reviewed each time it's opened
+// or pushed to. A fork's pull request starts nothing, since the sessions hold the maintainer's login
+// token, and the job that posts the checks waits for the reviews.
+func TestEveryPullRequestFromThisRepositoryIsReviewed(t *testing.T) {
+	review := readFactoryWorkflow(t, "review.yml")
+	if _, ok := review.On["pull_request_target"]; ok {
+		t.Error("review.yml runs on pull_request_target")
+	}
+	pull, _ := review.On["pull_request"].(map[string]any)
+	if pull == nil {
+		t.Fatal("review.yml doesn't run on pull_request")
+	}
+	if got := fmt.Sprint(pull["types"]); got != "[opened synchronize reopened]" {
+		t.Errorf("review.yml runs on pull requests %s, want [opened synchronize reopened]", got)
+	}
+	if got := fmt.Sprint(pull["branches"]); got != "[main]" {
+		t.Errorf("review.yml reviews pull requests into %s, want [main]", got)
+	}
+	job, ok := review.Jobs["review"]
+	if !ok {
+		t.Fatal("review.yml has no review job")
+	}
+	if strings.ReplaceAll(job.If, " ", "") != "github.event.pull_request.head.repo.full_name==github.repository" {
+		t.Errorf("the review job runs if %q, want only for a branch of this repository", job.If)
+	}
+	if needs, _ := review.Jobs["post"].Needs.(string); needs != "review" {
+		t.Errorf("the post job needs %v, want review", review.Jobs["post"].Needs)
+	}
+}
+
+// The reviews run with a token that only reads, from main's code, prompts and REVIEW.md, never the
+// branch's. The checks are posted by a job whose token may only write checks, which checks out
+// and runs nothing.
+func TestTheReviewsReadOnlyMain(t *testing.T) {
+	jobs := readFactoryWorkflow(t, "review.yml").Jobs
+	review := jobs["review"]
+	onlyReads(t, "review.yml", "review", review)
+	if review.Permissions["contents"] != "read" {
+		t.Errorf("the review job's contents permission is %q, want read", review.Permissions["contents"])
+	}
+	checkouts := 0
+	for _, step := range review.Steps {
+		if strings.HasPrefix(step.Uses, "actions/checkout") {
+			checkouts++
+			if step.With["ref"] != "main" {
+				t.Errorf("the review job checks out %q, want main", step.With["ref"])
+			}
+		}
+	}
+	if checkouts != 1 {
+		t.Errorf("the review job checks out %d times, want once, main", checkouts)
+	}
+	copied, applied, together := -1, -1, -1
+	for i, step := range review.Steps {
+		if strings.Contains(step.Run, "cp .github/review-bugs-prompt.md .github/review-security-prompt.md") &&
+			strings.Contains(step.Run, "cp REVIEW.md") {
+			copied = i
+		}
+		if strings.Contains(step.Run, "git apply --index") {
+			applied = i
+			if strings.Index(step.Run, "cp REVIEW.md") > strings.Index(step.Run, "git apply --index") {
+				t.Error("the review job copies main's REVIEW.md after the patch is applied")
+			}
+		}
+		if strings.Contains(step.Run, "review-bugs-prompt.md &") && strings.Contains(step.Run, "review-security-prompt.md &") &&
+			strings.Contains(step.Run, "wait") {
+			together = i
+		}
+	}
+	if copied < 0 || applied < 0 || copied > applied {
+		t.Error("the review job doesn't keep main's prompts and REVIEW.md before it applies the patch")
+	}
+	if together < applied {
+		t.Error("the review job doesn't start both reviews together once the patch is applied")
+	}
+
+	post := jobs["post"]
+	if len(post.Permissions) != 1 || post.Permissions["checks"] != "write" {
+		t.Errorf("the post job has %v, want only checks: write", post.Permissions)
+	}
+	for _, step := range post.Steps {
+		if step.Uses != "" && !strings.HasPrefix(step.Uses, "actions/download-artifact") {
+			t.Errorf("the post job uses %s, but should only read the findings", step.Uses)
+		}
+	}
+}
+
+// Each review is posted as a check on the pull request's head commit: Bug review and Security
+// review. One that finds nothing passes, and one that finds something is neutral, with its
+// findings ranked Important, Nit, Pre-existing, and nothing in them can hide the rest. A file that
+// isn't a list of findings posts nothing.
+func TestEachReviewIsPostedAsACheck(t *testing.T) {
+	post, _ := readFactoryWorkflow(t, "review.yml").Jobs["post"].step(t, "post")
+	head := strings.Repeat("ab", 20)
+	env := map[string]string{"HEAD_SHA": head}
+	answers := `  "api -X POST repos/owner/repo/check-runs"*) echo '{}' ;;`
+
+	clean := newRehearsal(t)
+	clean.write("findings/bugs.json", "[]")
+	clean.write("findings/security.json", "[]")
+	clean.run(post, env, answers)
+	clean.mustPass()
+	if len(clean.inputs) != 2 {
+		t.Fatalf("posted %d checks, want 2:\n%s", len(clean.inputs), clean.calls)
+	}
+	for i, name := range []string{"Bug review", "Security review"} {
+		check := clean.inputs[i]
+		if check["name"] != name || check["head_sha"] != head || check["status"] != "completed" || check["conclusion"] != "success" {
+			t.Errorf("check %d is %v, want %s on %s, completed, success", i, check, name, head)
+		}
+	}
+
+	found := newRehearsal(t)
+	found.write("findings/bugs.json", `[
+	  {"severity": "Nit", "file": "check.go", "line": 7, "title": "A clearer name", "detail": "Say what it holds."},
+	  {"severity": "Pre-existing", "file": "draw.go", "line": 0, "title": "An old fault", "detail": "It was there before."},
+	  {"severity": "Important", "file": "fit.go", "line": 42, "title": "A wrong answer", "detail": "It drops a part. <!-- hide the rest"}
+	]`)
+	found.write("findings/security.json", "[]")
+	found.run(post, env, answers)
+	found.mustPass()
+	if len(found.inputs) != 2 {
+		t.Fatalf("posted %d checks, want 2", len(found.inputs))
+	}
+	bugs := found.inputs[0]
+	if bugs["name"] != "Bug review" || bugs["conclusion"] != "neutral" {
+		t.Errorf("the bug review's check is %v, want neutral", bugs)
+	}
+	if found.inputs[1]["conclusion"] != "success" {
+		t.Errorf("the security review found nothing, but its check is %v", found.inputs[1]["conclusion"])
+	}
+	output, _ := bugs["output"].(map[string]any)
+	summary, _ := output["summary"].(string)
+	important, nit, old := strings.Index(summary, "A wrong answer"), strings.Index(summary, "A clearer name"), strings.Index(summary, "An old fault")
+	if important < 0 || nit < 0 || old < 0 || !(important < nit && nit < old) {
+		t.Errorf("the findings aren't all there, ranked Important, Nit, Pre-existing:\n%s", summary)
+	}
+	if !strings.Contains(summary, "It drops a part.") || !strings.Contains(summary, "fit.go:42") {
+		t.Errorf("the summary doesn't show the finding in full:\n%s", summary)
+	}
+	if strings.Contains(summary, "<!--") {
+		t.Errorf("a finding can hide the rest of the summary:\n%s", summary)
+	}
+	if title, _ := output["title"].(string); title == "" {
+		t.Error("the check has no title")
+	}
+
+	broken := newRehearsal(t)
+	broken.write("findings/bugs.json", "[]")
+	broken.write("findings/security.json", `{"not": "a list"}`)
+	broken.run(post, env, answers)
+	if !broken.failed {
+		t.Error("a findings file that isn't a list passed")
+	}
+	if len(broken.inputs) != 0 {
+		t.Errorf("posted %d checks from a findings file that isn't a list", len(broken.inputs))
+	}
+}
+
+const labelledIssue = `{"action": "labeled", "label": {"name": "build"},
+  "issue": {"number": 120, "title": "Labelled title", "body": "Labelled body"}}`
+
+// The issue as it reads now: its author edited it after the label went on.
+const issueAnswers = `
+  "api repos/owner/repo/issues/120"*) answer <<< '{"number": 120, "title": "Edited title", "body": "Edited body", "labels": [{"name": "build"}, {"name": "tool"}]}' ;;
+  "api --paginate repos/owner/repo/issues/120/comments"*) answer <<< '[
+    {"author_association": "OWNER", "user": {"login": "the-owner"}, "created_at": "2026-10-27T10:00:00Z", "body": "The owner says this"},
+    {"author_association": "NONE", "user": {"login": "a-stranger"}, "created_at": "2026-10-27T11:00:00Z", "body": "A stranger says that"}]' ;;`
+
+// The label approves the issue as it reads then. The first try drafts from the title and body in
+// the label's event, keeps them as the build's record, and reads the labels and the comments of the
+// repository's own people as they are now. A build started by hand approves the issue as it reads
+// when it starts.
+func TestTheFirstTryDraftsFromTheIssueAsLabelled(t *testing.T) {
+	draft := readBuildWorkflow(t)["draft"]
+	bring, _ := draft.step(t, "bring")
+
+	r := newRehearsal(t)
+	r.run(bring, map[string]string{
+		"ISSUE": "120", "ATTEMPT": "1", "PREVIOUS_RUN": "",
+		"GITHUB_EVENT_NAME": "issues", "GITHUB_EVENT_PATH": r.write("event.json", labelledIssue),
+	}, issueAnswers)
+	r.mustPass()
+	issue := r.read("build/issue.md")
+	for _, want := range []string{"# #120: Labelled title", "Labelled body", "Labels: build, tool", "The owner says this"} {
+		if !strings.Contains(issue, want) {
+			t.Errorf("issue.md doesn't have %q:\n%s", want, issue)
+		}
+	}
+	for _, unwanted := range []string{"Edited", "A stranger says that"} {
+		if strings.Contains(issue, unwanted) {
+			t.Errorf("issue.md has %q:\n%s", unwanted, issue)
+		}
+	}
+	if kept := r.read("asked/asked.json"); !strings.Contains(kept, "Labelled body") || !strings.Contains(kept, "Labelled title") {
+		t.Errorf("the build's record of the issue as labelled is %q", kept)
+	}
+
+	byHand := newRehearsal(t)
+	byHand.run(bring, map[string]string{
+		"ISSUE": "120", "ATTEMPT": "1", "PREVIOUS_RUN": "",
+		"GITHUB_EVENT_NAME": "workflow_dispatch", "GITHUB_EVENT_PATH": byHand.write("event.json", `{"inputs": {"issue": "120"}}`),
+	}, issueAnswers)
+	byHand.mustPass()
+	if issue := byHand.read("build/issue.md"); !strings.Contains(issue, "Edited body") {
+		t.Errorf("a build started by hand doesn't draft from the issue as it reads then:\n%s", issue)
+	}
+
+	upload := -1
+	claude := -1
+	for i, step := range draft.Steps {
+		if strings.HasPrefix(step.Uses, "actions/upload-artifact") && step.With["name"] == "asked" {
+			upload = i
+			if step.With["path"] != "${{ runner.temp }}/asked" {
+				t.Errorf("the draft keeps %q as the issue as labelled, want ${{ runner.temp }}/asked", step.With["path"])
+			}
+		}
+		if _, holds := step.Env["CLAUDE_CODE_OAUTH_TOKEN"]; holds && claude < 0 {
+			claude = i
+		}
+	}
+	if upload < 0 || claude < 0 || upload > claude {
+		t.Error("the draft doesn't keep the issue as labelled before Claude drafts")
+	}
+}
+
+// A retry drafts from the text the label approved, which it reads from the first try's record,
+// never from the issue as it reads now. The retry run that started it, and the first try's run,
+// are each checked before their records are trusted.
+func TestARetryDraftsFromTheTextTheLabelApproved(t *testing.T) {
+	bring, _ := readBuildWorkflow(t)["draft"].step(t, "bring")
+	runs := `
+  "api repos/owner/repo/actions/workflows/retry.yml"*) answer <<< '{"id": 11}' ;;
+  "api repos/owner/repo/actions/workflows/build.yml"*) answer <<< '{"id": 22}' ;;
+  "api repos/owner/repo/actions/runs/555") answer <<< '{"workflow_id": 11, "head_branch": "main", "event": "workflow_dispatch", "display_title": "Retry of issue 120, try 1", "created_at": "2026-10-27T12:00:00Z"}' ;;
+  "run list "*) answer <<< '[
+    {"databaseId": 302, "displayTitle": "Build of issue 120, try 2"},
+    {"databaseId": 301, "displayTitle": "Build of issue 121, try 1"},
+    {"databaseId": 300, "displayTitle": "Build of issue 120, try 1"},
+    {"databaseId": 290, "displayTitle": "Build of issue 120, try 1"}]' ;;
+  "run download 300 "*) mkdir -p "$download"; echo '{"issue": 120, "title": "Labelled title", "body": "Labelled body"}' > "$download/asked.json" ;;`
+	env := map[string]string{
+		"ISSUE": "120", "ATTEMPT": "2", "PREVIOUS_RUN": "555", "GITHUB_EVENT_NAME": "workflow_dispatch",
+	}
+
+	r := newRehearsal(t)
+	env["GITHUB_EVENT_PATH"] = r.write("event.json", `{"inputs": {"issue": "120"}}`)
+	r.run(bring, env, issueAnswers+runs+`
+  "api repos/owner/repo/actions/runs/300") answer <<< '{"workflow_id": 22, "head_branch": "main", "event": "issues", "display_title": "Build of issue 120, try 1"}' ;;`)
+	r.mustPass()
+	issue := r.read("build/issue.md")
+	for _, want := range []string{"# #120: Labelled title", "Labelled body", "The owner says this"} {
+		if !strings.Contains(issue, want) {
+			t.Errorf("issue.md doesn't have %q:\n%s", want, issue)
+		}
+	}
+	if strings.Contains(issue, "Edited") {
+		t.Errorf("a retry drafts from the issue as it reads now:\n%s", issue)
+	}
+	if !strings.Contains(r.calls, "2026-10-27T12:00:00Z") {
+		t.Errorf("the first try isn't looked for before the retry run that started this try:\n%s", r.calls)
+	}
+	if kept := r.read("asked/asked.json"); !strings.Contains(kept, "Labelled body") {
+		t.Errorf("the retry doesn't keep the text it drafted from: %q", kept)
+	}
+
+	for name, run := range map[string]string{
+		"from a branch":        `{"workflow_id": 22, "head_branch": "a-branch", "event": "issues", "display_title": "Build of issue 120, try 1"}`,
+		"of another workflow":  `{"workflow_id": 33, "head_branch": "main", "event": "issues", "display_title": "Build of issue 120, try 1"}`,
+		"started by a comment": `{"workflow_id": 22, "head_branch": "main", "event": "issue_comment", "display_title": "Build of issue 120, try 1"}`,
+	} {
+		forged := newRehearsal(t)
+		env["GITHUB_EVENT_PATH"] = forged.write("event.json", `{"inputs": {"issue": "120"}}`)
+		forged.run(bring, env, issueAnswers+runs+`
+  "api repos/owner/repo/actions/runs/300") answer <<< '`+run+`' ;;`)
+		if !forged.failed {
+			t.Errorf("a retry trusts a first try %s", name)
+		}
+		if strings.Contains(forged.calls, "run download") {
+			t.Errorf("a retry reads the record of a first try %s", name)
+		}
+	}
+}
+
+// A closed pull request is never updated. gh pr view finds a branch's closed or merged pull
+// request when it has no open one, so the build asks GitHub for the branch's open pull requests,
+// updates the one it finds, and otherwise opens a new one.
+func TestABuildNeverUpdatesAClosedPullRequest(t *testing.T) {
+	pull, _ := readBuildWorkflow(t)["open"].step(t, "pull")
+	if strings.Contains(readText(t, ".github/workflows/build.yml"), `gh pr view "$BRANCH"`) {
+		t.Error("build.yml asks gh pr view for the branch's pull request, which may be closed")
+	}
+	answers := func(open string) string {
+		return `
+  "pr view build/issue-125"*) echo '{"number": 119, "state": "MERGED"}' ;;
+  "api repos/owner/repo/pulls?"*"state=open"*) answer <<< '` + open + `' ;;
+  "pr create "*) echo "https://github.com/owner/repo/pull/140" ;;
+  "pr edit "*) ;;`
+	}
+	env := map[string]string{"BRANCH": "build/issue-125"}
+
+	closed := newRehearsal(t)
+	closed.write("pull-request/title.txt", "Close the pull request a rebuild replaces\n")
+	closed.write("pull-request.md", "The description\n")
+	closed.run(pull, env, answers("[]"))
+	closed.mustPass()
+	if strings.Contains(closed.calls, "pr edit") || !strings.Contains(closed.calls, "pr create") {
+		t.Errorf("with only a closed pull request, the build didn't open a new one:\n%s", closed.calls)
+	}
+	if closed.outputs["number"] != "140" || closed.outputs["opened"] != "true" {
+		t.Errorf("the step's outputs are %v, want number 140, opened", closed.outputs)
+	}
+
+	open := newRehearsal(t)
+	open.write("pull-request/title.txt", "Close the pull request a rebuild replaces\n")
+	open.write("pull-request.md", "The description\n")
+	open.run(pull, env, answers(`[{"number": 131, "state": "open"}]`))
+	open.mustPass()
+	if strings.Contains(open.calls, "pr create") || !strings.Contains(open.calls, "pr edit 131 ") {
+		t.Errorf("with an open pull request, the build didn't update it:\n%s", open.calls)
+	}
+	if open.outputs["number"] != "131" || open.outputs["opened"] != "false" {
+		t.Errorf("the step's outputs are %v, want number 131, not opened", open.outputs)
+	}
+}
+
+// Once the build opens a new pull request, a separate step closes every earlier one the app opened
+// for the issue that didn't merge, with a comment naming the new one, which it says once. It
+// never touches a pull request someone else opened, or one that merged.
+func TestABuildClosesOnlyItsOwnEarlierPullRequests(t *testing.T) {
+	open := readBuildWorkflow(t)["open"]
+	retire, at := open.step(t, "retire")
+	_, pullAt := open.step(t, "pull")
+	if at < pullAt || strings.ReplaceAll(retire.If, " ", "") != "steps.pull.outputs.opened=='true'" {
+		t.Errorf("the step that closes earlier pull requests runs if %q, want only once a new one is open", retire.If)
+	}
+	if retire.Env["GH_TOKEN"] != "${{ steps.app.outputs.token }}" {
+		t.Errorf("earlier pull requests are closed with %q, want the app's token", retire.Env["GH_TOKEN"])
+	}
+	r := newRehearsal(t)
+	r.run(retire, map[string]string{
+		"APP_SLUG": "bakery-builder", "BRANCH": "build/issue-125", "ISSUE": "125", "PR_NUMBER": "140",
+	}, `
+  "api --paginate repos/owner/repo/pulls?"*"state=all"*) answer <<< '[
+    {"number": 140, "state": "open", "merged_at": null, "user": {"login": "bakery-builder[bot]"}},
+    {"number": 131, "state": "closed", "merged_at": null, "user": {"login": "bakery-builder[bot]"}},
+    {"number": 127, "state": "closed", "merged_at": null, "user": {"login": "a-maintainer"}},
+    {"number": 126, "state": "open", "merged_at": null, "user": {"login": "bakery-builder[bot]"}},
+    {"number": 122, "state": "closed", "merged_at": "2026-10-01T00:00:00Z", "user": {"login": "bakery-builder[bot]"}},
+    {"number": 119, "state": "closed", "merged_at": null, "user": {"login": "bakery-builder[bot]"}},
+    {"number": 118, "state": "closed", "merged_at": null, "user": {"login": "another-app[bot]"}}]' ;;
+  "api --paginate repos/owner/repo/issues/119/comments"*) answer <<< '[{"user": {"login": "bakery-builder[bot]"}, "body": "<!-- factory-replaced -->\nReplaced by #131."}]' ;;
+  "api --paginate repos/owner/repo/issues/"*"/comments"*) answer <<< '[{"user": {"login": "a-maintainer"}, "body": "<!-- factory-replaced --> said by a person"}]' ;;
+  "pr comment "*|"pr close "*) ;;`)
+	r.mustPass()
+	for _, want := range []string{"pr comment 131 ", "pr comment 126 ", "pr close 126 "} {
+		if !strings.Contains(r.calls, want) {
+			t.Errorf("the build didn't %q:\n%s", strings.TrimSpace(want), r.calls)
+		}
+	}
+	for _, number := range []string{"140", "127", "122", "119", "118"} {
+		if strings.Contains(r.calls, "pr comment "+number+" ") || strings.Contains(r.calls, "pr close "+number+" ") {
+			t.Errorf("the build touched #%s:\n%s", number, r.calls)
+		}
+	}
+	if strings.Contains(r.calls, "pr close 131 ") {
+		t.Errorf("the build closed #131 again:\n%s", r.calls)
+	}
+	if !strings.Contains(r.calls, "#140") {
+		t.Errorf("the comment doesn't name the new pull request:\n%s", r.calls)
 	}
 }
