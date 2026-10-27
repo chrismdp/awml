@@ -662,8 +662,9 @@ func TestTheReviewsReadOnlyMain(t *testing.T) {
 }
 
 // Each review is posted as a check on the pull request's head commit: Bug review and Security
-// review. One that finds nothing passes, and one that finds something is neutral, with its
-// findings ranked Important, Nit, Pre-existing, and nothing in them can hide the rest. A file that
+// review. One that finds nothing passes, one with an Important finding fails, and one with only
+// Nits or Pre-existing faults is neutral, with its findings ranked Important, Nit, Pre-existing,
+// and nothing in them can hide the rest. A file that
 // isn't a list of findings posts nothing.
 func TestEachReviewIsPostedAsACheck(t *testing.T) {
 	post, _ := readFactoryWorkflow(t, "review.yml").Jobs["post"].step(t, "post")
@@ -699,8 +700,8 @@ func TestEachReviewIsPostedAsACheck(t *testing.T) {
 		t.Fatalf("posted %d checks, want 2", len(found.inputs))
 	}
 	bugs := found.inputs[0]
-	if bugs["name"] != "Bug review" || bugs["conclusion"] != "neutral" {
-		t.Errorf("the bug review's check is %v, want neutral", bugs)
+	if bugs["name"] != "Bug review" || bugs["conclusion"] != "failure" {
+		t.Errorf("the bug review found something Important, but its check is %v, want failure", bugs)
 	}
 	if found.inputs[1]["conclusion"] != "success" {
 		t.Errorf("the security review found nothing, but its check is %v", found.inputs[1]["conclusion"])
@@ -719,6 +720,17 @@ func TestEachReviewIsPostedAsACheck(t *testing.T) {
 	}
 	if title, _ := output["title"].(string); title == "" {
 		t.Error("the check has no title")
+	}
+
+	minor := newRehearsal(t)
+	minor.write("findings/bugs.json", `[{"severity": "Nit", "file": "check.go", "line": 7, "title": "A clearer name", "detail": "Say what it holds."}]`)
+	minor.write("findings/security.json", `[{"severity": "Pre-existing", "file": "draw.go", "line": 0, "title": "An old fault", "detail": "It was there before."}]`)
+	minor.run(post, env, answers)
+	minor.mustPass()
+	for i, check := range minor.inputs {
+		if check["conclusion"] != "neutral" {
+			t.Errorf("check %d found only a Nit or a Pre-existing fault, but is %v, want neutral", i, check["conclusion"])
+		}
 	}
 
 	broken := newRehearsal(t)

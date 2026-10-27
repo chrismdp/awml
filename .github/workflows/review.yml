@@ -2,10 +2,10 @@
 # repository's own app, is reviewed for bugs and for security each time it's opened or pushed to,
 # and each review is posted as a check on its head commit, beside CI. Two fresh Claude sessions read
 # the patch against main, with main's REVIEW.md and prompts, never the branch's. A review that finds
-# nothing passes; one with findings is neutral, since the build rule already asks for review when a
-# finding is open. A pull request from a fork gets no review, and neither does one opened by anyone
-# else, since the sessions hold the maintainer's login token and read the pull request's
-# description.
+# nothing passes, and one with an Important finding fails, so the change takes a fix, or the
+# maintainer's deliberate bypass, to merge. One with only Nits or Pre-existing faults is neutral. A
+# pull request from a fork gets no review, and neither does one opened by anyone else, since the
+# sessions hold the maintainer's login token and read the pull request's description.
 # Drawn at https://awml.io/chrismdp/review-a-pull-request
 name: Review a pull request
 
@@ -162,9 +162,9 @@ jobs:
             ${{ runner.temp }}/review/security.json
 
   # Once both reviews are done, posts each as a check on the head commit: passed if it found
-  # nothing, neutral if it found something, with its findings ranked. Findings never fail the
-  # check: the build rule already sends a change with open findings to review, and the maintainer
-  # decides. Each review's file must be a list of findings, each ranked, or nothing is posted, and
+  # nothing, failed if it found something Important, and neutral if it found only Nits or
+  # Pre-existing faults, with its findings ranked. An Important finding means the change breaks
+  # something, so it takes a fix, or the maintainer's deliberate bypass, to merge. Each review's file must be a list of findings, each ranked, or nothing is posted, and
   # findings that carry anything like the login token are refused, never uploaded or posted. Text
   # the reviews wrote goes into the summary with nothing in it that can hide the rest, each title
   # cut to 200 characters and each detail to 2,000.
@@ -217,7 +217,7 @@ jobs:
                 name: $name,
                 head_sha: $head_sha,
                 status: "completed",
-                conclusion: (if length == 0 then "success" else "neutral" end),
+                conclusion: (if any(.[]; .severity == "Important") then "failure" elif length == 0 then "success" else "neutral" end),
                 output: {
                   title: (if length == 0 then "Found nothing"
                     else [$ranked[] | "\(.rank): \(.found | length)"] | join(", ") end),
