@@ -261,3 +261,24 @@ func TestCommandsRefuseFilesWhoseRefsHaveMistakes(t *testing.T) {
 		}
 	}
 }
+
+// fit names two files of the same name by the folders they're in.
+func TestFitNamesFilesOfTheSameNameByTheirFolders(t *testing.T) {
+	root := t.TempDir()
+	plan := strings.Replace(planWorkflow, "  - { id: ready, kind: trigger, label: The shopping list is ready, ref: shop.yaml#ready }\n", "", 1)
+	plan = strings.Replace(plan, "  - { from: plan, to: ready, kind: start }\n", "", 1)
+	for _, dir := range []string{"x", "y"} {
+		if err := os.Mkdir(filepath.Join(root, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, dir, "plan.yaml"), []byte(plan), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	laptop := write(t, "laptop.yaml", strings.Replace(agentLaptop, "holds: []", "holds: [notes]", 1))
+	chdir(t, root)
+	want := "laptop  fits: x/plan#plan and y/plan#plan may use anthropic\n"
+	if got := awmlRun("fit", "x/plan.yaml", "y/plan.yaml", laptop); got != (result{0, want, ""}) {
+		t.Errorf("fit gave %+v\nwant %q", got, want)
+	}
+}
