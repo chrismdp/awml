@@ -511,6 +511,41 @@ lines:
       return true;
     });
   }
+
+  // Each kind of line break in a label folds into one space in the Mermaid, in both engines, while
+  // the graph gives the label as written.
+  for (const [name, escape] of [["lf", "\\n"], ["crlf", "\\r\\n"], ["cr", "\\r"], ["u2028", "\\u2028"], ["u2029", "\\u2029"]]) {
+    const source = `awml: "0.7"
+title: "Bakery${escape}replies"
+scopes:
+  - { id: shop, label: "${escape}end${escape}", processing: any }
+parts:
+  - { id: mail, kind: trigger, label: "A customer${escape}${escape}emails", wait: PT1H }
+  - id: draft
+    kind: ai
+    op: draft
+    in: shop
+    label: |
+      Draft a reply
+  - { id: board, kind: surface, label: "The shop's ${escape} board", in: shop }
+  - { id: gap, kind: comment, label: "Nobody${escape}reads it" }
+lines:
+  - { from: mail, to: draft, kind: start }
+  - { from: draft, to: board, kind: data, label: "posted${escape}to the board" }
+  - { from: gap, to: board, kind: tie }
+`;
+    const path = `${temporary}/breaks-${name}.yaml`;
+    await writeFile(path, source);
+    const drawn = api.draw(source);
+    assert.equal(drawn + "\n", runNative(["draw", path]), `line breaks, ${name}: Mermaid`);
+    assert.equal(api.graphJSON(source) + "\n", runNative(["graph", path]), `line breaks, ${name}: graph`);
+    assert(!["\r", String.fromCharCode(0x2028), String.fromCharCode(0x2029)].some((mark) => drawn.includes(mark)), `line breaks, ${name}: the Mermaid keeps a line break`);
+    assert(drawn.includes('subgraph shop["end"]') && drawn.includes('label: "Nobody reads it"'), `line breaks, ${name}: the Mermaid doesn't fold them:\n${drawn}`);
+    const rows = drawn.split("\n").map((row) => row.trim());
+    assert.equal(rows.filter((row) => row.startsWith("subgraph ")).length, 1, `line breaks, ${name}: subgraphs`);
+    assert.equal(rows.filter((row) => row === "end").length, 1, `line breaks, ${name}: ends`);
+    assert.equal(api.graph(source).comments[0].label, JSON.parse(`"Nobody${escape}reads it"`), `line breaks, ${name}: the graph's label`);
+  }
 } finally {
   await rm(temporary, { recursive: true });
 }

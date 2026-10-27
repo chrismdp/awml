@@ -360,7 +360,7 @@ func (g Graph) Mermaid() string {
 			arrow = headless[arrow]
 		}
 		var words []string
-		if said := strings.Join(append(nonEmpty(l.Label), l.Widens...), " · "); said != "" {
+		if said := strings.Join(append(nonEmpty(fold(l.Label)), l.Widens...), " · "); said != "" {
 			words = append(words, text(said))
 		}
 		// A line the check reports adds its words for each rule the line breaks, each on a row.
