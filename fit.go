@@ -136,8 +136,6 @@ type fitModel struct {
 	processing map[string]processingTerms
 	// names gives the name a part or scope is reported by, where it isn't its id.
 	names map[string]string
-	// runsOn holds the triggers the workflow runs on, those with a line out of them.
-	runsOn map[string]bool
 }
 
 // name gives the name a part or scope is reported by.
@@ -157,12 +155,8 @@ func newFitModel(security *Map) fitModel {
 		processing: map[string]processingTerms{},
 	}
 	model.where = placed(model.parts, items(security, "lines"))
-	model.runsOn = map[string]bool{}
 	for _, part := range model.parts {
 		model.byID[str(part, "id")] = part
-		if str(part, "kind") == "trigger" && leadsOutOf(security, part) {
-			model.runsOn[str(part, "id")] = true
-		}
 	}
 	for _, scope := range model.groups {
 		id := str(scope, "id")
@@ -187,7 +181,7 @@ func (model fitModel) gaps() []string {
 		}
 	}
 	for _, part := range model.parts {
-		if model.runsOn[str(part, "id")] && !part.has("wait") {
+		if str(part, "kind") == "trigger" && !part.has("wait") {
 			gaps = append(gaps, fmt.Sprintf(`trigger "%s" has no wait`, model.name(str(part, "id"))))
 		}
 	}
@@ -238,14 +232,10 @@ func textList(value any) []string {
 func judgePlatform(name string, platform fitPlatform, model fitModel, own, visible []*Map) FitResult {
 	result := FitResult{Platform: name, Judged: true, Reasons: []string{}, Models: map[string][]string{}}
 
-	// Rule 1: each trigger the workflow runs on belongs to its own platform, including one placed by
-	// its first line.
+	// Rule 1: each trigger belongs to its own platform, including one placed by its first line.
 	for _, part := range own {
-		if !model.runsOn[str(part, "id")] {
-			continue
-		}
 		securityPart := model.byID[str(part, "id")]
-		if securityPart == nil {
+		if securityPart == nil || str(securityPart, "kind") != "trigger" {
 			continue
 		}
 		waitText := str(securityPart, "wait")

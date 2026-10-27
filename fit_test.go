@@ -2,6 +2,7 @@ package awml
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -142,5 +143,27 @@ func TestFitReportsBlocksWithoutDescriptionsAsNotJudged(t *testing.T) {
 	}
 	if !reflect.DeepEqual(lines, wantLines) {
 		t.Errorf("FitLines gave\n%q\nwant\n%q", lines, wantLines)
+	}
+}
+
+// Every trigger is one the workflow runs on, so even a trigger with no line out needs a wait, and is
+// judged against the platform.
+func TestFitAsksForAWaitOnATriggerWithNoLineOut(t *testing.T) {
+	security := `
+awml: "0.7"
+title: Gaps
+scopes: [{id: private, label: private, processing: any}]
+parts:
+  - {id: hourly, kind: trigger, label: Hourly, in: private}
+  - {id: daily, kind: trigger, label: Daily, wait: P2D, in: private}
+  - {id: loose, kind: ai, op: sort, label: Loose, in: private}
+`
+	docs := fitDocs(t, security)
+	if _, gaps := Fit(docs[0], nil, nil); !reflect.DeepEqual(gaps, []string{`trigger "hourly" has no wait`}) {
+		t.Errorf("Fit gave gaps %q", gaps)
+	}
+	docs = fitDocs(t, strings.Replace(security, "Hourly,", "Hourly, wait: PT1H,", 1), codeServer)
+	if lines, _ := Fit(docs[0], nil, docs[1:]); !reflect.DeepEqual(lines, []string{"server  no: hourly may wait PT1H, but the platform may be off for P1D"}) {
+		t.Errorf("Fit gave %q", lines)
 	}
 }

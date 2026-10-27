@@ -1,0 +1,23 @@
+awml: "0.7"
+title: The bakery's supplier order
+description: |
+  When the stock count says something runs low, AI drafts the order from the stock levels, and Ana
+  says yes to the exact order before it's placed through the supplier account. The bakery is
+  fictional.
+scopes:
+  - { id: bakery, label: "bakery: Ana, Sam" }
+parts:
+  - { id: low, kind: trigger, label: "Flour, butter or sugar runs low" }
+  - { id: stock, kind: context, label: "Stock levels", in: bakery, ref: bakery-stock.yaml#stock }
+  - { id: draft, kind: ai, op: draft, label: "Draft the order", in: bakery }
+  - { id: ask, kind: code, op: do, label: "Ask Ana to place it", in: bakery }
+  - { id: approve, kind: review, label: "Ana's yes to the exact order", in: bakery }
+  - { id: place, kind: outside, label: "Place the order: Ask", in: bakery }
+  - { id: supplier, kind: connector, label: "The bakery's supplier account", in: bakery }
+lines:
+  - { from: low, to: draft, kind: start }
+  - { from: stock, to: draft, kind: data }
+  - { from: draft, to: ask, kind: data, label: the draft }
+  - { from: ask, to: approve, kind: data }
+  - { from: approve, to: place, kind: data, label: "[yes]" }
+  - { from: place, to: supplier, kind: data }

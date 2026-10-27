@@ -1,0 +1,46 @@
+---
+config:
+  theme: default
+  fontFamily: Inter, sans-serif
+  flowchart:
+    useMaxWidth: false
+    subGraphTitleMargin:
+      top: 6
+      bottom: 30
+---
+flowchart TB
+  subgraph bakery["bakery#58; Ana#44; Sam"]
+    direction TB
+    low(["Flour#44; butter or sugar runs low"])
+    stock[("Stock levels")]
+    draft("<small style='color:rgb(61,67,79)'>🤖 ✏️ draft</small><br>Draft the order")
+    ask("<small style='color:rgb(61,67,79)'>⚙️ 🛠️ do</small><br>Ask Ana to place it")
+    approve("<small style='color:rgb(61,67,79)'>👤 ✅ review</small><br>Ana#39;s yes to the exact order")
+    place>"Place the order#58; Ask"]
+    supplier{{"The bakery#39;s supplier account"}}
+  end
+
+  low --> draft
+  stock -.-> draft
+  draft -->|"the draft"| ask
+  ask --> approve
+  approve -->|"#91;yes#93;"| place
+  place -.-> supplier
+  classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
+  classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
+  classDef con fill:#eceef2,stroke:#5d6472,color:#16171b
+  classDef surf fill:#ffffff,stroke:#2a2d35,stroke-width:1.5px,color:#16171b
+  classDef out fill:#fde4dc,stroke:#b5532f,color:#16171b
+  classDef ai fill:#cdd3fb,stroke:#3b4bb0,color:#16171b
+  classDef code fill:#c4e3d1,stroke:#2b7a4f,color:#16171b
+  classDef person fill:#f7d79a,stroke:#9a6100,color:#16171b
+  classDef uml fill:#16171b,stroke:#16171b,color:#16171b
+  classDef gap fill:#ffffff,stroke:#8a93a3,stroke-dasharray:4 3,color:#6b7280
+  class low trig
+  class stock ctx
+  class supplier con
+  class place out
+  class draft ai
+  class ask code
+  class approve person
+  style bakery fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f

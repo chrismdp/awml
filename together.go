@@ -386,10 +386,17 @@ func (l *linked) warnShared() {
 // joined is the workflows given as one: each part once, a shared part as the copy its refs lead
 // back to, with its scope, and every line. Each id is made unique by its workflow, and names gives
 // each the name it's reported by: its own id, after its file's name where there are several files.
+// starts holds a line from each outside action that starts a workflow given to the trigger it
+// starts, which untrusted text follows but no drawing or placement does.
 type joined struct {
-	groups, parts, lines []*Map
-	from                 map[string]partAt
-	names                map[string]string
+	groups, parts, lines, starts []*Map
+	from                         map[string]partAt
+	names                        map[string]string
+}
+
+// carrying gives every line untrusted text follows: each workflow's own, and each hand-off.
+func (j joined) carrying() []*Map {
+	return append(append([]*Map{}, j.lines...), j.starts...)
 }
 
 func (l linked) join() joined {
@@ -456,6 +463,13 @@ func (l linked) join() joined {
 			c.set("to", idOf(w, to))
 			j.lines = append(j.lines, c)
 		}
+	}
+	for _, h := range l.starts {
+		line := &Map{}
+		line.set("from", idOf(h.action.workflow, h.action.part))
+		line.set("to", idOf(h.trigger.workflow, h.trigger.part))
+		line.set("kind", "start")
+		j.starts = append(j.starts, line)
 	}
 	return j
 }
@@ -540,16 +554,17 @@ func workflowNames(workflows []Workflow) []string {
 }
 
 // warnUntrusted warns of each outside action that untrusted text reaches through a part shared with
-// another workflow, which no workflow's own check sees. It names the part the text comes from by
-// the first copy marked untrusted.
+// another workflow, or through an outside action into the workflow it starts, which no workflow's
+// own check sees. It names the part the text comes from by the first copy marked untrusted.
 func (l *linked) warnUntrusted() {
-	if len(l.shared) == 0 {
+	if len(l.shared) == 0 && len(l.starts) == 0 {
 		return
 	}
 	j := l.join()
+	lines := j.carrying()
 	from := map[*Map][]partAt{}
 	for _, source := range untrustedParts(j.parts) {
-		reached, _ := reach(source, j.parts, j.lines)
+		reached, _ := reach(source, j.parts, lines)
 		root := j.from[str(source, "id")]
 		named, _ := l.marked(root)
 		for _, p := range j.parts {
@@ -587,7 +602,8 @@ func TogetherMistakes(workflows []Workflow) [][]string {
 
 // TogetherWarnings gives the warnings in each workflow that only the workflows together show: a
 // context more than one writes, a connector more than one brings items in from, and untrusted text
-// that reaches an outside action through a part they share.
+// that reaches an outside action through a part they share or an outside action that starts
+// another.
 func TogetherWarnings(workflows []Workflow) [][]string {
 	return link(workflows).list(true)
 }
@@ -607,9 +623,8 @@ func (l linked) list(warnings bool) [][]string {
 // workflowBox is how the map draws a workflow's box: solid, since it's a workflow, not a scope.
 const workflowBox = "fill:#f6f7f9,stroke:#5d6472,color:#16171b"
 
-// DrawMap draws workflows given together as their map: a box for each workflow, with its title, the
-// triggers it runs on, those with a line out of them or that another workflow starts, and each
-// outside action that starts a workflow given; and each shared part once, between the boxes, with a
+// DrawMap draws workflows given together as their map: a box for each workflow, with its title, its
+// triggers and each outside action that starts a workflow given; and each shared part once, between the boxes, with a
 // line from each workflow that leads into it and to each that it leads into. Each hand-off is a line
 // from the action to the trigger it starts. Each workflow must have no mistakes but lines that break
 // a rule.
@@ -626,8 +641,7 @@ func DrawMap(workflows []Workflow) string {
 		box := fmt.Sprintf("w%d", w+1)
 		out = append(out, fmt.Sprintf(`  subgraph %s["%s"]`, box, text(str(workflow.Doc, "title"))), "    direction TB")
 		for _, p := range items(workflow.Doc, "parts") {
-			runsOn := str(p, "kind") == "trigger" && leadsOutOf(workflow.Doc, p)
-			if _, shared := l.root[p]; shared || !runsOn && !ends[p] {
+			if _, shared := l.root[p]; shared || str(p, "kind") != "trigger" && !ends[p] {
 				continue
 			}
 			node[p] = box + "_" + str(p, "id")
@@ -708,7 +722,8 @@ type SharedSummary struct {
 }
 
 // SummariseTogether summarises workflows given together: each counted as Summarise counts it, a
-// part they share counted once, and untrusted text followed through what they share. It names the
+// part they share counted once, and untrusted text followed through what they share and into each
+// workflow one starts. It names the
 // shared parts. One workflow is summarised as Summarise does.
 func SummariseTogether(workflows []Workflow) Summary {
 	if len(workflows) == 1 {
@@ -748,7 +763,7 @@ func SummariseTogether(workflows []Workflow) Summary {
 		}
 	}
 	j := l.join()
-	out.Untrusted = summariseUntrusted(j.parts, j.lines)
+	out.Untrusted = summariseUntrusted(j.parts, j.carrying())
 	return out
 }
 
