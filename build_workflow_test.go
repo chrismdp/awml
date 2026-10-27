@@ -1130,6 +1130,7 @@ func TestTheReviewAppliesAPatchWithBinaryFiles(t *testing.T) {
 	for file, text := range map[string]string{
 		".github/review-bugs-prompt.md": "Review for bugs.\n", ".github/review-security-prompt.md": "Review for security.\n",
 		"REVIEW.md": "What failure looks like.\n", "recipes.md": "Bread\n", "logo.png": "\x89PNG\x00old",
+		"badge.png": "\x89PNG\x00badge",
 	} {
 		r.write(filepath.Join(repo, file), text)
 	}
@@ -1140,9 +1141,11 @@ func TestTheReviewAppliesAPatchWithBinaryFiles(t *testing.T) {
 	r.write(filepath.Join(repo, "recipes.md"), "Bread\nScones\n")
 	r.write(filepath.Join(repo, "logo.png"), "\x89PNG\x00new")
 	r.write(filepath.Join(repo, "fonts/Bakery.ttf"), "\x00\x01font")
-	// A binary file named like a pattern hides nothing, and one git quotes is still left out.
-	r.write(filepath.Join(repo, "*"), "\x00star")
+	// A binary file git quotes the name of is still left out, and a moved and changed one counts by
+	// both its names.
 	r.write(filepath.Join(repo, "images/café.png"), "\x00accent")
+	gitIn(t, repo, "mv", "badge.png", "images/badge.png")
+	r.write(filepath.Join(repo, "images/badge.png"), "\x89PNG\x00badge, redrawn")
 	gitIn(t, repo, "add", "-A")
 	// GitHub's diff, like git's without --binary, says only that a binary file differs.
 	patch := r.write("change/change.patch", gitIn(t, repo, "diff", "--cached")+"\n")
@@ -1157,9 +1160,49 @@ func TestTheReviewAppliesAPatchWithBinaryFiles(t *testing.T) {
 		t.Errorf("staged %q, want recipes.md", staged)
 	}
 	told := r.read("review/pull-request.md")
-	for _, path := range []string{"logo.png", "fonts/Bakery.ttf", "*", "images/café.png"} {
+	for _, path := range []string{"logo.png", "fonts/Bakery.ttf", "images/café.png", "images/badge.png"} {
 		if !strings.Contains(told, path) {
 			t.Errorf("the reviewers aren't told that %s changed:\n%s", path, told)
+		}
+	}
+}
+
+// A file is binary to git if it holds one NUL byte, so a script or workflow made binary would reach
+// the reviewers as a name only. Only images, fonts and WebAssembly outside .github/ go through
+// unread; any other binary file stops the review.
+func TestTheReviewStopsAtABinaryFileItCantRead(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git isn't installed")
+	}
+	pull, _ := readFactoryWorkflow(t, "review.yml").Jobs["review"].step(t, "bring")
+	answers := `
+  *"vnd.github.diff"*) cat "$PATCH" ;;
+  "api repos/owner/repo/compare/"*) answer <<< "{\"merge_base_commit\": {\"sha\": \"$BASE\"}}" ;;`
+	for _, path := range []string{"examples/render.sh", ".github/logo.png", "wasm/awml.js"} {
+		r := newRehearsal(t)
+		repo := filepath.Join(r.root, "repo")
+		for file, text := range map[string]string{
+			".github/review-bugs-prompt.md": "Review for bugs.\n", ".github/review-security-prompt.md": "Review for security.\n",
+			"REVIEW.md": "What failure looks like.\n", "recipes.md": "Bread\n",
+		} {
+			r.write(filepath.Join(repo, file), text)
+		}
+		gitIn(t, repo, "init", "-q")
+		gitIn(t, repo, "add", "-A")
+		gitIn(t, repo, "commit", "-q", "-m", "The bakery's main")
+		base := gitIn(t, repo, "rev-parse", "HEAD")
+		r.write(filepath.Join(repo, "recipes.md"), "Bread\nScones\n")
+		r.write(filepath.Join(repo, path), "echo hello\n\x00")
+		gitIn(t, repo, "add", "-A")
+		patch := r.write("change/change.patch", gitIn(t, repo, "diff", "--cached")+"\n")
+		gitIn(t, repo, "reset", "-q", "--hard")
+		r.dir = repo
+		r.run(pull, map[string]string{
+			"HEAD_SHA": strings.Repeat("cd", 20), "BASE": base, "PATCH": patch,
+			"GITHUB_EVENT_PATH": r.write("event.json", `{"pull_request": {"title": "Add scones", "body": "A new recipe."}}`),
+		}, answers)
+		if !r.failed || !strings.Contains(r.printed, path) {
+			t.Errorf("a binary %s went through to the reviews unread:\n%s", path, r.printed)
 		}
 	}
 }
