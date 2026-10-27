@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -398,10 +399,10 @@ func TestAPartIsUntrustedIfAnyCopyIsMarked(t *testing.T) {
 func TestTheMapDrawsABoxForEachWorkflowAndEachSharedPartOnce(t *testing.T) {
 	got := DrawMap(together(t, "plan.yaml", planWorkflow, "shop.yaml", shopWorkflow))
 	for _, want := range []string{
-		"  subgraph w1[\"Dinners\"]\n    direction TB\n    w1_thu([\"Thursday 19#58;00\"])\n    w1_ready>\"Start the shopping#58; Allow\"]\n  end\n",
-		"  subgraph w2[\"Shopping\"]\n    direction TB\n    w2_ready([\"The shopping list is ready\"])\n  end\n",
+		"  w1_thu([\"Thursday 19#58;00\"])\n  subgraph w1[\"Dinners\"]\n    direction TB\n    w1_ready>\"Start the shopping#58; Allow\"]\n  end\n",
+		"  w2_ready([\"The shopping list is ready\"])\n  subgraph w2[\"Shopping\"]\n    direction TB\n  end\n",
 		"  s1[(\"Shopping list\")]\n",
-		"  w1 -.-> s1\n  s1 -.-> w2\n  w1_ready --> w2_ready\n",
+		"  w1_thu --> w1\n  w2_ready --> w2\n  w1 -.-> s1\n  s1 -.-> w2\n  w1_ready --> w2_ready\n",
 		"  class w1_thu,w2_ready trig\n  class s1 ctx\n  class w1_ready out\n",
 		"  style w1 " + workflowBox + "\n  style w2 " + workflowBox,
 	} {
@@ -414,22 +415,43 @@ func TestTheMapDrawsABoxForEachWorkflowAndEachSharedPartOnce(t *testing.T) {
 	}
 }
 
-// A box holds the triggers its workflow runs on, and an outside action only where it starts a
-// workflow given: the map draws the hand-off as a line from the action to the trigger it starts.
+// Each trigger sits outside its workflow's box, with a line into the box, so what starts a workflow
+// reads as coming from outside it. An outside action that starts a workflow given leads to that
+// trigger, outside the box of the workflow it starts.
+func TestTheMapDrawsEachTriggerOutsideItsBox(t *testing.T) {
+	got := DrawMap(together(t, "plan.yaml", planWorkflow, "shop.yaml", shopWorkflow))
+	boxes := regexp.MustCompile(`(?s)  subgraph .*?\n  end\n`).FindAllString(got, -1)
+	if len(boxes) != 2 {
+		t.Fatalf("the map has %d boxes:\n%s", len(boxes), got)
+	}
+	for _, box := range boxes {
+		if strings.Contains(box, "w1_thu") || strings.Contains(box, "w2_ready") {
+			t.Errorf("a trigger is drawn inside its box:\n%s", box)
+		}
+	}
+	for _, want := range []string{"  w1_thu --> w1\n", "  w2_ready --> w2\n", "  w1_ready --> w2_ready\n"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the map lacks\n%s\nin\n%s", want, got)
+		}
+	}
+}
+
+// A box holds an outside action only where it starts a workflow given: the map draws the hand-off as
+// a line from the action to the trigger it starts.
 func TestTheMapDrawsAnOutsideActionOnlyWhereItStartsAWorkflowGiven(t *testing.T) {
 	sorting := strings.Replace(notes("Sorting", ""), "  - { id: notes,", "  - { id: tell, kind: code, op: do, label: Say sorting is done, in: s }\n"+
 		"  - { id: done, kind: outside, label: \"Start the filing: Allow\", in: s, ref: elsewhere.yaml#start }\n  - { id: notes,", 1)
 	sorting = strings.Replace(sorting, "lines:\n", "lines:\n  - { from: step, to: tell, kind: start }\n  - { from: tell, to: done, kind: start }\n", 1)
 	got := DrawMap(together(t, "plan.yaml", planWorkflow, "sorting.yaml", sorting))
 	for _, want := range []string{
-		"  subgraph w1[\"Dinners\"]\n    direction TB\n    w1_thu([\"Thursday 19#58;00\"])\n  end\n",
-		"  subgraph w2[\"Sorting\"]\n    direction TB\n    w2_go([\"Go\"])\n  end\n",
+		"  w1_thu([\"Thursday 19#58;00\"])\n  subgraph w1[\"Dinners\"]\n    direction TB\n  end\n",
+		"  w2_go([\"Go\"])\n  subgraph w2[\"Sorting\"]\n    direction TB\n  end\n",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("the map lacks\n%s\nin\n%s", want, got)
 		}
 	}
-	if strings.Contains(got, "-->") {
+	if strings.Contains(got, "w2_done") {
 		t.Errorf("the map draws a hand-off to a workflow not given:\n%s", got)
 	}
 }
@@ -438,7 +460,7 @@ func TestTheMapDrawsAnOutsideActionOnlyWhereItStartsAWorkflowGiven(t *testing.T)
 func TestTheMapDrawsEveryTrigger(t *testing.T) {
 	plan := strings.Replace(planWorkflow, "  - { id: plan,", "  - { id: sun, kind: trigger, label: Sunday, wait: PT1H }\n  - { id: plan,", 1)
 	got := DrawMap(together(t, "plan.yaml", plan, "shop.yaml", shopWorkflow))
-	if want := "    w1_thu([\"Thursday 19#58;00\"])\n    w1_sun([\"Sunday\"])\n"; !strings.Contains(got, want) {
+	if want := "  w1_thu([\"Thursday 19#58;00\"])\n  w1_sun([\"Sunday\"])\n";!strings.Contains(got, want) {
 		t.Errorf("the map lacks\n%s\nin\n%s", want, got)
 	}
 }
