@@ -1,6 +1,6 @@
 # AWML: the Agentic Workflow Modelling Language
 
-Draft 0.6, 26 October 2026.
+Draft 0.6, 27 October 2026.
 
 AWML describes agentic work as diagrams, written as YAML files and drawn with Mermaid.
 
