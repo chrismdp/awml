@@ -1,0 +1,183 @@
+# Every pull request from a branch of this repository is reviewed for bugs and for security, each
+# time it's opened or pushed to, whoever opened it, and each review is posted as a check on its head
+# commit, beside CI. Two fresh Claude sessions read the patch against main, with main's REVIEW.md and
+# prompts, never the branch's. A review that finds nothing passes; one with findings is neutral, since
+# the build rule already asks for review when a finding is open. A pull request from a fork gets no
+# review, since the sessions hold the maintainer's login token.
+# Drawn at https://awml.io/chrismdp/review-a-pull-request
+name: Review a pull request
+
+# Before it works, a repository needs the CLAUDE_CODE_OAUTH_TOKEN secret that build.yml lists.
+#
+# The review job holds a token that only reads, and checks out main, never the branch. It brings in
+# the pull request's patch through the Actions token, as data, and applies it to the commit of main
+# the branch started from, so the sessions read the change as the build's own reviews read a build's.
+# The post job holds a token that may only write checks, and checks out and runs nothing: it reads
+# the two reviews' findings from the review job's artifact, and checks them before it posts them.
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+# A push to the pull request replaces the review of the commit before it.
+concurrency:
+  group: review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # Two fresh Claude sessions review the patch side by side, one for bugs and one for security,
+  # each its own claude run. Neither can run the change's code: they read the patch, applied to
+  # main, and the repository, with no tool that runs anything but git's reads.
+  review:
+    # A fork's pull request starts nothing here: its author could steer the sessions, which hold the
+    # maintainer's login token.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      # The reviews read the patch as data and follow main's prompts and REVIEW.md, so a branch
+      # can't rewrite what it's held to. They're kept before the patch is applied. The patch is
+      # GitHub's diff of the head commit against the commit of main the branch started from, so it
+      # applies there as it is, and `git diff --cached` shows the whole change.
+      - name: Bring in the pull request's patch against main, and main's REVIEW.md and review prompts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if ! [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "The head commit isn't a commit id: $HEAD_SHA"
+            exit 1
+          fi
+          review="$RUNNER_TEMP/review"
+          mkdir -p "$review"
+          cp .github/review-bugs-prompt.md .github/review-security-prompt.md "$RUNNER_TEMP/"
+          cp REVIEW.md "$review/REVIEW.md"
+          main="$(git rev-parse HEAD)"
+          compare="repos/$GITHUB_REPOSITORY/compare/$main...$HEAD_SHA"
+          base="$(gh api "$compare" --jq .merge_base_commit.sha)"
+          if ! [[ "$base" =~ ^[0-9a-f]{40}$ ]] || ! git merge-base --is-ancestor "$base" "$main"; then
+            echo "The pull request doesn't start from a commit of main: $base"
+            exit 1
+          fi
+          gh api "$compare" -H "Accept: application/vnd.github.diff" > "$review/change.patch"
+          jq -r '"# \(.pull_request.title)\n\n\(.pull_request.body // "")"' "$GITHUB_EVENT_PATH" \
+            > "$review/pull-request.md"
+          git checkout -q --detach "$base"
+          git apply --index "$review/change.patch"
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      # Each review is its own claude run, started together, so neither sees the other's session.
+      # Each session keeps the login token from the commands it runs (awml #121).
+      - name: Review the patch for bugs and for security, side by side
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
+          REVIEW_DIR: ${{ runner.temp }}/review
+        run: |
+          review() {
+            prompt="$(sed "s|REVIEW_DIR|$REVIEW_DIR|g" "$RUNNER_TEMP/$1")"
+            claude -p "$prompt" --model opus --max-turns 100 --permission-mode acceptEdits \
+              --add-dir "$REVIEW_DIR" \
+              --allowedTools "Read" "Write" "Glob" "Grep" \
+                "Bash(git diff:*)" "Bash(git log:*)" "Bash(git show:*)" "Bash(git status:*)" \
+              > "$RUNNER_TEMP/$1.log" 2>&1
+          }
+          review review-bugs-prompt.md &
+          bugs=$!
+          review review-security-prompt.md &
+          security=$!
+          status=0
+          wait "$bugs" || status=1
+          wait "$security" || status=1
+          for log in review-bugs-prompt.md review-security-prompt.md; do
+            echo "::group::$log"
+            cat "$RUNNER_TEMP/$log.log"
+            echo "::endgroup::"
+          done
+          exit "$status"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: findings
+          path: |
+            ${{ runner.temp }}/review/bugs.json
+            ${{ runner.temp }}/review/security.json
+
+  # Once both reviews are done, posts each as a check on the head commit: passed if it found
+  # nothing, neutral if it found something, with its findings ranked. Findings never fail the
+  # check: the build rule already sends a change with open findings to review, and the maintainer
+  # decides. Each review's file must be a list of findings, each ranked, or nothing is posted. Text
+  # the reviews wrote goes into the summary with nothing in it that can hide the rest.
+  post:
+    needs: review
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      checks: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: findings
+          path: ${{ runner.temp }}/findings
+
+      - name: Post the Bug review and Security review checks
+        id: post
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if ! [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "The head commit isn't a commit id: $HEAD_SHA"
+            exit 1
+          fi
+          findings="$RUNNER_TEMP/findings"
+          for file in bugs.json security.json; do
+            if ! jq -e 'type == "array" and length <= 50 and all(.[];
+                type == "object" and
+                (.severity | IN("Important", "Nit", "Pre-existing")) and
+                (.file | type == "string") and (.line | type == "number" and . >= 0) and
+                (.title | type == "string") and (.detail | type == "string"))' "$findings/$file" > /dev/null; then
+              echo "The review left no readable record of its findings in $file."
+              exit 1
+            fi
+          done
+          check='
+            def clean: gsub("[\r\n]+"; " ") | gsub("<"; "&lt;");
+            def place: (.file | gsub("`"; "")) + (if .line > 0 then ":\(.line | floor)" else "" end);
+            ["Important", "Nit", "Pre-existing"] as $ranks
+            | . as $found
+            | [$ranks[] as $rank | {rank: $rank, found: [$found[] | select(.severity == $rank)]}
+                | select(.found | length > 0)] as $ranked
+            | {
+                name: $name,
+                head_sha: $head_sha,
+                status: "completed",
+                conclusion: (if length == 0 then "success" else "neutral" end),
+                output: {
+                  title: (if length == 0 then "Found nothing"
+                    else [$ranked[] | "\(.rank): \(.found | length)"] | join(", ") end),
+                  summary: (if length == 0 then "The review found nothing that survived a second look."
+                    else [$ranked[] | "## \(.rank)\n\n" +
+                      ([.found[] | "- In `\(place)`: **\(.title | clean)** \(.detail | clean)"] | join("\n"))]
+                      | join("\n\n") end)
+                }
+              }'
+          post() {
+            jq --arg name "$1" --arg head_sha "$HEAD_SHA" "$check" "$findings/$2" |
+              gh api -X POST "repos/$GITHUB_REPOSITORY/check-runs" --input - > /dev/null
+          }
+          post "Bug review" bugs.json
+          post "Security review" security.json
