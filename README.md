@@ -483,7 +483,7 @@ npx -y @mermaid-js/mermaid-cli@11.4.1 -b white -i my-workflow.mmd -o my-workflow
 
 ### Workflows that share parts
 
-Workflows hand work on through a part both have: a context one writes and another reads, or a trigger one fires and another starts on. The workflow that doesn't create the part keeps its own copy, with `ref` naming the other's, as `shopping.yaml#list` for a file alongside or `owner/slug#id` for a published one. Each file still checks alone. Given together, `awml check` reports a `ref` to a part that isn't there and a copy that differs from the part it names, and warns of a context more than one writes and a connector more than one reads. `awml draw` draws their map, with each shared part once between the workflows:
+Workflows hand work on through a part both have: a context one writes and another reads, or a trigger one fires and another starts on. The workflow that doesn't create the part keeps its own copy, with `ref` naming the other's, as `shopping.yaml#list` for a file alongside or `owner/slug#id` for a published one. Each file still checks alone. Given together, `awml check` reports a `ref` to a part that isn't there and a copy that differs from the part it names, and warns of a context more than one writes and a connector more than one reads. The other commands refuse the files until those mistakes are fixed. `awml draw` draws their map, with each shared part once between the workflows:
 
 <img src="examples/family-map.svg" alt="The family's dinners and its question, drawn together">
 

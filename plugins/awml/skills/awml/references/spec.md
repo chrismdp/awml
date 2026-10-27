@@ -203,6 +203,8 @@ Given more than one workflow:
 - `awml summary` counts each part they share once, and follows untrusted text through them. It lists the parts they share, with the workflows that have each.
 - `awml fit` judges each platform as running every workflow given, with each part they share placed once, and names each part and scope after its file, as in `dinners#plan`.
 
+A mistake that following the references finds stops `awml draw`, `awml page`, `awml summary` and `awml fit`, as a file's own mistakes do.
+
 <img src="examples/family-map.svg" alt="The family's dinners and its question, drawn together">
 
 Here the family's dinners and a question asked in the family chat share the chat, which both write to.

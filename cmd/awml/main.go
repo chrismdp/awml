@@ -592,23 +592,34 @@ func readWith(path string, find func(any) []string) (*awml.Map, []string) {
 	return doc.(*awml.Map), nil
 }
 
-// sound gives every file's document, or false once any file has mistakes, which are printed. A
-// command that draws or counts red lines takes a file whose only mistakes are lines that break a
-// rule.
+// sound gives every file's document, or false once any file has mistakes, which are printed: its own,
+// then those following each ref between the workflows given finds. A command that draws or counts
+// red lines takes a file whose only mistakes are lines that break a rule.
 func sound(paths []string, stderr io.Writer, drawn bool) ([]*awml.Map, bool) {
 	find := awml.Check
 	if drawn {
 		find = awml.Unsound
 	}
-	var docs []*awml.Map
+	docs := make([]*awml.Map, len(paths))
+	errs := make([][]string, len(paths))
+	var given []awml.Workflow
+	var at []int
+	for i, path := range paths {
+		docs[i], errs[i] = readWith(path, find)
+		if awml.IsCanonical(docs[i]) {
+			given = append(given, workflowAt(path, docs[i]))
+			at = append(at, i)
+		}
+	}
+	for n, mistakes := range awml.TogetherMistakes(given) {
+		errs[at[n]] = append(errs[at[n]], mistakes...)
+	}
 	ok := true
-	for _, path := range paths {
-		doc, errs := readWith(path, find)
-		for _, e := range errs {
+	for i, path := range paths {
+		for _, e := range errs[i] {
 			fmt.Fprintf(stderr, "%s: %s\n", path, e)
 		}
-		ok = ok && len(errs) == 0
-		docs = append(docs, doc)
+		ok = ok && len(errs[i]) == 0
 	}
 	return docs, ok
 }

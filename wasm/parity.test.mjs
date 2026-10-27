@@ -65,7 +65,8 @@ for (const path of top.sort()) {
 const everyPath = [...top.sort(), ...descriptions].map((path) => path.slice(new URL("../", import.meta.url).pathname.length));
 const everySource = await Promise.all(everyPath.map(async (file) => ({ file, source: await readFile(new URL(`../${file}`, import.meta.url), "utf8") })));
 assert.equal(api.checksJSON(everySource) + "\n", runNative(["check", "--json", ...everyPath], 1), "checks JSON for every example at once");
-assert.deepEqual(api.checks(everySource).files.map((file) => file.file), everyPath);
+// Each file named twice is read once, where it's first named, in both.
+assert.deepEqual(api.checks(everySource).files.map((file) => file.file), [...new Set(everyPath)]);
 
 const canonicalPath = new URL("testdata/canonical.yaml", import.meta.url).pathname;
 const canonicalSource = await readFile(canonicalPath, "utf8");
@@ -358,6 +359,34 @@ lines:
   await writeFile(broken[1].file, broken[1].source);
   assert.equal(api.checksJSON(broken) + "\n", runNative(["check", "--json", ...handOffPaths], 1), "checks JSON together, with a ref to a part that isn't there");
   assert.equal(api.checks(broken).checks.find((check) => check.id === "refs.known").result, "fail");
+
+  // The mistakes following the refs finds stop draw, summary and fit, which say them as awml does.
+  for (const [name, call, args] of [
+    ["draw", () => api.draw(broken), ["draw", ...handOffPaths]],
+    ["summary", () => api.summary(broken), ["summary", "--json", ...handOffPaths]],
+    ["fit", () => api.fit([...broken, ...descriptionSources]), ["fit", "--json", ...handOffPaths, ...descriptions]],
+  ]) {
+    const refused = runNativeResult(args, 1);
+    assert.equal(refused.stdout, "", `${name} of files with a ref to a part that isn't there: awml prints nothing`);
+    assert.throws(call, (error) => {
+      assert.equal(`${error.message}\n`, refused.stderr, `${name} of files with a ref to a part that isn't there`);
+      return true;
+    });
+  }
+  // One file given by name is held to a ref it makes to itself.
+  const self = { file: `${temporary}/self.yaml`, source: plan.replace("shop.yaml#ready", "self.yaml#thu") };
+  await writeFile(self.file, self.source);
+  for (const [name, call, args] of [
+    ["draw", () => api.draw(self), ["draw", self.file]],
+    ["summary", () => api.summary(self), ["summary", self.file]],
+    ["fit", () => api.fit([self, ...descriptionSources]), ["fit", self.file, ...descriptions]],
+  ]) {
+    const refused = runNativeResult(args, 1);
+    assert.throws(call, (error) => {
+      assert.equal(`${error.message}\n`, refused.stderr, `${name} of a file with a ref to itself`);
+      return true;
+    });
+  }
 } finally {
   await rm(temporary, { recursive: true });
 }

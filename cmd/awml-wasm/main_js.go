@@ -6,6 +6,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"path"
 	"strings"
 	"syscall/js"
 
@@ -27,7 +28,11 @@ func main() {
 			return errorJSON(err.Error())
 		}
 		sources := make([]awml.Source, 0, len(files))
+		named := names{}
 		for _, file := range files {
+			if named.again(file.File) {
+				continue
+			}
 			sources = append(sources, awml.Source{File: file.File, Text: []byte(file.Source)})
 		}
 		engine := version
@@ -149,10 +154,17 @@ func main() {
 		}
 		return string(encoded)
 	})
+	// __awmlDraw draws one workflow's view. Given the file's name too, it refuses a ref the file makes
+	// to itself, as awml draw does.
 	expose("__awmlDraw", func(args []js.Value) string {
 		doc, err := awml.Parse([]byte(args[0].String()))
 		if err != nil || len(awml.Unsound(doc)) != 0 {
 			return ""
+		}
+		if len(args) > 2 && args[2].Type() == js.TypeString {
+			if err := refMistakes([]awml.Workflow{{File: args[2].String(), Doc: doc.(*awml.Map)}}); err != nil {
+				return errorJSON(err.Error())
+			}
 		}
 		view, err := awml.View(doc.(*awml.Map), optionalImplementation(args))
 		if err != nil {
@@ -217,13 +229,16 @@ func warningsSource(source string) []string {
 }
 
 // readGiven reads the files given as a JSON list, each its text or { file, source }. A file's name
-// is what a ref's path is followed from. It fails on the first file find reports mistakes in.
+// is its path from one root, which a ref's path is followed from. It fails on the first file find
+// reports mistakes in, and then on the mistakes following each ref between the workflows given
+// finds, one to a line after the file's name, as awml prints them.
 func readGiven(list string, find func(any) []string) ([]awml.Workflow, error) {
 	var items []json.RawMessage
 	if err := json.Unmarshal([]byte(list), &items); err != nil {
 		return nil, err
 	}
 	workflows := make([]awml.Workflow, 0, len(items))
+	named := names{}
 	for _, item := range items {
 		var given struct {
 			File   string `json:"file"`
@@ -234,6 +249,9 @@ func readGiven(list string, find func(any) []string) ([]awml.Workflow, error) {
 				return nil, err
 			}
 		}
+		if named.again(given.File) {
+			continue
+		}
 		doc, err := awml.Parse([]byte(given.Source))
 		if err != nil {
 			return nil, errors.New("isn't YAML: " + strings.Join(strings.Fields(err.Error()), " "))
@@ -243,7 +261,51 @@ func readGiven(list string, find func(any) []string) ([]awml.Workflow, error) {
 		}
 		workflows = append(workflows, awml.Workflow{File: given.File, Doc: doc.(*awml.Map)})
 	}
+	if err := refMistakes(workflows); err != nil {
+		return nil, err
+	}
 	return workflows, nil
+}
+
+// refMistakes gives the mistakes following each ref between the workflows given finds, one to a line
+// after the file's name, as awml prints them, or nil when there are none.
+func refMistakes(given []awml.Workflow) error {
+	var workflows []awml.Workflow
+	for _, w := range given {
+		if awml.IsCanonical(w.Doc) {
+			workflows = append(workflows, w)
+		}
+	}
+	var lines []string
+	for n, mistakes := range awml.TogetherMistakes(workflows) {
+		for _, mistake := range mistakes {
+			if workflows[n].File != "" {
+				mistake = workflows[n].File + ": " + mistake
+			}
+			lines = append(lines, mistake)
+		}
+	}
+	if lines == nil {
+		return nil
+	}
+	return errors.New(strings.Join(lines, "\n"))
+}
+
+// names holds the files given so far, by their paths from one root.
+type names map[string]bool
+
+// again is whether a file of this name was given already, as awml reads a file named twice once. A
+// file given as text alone has no name, so it's never given again.
+func (n names) again(file string) bool {
+	if file == "" {
+		return false
+	}
+	at := path.Join("/", file)
+	if n[at] {
+		return true
+	}
+	n[at] = true
+	return false
 }
 
 func errorJSON(message string) string {
