@@ -37,12 +37,18 @@ printf '@font-face{font-family:"Inter";font-style:normal;font-weight:400;src:url
 render() {
   npx -y -p @mermaid-js/mermaid-cli@11.4.1 -p mermaid@11.17.2 mmdc -q -p "$tmp/puppeteer.json" -C "$tmp/inter.css" -b white -i "$1" -o "${1%.mmd}.svg"
 }
-for f in examples/*.yaml examples/tour/*.yaml examples/live/*.yaml; do
-  for drawing in $("$tmp/draw" "$f"); do
+# set -e doesn't fire for a command substitution in a for list or an argument, so the helper's
+# output is taken in an assignment, which stops the script when the helper fails.
+redraw() {
+  drawings=$("$tmp/draw" "$@")
+  for drawing in $drawings; do
     render "$drawing"
   done
+}
+for f in examples/*.yaml examples/tour/*.yaml examples/live/*.yaml; do
+  redraw "$f"
 done
 # The examples that share a part are drawn together as their map.
-render "$("$tmp/draw" -map examples/family-map.mmd examples/dinners.yaml examples/shopping.yaml examples/bills.yaml examples/pickups.yaml examples/question.yaml)"
-render "$("$tmp/draw" -map examples/bakery-map.mmd examples/bakery-stock.yaml examples/bakery-order.yaml)"
-render "$("$tmp/draw" -map examples/tour/15-split-map.mmd examples/tour/15-split-count.yaml examples/tour/15-split-order.yaml)"
+redraw -map examples/family-map.mmd examples/dinners.yaml examples/shopping.yaml examples/bills.yaml examples/pickups.yaml examples/question.yaml
+redraw -map examples/bakery-map.mmd examples/bakery-stock.yaml examples/bakery-order.yaml
+redraw -map examples/tour/15-split-map.mmd examples/tour/15-split-count.yaml examples/tour/15-split-order.yaml
