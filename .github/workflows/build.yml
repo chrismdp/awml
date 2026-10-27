@@ -192,6 +192,7 @@ jobs:
       - name: Draft the change
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
           BUILD_DIR: ${{ runner.temp }}/build
           PUPPETEER_EXECUTABLE_PATH: /usr/bin/google-chrome
         run: |
@@ -350,6 +351,7 @@ jobs:
       - name: Review the patch for bugs and for security, side by side
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
           REVIEW_DIR: ${{ runner.temp }}/review
         run: |
           review() {
@@ -417,6 +419,7 @@ jobs:
         if: steps.weigh.outputs.opens == 'true'
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
           REVIEW_DIR: ${{ runner.temp }}/review
         run: |
           prompt="$(sed "s|REVIEW_DIR|$REVIEW_DIR|g" "$RUNNER_TEMP/classify-prompt.md")"

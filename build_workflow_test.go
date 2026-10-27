@@ -13,6 +13,7 @@ type workflowStep struct {
 	Uses string            `yaml:"uses"`
 	Run  string            `yaml:"run"`
 	With map[string]string `yaml:"with"`
+	Env  map[string]string `yaml:"env"`
 }
 
 type workflowJob struct {
@@ -259,6 +260,26 @@ func TestTheGoCacheIsNeverShared(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// Every step that runs Claude Code holds the maintainer's login token, so Claude Code strips it,
+// and any other credential, from the commands it starts, which text in an issue could steer.
+func TestClaudesCommandsNeverSeeItsToken(t *testing.T) {
+	found := 0
+	for name, job := range readBuildWorkflow(t) {
+		for _, step := range job.Steps {
+			if _, holds := step.Env["CLAUDE_CODE_OAUTH_TOKEN"]; !holds {
+				continue
+			}
+			found++
+			if step.Env["CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"] != "1" {
+				t.Errorf("build.yml's %s step %q gives Claude its token without scrubbing it from Claude's commands", name, step.Name)
+			}
+		}
+	}
+	if found == 0 {
+		t.Error("no step in build.yml runs Claude Code with its token")
 	}
 }
 
