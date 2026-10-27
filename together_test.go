@@ -220,17 +220,33 @@ func TestAnOutsideActionsRefNamesTheTriggerOfTheWorkflowItStarts(t *testing.T) {
 	}
 }
 
-// Starting another workflow is an outside action, which carries nothing into it: the text it starts
-// with is the other workflow's to mark, on its own trigger.
-func TestUntrustedTextDoesntFollowAnOutsideActionIntoTheWorkflowItStarts(t *testing.T) {
+// Given together, untrusted text that reaches an outside action carries on into the trigger it
+// starts, and through the workflow it starts. Checked alone, the started workflow doesn't know.
+func TestUntrustedTextFollowsAnOutsideActionIntoTheWorkflowItStarts(t *testing.T) {
+	stop := `: a review, a person's own step or a code step marked cleans in between would stop it`
 	plan := strings.Replace(planWorkflow, "  - { id: tell,", "  - { id: form, kind: connector, label: The order form, untrusted: true, in: family }\n  - { id: tell,", 1)
 	plan = strings.Replace(plan, "lines:\n", "lines:\n  - { from: form, to: tell, kind: data }\n", 1)
 	workflows := together(t, "plan.yaml", plan, "shop.yaml", shopWorkflow)
-	if got := TogetherWarnings(workflows); !reflect.DeepEqual(got, [][]string{nil, nil}) {
-		t.Errorf("TogetherWarnings gave %q", got)
+	if got := Warnings(workflows[0].Doc); !reflect.DeepEqual(got, []string{`untrusted text from part "form" reaches outside action "ready"` + stop}) {
+		t.Errorf("the plan alone warns %q", got)
 	}
-	if got := SummariseTogether(workflows).Untrusted; len(got) != 1 || !reflect.DeepEqual(got[0].OutsideActions, []string{"Start the shopping: Allow"}) {
-		t.Errorf("the summary's untrusted parts are %+v", got)
+	if got := Warnings(workflows[1].Doc); len(got) != 0 {
+		t.Errorf("the shopping alone warns %q", got)
+	}
+	want := [][]string{nil, {`untrusted text from part "form" in plan.yaml reaches outside action "basket"` + stop}}
+	if got := TogetherWarnings(workflows); !reflect.DeepEqual(got, want) {
+		t.Errorf("TogetherWarnings gave\n  %q\nwant\n  %q", got, want)
+	}
+	untrusted := []UntrustedSummary{{Part: "The order form", Steps: []string{"Tell the shopping the list is ready", "Fill the basket"},
+		OutsideActions: []string{"Start the shopping: Allow", "Fill the basket: Allow"}}}
+	if got := SummariseTogether(workflows).Untrusted; !reflect.DeepEqual(got, untrusted) {
+		t.Errorf("the summary's untrusted parts are %+v\nwant %+v", got, untrusted)
+	}
+	// A review in the started workflow stops it there.
+	shop := strings.Replace(shopWorkflow, "  - { from: ready, to: fill, kind: start }", "  - { from: ready, to: ok, kind: start }\n  - { from: ok, to: fill, kind: start }", 1)
+	shop = strings.Replace(shop, "  - { id: fill,", "  - { id: ok, kind: review, label: Check the list, in: home }\n  - { id: fill,", 1)
+	if got := TogetherWarnings(together(t, "plan.yaml", plan, "shop.yaml", shop)); !reflect.DeepEqual(got, [][]string{nil, nil}) {
+		t.Errorf("TogetherWarnings past a review gave %q", got)
 	}
 }
 
@@ -415,6 +431,15 @@ func TestTheMapDrawsAnOutsideActionOnlyWhereItStartsAWorkflowGiven(t *testing.T)
 	}
 	if strings.Contains(got, "-->") {
 		t.Errorf("the map draws a hand-off to a workflow not given:\n%s", got)
+	}
+}
+
+// Every trigger is one its workflow runs on, so the map draws it even with no line out of it.
+func TestTheMapDrawsEveryTrigger(t *testing.T) {
+	plan := strings.Replace(planWorkflow, "  - { id: plan,", "  - { id: sun, kind: trigger, label: Sunday, wait: PT1H }\n  - { id: plan,", 1)
+	got := DrawMap(together(t, "plan.yaml", plan, "shop.yaml", shopWorkflow))
+	if want := "    w1_thu([\"Thursday 19#58;00\"])\n    w1_sun([\"Sunday\"])\n"; !strings.Contains(got, want) {
+		t.Errorf("the map lacks\n%s\nin\n%s", want, got)
 	}
 }
 

@@ -36,7 +36,7 @@ func TestThereAreExamples(t *testing.T) {
 	for _, p := range examples(t) {
 		names = append(names, strings.TrimSuffix(strings.TrimPrefix(p, "examples/"), ".yaml"))
 	}
-	want := []string{"client-email", "dinners", "legend", "question",
+	want := []string{"bakery-order", "bakery-stock", "client-email", "dinners", "legend", "question",
 		"tour/01-draft-and-send", "tour/02-fork", "tour/03-refused-read", "tour/04-publishing", "tour/05-side-by-side",
 		"tour/07-person-step", "tour/08-gap", "tour/09-platform-view", "tour/10-operations",
 		"tour/11-do", "tour/12-standing-approval", "tour/13-check-by-code", "tour/14-untrusted-text"}
@@ -131,26 +131,43 @@ func TestEachExampleIsSoundAndItsDrawingsAreCurrent(t *testing.T) {
 	}
 }
 
-// The family's dinners and its question share the family chat, so they're drawn together as a map.
-// examples/render.sh draws its SVG.
+// The family's dinners and its question share the family chat, and the bakery's stock count shares
+// its stock levels with the supplier order and starts it, so each pair is drawn together as a map.
+// examples/render.sh draws their SVGs.
 func TestTheExamplesThatShareAPartAreDrawnTogether(t *testing.T) {
-	var workflows []Workflow
-	for _, path := range []string{"examples/dinners.yaml", "examples/question.yaml"} {
-		workflows = append(workflows, Workflow{File: path, Doc: readExample(t, path)})
-	}
-	if got := TogetherMistakes(workflows); !reflect.DeepEqual(got, [][]string{nil, nil}) {
-		t.Errorf("together they have mistakes: %q", got)
-	}
-	if got := SummariseTogether(workflows).Shared; len(got) == 0 {
-		t.Error("they share no part")
-	}
-	mmd, err := os.ReadFile("examples/family-map.mmd")
-	if err != nil || string(mmd) != DrawMap(workflows)+"\n" {
-		t.Error("examples/family-map.mmd isn't what awml draw examples/dinners.yaml examples/question.yaml draws now: run examples/render.sh")
-	}
-	script, err := os.ReadFile("examples/render.sh")
-	if err != nil || !strings.Contains(string(script), "-map examples/family-map.mmd examples/dinners.yaml examples/question.yaml") {
-		t.Error("examples/render.sh doesn't draw the family's map")
+	for _, example := range []struct {
+		drawing string
+		paths   []string
+		starts  bool
+	}{
+		{"examples/family-map.mmd", []string{"examples/dinners.yaml", "examples/question.yaml"}, false},
+		{"examples/bakery-map.mmd", []string{"examples/bakery-stock.yaml", "examples/bakery-order.yaml"}, true},
+	} {
+		var workflows []Workflow
+		for _, path := range example.paths {
+			workflows = append(workflows, Workflow{File: path, Doc: readExample(t, path)})
+		}
+		if got := TogetherMistakes(workflows); !reflect.DeepEqual(got, [][]string{nil, nil}) {
+			t.Errorf("%s: together they have mistakes: %q", example.drawing, got)
+		}
+		if got := TogetherWarnings(workflows); !reflect.DeepEqual(got, [][]string{nil, nil}) {
+			t.Errorf("%s: together they have warnings: %q", example.drawing, got)
+		}
+		if got := SummariseTogether(workflows).Shared; len(got) == 0 {
+			t.Errorf("%s: they share no part", example.drawing)
+		}
+		if got := len(link(workflows).starts) > 0; got != example.starts {
+			t.Errorf("%s: one starts the other is %v, want %v", example.drawing, got, example.starts)
+		}
+		draw := "awml draw " + strings.Join(example.paths, " ")
+		mmd, err := os.ReadFile(example.drawing)
+		if err != nil || string(mmd) != DrawMap(workflows)+"\n" {
+			t.Errorf("%s isn't what %s draws now: run examples/render.sh", example.drawing, draw)
+		}
+		script, err := os.ReadFile("examples/render.sh")
+		if err != nil || !strings.Contains(string(script), "-map "+example.drawing+" "+strings.Join(example.paths, " ")) {
+			t.Errorf("examples/render.sh doesn't draw %s", example.drawing)
+		}
 	}
 }
 

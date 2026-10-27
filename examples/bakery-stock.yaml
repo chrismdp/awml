@@ -1,0 +1,22 @@
+awml: "0.7"
+title: The bakery's stock count
+description: |
+  Each evening, code works out what the day's baking used from the till's sales and keeps the stock
+  levels. When flour, butter or sugar runs low, it starts the bakery's supplier order, which is a
+  workflow of its own. The bakery is fictional.
+scopes:
+  - { id: bakery, label: "bakery: Ana, Sam" }
+parts:
+  - { id: close, kind: trigger, label: "Every day 18:00" }
+  - { id: till, kind: connector, label: "The till's sales", in: bakery }
+  - { id: count, kind: code, op: bring-in, label: "Work out what the day's baking used", in: bakery }
+  - { id: stock, kind: context, label: "Stock levels", in: bakery }
+  - { id: tell, kind: code, op: do, label: "Start the order when anything runs low", in: bakery }
+  - { id: start, kind: outside, label: "Start the supplier order: Allow", in: bakery, ref: bakery-order.yaml#low }
+lines:
+  - { from: close, to: count, kind: start }
+  - { from: till, to: count, kind: data }
+  - { from: count, to: stock, kind: data }
+  - { from: count, to: tell, kind: start }
+  - { from: stock, to: tell, kind: data }
+  - { from: tell, to: start, kind: start }
