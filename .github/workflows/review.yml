@@ -59,7 +59,8 @@ jobs:
       # The reviews read the patch as data and follow main's prompts and REVIEW.md, so a branch
       # can't rewrite what it's held to. They're kept before the patch is applied. The patch is
       # GitHub's diff of the head commit against the commit of main the branch started from, so it
-      # applies there as it is, and `git diff --cached` shows the whole change. A patch that touches
+      # applies there, and `git diff --cached` shows the change, all but binary images, fonts and
+      # WebAssembly, which are listed for the reviewers instead. A patch that touches
       # Claude Code's own settings, .claude/, .mcp.json or a CLAUDE.md, is refused before any session
       # starts, and no session loads settings or servers from the tree.
       - name: Bring in the pull request's patch against main, and main's REVIEW.md and review prompts
@@ -94,13 +95,17 @@ jobs:
             added="${record%%$'\t'*}"
             path="${record#*$'\t'}"
             path="${path#*$'\t'}"
+            old=""
             if [ -z "$path" ]; then
               IFS= read -r -d '' old
               IFS= read -r -d '' path
               paths+=("$old")
             fi
             paths+=("$path")
-            [ "$added" = "-" ] && binaries+=("$path")
+            if [ "$added" = "-" ]; then
+              binaries+=("$path")
+              [ -n "$old" ] && binaries+=("$old")
+            fi
           done < <(git apply --numstat -z "$review/change.patch")
           claudes='(^|/)\.claude(/|$)|(^|/)\.mcp\.json$|(^|/)CLAUDE(\.local)?\.md$'
           if [ "${#paths[@]}" -gt 0 ] && printf '%s\0' "${paths[@]}" | grep -zqE "$claudes"; then
@@ -108,9 +113,18 @@ jobs:
             printf '%s\0' "${paths[@]}" | grep -zE "$claudes" | tr '\0' '\n'
             exit 1
           fi
-          # GitHub's diff names a binary file without its contents, so git can't apply it. Leave out
-          # each binary file's section, apply the rest, and tell the reviewers which binary files
-          # changed. Then check that every other file the patch touches is staged.
+          # GitHub's diff names a binary file without its contents, so git can't apply it, and the
+          # reviews can't read it. A file is binary to git if it holds one NUL byte, so only images,
+          # fonts and WebAssembly outside .github/ are let through unread; any other binary file
+          # stops the review. Leave out each binary file's section, apply the rest, and tell the
+          # reviewers which binary files changed. Then check that every other file is staged.
+          readable='\.(png|jpe?g|gif|webp|ico|ttf|otf|woff2?|wasm)$'
+          for binary in "${binaries[@]}"; do
+            if [[ "$binary" == .github/* ]] || ! [[ "$binary" =~ $readable ]]; then
+              echo "The patch changes $binary, which GitHub's diff shows only as binary, so the reviews couldn't read it."
+              exit 1
+            fi
+          done
           awk 'function flush() { if (section != "" && !binary) printf "%s", section; section = ""; binary = 0 }
             /^diff --git / { flush() }
             { section = section $0 "\n" }
