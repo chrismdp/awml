@@ -98,7 +98,7 @@ In the security view, a `data` line into a box that isn't the source's or one in
 - `awml draw standup.yaml` prints the file's Mermaid, which needs Mermaid 11.4.1 or later. Where the host renders Mermaid, show it in a `mermaid` code block.
 - `awml draw --implementation ID standup.yaml` prints that implementation's platform view.
 - `awml draw --untrusted standup.yaml` prints the untrusted view, for a file that marks a part untrusted.
-- `awml draw dinners.yaml shopping.yaml` prints the map of workflows that share parts: a box for each, each shared part once between them, and a line from each outside action that starts another workflow to the trigger it starts.
+- `awml draw dinners.yaml shopping.yaml` prints the map of workflows that share parts: a box for each, each trigger outside its workflow's box with a line into it, each shared part once between them, and a line from each outside action that starts another workflow to the trigger it starts.
 - `awml page standup.yaml -o standup.html` writes one standalone HTML page with the security view and every implementation, to share or open in a browser.
 - For an SVG, save the Mermaid to `standup.mmd` and run `npx -y @mermaid-js/mermaid-cli@11.4.1 -b white -i standup.mmd -o standup.svg`, which needs Node.
 

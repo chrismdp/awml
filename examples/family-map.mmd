@@ -9,18 +9,22 @@ config:
       bottom: 30
 ---
 flowchart TB
+  w1_thu(["Thursday 19#58;00"])
+  w1_sat(["Saturday 09#58;00"])
+  w1_daily(["Every day 07#58;00"])
   subgraph w1["The family#39;s dinners"]
     direction TB
-    w1_thu(["Thursday 19#58;00"])
-    w1_sat(["Saturday 09#58;00"])
-    w1_daily(["Every day 07#58;00"])
   end
+  w2_ask(["Someone in the family chat asks what time swimming is"])
   subgraph w2["A question in the family chat"]
     direction TB
-    w2_ask(["Someone in the family chat asks what time swimming is"])
   end
   s1@{ shape: win-pane, label: "Family chat" }
 
+  w1_thu --> w1
+  w1_sat --> w1
+  w1_daily --> w1
+  w2_ask --> w2
   w1 -.-> s1
   w2 -.-> s1
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b

@@ -9,17 +9,19 @@ config:
       bottom: 30
 ---
 flowchart TB
+  w1_close(["Every day 18#58;00"])
   subgraph w1["The bakery#39;s stock count"]
     direction TB
-    w1_close(["Every day 18#58;00"])
     w1_start>"Start the supplier order#58; Allow"]
   end
+  w2_low(["Flour#44; butter or sugar runs low"])
   subgraph w2["The bakery#39;s supplier order"]
     direction TB
-    w2_low(["Flour#44; butter or sugar runs low"])
   end
   s1[("Stock levels")]
 
+  w1_close --> w1
+  w2_low --> w2
   w1 <-.-> s1
   s1 -.-> w2
   w1_start --> w2_low

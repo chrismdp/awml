@@ -623,11 +623,11 @@ func (l linked) list(warnings bool) [][]string {
 // workflowBox is how the map draws a workflow's box: solid, since it's a workflow, not a scope.
 const workflowBox = "fill:#f6f7f9,stroke:#5d6472,color:#16171b"
 
-// DrawMap draws workflows given together as their map: a box for each workflow, with its title, its
-// triggers and each outside action that starts a workflow given; and each shared part once, between the boxes, with a
-// line from each workflow that leads into it and to each that it leads into. Each hand-off is a line
-// from the action to the trigger it starts. Each workflow must have no mistakes but lines that break
-// a rule.
+// DrawMap draws workflows given together as their map: a box for each workflow, with its title and
+// each outside action that starts a workflow given, and its triggers outside it, each with a line
+// into it; and each shared part once, between the boxes, with a line from each workflow that leads
+// into it and to each that it leads into. Each hand-off is a line from the action to the trigger it
+// starts. Each workflow must have no mistakes but lines that break a rule.
 func DrawMap(workflows []Workflow) string {
 	l := link(workflows)
 	out := append([]string{}, header...)
@@ -637,18 +637,27 @@ func DrawMap(workflows []Workflow) string {
 	for _, h := range l.starts {
 		ends[h.action.part], ends[h.trigger.part] = true, true
 	}
+	var starts []string
 	for w, workflow := range workflows {
 		box := fmt.Sprintf("w%d", w+1)
-		out = append(out, fmt.Sprintf(`  subgraph %s["%s"]`, box, text(str(workflow.Doc, "title"))), "    direction TB")
+		var inside []string
 		for _, p := range items(workflow.Doc, "parts") {
-			if _, shared := l.root[p]; shared || str(p, "kind") != "trigger" && !ends[p] {
+			trigger := str(p, "kind") == "trigger"
+			if _, shared := l.root[p]; shared || !trigger && !ends[p] {
 				continue
 			}
 			node[p] = box + "_" + str(p, "id")
 			drawn = append(drawn, p)
-			out = append(out, "    "+node[p]+fmt.Sprintf(shapes[str(p, "kind")], label(p, false)))
+			shape := node[p] + fmt.Sprintf(shapes[str(p, "kind")], label(p, false))
+			if trigger {
+				out = append(out, "  "+shape)
+				starts = append(starts, fmt.Sprintf("  %s --> %s", node[p], box))
+			} else {
+				inside = append(inside, "    "+shape)
+			}
 		}
-		out = append(out, "  end")
+		out = append(out, fmt.Sprintf(`  subgraph %s["%s"]`, box, text(str(workflow.Doc, "title"))), "    direction TB")
+		out = append(append(out, inside...), "  end")
 	}
 	for n, copies := range l.shared {
 		root := copies[0].part
@@ -656,7 +665,7 @@ func DrawMap(workflows []Workflow) string {
 		drawn = append(drawn, root)
 		out = append(out, "  "+node[root]+fmt.Sprintf(shapes[str(root, "kind")], label(l.sharedPart(copies[0]), false)))
 	}
-	out = append(out, "")
+	out = append(append(out, ""), starts...)
 	for n, copies := range l.shared {
 		shared := fmt.Sprintf("s%d", n+1)
 		into, outOf := map[int]bool{}, map[int]bool{}
