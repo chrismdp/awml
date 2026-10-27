@@ -1,4 +1,4 @@
-awml: "0.7"
+awml: "0.8"
 title: The bakery's stock count and morning order, in one file
 description: |
   Two workflows drawn as one. Each evening code counts what the day's baking used, and each morning

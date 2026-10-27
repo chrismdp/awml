@@ -1,0 +1,33 @@
+awml: "0.8"
+title: Answering customers on the bakery's website
+description: |
+  A standing approval over actions that can't be undone. Every 15 minutes, the bakery answers the
+  questions about opening hours and allergens that customers asked on its website's chat. A reply
+  to a customer can't be taken back, but Ana and the bakery's insurer read the replies to the March
+  test set and accepted the risk of each one going out without a yes. So the replies go under Ana's
+  standing approval, within its limits, and each is listed for Ana as sent. A code step sends only
+  replies made of sentences from Ana's answer sheet, so the customers' text can't steer what goes
+  out. The bakery and its people are fictional.
+scopes:
+  - { id: bakery, label: "bakery: Ana, Ben" }
+parts:
+  - { id: quarter, kind: trigger, label: "Every 15 minutes" }
+  - { id: chat, kind: connector, label: "The website's chat", in: bakery, untrusted: true }
+  - { id: bring, kind: code, op: bring-in, label: "Bring in the questions that arrived", in: bakery }
+  - { id: sheet, kind: context, label: "Ana's answer sheet: hours and allergens", in: bakery }
+  - { id: draft, kind: ai, op: draft, label: "Draft a reply to each question about opening hours or allergens, from the answer sheet", in: bakery }
+  - { id: send, kind: code, op: do, label: "Send each reply made only of sentences from the answer sheet", in: bakery, cleans: true }
+  - { id: approval, kind: approval, label: "Ana's standing approval: hours and allergens replies only, up to fifty a day, risk accepted by Ana and the bakery's insurer on the March test set", in: bakery }
+  - { id: reply, kind: outside, label: "Send the reply to the customer: Ask", in: bakery }
+  - { id: list, kind: surface, label: "Ana's list", in: bakery }
+lines:
+  - { from: quarter, to: bring, kind: start }
+  - { from: chat, to: bring, kind: data, label: new questions }
+  - { from: bring, to: draft, kind: start }
+  - { from: sheet, to: draft, kind: data }
+  - { from: draft, to: send, kind: start }
+  - { from: sheet, to: send, kind: data }
+  - { from: send, to: approval, kind: start }
+  - { from: approval, to: reply, kind: data, label: "[within limits]" }
+  - { from: reply, to: chat, kind: data }
+  - { from: approval, to: list, kind: data, label: "each reply, as sent" }

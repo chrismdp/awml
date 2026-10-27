@@ -12,6 +12,7 @@ import (
 // version comes back as it is. The file needn't pass Check, and the result may not either, since
 // newer versions hold a file to rules older ones didn't.
 //
+// From 0.7, only the version changes, since 0.8 changed only what a standing approval may cover.
 // From 0.6, a trigger of another workflow that only do steps lead into becomes their outside action,
 // which refers to it, since a trigger is never a destination. From 0.5, each publish line becomes a
 // data line, since a data line publishes whenever its scopes make it one. A line's breaks goes,
@@ -26,7 +27,7 @@ func Upgrade(doc any) (*Map, error) {
 // author to do by hand.
 func upgrade(doc any) (*Map, []string, error) {
 	file, err := upgradeFile(doc)
-	if err != nil || file == doc {
+	if err != nil || file == doc || doc.(*Map).get("awml") == "0.7" {
 		return file, nil, err
 	}
 	notes := startOutsideActions(file)
@@ -44,7 +45,7 @@ func upgradeFile(doc any) (*Map, error) {
 		return file, nil
 	case !isOneOf(version, olderFormats...):
 		return nil, fmt.Errorf(`awml convert reads versions %s to %s, not "%s"`, olderFormats[0], currentFormat, show(version))
-	case file.has("platform"):
+	case file.has("platform") || version == "0.7":
 		out := copyMap(file)
 		out.set("awml", currentFormat)
 		return out, nil

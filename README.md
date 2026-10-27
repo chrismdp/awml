@@ -138,7 +138,7 @@ The operating model has little to do with AI: it's how work is organised, whoeve
 - A **trigger** is a pink pill. It starts the workflow: a time, such as `Weekdays 07:00`, or an event, such as someone asking in a chat or an email arriving.
 - A **step** is a rounded box: one piece of work, with the colour and emoji of who decides it.
 - A **review** is an amber rounded box, like a step, with `👤 ✅ review` above its label: a person's yes to exact content before it goes ahead. Its one way out is a line with the guard `[yes]`.
-- A **standing approval** is an amber rounded box too, with `👤 📜 standing approval` above its label: a person's yes given once to named kinds of action, within limits.
+- A **standing approval** is an amber rounded box too, with `👤 📜 standing approval` above its label: a person's yes given once, in advance, to each action of named kinds that a scheduled task takes, within limits.
 - A **fork** is a black bar, where work splits to run side by side.
 - A **context** is a pale blue cylinder: the notes a step may read or write, kept as one folder.
 - A **connector** is a grey hexagon: someone's access to an outside service, such as a calendar, a mailbox or a bank account.
@@ -279,7 +279,7 @@ Content moves between scopes in only two ways.
 
 Nobody marks a publish. A `data` line publishes whenever its scopes make it one, and the drawing adds to its label who it adds, what it loosens, or both, as in `standing rule: dinners to carers · adds June and Beth`. So a step put in the wrong scope by mistake shows up as a publish when you read the drawing.
 
-Publishing waits for a person's yes, unless a **standing rule** names that target for that kind of item. A standing rule moves only the words of people who agreed to that target, and the thick line's label names the rule and who they are, as in `co-op notes, under the bakery's rule, for customers who ticked the box`. Only the item crosses, never what lies behind it. Nothing reaches the public without a person's yes to that item, under any rule or approval.
+Publishing waits for a person's yes, unless a **standing rule** names that target for that kind of item. A standing rule moves only the words of people who agreed to that target, and the thick line's label names the rule and who they are, as in `co-op notes, under the bakery's rule, for customers who ticked the box`. Only the item crosses, never what lies behind it. Nothing reaches the public without a person's yes to that item, and a standing rule never takes an item public. The one exception is an outside action that is public, under a [standing approval](#standing-approvals) whose label says who accepted the risk and on what evidence.
 
 ## Connectors
 
@@ -327,13 +327,20 @@ An **approver** is a role, such as the approver of sends, held by one or more pe
 
 ## Standing approvals
 
-Asking for a yes to every small, reversible action soon trains people to say yes without looking. A **standing approval** is the way out. The person who answers for a scheduled task approves it once to take named kinds of action that can be undone, within limits such as how many and how often, so each item doesn't wait for a yes. Each action under it is recorded and listed for that person, with how to undo it. One that acts in someone else's name needs their yes too, and ends when their access does. Nothing that can't be undone goes this way, such as a send to a person or a payment, and nothing that reaches the public.
+Asking for a yes to every small action soon trains people to say yes without looking. A **standing approval** is the way out. The person who answers for a scheduled task approves it once, in advance, to take named kinds of action within limits such as how many and how often, so each item doesn't wait for a yes. One that acts in someone else's name needs their yes too, and ends when their access does.
 
-A standing approval is a part of its own, in the box of the person who gives it, between the `do` step and the Ask actions it covers. Its label says whose it is and gives its kinds and limits. A line from it goes to the surface where each action is listed with how to undo it, and `awml check` reports one without. No drawing shows whether an action can be undone, so that stays for its readers to judge.
+It may cover two kinds of action, and its label says which:
+
+- **Actions that can be undone,** such as renewing a library book. The label says whose it is and gives its kinds and limits, as in `Sam's standing approval: renewals only, up to six a week`.
+- **Actions that can't be undone, or that are public,** such as a reply to a customer, where someone has knowingly accepted the risk of each one going out without a yes. The label also says who accepted the risk and on what evidence, as in `Ana's standing approval: hours and allergens replies only, up to fifty a day, risk accepted by Ana and the bakery's insurer on the March test set`.
+
+Nobody looks at each item before it goes, so a standing approval suits frequent, low-stakes actions, or ones whose risk someone has knowingly accepted. Anything else waits for a review.
+
+A standing approval is a part of its own, in the box of the person who gives it, between the `do` step and the Ask actions it covers. Each action under it is recorded and listed for that person: with how to undo it where it can be undone, and as sent where it can't. A line from it goes to the surface where they're listed, and `awml check` reports one without. No drawing shows whether an action can be undone, or whether someone accepted its risk, so `awml check` accepts a standing approval in front of any Ask action. When you read one, check that its kinds and limits are as narrow as the work needs, that each action it covers can be undone or its label says who accepted the risk and on what evidence, and that its line goes to a surface the person who gave it reads.
 
 ![Library renewals under a standing approval](examples/tour/12-standing-approval.svg)
 
-Here Sam approved the morning renewals once, for renewals only and up to six a week, and each renewal is listed on Sam's list.
+Here Sam approved the morning renewals once, for renewals only and up to six a week, and each renewal is listed on Sam's list with how to undo it. The bakery's replies to customers, in the [gallery](#replies-under-an-accepted-risk), go under a standing approval too, though none can be taken back.
 
 ## Untrusted text
 
@@ -429,6 +436,12 @@ Split at the triggers, each file holds one workflow with one line running throug
 
 ![The stock count and the morning order, split and drawn together](examples/tour/15-split-map.svg)
 
+### Replies under an accepted risk
+
+Every 15 minutes, the bakery answers the questions about opening hours and allergens that customers asked on its website's chat. A reply can't be taken back, but Ana and the bakery's insurer read the replies to the March test set and accepted the risk, so each goes under Ana's standing approval, whose label says so, and is listed on Ana's list as sent. A code step sends only replies made of sentences from Ana's answer sheet, so the customers' text stops there.
+
+![Replies to customers under Ana's standing approval](examples/tour/16-accepted-risk.svg)
+
 ## Improving one step at a time
 
 Once each step is a box with a known input and a known output, you can improve it on its own.
@@ -473,8 +486,8 @@ awml pull family/dinners@1 -o dinners
 - `awml graph` takes what `awml draw` takes, and prints what it would draw as JSON, with nothing laid out, for a tool that lays the drawing out itself. Each id is the one `awml draw` gives it, and the spec lists the fields. Its text isn't escaped and keeps its line breaks, so a tool that shows it must escape it and handle them.
 - `awml page` writes one standalone HTML page with the security view, the untrusted view if there is one, then every implementation, each with a heading. Several files appear in the order given. The page takes their shared title, or Workflows when they differ.
 - `awml summary` counts the scopes, platforms, parts and lines in one workflow, and lists every publish with what it adds or loosens. It includes platforms from every implementation and counts the design once, and lists what each untrusted part's text reaches. Given several workflows, it counts each part they share once, and lists those parts. `--json` prints the registry's JSON form.
-- `awml convert old.yaml` upgrades a file of any older version to 0.7, printed to standard output, and every other command refuses an older file. A trigger of another workflow that only `do` steps lead into becomes their outside action, which starts that workflow, and convert says where any untrusted mark it drops belongs. A `publish` line becomes a `data` line, and a line marked red with `breaks` loses it, gaining a comment if the check doesn't find what it breaks. `awml convert security.yaml platform.yaml` joins a matching 0.3 or 0.2 pair into one file, turning platform groups into blocks of the `default` implementation. Add `--implementation ID` to name the implementation. YAML comments move to the top. If it notes something to do by hand, or the new version's rules find mistakes in the result, it lists them and exits 1.
-- `awml login` saves an API token for the registry. `awml push` checks and uploads one 0.7 file in the API's workflow field. `awml pull` downloads the latest or a numbered version as `<slug>.yaml`, and `awml pull owner/platforms/slug` does the same for a published platform description. It still downloads an older pair as `security.yaml` and `platform.yaml`. The commands use `https://awml.io` unless `--registry` or `AWML_REGISTRY_URL` says otherwise. Add `--private` to the first push of a private organisation workflow.
+- `awml convert old.yaml` upgrades a file of any older version to 0.8, printed to standard output, and every other command refuses an older file. A trigger of another workflow that only `do` steps lead into becomes their outside action, which starts that workflow, and convert says where any untrusted mark it drops belongs. A `publish` line becomes a `data` line, and a line marked red with `breaks` loses it, gaining a comment if the check doesn't find what it breaks. `awml convert security.yaml platform.yaml` joins a matching 0.3 or 0.2 pair into one file, turning platform groups into blocks of the `default` implementation. Add `--implementation ID` to name the implementation. YAML comments move to the top. If it notes something to do by hand, or the new version's rules find mistakes in the result, it lists them and exits 1.
+- `awml login` saves an API token for the registry. `awml push` checks and uploads one 0.8 file in the API's workflow field. `awml pull` downloads the latest or a numbered version as `<slug>.yaml`, and `awml pull owner/platforms/slug` does the same for a published platform description. It still downloads an older pair as `security.yaml` and `platform.yaml`. The commands use `https://awml.io` unless `--registry` or `AWML_REGISTRY_URL` says otherwise. Add `--private` to the first push of a private organisation workflow.
 
 For example, the client email workflow can run on the scheduled scripts platform, while the other descriptions show why they don't fit:
 
@@ -510,7 +523,7 @@ Workflows hand work on through a context one writes and another reads, and may s
 One file holds one workflow and its implementations:
 
 ```yaml
-awml: "0.7"
+awml: "0.8"
 title: The family's dinners
 description: |
   Plans the family's dinners each Thursday. The family is fictional.
@@ -534,7 +547,7 @@ implementations:
       - { id: phone, label: Family phone, parts: [chat] }
 ```
 
-- The file needs `awml`, the version `"0.7"`; `title`, the workflow's name; and `parts`. It may have `description`, what the workflow is for in Markdown, and `scopes`, `lines` and `implementations`. Upgrade a file of an older version with `awml convert`.
+- The file needs `awml`, the version `"0.8"`; `title`, the workflow's name; and `parts`. It may have `description`, what the workflow is for in Markdown, and `scopes`, `lines` and `implementations`. Upgrade a file of an older version with `awml convert`.
 - A **scope** has an `id` and a `label`, and may have `in`, the id of its parent scope, and `processing`, the companies it allows.
 - A **part** has an `id`, a `kind` and a `label`, which a fork doesn't need. Its `in` names its scope. A step may have `op`, a trigger `wait`, and a context `at`. A trigger, connector or context may have `untrusted`, and a code step `cleans`. A context, connector or surface may have `ref`, the part of another workflow it is, and an outside action `ref`, the trigger of the workflow it starts.
 - An **implementation** has an id in the `implementations` map, a `label` and `blocks`. Each block has an `id`, a `label` and `parts`, the ids it holds. It may have `in`, its parent block, and `platform`, a platform description id: a bare id for your own, or `owner/platforms/slug` for one published to the registry. Every part except a trigger or comment needs exactly one block per implementation.
@@ -562,6 +575,6 @@ Besides the gallery, [`examples/`](examples) has workflows to start from. The fa
 
 ## Status and licence
 
-Draft 0.7. The notation and the file format may still change.
+Draft 0.8. The notation and the file format may still change.
 
 MIT. See `LICENSE`.

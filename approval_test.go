@@ -8,7 +8,7 @@ import (
 
 // A workflow in which a standing approval stands between a code do step and the action it covers,
 // and lists each action on the person's own surface.
-const standing = `awml: "0.7"
+const standing = `awml: "0.8"
 title: Prices
 scopes:
   - { id: owner, label: "owner: Ana" }
@@ -51,7 +51,7 @@ func TestAStandingApprovalIsDrawnAsAPersonsYes(t *testing.T) {
 // tiered is a file with the parts every tier test needs, and the lines given.
 func tiered(t *testing.T, outside string, lines ...string) *Map {
 	t.Helper()
-	src := `awml: "0.7"
+	src := `awml: "0.8"
 title: Tiers
 parts:
   - { id: go, kind: trigger, label: Go }
@@ -117,7 +117,16 @@ func TestAnOutsideActionsLabelEndsWithItsTier(t *testing.T) {
 
 func TestAStandingApprovalListsItsActionsOnASurface(t *testing.T) {
 	doc := parsed(t, strings.Replace(standing, "  - { from: ana_ok, to: list, kind: data, label: \"each change, with how to undo it\" }\n", "", 1))
-	mistakes(t, doc, `standing approval "ana_ok" leads to no surface: draw a line from it to the surface where each action it covers is listed with how to undo it`)
+	mistakes(t, doc, `standing approval "ana_ok" leads to no surface: draw a line from it to the surface where each action it covers is listed`)
+}
+
+// A standing approval may cover actions that can't be undone, each listed as sent, so neither the
+// check's message nor what it says of itself asks for how to undo each one.
+func TestTheStandingApprovalCheckDoesntAskHowToUndoEachAction(t *testing.T) {
+	report := CheckSources("dev", []Source{source("prices.yaml", standing)})
+	if got := checkResult(t, report, "approvals.listed"); strings.Contains(got.About, "undo") {
+		t.Errorf("approvals.listed says %q", got.About)
+	}
 }
 
 func TestOnlyADoStepLeadsToAnOutsideActionThroughAStandingApproval(t *testing.T) {
@@ -156,12 +165,12 @@ func TestTheTierChecksPassOrFail(t *testing.T) {
 }
 
 func TestAWorkflowIsWrittenInTheCanonicalOrder(t *testing.T) {
-	doc := parsed(t, "title: Prices\nparts: []\nawml: \"0.7\"\n")
+	doc := parsed(t, "title: Prices\nparts: []\nawml: \"0.8\"\n")
 	got, err := Marshal(doc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := "awml: \"0.7\"\ntitle: Prices\nparts: []\n"; string(got) != want {
+	if want := "awml: \"0.8\"\ntitle: Prices\nparts: []\n"; string(got) != want {
 		t.Errorf("Marshal gave\n%s\nwant\n%s", got, want)
 	}
 }

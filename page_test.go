@@ -17,7 +17,7 @@ func pageDoc(t *testing.T, title, view, label string) *Map {
 	if view == "platform" {
 		implementations = ", implementations: {home: {label: Home, blocks: [{id: server, label: Server, parts: [a]}]}}"
 	}
-	return parsed(t, fmt.Sprintf("{awml: \"0.7\", title: %q, parts: [{id: a, kind: ai, label: %q}]%s}", title, label, implementations))
+	return parsed(t, fmt.Sprintf("{awml: \"0.8\", title: %q, parts: [{id: a, kind: ai, label: %q}]%s}", title, label, implementations))
 }
 
 func drawings(t *testing.T, html string) []string {

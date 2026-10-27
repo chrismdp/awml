@@ -6,9 +6,9 @@ import (
 	"testing"
 )
 
-// replies is a 0.7 workflow whose data lines cross between a private scope that allows any
+// replies is a 0.8 workflow whose data lines cross between a private scope that allows any
 // company and a business scope that allows only anthropic, and into a venture beside them.
-const replies = `awml: "0.7"
+const replies = `awml: "0.8"
 title: Replies
 scopes:
   - { id: private, label: "private: the consultant", processing: any }
@@ -34,7 +34,7 @@ implementations:
 
 func TestA06FileIsAWorkflow(t *testing.T) {
 	if !IsCanonical(parsed(t, replies)) {
-		t.Fatal("a 0.7 file isn't read as a workflow")
+		t.Fatal("a 0.8 file isn't read as a workflow")
 	}
 }
 
@@ -82,11 +82,11 @@ func TestTheSummaryListsEachPublishWithWhatItAddsOrLoosens(t *testing.T) {
 	}
 }
 
-// publishingLabels checks a 0.7 file with the scopes, parts and lines given, and gives each
+// publishingLabels checks a 0.8 file with the scopes, parts and lines given, and gives each
 // publishing line's label.
 func publishingLabels(t *testing.T, scopes, parts, lines string) []string {
 	t.Helper()
-	src := "awml: \"0.7\"\ntitle: T\nscopes:\n" + scopes + "parts:\n" + parts + "lines:\n" + lines
+	src := "awml: \"0.8\"\ntitle: T\nscopes:\n" + scopes + "parts:\n" + parts + "lines:\n" + lines
 	doc := parsed(t, src)
 	mistakes(t, doc)
 	return Summarise(doc).PublishingLines.Labels

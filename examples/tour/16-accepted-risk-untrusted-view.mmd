@@ -1,0 +1,54 @@
+---
+config:
+  theme: default
+  fontFamily: Inter, sans-serif
+  flowchart:
+    useMaxWidth: false
+    subGraphTitleMargin:
+      top: 6
+      bottom: 30
+---
+flowchart TB
+  subgraph bakery["bakery#58; Ana#44; Ben"]
+    direction TB
+    quarter(["Every 15 minutes"])
+    chat{{"The website#39;s chat ⚠️"}}
+    bring("<small style='color:rgb(61,67,79)'>⚙️ 📥 bring-in</small><br>Bring in the questions that arrived")
+    sheet[("Ana#39;s answer sheet#58; hours and allergens")]
+    draft("<small style='color:rgb(61,67,79)'>🤖 ✏️ draft</small><br>Draft a reply to each question about opening hours or allergens#44; from the answer sheet")
+    send("<small style='color:rgb(61,67,79)'>⚙️ 🛠️ do</small><br>Send each reply made only of sentences from the answer sheet 🛡️")
+    approval("<small style='color:rgb(61,67,79)'>👤 📜 standing approval</small><br>Ana#39;s standing approval#58; hours and allergens replies only#44; up to fifty a day#44; risk accepted by Ana and the bakery#39;s insurer on the March test set")
+    reply>"Send the reply to the customer#58; Ask"]
+    list@{ shape: win-pane, label: "Ana#39;s list" }
+  end
+
+  quarter --> bring
+  chat -.->|"new questions"| bring
+  bring --> draft
+  sheet -.-> draft
+  draft --> send
+  sheet -.-> send
+  send --> approval
+  approval -->|"#91;within limits#93;"| reply
+  reply -.-> chat
+  approval -.->|"each reply#44; as sent"| list
+  classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
+  classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
+  classDef con fill:#eceef2,stroke:#5d6472,color:#16171b
+  classDef surf fill:#ffffff,stroke:#2a2d35,stroke-width:1.5px,color:#16171b
+  classDef out fill:#fde4dc,stroke:#b5532f,color:#16171b
+  classDef ai fill:#cdd3fb,stroke:#3b4bb0,color:#16171b
+  classDef code fill:#c4e3d1,stroke:#2b7a4f,color:#16171b
+  classDef person fill:#f7d79a,stroke:#9a6100,color:#16171b
+  classDef uml fill:#16171b,stroke:#16171b,color:#16171b
+  classDef gap fill:#ffffff,stroke:#8a93a3,stroke-dasharray:4 3,color:#6b7280
+  classDef taint fill:#ead9f5,stroke:#7b3fa0,color:#16171b
+  classDef taintout fill:#f9cdc7,stroke:#d0342c,stroke-width:2.5px,color:#16171b
+  class quarter trig
+  class sheet ctx
+  class list surf
+  class reply out
+  class send code
+  class approval person
+  class chat,bring,draft taint
+  style bakery fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f

@@ -5,7 +5,7 @@ Use this only where `awml check` can't run, as in a chat with no shell. It cover
 ## The file
 
 1. The file is one YAML mapping with `awml`, `title` and `parts`, and may have `description`, `scopes`, `lines` and `implementations`. It has no other field.
-2. `awml` is `"0.7"`, in quotes. There is no `view`.
+2. `awml` is `"0.8"`, in quotes. There is no `view`.
 3. `parts`, and `scopes` and `lines` where given, are lists, and each item in them is a mapping.
 
 ## Scopes and parts

@@ -12,7 +12,7 @@ import (
 
 // Two workflows that hand work on: the plan writes the shopping list, which the shopping refers
 // to, and a do step asks the shopping to start, with an outside action that names its trigger.
-const planWorkflow = `awml: "0.7"
+const planWorkflow = `awml: "0.8"
 title: Dinners
 scopes:
   - { id: family, label: "family: parents, kids", processing: any }
@@ -29,7 +29,7 @@ lines:
   - { from: tell, to: ready, kind: start }
 `
 
-const shopWorkflow = `awml: "0.7"
+const shopWorkflow = `awml: "0.8"
 title: Shopping
 scopes:
   - { id: home, label: "home: parents, kids", processing: any }
@@ -139,7 +139,7 @@ func notes(title, ref string) string {
 	if ref != "" {
 		ref = ", ref: " + ref
 	}
-	return `awml: "0.7"
+	return `awml: "0.8"
 title: ` + title + `
 scopes:
   - { id: s, label: "s: Ana", processing: any }
@@ -326,7 +326,7 @@ func TestUntrustedTextIsFollowedAcrossWorkflows(t *testing.T) {
 // The inbox sorter owns the shop's inbox, and tags each mail and sorts it into a queue. The replier
 // reads the queue and sends a reply, and its copy of the inbox marks it untrusted, as anyone can
 // write to it.
-const sorterWorkflow = `awml: "0.7"
+const sorterWorkflow = `awml: "0.8"
 title: Inbox sorter
 scopes:
   - { id: office, label: "office: Ana", processing: any }
@@ -345,7 +345,7 @@ lines:
   - { from: tag, to: label, kind: data }
 `
 
-const replierWorkflow = `awml: "0.7"
+const replierWorkflow = `awml: "0.8"
 title: Replier
 scopes:
   - { id: office, label: "office: Ana", processing: any }
@@ -502,7 +502,7 @@ func TestTheSummaryOfOneWorkflowIsItsOwn(t *testing.T) {
 	}
 }
 
-const laptop = `awml: "0.7"
+const laptop = `awml: "0.8"
 platform: { id: laptop, label: A laptop }
 off_for_up_to: PT0S
 steps: agent
@@ -586,7 +586,7 @@ func specHandOff(t *testing.T) (dinners, shopping string) {
 			t.Fatalf("SPEC.md has no %s", name)
 		}
 		parts, _, _ := strings.Cut(after, "```")
-		return `awml: "0.7"
+		return `awml: "0.8"
 title: ` + title + `
 scopes:
   - { id: family, label: "family: parents, kids", processing: any }
@@ -595,7 +595,7 @@ scopes:
 	return block("dinners.yaml", "Dinners"), block("shopping.yaml", "Shopping")
 }
 
-const codeServer = `awml: "0.7"
+const codeServer = `awml: "0.8"
 platform: { id: server, label: Scripts on a server }
 off_for_up_to: P1D
 steps: code

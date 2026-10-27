@@ -100,7 +100,7 @@ func TestSummaryHasStableJSONFieldNames(t *testing.T) {
 
 func TestAnOutsideActionWithoutATierIsNotInvented(t *testing.T) {
 	doc := parsed(t, `
-awml: "0.7"
+awml: "0.8"
 title: No tier
 parts:
   - { id: action, kind: outside, label: "" }
@@ -112,7 +112,7 @@ parts:
 
 func TestSummariseCountsEveryOutsideActionTier(t *testing.T) {
 	doc := parsed(t, `
-awml: "0.7"
+awml: "0.8"
 title: Tiers
 parts:
   - { id: allow, kind: outside, label: "Keep the draft: Allow" }
@@ -151,7 +151,7 @@ func TestSummariseListsPersonStepsReviewsAndStandingApprovalsInFileOrder(t *test
 
 func TestAScopeWithoutMembersIsNamedByItsWholeLabel(t *testing.T) {
 	doc := parsed(t, `
-awml: "0.7"
+awml: "0.8"
 title: Bare scope
 scopes:
   - { id: team, label: "The team" }

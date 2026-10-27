@@ -9,7 +9,7 @@ import (
 )
 
 const good = `
-awml: "0.7"
+awml: "0.8"
 title: The family's dinners
 scopes:
   - { id: carers, label: carers }
@@ -98,7 +98,7 @@ func TestASoundFileHasNoMistakes(t *testing.T) {
 
 func TestLabelsThatMarkdownWouldRecogniseHaveNoMistakes(t *testing.T) {
 	mistakes(t, parsed(t, `
-awml: "0.7"
+awml: "0.8"
 title: Literal labels
 scopes: [{id: group, label: '# Team'}]
 parts:
@@ -130,7 +130,7 @@ func TestTheOldNamesForKindsAreUnknown(t *testing.T) {
 }
 
 func TestAnUnknownVersion(t *testing.T) {
-	mistakes(t, changed(t, "awml", "2"), `awml must be "0.7", not "2"`)
+	mistakes(t, changed(t, "awml", "2"), `awml must be "0.8", not "2"`)
 }
 
 func TestAPartInAnUnknownGroup(t *testing.T) {
@@ -190,11 +190,11 @@ func TestAMissingField(t *testing.T) {
 }
 
 func TestTheVersionIsText(t *testing.T) {
-	mistakes(t, changed(t, "awml", 0.7), `awml: YAML read it as 0.7, not text: put it in quotes`)
+	mistakes(t, changed(t, "awml", 0.8), `awml: YAML read it as 0.8, not text: put it in quotes`)
 }
 
 func TestAFileInAVersionNoReleaseReadIsRefused(t *testing.T) {
-	mistakes(t, changed(t, "awml", "0.1"), `awml must be "0.7", not "0.1"`)
+	mistakes(t, changed(t, "awml", "0.1"), `awml must be "0.8", not "0.1"`)
 }
 
 func TestAnUnknownField(t *testing.T) {
@@ -216,7 +216,7 @@ func TestEveryMistakeIsReportedAtOnce(t *testing.T) {
 
 func TestAValueYAMLReadsAsTrueMustBeQuoted(t *testing.T) {
 	d := parsed(t, `
-awml: "0.7"
+awml: "0.8"
 title: T
 parts:
   - { id: true, kind: review, label: True }
@@ -231,13 +231,13 @@ lines:
 }
 
 func TestANumberMustBeQuoted(t *testing.T) {
-	d := parsed(t, `{awml: "0.7", title: T, parts: [{id: t, kind: trigger, label: 12}]}`)
+	d := parsed(t, `{awml: "0.8", title: T, parts: [{id: t, kind: trigger, label: 12}]}`)
 	mistakes(t, d, `part "t": YAML read its label as 12, not text: put it in quotes`)
 }
 
 func TestYesNoOnOffAndTimesAreText(t *testing.T) {
 	d := parsed(t, `
-awml: "0.7"
+awml: "0.8"
 title: T
 parts:
   - { id: t, kind: trigger, label: 19:00 }
@@ -252,7 +252,7 @@ lines:
 }
 
 const reply = `
-awml: "0.7"
+awml: "0.8"
 title: A reply
 parts:
   - { id: write, kind: ai, op: draft, label: Draft the reply }
@@ -282,7 +282,7 @@ func withLines(t *testing.T, lines ...string) *Map {
 func TestEachOperationNamesAStep(t *testing.T) {
 	for _, op := range []string{"bring-in", "sort", "learn", "prepare", "check", "reflect", "draft", "do", "answer", "other"} {
 		for _, kind := range []string{"ai", "code", "person"} {
-			d := parsed(t, fmt.Sprintf(`{awml: "0.7", title: T, parts: [{id: s, kind: %s, op: %s, label: S}]}`, kind, op))
+			d := parsed(t, fmt.Sprintf(`{awml: "0.8", title: T, parts: [{id: s, kind: %s, op: %s, label: S}]}`, kind, op))
 			mistakes(t, d)
 		}
 	}
@@ -343,7 +343,7 @@ func TestHiddenAndRefusedLinesLeadNowhere(t *testing.T) {
 }
 
 const question = `
-awml: "0.7"
+awml: "0.8"
 title: A question
 parts:
   - { id: notes, kind: context, label: Family notes }
@@ -377,7 +377,7 @@ func TestACheckPassesItsVerdictOnAndAStepAfterItKeepsIt(t *testing.T) {
 
 // The dinners start the shopping by asking it to start, as they would call any outside service.
 const startsShopping = `
-awml: "0.7"
+awml: "0.8"
 title: Dinners
 parts:
   - { id: thu, kind: trigger, label: "Thursday 19:00" }
