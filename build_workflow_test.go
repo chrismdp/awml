@@ -495,16 +495,18 @@ func (r *rehearsal) mustPass() {
 }
 
 // Every pull request from a branch of this repository into main is reviewed each time it's opened
-// or pushed to. A fork's pull request starts nothing, since the sessions hold the maintainer's login
-// token, and the job that posts the checks waits for the reviews.
+// or pushed to. GitHub runs main's copy of the workflow on pull_request_target, so a branch can't
+// rewrite how it's reviewed, as it could on pull_request. A fork's pull request starts nothing,
+// since the sessions hold the maintainer's login token, and the job that posts the checks waits
+// for the reviews.
 func TestEveryPullRequestFromThisRepositoryIsReviewed(t *testing.T) {
 	review := readFactoryWorkflow(t, "review.yml")
-	if _, ok := review.On["pull_request_target"]; ok {
-		t.Error("review.yml runs on pull_request_target")
+	if _, ok := review.On["pull_request"]; ok {
+		t.Error("review.yml runs on pull_request, which runs the branch's copy of it")
 	}
-	pull, _ := review.On["pull_request"].(map[string]any)
+	pull, _ := review.On["pull_request_target"].(map[string]any)
 	if pull == nil {
-		t.Fatal("review.yml doesn't run on pull_request")
+		t.Fatal("review.yml doesn't run on pull_request_target")
 	}
 	if got := fmt.Sprint(pull["types"]); got != "[opened synchronize reopened]" {
 		t.Errorf("review.yml runs on pull requests %s, want [opened synchronize reopened]", got)
@@ -521,6 +523,50 @@ func TestEveryPullRequestFromThisRepositoryIsReviewed(t *testing.T) {
 	}
 	if needs, _ := review.Jobs["post"].Needs.(string); needs != "review" {
 		t.Errorf("the post job needs %v, want review", review.Jobs["post"].Needs)
+	}
+}
+
+// On pull_request_target the jobs hold main's secrets and tokens, so nothing from the pull
+// request's head is checked out or fetched: its change arrives only as the diff GitHub's compare
+// API gives for the event's head commit, and the checks go on that same commit.
+func TestTheReviewNeverChecksOutTheHead(t *testing.T) {
+	jobs := readFactoryWorkflow(t, "review.yml").Jobs
+	head := "${{ github.event.pull_request.head.sha }}"
+	for name, job := range jobs {
+		for _, step := range job.Steps {
+			if strings.HasPrefix(step.Uses, "actions/checkout") {
+				if step.With["ref"] != "main" || step.With["repository"] != "" {
+					t.Errorf("review.yml's %s checks out %q from %q, want main from this repository",
+						name, step.With["ref"], step.With["repository"])
+				}
+			}
+			for key, value := range step.With {
+				if strings.Contains(value, "pull_request.head") {
+					t.Errorf("review.yml's %s step %q passes the head to %s: %s", name, step.Name, key, value)
+				}
+			}
+			for _, line := range strings.Split(step.Run, "\n") {
+				for _, from := range []string{"git fetch", "git pull", "refs/pull/", "gh pr checkout"} {
+					if strings.Contains(line, from) {
+						t.Errorf("review.yml's %s step %q brings in the head with %q", name, step.Name, from)
+					}
+				}
+				if strings.Contains(line, "checkout") && strings.Contains(line, "HEAD_SHA") {
+					t.Errorf("review.yml's %s step %q checks out the head commit: %s", name, step.Name, strings.TrimSpace(line))
+				}
+			}
+		}
+	}
+	bring, _ := jobs["review"].step(t, "bring")
+	if bring.Env["HEAD_SHA"] != head || !strings.Contains(bring.Run, "compare/") {
+		t.Errorf("the review doesn't bring in the patch through the compare API for %s", head)
+	}
+	if !strings.Contains(bring.Run, "merge-base --is-ancestor") {
+		t.Error("the review checks out the patch's starting point without checking it's a commit of main")
+	}
+	post, _ := jobs["post"].step(t, "post")
+	if post.Env["HEAD_SHA"] != head {
+		t.Errorf("the checks go on %q, want %s", post.Env["HEAD_SHA"], head)
 	}
 }
 
