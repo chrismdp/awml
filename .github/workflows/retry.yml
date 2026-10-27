@@ -4,6 +4,9 @@
 # failed is commented on the issue.
 # Drawn at https://awml.io/chrismdp/retry-a-build
 name: Retry a build
+# GitHub names each retry run for its issue and the try that failed, so the next build can check
+# the run it reads is the one it means.
+run-name: ${{ format('Retry of issue {0}, try {1}', inputs.issue, inputs.attempt) }}
 
 # build.yml and land.yml start this by dispatch with the Actions token, so only they, or a person
 # with write access, can. It checks out nothing and runs only gh, so it runs nothing from the
@@ -80,6 +83,12 @@ jobs:
             tail -n 150 "$here/ci.log" > "$here/output.txt"
             output="$here/output.txt"
           elif [ "$workflow" = "$build" ]; then
+            # GitHub names each build run for its issue and try, from its own inputs.
+            jq -e --arg title "Build of issue $ISSUE, try $ATTEMPT" '.head_branch == "main" and
+                (.event | IN("issues", "workflow_dispatch")) and .display_title == $title' <<< "$run" > /dev/null || {
+              echo "Run $FAILED_RUN isn't the build from main of issue $ISSUE, try $ATTEMPT."
+              exit 1
+            }
             get() { gh run download "$FAILED_RUN" --repo "$GITHUB_REPOSITORY" -n "$1" -D "$here/$1" 2> /dev/null; }
             if ! get change; then
               reason="The draft failed or ran out of time."

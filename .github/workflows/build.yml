@@ -9,6 +9,9 @@
 # third try, goes to retry-a-build.
 # Drawn at https://awml.io/chrismdp/issue-to-pull-request
 name: Build from an issue
+# GitHub names each build run for its issue and try, from its own inputs, so retry.yml and land.yml
+# can check a run is the one they mean.
+run-name: ${{ (github.event_name == 'workflow_dispatch' || github.event.label.name == 'build') && format('Build of issue {0}, try {1}', inputs.issue || github.event.issue.number, inputs.attempt || '1') || format('A label added to issue {0}', github.event.issue.number) }}
 
 # Before it works, a repository needs:
 # - a GitHub App with read and write access to contents, pull requests and issues, installed on the
@@ -86,7 +89,12 @@ jobs:
             printf '**Building this issue** (try %s of 3). [The run](%s)\n' "$ATTEMPT" "$run_url"
             if [ "$ATTEMPT" -gt 1 ]; then
               reason="The reason was not recorded."
-              if [ -n "$PREVIOUS_RUN" ] &&
+              # Only retry.yml's run from main for this issue's last try is read.
+              retry="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/retry.yml" --jq .id || true)"
+              if [ -n "$PREVIOUS_RUN" ] && [ -n "$retry" ] &&
+                gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PREVIOUS_RUN" |
+                  jq -e --argjson workflow "$retry" --arg title "Retry of issue $ISSUE, try $((ATTEMPT - 1))" \
+                    '.workflow_id == $workflow and .head_branch == "main" and .display_title == $title' > /dev/null &&
                 gh run download "$PREVIOUS_RUN" --repo "$GITHUB_REPOSITORY" -n failed -D "$here/failed"; then
                 reason="$(head -n 1 "$here/failed/reason.txt" 2>/dev/null | cut -c 1-200)"
                 [ -n "$reason" ] || reason="The reason was not recorded."
@@ -136,6 +144,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
+          cache: false
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -161,7 +170,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           previous="$RUNNER_TEMP/previous"
-          if ! gh run download "$PREVIOUS_RUN" --repo "$GITHUB_REPOSITORY" -n failed -D "$previous" ||
+          # Only retry.yml's run from main for this issue's last try is read.
+          retry="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/retry.yml" --jq .id)"
+          if ! gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PREVIOUS_RUN" |
+              jq -e --argjson workflow "$retry" --arg title "Retry of issue $ISSUE, try $((ATTEMPT - 1))" \
+                '.workflow_id == $workflow and .head_branch == "main" and .display_title == $title' > /dev/null ||
+            ! gh run download "$PREVIOUS_RUN" --repo "$GITHUB_REPOSITORY" -n failed -D "$previous" ||
             [ ! -s "$previous/failed.md" ]; then
             mkdir -p "$previous"
             echo "Why the last try failed was not recorded." > "$previous/failed.md"
@@ -233,6 +247,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
+          cache: false
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -532,11 +547,15 @@ jobs:
           echo "count=$count" >> "$GITHUB_OUTPUT"
 
       # If the patch no longer applies to main as it is now, the job says so in its own record and
-      # stops without failing, and the retry job sends the build to retry.yml.
+      # stops without failing, and the retry job sends the build to retry.yml. Once the patch is
+      # applied, the workspace holds the change's code and later steps hold the app's token, so
+      # nothing after this runs from the workspace: main's script for the description is copied out
+      # first.
       - name: Apply the change to main as it is now
         id: commit
         run: |
           mkdir -p "$RUNNER_TEMP/open"
+          cp .github/pull-request-body.sh "$RUNNER_TEMP/pull-request-body.sh"
           if ! git apply --index "$RUNNER_TEMP/change/change.patch" 2> "$RUNNER_TEMP/apply.log"; then
             cat "$RUNNER_TEMP/apply.log"
             echo "The change no longer applies to main as it is now." > "$RUNNER_TEMP/open/result.txt"
@@ -579,16 +598,18 @@ jobs:
           git -c core.hooksPath=/dev/null commit -q -F "$message"
 
       # What land.yml needs from this build: the commit it pushes, the commit of main it applied the
-      # patch to, the try, who to ask, and the pictures. It goes up before the push, so it's there
+      # patch to, the try, who to ask, the app's bot that opens the pull request, and the pictures. It goes up before the push, so it's there
       # before CI can finish.
       - name: Write the build's record
         if: steps.commit.outputs.applies == 'true'
+        env:
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
         run: |
           record="$RUNNER_TEMP/pull-request"
           mkdir -p "$record"
           jq -n --argjson issue "$ISSUE" --argjson attempt "$ATTEMPT" --arg requested_by "$REQUESTED_BY" \
-            --arg commit "$(git rev-parse HEAD)" --arg base "$(git rev-parse HEAD^)" \
-            '{issue: $issue, attempt: $attempt, requested_by: $requested_by, commit: $commit, base: $base}' \
+            --arg commit "$(git rev-parse HEAD)" --arg base "$(git rev-parse HEAD^)" --arg bot "$APP_SLUG[bot]" \
+            '{issue: $issue, attempt: $attempt, requested_by: $requested_by, commit: $commit, base: $base, bot: $bot}' \
             > "$record/build.json"
           cp "$RUNNER_TEMP/pictures.txt" "$RUNNER_TEMP/pictures-left-out.txt" "$record/"
           title="$(head -n 1 "$RUNNER_TEMP/change/message.md" 2> /dev/null || true)"
@@ -666,7 +687,7 @@ jobs:
           PICTURES_LEFT_OUT: ${{ runner.temp }}/pictures-left-out.txt
         run: |
           export MEDIA_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/raw/factory-media/issue-$ISSUE/attempt-$ATTEMPT"
-          .github/pull-request-body.sh > "$RUNNER_TEMP/pull-request.md"
+          "$RUNNER_TEMP/pull-request-body.sh" > "$RUNNER_TEMP/pull-request.md"
           cat "$RUNNER_TEMP/pull-request.md"
 
       - name: Open or update the pull request

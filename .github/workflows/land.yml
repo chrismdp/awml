@@ -75,6 +75,8 @@ jobs:
             jq -c --arg repository "$GITHUB_REPOSITORY" --arg branch "$BRANCH" \
               '[.[] | select(.base.ref == "main" and .head.ref == $branch and
                 .head.repo.full_name == $repository and .user.type == "Bot")] | first // empty')"
+          # Any bot can open a pull request; the app's own login, from the build's record, is
+          # checked once the record is read.
           [ -n "$pull" ] || leave "No open pull request of the app's is on $BRANCH."
           [ "$(jq -r .head.sha <<< "$pull")" = "$HEAD_SHA" ] ||
             leave "The pull request has moved on since CI ran, so a newer CI result decides."
@@ -82,10 +84,14 @@ jobs:
           build_run="$(jq -r '(.body // "") | (split("\n")[0] // "") | rtrimstr("\r") |
             (capture("^<!-- factory-build run=(?<run>[0-9]+) -->$") | .run) // empty' <<< "$pull")"
           [ -n "$build_run" ] || leave "The description of #$pr names no build."
+          # The run must be this repository's build, run from main for a label or a dispatch. GitHub
+          # names each build run for its issue and try, from its own inputs.
           workflow="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/build.yml" --jq .id)"
-          named="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$build_run" --jq .workflow_id || true)"
-          [ -n "$workflow" ] && [ "$named" = "$workflow" ] ||
-            leave "The run that #$pr names isn't this repository's build."
+          named="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$build_run" || true)"
+          [ -n "$workflow" ] && [ -n "$named" ] &&
+            jq -e --argjson workflow "$workflow" '.workflow_id == $workflow and .head_branch == "main" and
+              (.event | IN("issues", "workflow_dispatch"))' <<< "$named" > /dev/null ||
+            leave "The run that #$pr names isn't this repository's build from main."
 
           record="$RUNNER_TEMP/pull-request"
           gh run download "$build_run" --repo "$GITHUB_REPOSITORY" -n pull-request -D "$record" ||
@@ -94,8 +100,13 @@ jobs:
               .issue == $issue and (.attempt | IN(1, 2, 3)) and
               (.requested_by | type == "string" and test("^[A-Za-z0-9._\\[\\]-]{0,64}$")) and
               (.commit | type == "string" and test("^[0-9a-f]{40}$")) and
-              (.base | type == "string" and test("^[0-9a-f]{40}$"))' "$record/build.json" > /dev/null ||
+              (.base | type == "string" and test("^[0-9a-f]{40}$")) and
+              (.bot | type == "string" and test("^[a-z0-9-]+\\[bot\\]$"))' "$record/build.json" > /dev/null ||
             leave "The record of the build that opened #$pr isn't one."
+          [ "$(jq -r .display_title <<< "$named")" = "Build of issue $issue, try $(jq -r .attempt "$record/build.json")" ] ||
+            leave "The run that #$pr names is the build of another issue or try."
+          [ "$(jq -r .user.login <<< "$pull")" = "$(jq -r .bot "$record/build.json")" ] ||
+            leave "#$pr wasn't opened by the app that pushed the build."
           [ "$(jq -r .commit "$record/build.json")" = "$HEAD_SHA" ] ||
             leave "The branch has moved since the build pushed it, so it's left to whoever moved it."
 
@@ -116,10 +127,12 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
+      # The change's code ran in the build's jobs, so no Go cache is restored here.
       - uses: actions/setup-go@v5
         if: steps.find.outputs.ci == 'passed'
         with:
           go-version: stable
+          cache: false
 
       # The rule, its settings and the description's script come from main as it is now, and the
       # patch is judged against the commit of main the build pushed it onto, which must be on main.
