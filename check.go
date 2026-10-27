@@ -27,11 +27,12 @@ func Unsound(doc any) []string {
 }
 
 // mistake is one thing Check reports, with the id of the check that found it. A mistake that is a
-// line breaking a rule also has the lines, and breach, the check's words for what's wrong, which the
-// line's label adds.
+// line breaking a rule also has the lines, their places in the file's list of lines, and breach, the
+// check's words for what's wrong, which the line's label adds.
 type mistake struct {
 	check, message string
 	lines          []*Map
+	places         []int
 	breach         string
 }
 

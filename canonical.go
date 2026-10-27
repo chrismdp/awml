@@ -58,11 +58,13 @@ func View(doc *Map, implementation string) (*Map, error) {
 	if err != nil {
 		return view, err
 	}
+	// A line that publishes is a fresh copy each time the workflow is projected, so the check's
+	// lines are found by their places, which every projection keeps.
 	found, _ := checkDoc(doc)
-	words := map[*Map][]any{}
+	words := map[int][]any{}
 	for _, m := range found {
-		for _, line := range m.lines {
-			words[line] = append(words[line], m.breach)
+		for _, place := range m.places {
+			words[place] = append(words[place], m.breach)
 		}
 	}
 	// Each line that publishes keeps, in widens, what it adds or loosens, which its label ends with.
@@ -70,7 +72,7 @@ func View(doc *Map, implementation string) (*Map, error) {
 	var lines []any
 	for i, line := range items(view, "lines") {
 		said, publishes := widens[i]
-		if breaches := words[line]; breaches != nil || publishes {
+		if breaches := words[i]; breaches != nil || publishes {
 			line = copyMap(line)
 			if breaches != nil {
 				line.set("breaks", breaches)
@@ -174,7 +176,7 @@ func checkCanonical(file *Map) (mistakeList, bool) {
 		}
 	}
 	designErrors, stopped := checkView(clean, false)
-	errors = appendUnique(errors, designErrors...)
+	errors = appendUnique(errors, placeLines(designErrors, clean, file)...)
 	for n, line := range soundMaps(file.get("lines")) {
 		if line.get("kind") == "publish" {
 			errors.add("kinds.known", fmt.Sprintf(`%s has unknown kind "publish": write it as data, since a data line publishes whenever its scopes make it one`, lineName(n, line)))
@@ -283,9 +285,31 @@ func checkCanonical(file *Map) (mistakeList, bool) {
 		}
 		platform, _ := project(file, name)
 		platformErrors, _ := checkView(platform, true)
-		errors = appendUnique(errors, platformErrors...)
+		errors = appendUnique(errors, placeLines(platformErrors, platform, file)...)
 	}
 	return errors, false
+}
+
+// placeLines gives each mistake that is lines breaking a rule the places of its lines in the file's
+// list of lines. The view is the one the check found them in, which starts with the file's lines in
+// their order, then a platform view's ties.
+func placeLines(found mistakeList, view, file *Map) mistakeList {
+	own, _ := file.get("lines").([]any)
+	list, _ := view.get("lines").([]any)
+	place := map[*Map]int{}
+	for i, item := range list {
+		if line, ok := item.(*Map); ok && i < len(own) {
+			place[line] = i
+		}
+	}
+	for n := range found {
+		for _, line := range found[n].lines {
+			if i, ok := place[line]; ok {
+				found[n].places = append(found[n].places, i)
+			}
+		}
+	}
+	return found
 }
 
 func canonicalList(file *Map, key, singular string) ([]*Map, mistakeList) {

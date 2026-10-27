@@ -163,3 +163,49 @@ func TestSummaryCountsEachLineThatBreaksARuleAsARedLine(t *testing.T) {
 		t.Errorf("red lines = %d, want 1", got)
 	}
 }
+
+// The bakery's specials, drafted in the kitchen and pinned straight up in the shop, so the one red
+// line also publishes. Sam is fictional.
+const specialsPinned = `awml: "0.7"
+title: The bakery's specials, pinned up
+scopes:
+  - { id: kitchen, label: "kitchen: Sam" }
+  - { id: shop, label: "shop: Sam, the staff" }
+parts:
+  - { id: monday, kind: trigger, label: "Monday 07:00" }
+  - { id: write, kind: ai, op: draft, label: "Draft the week's specials", in: kitchen }
+  - { id: pin, kind: outside, label: "Pin them on the shop board: Ask", in: shop }
+lines:
+  - { from: monday, to: write, kind: start }
+  - { from: write, to: pin, kind: data, label: the specials }
+implementations:
+  bakery:
+    label: The bakery
+    blocks:
+      - { id: tablet, label: Shop tablet, parts: [write, pin] }
+`
+
+func TestARedLineThatPublishesIsDrawnRedAndThick(t *testing.T) {
+	doc := parsed(t, specialsPinned)
+	mistakes(t, doc,
+		`part "write" leads to outside action "pin", but its op is draft: only a do step leads to an outside action`,
+		`outside action "pin" is Ask, but part "write" leads to it with no person in between: put a review or a standing approval in front of it, or have a person's own do step take it`)
+	for _, implementation := range []string{"", "bakery"} {
+		view, err := View(doc, implementation)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := Draw(view)
+		has(t, out, `
+  write ==>|"the specials · adds the staff<br>part #34;write#34; leads to outside action #34;pin#34;#44; but its op is draft<br>outside action #34;pin#34; is Ask#44; but part #34;write#34; leads to it with no person in between"| pin
+`)
+		has(t, out, "\n  linkStyle 1 "+red)
+	}
+}
+
+func TestSummaryCountsARedLineThatPublishesAsARedLine(t *testing.T) {
+	got := Summarise(parsed(t, specialsPinned))
+	if got.RedLines != 1 || got.PublishingLines.Count != 0 {
+		t.Errorf("red lines = %d and publishing lines = %d, want 1 and 0", got.RedLines, got.PublishingLines.Count)
+	}
+}
