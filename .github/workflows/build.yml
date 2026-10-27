@@ -403,7 +403,12 @@ jobs:
           name: change
           path: ${{ runner.temp }}/change
 
+      # A Claude Code session loads its tree's settings, servers and instructions, so a change that
+      # touches .claude/, .mcp.json or a CLAUDE.md, anywhere in the tree, is refused before a session
+      # starts. The record says why, and the try goes to retry.yml as a failed check does. The paths
+      # go only to the log, since the reason reaches the issue.
       - name: Apply the change, keeping main's prompts and REVIEW.md
+        id: apply
         run: |
           review="$RUNNER_TEMP/review"
           cp .github/review-bugs-prompt.md .github/review-security-prompt.md .github/classify-prompt.md "$RUNNER_TEMP/"
@@ -412,6 +417,13 @@ jobs:
             [ -f "$RUNNER_TEMP/change/$file" ] && cp "$RUNNER_TEMP/change/$file" "$review/"
           done
           git apply --index "$RUNNER_TEMP/change/change.patch"
+          claudes='(^|/)\.claude(/|$)|(^|/)\.mcp\.json$|(^|/)CLAUDE(\.local)?\.md$'
+          if git diff --cached --name-only --no-renames -z | grep -zqE "$claudes"; then
+            echo "The change touches Claude Code's own settings, servers or instructions (.claude/, .mcp.json or a CLAUDE.md), which the reviews would load, so it wasn't reviewed." |
+              tee "$RUNNER_TEMP/record/result.txt"
+            git diff --cached --name-only --no-renames -z | grep -zE "$claudes" | tr '\0' '\n'
+            exit 1
+          fi
 
       # Claude Code scrubs its login token from the commands it runs inside bubblewrap, and stops
       # without it. Ubuntu's runners restrict the user namespaces bubblewrap needs, so allow them on
