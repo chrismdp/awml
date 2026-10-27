@@ -15,7 +15,6 @@ flowchart TB
     favourites[("Favourites#44; recipes and the shopping list")]
     plan("<small style='color:rgb(61,67,79)'>🤖</small><br>Plan next week#39;s dinners")
     mealplan[("Meal plan")]
-    screen_gap@{ shape: notch-rect, label: "Missing from the design#58; no scheduled task keeps the screen current" }
     scored@{ shape: notch-rect, label: "For example#58; scored against the plans the family kept" }
     tried@{ shape: notch-rect, label: "For example#58; tried on a second model some weeks" }
   end
@@ -26,6 +25,7 @@ flowchart TB
   subgraph wall["The kitchen screen"]
     direction TB
     screen@{ shape: win-pane, label: "Kitchen screen" }
+    screen_gap@{ shape: notch-rect, label: "Missing from the design#58; no scheduled task keeps the screen current" }
   end
 
   thu --> plan
