@@ -1,4 +1,4 @@
-awml: "0.7"
+awml: "0.8"
 title: The bakery's stock count
 description: |
   The first of the two workflows, split out at its trigger. Each evening code counts what the day's

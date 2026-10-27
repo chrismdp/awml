@@ -56,9 +56,9 @@ func (m mistakeList) messages() []string {
 }
 
 // The version of the file format this release reads, and the older ones awml convert upgrades.
-const currentFormat = "0.7"
+const currentFormat = "0.8"
 
-var olderFormats = []string{"0.2", "0.3", "0.4", "0.5", "0.6"}
+var olderFormats = []string{"0.2", "0.3", "0.4", "0.5", "0.6", "0.7"}
 
 // checkDoc gives the mistakes in a document, and whether a mistake stopped the checks that follow
 // those of the file's own fields: a version this release doesn't read, or a broken list.
@@ -553,7 +553,7 @@ func tiers(parts, lines []*Map) mistakeList {
 			listed = listed || lineLeads(l) && byID[keyOf(l.get("from"))] == approval && to != nil && to.get("kind") == "surface"
 		}
 		if !listed {
-			errors.add("approvals.listed", fmt.Sprintf(`standing approval "%s" leads to no surface: draw a line from it to the surface where each action it covers is listed with how to undo it`, show(approval.get("id"))))
+			errors.add("approvals.listed", fmt.Sprintf(`standing approval "%s" leads to no surface: draw a line from it to the surface where each action it covers is listed`, show(approval.get("id"))))
 		}
 	}
 	return errors

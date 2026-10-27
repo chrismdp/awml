@@ -23,7 +23,7 @@ func checkResult(t *testing.T, report CheckReport, id string) CheckResult {
 
 func source(file, text string) Source { return Source{File: file, Text: []byte(text)} }
 
-const soundWorkflow = `awml: "0.7"
+const soundWorkflow = `awml: "0.8"
 title: Dinners
 scopes:
   - { id: family, label: "family: parents, kids", processing: any }
@@ -41,7 +41,7 @@ implementations:
       - { id: server, label: Server, parts: [plan, notes] }
 `
 
-const soundDescription = `awml: "0.7"
+const soundDescription = `awml: "0.8"
 platform: { id: scripts-server, label: Scripts on a server }
 off_for_up_to: PT0S
 steps: code
@@ -152,7 +152,7 @@ func TestAFileThatIsntYAMLRunsNoOtherCheck(t *testing.T) {
 }
 
 func TestAChecksStoppedByAnEarlierMistakeIsSkipped(t *testing.T) {
-	src := "awml: \"0.7\"\ntitle: Broken\nparts: [nonsense]\n"
+	src := "awml: \"0.8\"\ntitle: Broken\nparts: [nonsense]\n"
 	report := CheckSources("dev", []Source{source("broken.yaml", src)})
 	if fields := checkResult(t, report, "fields.known"); fields.Result != "fail" {
 		t.Errorf("fields.known gave %s", fields.Result)
@@ -229,7 +229,7 @@ func TestEveryMistakeIsFiledUnderACheck(t *testing.T) {
 	sources := map[string]string{
 		"sound":       soundWorkflow,
 		"description": soundDescription,
-		"bad description": `awml: "0.7"
+		"bad description": `awml: "0.8"
 platform: { id: Server, label: 4 }
 off_for_up_to: P1M
 steps: robots
@@ -241,8 +241,8 @@ extra: 1
 		"not a mapping": "- one\n- two\n",
 		"bad version":   "awml: \"0.1\"\ntitle: x\nview: sideways\nparts: []\n",
 		"older version": "awml: \"0.5\"\ntitle: x\nparts: []\n",
-		"broken lists":  "awml: \"0.7\"\ntitle: x\nparts: 3\nlines: [3]\n",
-		"design": `awml: "0.7"
+		"broken lists":  "awml: \"0.8\"\ntitle: x\nparts: 3\nlines: [3]\n",
+		"design": `awml: "0.8"
 title: Design
 scopes:
   - { id: a, label: A, in: b, platform: Pc, processing: { anthropic: [fly], 3: any, Bad: soon } }
@@ -270,7 +270,7 @@ lines:
   - { to: t }
   - { from: n, to: t, kind: data }
 `,
-		"operations": `awml: "0.7"
+		"operations": `awml: "0.8"
 title: Operations
 scopes:
   - { id: a, label: A }
@@ -285,7 +285,7 @@ lines:
   - { from: d, to: o, kind: data }
   - { from: d, to: p, kind: data }
 `,
-		"canonical": `awml: "0.7"
+		"canonical": `awml: "0.8"
 title: Canonical
 extra: 1
 scopes:
@@ -307,7 +307,7 @@ implementations:
     label: Away
     blocks: 3
 `,
-		"tiers": `awml: "0.7"
+		"tiers": `awml: "0.8"
 title: Tiers
 parts:
   - { id: d, kind: code, op: do, label: D }
@@ -323,7 +323,7 @@ lines:
   - { from: d, to: b, kind: data }
   - { from: d, to: o, kind: data }
 `,
-		"untrusted": `awml: "0.7"
+		"untrusted": `awml: "0.8"
 title: Untrusted
 parts:
   - { id: form, kind: trigger, label: Form, untrusted: true }
@@ -336,8 +336,8 @@ lines:
   - { from: read, to: d, kind: start }
   - { from: d, to: a, kind: start }
 `,
-		"canonical lists":           "awml: \"0.7\"\ntitle: x\nparts: [3]\nimplementations: 3\n",
-		"canonical implementations": "awml: \"0.7\"\ntitle: x\nparts: []\nimplementations: 3\n",
+		"canonical lists":           "awml: \"0.8\"\ntitle: x\nparts: [3]\nimplementations: 3\n",
+		"canonical implementations": "awml: \"0.8\"\ntitle: x\nparts: []\nimplementations: 3\n",
 	}
 	examples, _ := filepath.Glob("examples/*.yaml")
 	more, _ := filepath.Glob("examples/*/*.yaml")

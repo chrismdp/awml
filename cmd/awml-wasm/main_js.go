@@ -130,7 +130,7 @@ func main() {
 		}
 		return graphJSON(graph)
 	})
-	// __awmlConvert gives the 0.7 file awml convert writes, from one file or a legacy pair, what it
+	// __awmlConvert gives the 0.8 file awml convert writes, from one file or a legacy pair, what it
 	// notes it couldn't carry over, and the mistakes the current rules find in it.
 	expose("__awmlConvert", func(args []js.Value) string {
 		var texts []string

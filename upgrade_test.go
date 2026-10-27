@@ -7,7 +7,7 @@ import (
 )
 
 // The canonical workflow as a 0.4 file, which differs only in its version.
-var canonical04 = strings.Replace(canonical, `awml: "0.7"`, `awml: "0.4"`, 1)
+var canonical04 = strings.Replace(canonical, `awml: "0.8"`, `awml: "0.4"`, 1)
 
 // upgraded upgrades a file and gives it as awml convert writes it.
 func upgraded(t *testing.T, source string) string {
@@ -28,26 +28,27 @@ func TestCheckRefusesEachOlderVersionAndSaysToConvertIt(t *testing.T) {
 		"0.2": "awml: \"0.2\"\ntitle: Bread\nview: security\nparts: [{id: plan, kind: ai, label: Plan}]\n",
 		"0.3": "awml: \"0.3\"\ntitle: Bread\nview: platform\ngroups: [{id: server, label: Server, platform: scripts}]\nparts: [{id: plan, kind: ai, label: Plan, in: server}]\n",
 		"0.4": canonical04,
-		"0.5": strings.Replace(canonical, `awml: "0.7"`, `awml: "0.5"`, 1),
-		"0.6": strings.Replace(canonical, `awml: "0.7"`, `awml: "0.6"`, 1),
+		"0.5": strings.Replace(canonical, `awml: "0.8"`, `awml: "0.5"`, 1),
+		"0.6": strings.Replace(canonical, `awml: "0.8"`, `awml: "0.6"`, 1),
+		"0.7": strings.Replace(canonical, `awml: "0.8"`, `awml: "0.7"`, 1),
 	} {
 		mistakes(t, parseCanonical(t, source), `awml is "`+version+`", which this release no longer reads: upgrade the file with awml convert`)
 	}
-	for _, version := range []string{"0.3", "0.4", "0.5", "0.6"} {
-		mistakes(t, parseCanonical(t, strings.Replace(description07, `awml: "0.7"`, `awml: "`+version+`"`, 1)),
+	for _, version := range []string{"0.3", "0.4", "0.5", "0.6", "0.7"} {
+		mistakes(t, parseCanonical(t, strings.Replace(description08, `awml: "0.8"`, `awml: "`+version+`"`, 1)),
 			`awml is "`+version+`", which this release no longer reads: upgrade the file with awml convert`)
 	}
 }
 
 func TestCheckRefusesAnUnknownVersionOrOneThatIsntText(t *testing.T) {
 	workflow := canonical
-	mistakes(t, parseCanonical(t, strings.Replace(workflow, `awml: "0.7"`, `awml: "0.8"`, 1)), `awml must be "0.7", not "0.8"`)
-	mistakes(t, parseCanonical(t, strings.Replace(workflow, `awml: "0.7"`, `awml: 0.7`, 1)), `awml: YAML read it as 0.7, not text: put it in quotes`)
-	mistakes(t, parseCanonical(t, strings.Replace(workflow, "awml: \"0.7\"\n", "", 1)), `the file has no awml`)
-	mistakes(t, parseCanonical(t, strings.Replace(description07, `awml: "0.7"`, `awml: "0.8"`, 1)), `awml must be "0.7", not "0.8"`)
+	mistakes(t, parseCanonical(t, strings.Replace(workflow, `awml: "0.8"`, `awml: "0.9"`, 1)), `awml must be "0.8", not "0.9"`)
+	mistakes(t, parseCanonical(t, strings.Replace(workflow, `awml: "0.8"`, `awml: 0.8`, 1)), `awml: YAML read it as 0.8, not text: put it in quotes`)
+	mistakes(t, parseCanonical(t, strings.Replace(workflow, "awml: \"0.8\"\n", "", 1)), `the file has no awml`)
+	mistakes(t, parseCanonical(t, strings.Replace(description08, `awml: "0.8"`, `awml: "0.9"`, 1)), `awml must be "0.8", not "0.9"`)
 }
 
-const description07 = `awml: "0.7"
+const description08 = `awml: "0.8"
 platform: {id: scripts, label: Scripts on a server}
 off_for_up_to: PT0S
 steps: code
@@ -56,7 +57,7 @@ calls: [anthropic]
 holds: [notes]
 `
 
-func TestUpgradeGivesA07FileUnchanged(t *testing.T) {
+func TestUpgradeGivesA08FileUnchanged(t *testing.T) {
 	doc := parseCanonical(t, canonical)
 	got, err := Upgrade(doc)
 	if err != nil || !reflect.DeepEqual(got, doc) {
@@ -65,7 +66,7 @@ func TestUpgradeGivesA07FileUnchanged(t *testing.T) {
 }
 
 func TestUpgradeFrom04ChangesOnlyTheVersion(t *testing.T) {
-	want := `awml: "0.7"
+	want := `awml: "0.8"
 title: Bread
 scopes:
   - { id: bakery, label: "Bakery", processing: any }
@@ -117,8 +118,24 @@ implementations:
       - {id: runner, label: Runner, platform: acme/platforms/ops-runner, parts: [renew, standing, library, phone, board]}
 `
 
+// 0.8 changed only what a standing approval may cover, so a 0.7 file changes only its version, even
+// one that still has a line from a do step into a trigger with a ref, which converting a 0.6 file
+// would turn into an outside action.
+func TestUpgradeFrom07ChangesOnlyTheVersion(t *testing.T) {
+	if got, want := upgraded(t, strings.Replace(canonical, `awml: "0.8"`, `awml: "0.7"`, 1)), upgraded(t, canonical); got != want {
+		t.Fatalf("Upgrade gave\n%s\nwant\n%s", got, want)
+	}
+	source := strings.Replace(fires06, `awml: "0.6"`, `awml: "0.7"`, 1)
+	if got, want := upgraded(t, source), upgraded(t, strings.Replace(fires06, `awml: "0.6"`, `awml: "0.8"`, 1)); got != want {
+		t.Fatalf("Upgrade gave\n%s\nwant\n%s", got, want)
+	}
+	if _, notes, _, err := ConvertSources([]Source{{Text: []byte(strings.Replace(source, "wait: PT1H, ref:", "wait: PT1H, untrusted: true, ref:", 1))}}, ""); err != nil || notes != nil {
+		t.Errorf("convert of a 0.7 file notes %q, %v", notes, err)
+	}
+}
+
 func TestUpgradeFrom06ChangesOnlyTheVersionOfAFileThatFiresNoTrigger(t *testing.T) {
-	if got, want := upgraded(t, strings.Replace(canonical, `awml: "0.7"`, `awml: "0.6"`, 1)), upgraded(t, canonical); got != want {
+	if got, want := upgraded(t, strings.Replace(canonical, `awml: "0.8"`, `awml: "0.6"`, 1)), upgraded(t, canonical); got != want {
 		t.Fatalf("Upgrade gave\n%s\nwant\n%s", got, want)
 	}
 }
@@ -151,7 +168,7 @@ implementations:
 // becomes the do step's outside action, which refers to that trigger. Any other line into a trigger
 // is left for the author to redraw, and the check reports it.
 func TestUpgradeFrom06MakesADoStepsLineIntoATriggerAnOutsideAction(t *testing.T) {
-	want := `awml: "0.7"
+	want := `awml: "0.8"
 title: Dinners
 scopes:
   - { id: family, label: "family: parents, kids" }
@@ -205,7 +222,7 @@ func TestConvertSaysAnUntrustedTriggerItTurnsIntoAnOutsideActionIsMarkedThere(t 
 }
 
 func TestUpgradeFrom05WritesEachPublishAsDataAndDropsBreaksFalse(t *testing.T) {
-	want := `awml: "0.7"
+	want := `awml: "0.8"
 title: Renewals
 scopes:
   - { id: sam, label: "sam: Sam", processing: any }
@@ -315,7 +332,7 @@ lines:
   - {from: thu, to: plan, kind: start}
   - {from: plan, to: board, kind: publish, label: posted}
 `
-		want := `awml: "0.7"
+		want := `awml: "0.8"
 title: Dinners
 scopes:
   - { id: family, label: "family: parents, kids" }
@@ -334,9 +351,9 @@ lines:
 }
 
 func TestUpgradeMovesAPlatformDescriptionToTheCurrentVersion(t *testing.T) {
-	for _, version := range []string{"0.3", "0.4", "0.5", "0.6"} {
-		source := strings.Replace(description07,`awml: "0.7"`, `awml: "`+version+`"`, 1)
-		want := `awml: "0.7"
+	for _, version := range []string{"0.3", "0.4", "0.5", "0.6", "0.7"} {
+		source := strings.Replace(description08,`awml: "0.8"`, `awml: "`+version+`"`, 1)
+		want := `awml: "0.8"
 platform: { id: scripts, label: "Scripts on a server" }
 off_for_up_to: PT0S
 steps: code
@@ -355,7 +372,7 @@ holds: [notes]
 func TestUpgradeRefusesWhatItCantConvertAlone(t *testing.T) {
 	for source, want := range map[string]string{
 		"awml: \"0.3\"\ntitle: Bread\nview: platform\nparts: []\n": "a platform view converts only with its security view: awml convert security.yaml platform.yaml",
-		"awml: \"0.1\"\ntitle: Bread\nparts: []\n":                 `awml convert reads versions 0.2 to 0.7, not "0.1"`,
+		"awml: \"0.1\"\ntitle: Bread\nparts: []\n":                 `awml convert reads versions 0.2 to 0.8, not "0.1"`,
 		"awml: \"0.5\"\ntitle: Bread\nparts: 3\n":                  "parts must be a list of mappings",
 		"- a list\n": "the file must be a mapping of fields, starting with awml",
 	} {
@@ -394,7 +411,7 @@ lines: [{from: plan, to: list, kind: publish}]
 			t.Fatal(err)
 		}
 		data, _ := Marshal(converted)
-		want := `awml: "0.7"
+		want := `awml: "0.8"
 title: Bread
 scopes:
   - { id: bakery, label: "Bakery" }

@@ -77,7 +77,7 @@ type checkDefinition struct {
 
 var checkDefinitions = []checkDefinition{
 	{id: "file.yaml", name: "The file is YAML", about: "Each file can be read, and holds a YAML mapping of fields.", appliesTo: everyFile, early: true},
-	{id: "file.version", name: "The file is of the version this release reads", about: "awml is \"0.7\". An older file is upgraded with awml convert.", appliesTo: everyFile, early: true},
+	{id: "file.version", name: "The file is of the version this release reads", about: "awml is \"0.8\". An older file is upgraded with awml convert.", appliesTo: everyFile, early: true},
 	{id: "fields.known", name: "Every field is known and none is missing", about: "Each file, scope, part, line, implementation, block and comment has the fields it needs and no others, and each list is a list of mappings.", appliesTo: everyFile, early: true},
 	{id: "kinds.known", name: "Every kind is known", about: "Each part and line has a kind the spec defines.", appliesTo: workflows},
 	{id: "ids.unique", name: "No id is used twice", about: "Scope, part, block and comment ids are unique across the file.", appliesTo: workflows},
@@ -93,7 +93,7 @@ var checkDefinitions = []checkDefinition{
 	{id: "operations.answer-check-read-only", name: "An answer or check step never writes to a context", about: "An answer step and a check step read contexts and speak on surfaces, but never write to a context.", appliesTo: workflows},
 	{id: "tiers.written", name: "Every outside action's label ends with its tier", about: "An outside action's label ends with Allow, Ask or Block after a colon.", appliesTo: workflows},
 	{id: "tiers.shape", name: "Every tier agrees with what stands in front of it", about: "An Ask action has a review, a standing approval or a person's own step on every way in, an Allow action has no review or standing approval in front of it, and only red lines lead to a Block action.", appliesTo: workflows},
-	{id: "approvals.listed", name: "Every standing approval lists its actions on a surface", about: "A standing approval leads to the surface where each action it covers is listed with how to undo it.", appliesTo: workflows},
+	{id: "approvals.listed", name: "Every standing approval lists its actions on a surface", about: "A standing approval leads to the surface where each action it covers is listed.", appliesTo: workflows},
 	{id: "processing.written", name: "Every processing is well written", about: "A scope's processing is any, none, or a map from company ids to any or a list of known operations.", appliesTo: workflows},
 	{id: "processing.nested", name: "An inner scope allows no more processing than its outer one", about: "A scope inside another allows no company or operation that the outer scope doesn't.", appliesTo: workflows},
 	{id: "platform.blocks-only", name: "Only a block takes a platform", about: "platform belongs to a block of an implementation, never to a scope.", appliesTo: workflows},

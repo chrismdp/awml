@@ -111,9 +111,9 @@ func TestBrokenYAMLSaysWhereWithoutTheLibrarysName(t *testing.T) {
 
 func TestADescriptionOfSeveralLinesIsWrittenAsALiteralBlock(t *testing.T) {
 	for _, src := range []string{
-		"awml: \"0.7\"\ntitle: T\ndescription: |\n  The family's *dinners*: planned each Thursday.\n\n  The family is fictional.\nparts: []\n",
-		"awml: \"0.7\"\ntitle: T\ndescription: |-\n  No newline at the end.\n  Two lines.\nparts: []\n",
-		"awml: \"0.7\"\ntitle: T\ndescription: \"One line: with a colon\"\nparts: []\n",
+		"awml: \"0.8\"\ntitle: T\ndescription: |\n  The family's *dinners*: planned each Thursday.\n\n  The family is fictional.\nparts: []\n",
+		"awml: \"0.8\"\ntitle: T\ndescription: |-\n  No newline at the end.\n  Two lines.\nparts: []\n",
+		"awml: \"0.8\"\ntitle: T\ndescription: \"One line: with a colon\"\nparts: []\n",
 	} {
 		got, err := Marshal(parsed(t, src))
 		if err != nil {
