@@ -208,7 +208,7 @@ func owners(to map[*Map]partAt, referring []partAt) (map[*Map]partAt, [][]partAt
 }
 
 // disagreements says how a copy differs from the part it refers to: its kind, label or at, or its
-// scope, compared by who it holds and its terms rather than by its id.
+// scope, compared by who it holds and its terms rather than by its id, whatever kind of part it is.
 func disagreements(here *Map, p *Map, there *Map, q *Map) []string {
 	var said []string
 	quoted := func(m *Map, field string) string {
@@ -221,10 +221,6 @@ func disagreements(here *Map, p *Map, there *Map, q *Map) []string {
 		if a, b := quoted(p, field), quoted(q, field); a != b {
 			said = append(said, fmt.Sprintf("its %s is %s here and %s there", field, a, b))
 		}
-	}
-	// A trigger sits beside what it starts, so its scope is no part of it.
-	if str(p, "kind") == "trigger" || str(q, "kind") == "trigger" {
-		return said
 	}
 	a, b := str(p, "in"), str(q, "in")
 	switch {
@@ -239,17 +235,24 @@ func disagreements(here *Map, p *Map, there *Map, q *Map) []string {
 		said = append(said, fmt.Sprintf("it's %s here and %s there", where(a), where(b)))
 	default:
 		hereScopes, thereScopes := scopeIndex(here), scopeIndex(there)
-		// Who a scope holds is compared only where both labels say.
-		if x, y := hereScopes.people(a), thereScopes.people(b); x != nil && y != nil && strings.Join(x, ",") != strings.Join(y, ",") {
-			said = append(said, fmt.Sprintf("its scope holds %s here and %s there", naturalList(x), naturalList(y)))
-		}
-		x, y := hereScopes.terms(a), thereScopes.terms(b)
+		// A scope records who it holds only in its label, so where a label doesn't list them, the
+		// labels are compared as written.
+		x, y := hereScopes.people(a), thereScopes.people(b)
 		switch {
-		case x == y:
-		case x == "" || y == "":
-			said = append(said, fmt.Sprintf("its scope's processing is %s here and %s there", orUnsaid(x), orUnsaid(y)))
+		case x != nil && y != nil:
+			if strings.Join(x, ",") != strings.Join(y, ",") {
+				said = append(said, fmt.Sprintf("its scope holds %s here and %s there", naturalList(x), naturalList(y)))
+			}
+		case hereScopes.label(a) != thereScopes.label(b):
+			said = append(said, fmt.Sprintf(`its scope's label is "%s" here and "%s" there`, hereScopes.label(a), thereScopes.label(b)))
+		}
+		u, v := hereScopes.terms(a), thereScopes.terms(b)
+		switch {
+		case u == v:
+		case u == "" || v == "":
+			said = append(said, fmt.Sprintf("its scope's processing is %s here and %s there", orUnsaid(u), orUnsaid(v)))
 		default:
-			said = append(said, fmt.Sprintf("its scope allows %s here and %s there", x, y))
+			said = append(said, fmt.Sprintf("its scope allows %s here and %s there", u, v))
 		}
 	}
 	return said
@@ -275,6 +278,14 @@ func scopeIndex(doc *Map) scopes {
 		s.children[str(scope, "in")] = append(s.children[str(scope, "in")], str(scope, "id"))
 	}
 	return s
+}
+
+// label gives a scope's label, or "" for a scope the workflow doesn't have.
+func (s scopes) label(scope string) string {
+	if s.byID[scope] == nil {
+		return ""
+	}
+	return str(s.byID[scope], "label")
 }
 
 // people gives who a scope holds, sorted, or nil when its label doesn't say.

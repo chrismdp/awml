@@ -430,6 +430,16 @@ lines:
   assert.deepEqual(Object.keys(alikeFit.results.find((result) => result.fits).models), ["x/sorter#sort", "y/sorter#sort"]);
   assert.deepEqual(Object.keys(api.fit([...alike.map(({ source }) => source), ...descriptionSources]).results.find((result) => result.fits).models), ["1#sort", "2#sort"]);
 
+  // A trigger's copy is held to its scope too.
+  const scoped = [
+    { file: handOff[0].file, source: plan.replace("label: The shopping list is ready, ref", "label: The shopping list is ready, in: family, ref") },
+    handOff[1],
+  ];
+  for (const { file, source } of scoped) await writeFile(file, source);
+  assert.equal(api.checksJSON(scoped) + "\n", runNative(["check", "--json", ...handOffPaths], 1), "checks JSON of a trigger's copy in another scope");
+  assert.equal(api.checks(scoped).checks.find((check) => check.id === "refs.agree").result, "fail");
+  for (const { file, source } of broken) await writeFile(file, source);
+
   // One file given by name is held to a ref it makes to itself.
   const self = { file: `${temporary}/self.yaml`, source: plan.replace("shop.yaml#ready", "self.yaml#thu") };
   await writeFile(self.file, self.source);
