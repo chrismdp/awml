@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -24,6 +25,13 @@ type config struct {
 	MaxChangedLines int      `yaml:"max_changed_lines"`
 }
 
+// The reviews' record and the classifier's verdict, as files the review job wrote. Either may be
+// left out: the classifier doesn't run when the reviews leave an Important finding open.
+type inputs struct {
+	Findings       string
+	Classification string
+}
+
 type verdict struct {
 	Review  bool
 	Reasons []string
@@ -32,14 +40,15 @@ type verdict struct {
 func main() {
 	repo := flag.String("repo", ".", "repository containing the staged patch")
 	rules := flag.String("rules", ".github/build-rules.yml", "build rules file")
-	review := flag.String("review", "", "optional review note from Claude")
+	findings := flag.String("findings", "", "the reviews' findings, as JSON")
+	classification := flag.String("classification", "", "the classifier's verdict, as JSON")
 	flag.Parse()
 
 	cfg, err := loadConfig(*rules)
 	if err != nil {
 		fatal(err)
 	}
-	result, err := evaluate(*repo, cfg, *review)
+	result, err := evaluate(*repo, cfg, inputs{Findings: *findings, Classification: *classification})
 	if err != nil {
 		fatal(err)
 	}
@@ -82,20 +91,28 @@ func loadConfig(path string) (config, error) {
 	return cfg, nil
 }
 
-func evaluate(repo string, cfg config, reviewPath string) (verdict, error) {
+func evaluate(repo string, cfg config, in inputs) (verdict, error) {
 	var reasons []string
 
-	if reviewPath != "" {
-		note, err := os.ReadFile(reviewPath)
-		if err != nil && !os.IsNotExist(err) {
-			return verdict{}, fmt.Errorf("read Claude's review note: %w", err)
+	if in.Findings != "" {
+		open, err := openFindings(in.Findings)
+		if err != nil {
+			return verdict{}, err
 		}
-		if err == nil {
-			if strings.TrimSpace(string(note)) == "" {
-				reasons = append(reasons, "Claude asked for the maintainer's review.")
-			} else {
-				reasons = append(reasons, "Claude asked for a review: see Claude's note.")
-			}
+		if open == 1 {
+			reasons = append(reasons, "The reviews left 1 finding open.")
+		} else if open > 1 {
+			reasons = append(reasons, fmt.Sprintf("The reviews left %d findings open.", open))
+		}
+	}
+
+	if in.Classification != "" {
+		asked, err := classifierAsked(in.Classification)
+		if err != nil {
+			return verdict{}, err
+		}
+		if asked {
+			reasons = append(reasons, "The classifier asked for a review.")
 		}
 	}
 
@@ -150,6 +167,51 @@ func evaluate(repo string, cfg config, reviewPath string) (verdict, error) {
 		return verdict{Reasons: []string{"No review rule matched this change."}}, nil
 	}
 	return verdict{Review: true, Reasons: reasons}, nil
+}
+
+// openFindings counts the findings about the change itself. A pre-existing one is about code the
+// change didn't write, so it's shown but leaves the change straightforward.
+func openFindings(path string) (int, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, fmt.Errorf("read the reviews' findings: %w", err)
+	}
+	var findings []struct {
+		Severity string `json:"severity"`
+	}
+	if err := json.Unmarshal(data, &findings); err != nil {
+		return 0, fmt.Errorf("read the reviews' findings: %w", err)
+	}
+	open := 0
+	for _, finding := range findings {
+		switch finding.Severity {
+		case "Important", "Nit":
+			open++
+		case "Pre-existing":
+		default:
+			return 0, fmt.Errorf("a finding has an unknown severity %q", finding.Severity)
+		}
+	}
+	return open, nil
+}
+
+// classifierAsked reads whether the classifier asked for a review. It can only add a review, so
+// its answer of no changes nothing.
+func classifierAsked(path string) (bool, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false, fmt.Errorf("read the classifier's verdict: %w", err)
+	}
+	var classification struct {
+		NeedsReview *bool `json:"needs_review"`
+	}
+	if err := json.Unmarshal(data, &classification); err != nil {
+		return false, fmt.Errorf("read the classifier's verdict: %w", err)
+	}
+	if classification.NeedsReview == nil {
+		return false, errors.New("the classifier's verdict has no needs_review")
+	}
+	return *classification.NeedsReview, nil
 }
 
 func changedPaths(repo string) ([]string, error) {
