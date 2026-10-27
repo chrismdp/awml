@@ -214,3 +214,50 @@ func TestAFileGivenTwiceIsReadOnce(t *testing.T) {
 		t.Errorf("check plan.yaml . ./plan.yaml gave %+v\nwant %+v", got, want)
 	}
 }
+
+// Mistakes found by following refs between files stop the commands that draw, count and fit them,
+// as one file's own mistakes do: each is printed, and nothing else.
+func TestCommandsRefuseFilesWhoseRefsHaveMistakes(t *testing.T) {
+	laptop := write(t, "laptop.yaml", agentLaptop)
+	for _, tc := range []struct{ name, plan, shop string }{
+		{"a missing part", planWorkflow, strings.Replace(shopWorkflow, "plan.yaml#list", "plan.yaml#lists", 1)},
+		{"a copy that disagrees", planWorkflow, strings.Replace(shopWorkflow, "label: Shopping list", "label: The list", 1)},
+		{"a copy of another kind", planWorkflow, strings.Replace(shopWorkflow, "kind: context, label: Shopping list, at: notes/list", "kind: connector, label: Shopping list", 1)},
+		{"a copy of a step", planWorkflow, strings.Replace(shopWorkflow, "plan.yaml#list", "plan.yaml#plan", 1)},
+		{"a ref to its own workflow", strings.Replace(planWorkflow, "shop.yaml#ready", "plan.yaml#thu", 1), shopWorkflow},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := folder(t, "plan.yaml", tc.plan, "shop.yaml", tc.shop)
+			plan, shop := filepath.Join(dir, "plan.yaml"), filepath.Join(dir, "shop.yaml")
+			var want string
+			for _, line := range strings.Split(awmlRun("check", plan, shop).stdout, "\n") {
+				if line != "" && !strings.Contains(line, ": warning: ") && !strings.HasSuffix(line, ": ok") {
+					want += line + "\n"
+				}
+			}
+			if want == "" {
+				t.Fatal("check finds no mistake")
+			}
+			out := filepath.Join(dir, "page.html")
+			for _, args := range [][]string{
+				{"draw", plan, shop}, {"summary", plan, shop}, {"summary", "--json", plan, shop},
+				{"fit", plan, shop, laptop}, {"fit", "--json", plan, shop, laptop}, {"page", "-o", out, plan, shop},
+			} {
+				if got := awmlRun(args...); got != (result{1, "", want}) {
+					t.Errorf("awml %q gave %+v\nwant stderr %q", args[:len(args)-2], got, want)
+				}
+			}
+			if _, err := os.Stat(out); err == nil {
+				t.Error("page wrote its file")
+			}
+		})
+	}
+	// One file is held to its refs too.
+	path := write(t, "plan.yaml", strings.Replace(planWorkflow, "shop.yaml#ready", "plan.yaml#thu", 1))
+	want := path + `: part "ready" refers to plan.yaml#thu, which is in its own workflow: a ref names a part of another workflow` + "\n"
+	for _, args := range [][]string{{"draw", path}, {"draw", "--untrusted", path}, {"summary", path}, {"fit", path, laptop}} {
+		if got := awmlRun(args...); got != (result{1, "", want}) {
+			t.Errorf("awml %q gave %+v", args, got)
+		}
+	}
+}

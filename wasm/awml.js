@@ -51,7 +51,9 @@ async function start(source) {
       return JSON.parse(this.checksJSON(files));
     },
     // summary, fit and draw take one file or several, each its text or { file, source }. Given
-    // together, workflows follow each ref between them, a path ref from the file's name.
+    // together, workflows follow each ref between them, a path ref from the file's name, which is
+    // its path from one root. Each throws the mistakes following the refs finds, one to a line after
+    // the file's name, as awml prints them.
     summaryJSON(sourceTexts) {
       const sources = given(sourceTexts);
       for (const sourceText of sources) {
@@ -113,7 +115,9 @@ async function start(source) {
       sourceText = text(sources[0]);
       const errors = this.unsound(sourceText);
       if (errors.length) throw new Error(errors.join("\n"));
-      const output = globalThis.__awmlDraw(sourceText, implementation);
+      const output = typeof sources[0] === "string"
+        ? globalThis.__awmlDraw(sourceText, implementation)
+        : globalThis.__awmlDraw(sourceText, implementation, sources[0].file || "");
       if (output.startsWith("{")) throw new Error(JSON.parse(output).error);
       return output;
     },
