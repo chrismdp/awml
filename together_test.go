@@ -187,12 +187,35 @@ func TestACopyThatDisagreesWithThePartItRefersToIsAMistake(t *testing.T) {
 		{`"home: parents, kids"`, `"home: parents"`, `part "list" refers to plan.yaml#list, but its scope holds parents here and kids and parents there`},
 		{"processing: any", "processing: { anthropic: any }", `part "list" refers to plan.yaml#list, but its scope allows anthropic only here and any company there`},
 		{"at: notes/list, in: home, ref", "at: notes/list, ref", `part "list" refers to plan.yaml#list, but it's outside every scope here and in scope "family" there`},
+		// A scope records its people only in its label, so a label that doesn't list them is compared as written.
+		{`"home: parents, kids"`, `"The family"`, `part "list" refers to plan.yaml#list, but its scope's label is "The family" here and "family: parents, kids" there`},
 	} {
 		t.Run(tc.want, func(t *testing.T) {
 			shop := strings.Replace(shopWorkflow, tc.from, tc.to, 1)
 			togetherFinds(t, together(t, "plan.yaml", planWorkflow, "shop.yaml", shop), nil, strings.Split(tc.want, "\n"))
 		})
 	}
+}
+
+// A trigger's copy is held to its scope as every other part's is.
+func TestATriggersCopyIsHeldToItsScope(t *testing.T) {
+	plan := strings.Replace(planWorkflow, "label: The shopping list is ready, ref", "label: The shopping list is ready, in: family, ref", 1)
+	shop := strings.Replace(shopWorkflow, "label: The shopping list is ready, wait: PT1H", "label: The shopping list is ready, wait: PT1H, in: parents", 1)
+	shop = strings.Replace(shop, "scopes:\n", "scopes:\n  - { id: parents, label: \"parents: parents\", processing: none }\n", 1)
+	togetherFinds(t, together(t, "plan.yaml", plan, "shop.yaml", shop), []string{
+		`part "ready" refers to shop.yaml#ready, but its scope holds kids and parents here and parents there`,
+		`part "ready" refers to shop.yaml#ready, but its scope allows any company here and no company there`,
+	}, nil)
+	togetherFinds(t, together(t, "plan.yaml", plan, "shop.yaml", shopWorkflow), []string{
+		`part "ready" refers to shop.yaml#ready, but it's in scope "family" here and outside every scope there`,
+	}, nil)
+}
+
+// Labels that list no one are the same scope when they're written the same.
+func TestScopesWhoseLabelsListNoOneAgreeWhenTheLabelsDo(t *testing.T) {
+	plan := strings.Replace(planWorkflow, `"family: parents, kids"`, `"The family"`, 1)
+	shop := strings.Replace(shopWorkflow, `"home: parents, kids"`, `"The family"`, 1)
+	togetherFinds(t, together(t, "plan.yaml", plan, "shop.yaml", shop))
 }
 
 // A scope is compared by who it holds and its terms, never by its id.
