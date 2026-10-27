@@ -87,7 +87,23 @@ jobs:
           jq -r '"# \(.pull_request.title)\n\n\(.pull_request.body // "")"' "$GITHUB_EVENT_PATH" \
             > "$review/pull-request.md"
           git checkout -q --detach "$base"
-          git apply --index "$review/change.patch"
+          # GitHub's diff names a binary file without its contents, so git can't apply it. Apply the
+          # rest, and tell the reviewers which binary files changed.
+          binaries="$review/binaries.txt"
+          sed -nE -e 's#^Binary files .* and b/(.*) differ$#\1#p' \
+            -e 's#^Binary files a/(.*) and /dev/null differ$#\1#p' "$review/change.patch" \
+            | sort -u > "$binaries"
+          skip=()
+          while IFS= read -r path; do
+            [ -n "$path" ] && skip+=("--exclude=$path")
+          done < "$binaries"
+          git apply --index "${skip[@]}" "$review/change.patch"
+          if [ -s "$binaries" ]; then
+            {
+              printf '\n## Binary files, changed but not shown in the patch\n\n'
+              sed 's/^/- /' "$binaries"
+            } >> "$review/pull-request.md"
+          fi
           claudes='(^|/)\.claude(/|$)|(^|/)\.mcp\.json$|(^|/)CLAUDE(\.local)?\.md$'
           if git diff --cached --name-only --no-renames -z | grep -zqE "$claudes"; then
             echo "The patch changes Claude Code's own settings, servers or instructions, which a review session would load, so it isn't reviewed:"
