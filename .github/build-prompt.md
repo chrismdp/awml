@@ -26,8 +26,8 @@ found, fix each Important finding, and any other you agree with.
   the test that asks for it. A drawing that breaks a rule goes in examples/live/red-line.yaml.
   Anything else goes in a small new example in examples/tour/, numbered one more than the highest
   there, checking with no warnings, added to the list in TestThereAreExamples, and given its own
-  short section in the README's gallery. Its SVG comes from `.github/picture-drawings.sh`, so run
-  that as soon as its .mmd is written, then the checks again. Change an existing example's story
+  short section in the README's gallery. Its SVG comes from `.github/picture-drawings.sh BUILD_DIR`,
+  so run that as soon as its .mmd is written, then the checks again. Change an existing example's story
   only by asking, as above.
 - Once the checks pass, if your change alters an example's .mmd or the renderer under
   examples/render*, run `.github/picture-drawings.sh BUILD_DIR`. It redraws the drawings your

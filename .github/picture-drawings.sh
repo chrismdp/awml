@@ -26,7 +26,7 @@ set -euo pipefail
 out="$1"
 mkdir -p "$out"
 
-drawings=(':(glob)examples/*.svg' ':(glob)examples/tour/*.svg')
+drawings=(':(glob)examples/*.svg' ':(glob)examples/tour/*.svg' ':(glob)examples/live/*.svg')
 
 # What the working tree changes from HEAD, new files included.
 changed() {
@@ -38,7 +38,7 @@ keep=()
 if [ -z "$renderer" ]; then
   while IFS= read -r mmd; do
     [ -f "$mmd" ] && keep+=("${mmd%.mmd}.svg")
-  done < <(changed ':(glob)examples/*.mmd' ':(glob)examples/tour/*.mmd')
+  done < <(changed ':(glob)examples/*.mmd' ':(glob)examples/tour/*.mmd' ':(glob)examples/live/*.mmd')
   if [ "${#keep[@]}" -eq 0 ]; then
     echo "The change alters no example's .mmd and not the renderer, so nothing is redrawn."
     exit 0
