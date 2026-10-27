@@ -91,7 +91,7 @@ func loadConfig(path string) (config, error) {
 	return cfg, nil
 }
 
-func evaluate(repo string, cfg config, in inputs) (verdict, error) {
+func evaluate(repoDir string, cfg config, in inputs) (verdict, error) {
 	var reasons []string
 
 	if in.Findings != "" {
@@ -116,6 +116,11 @@ func evaluate(repo string, cfg config, in inputs) (verdict, error) {
 		}
 	}
 
+	repo, err := openRepository(repoDir)
+	if err != nil {
+		return verdict{}, err
+	}
+
 	paths, err := changedPaths(repo)
 	if err != nil {
 		return verdict{}, err
@@ -126,6 +131,11 @@ func evaluate(repo string, cfg config, in inputs) (verdict, error) {
 				reasons = append(reasons, fmt.Sprintf("%s is a path that always needs review.", path))
 				break
 			}
+		}
+	}
+	for _, path := range paths {
+		if path == ".gitattributes" || strings.HasSuffix(path, "/.gitattributes") {
+			reasons = append(reasons, fmt.Sprintf("%s changes how git reads files.", path))
 		}
 	}
 
@@ -143,7 +153,8 @@ func evaluate(repo string, cfg config, in inputs) (verdict, error) {
 		if !strings.HasSuffix(path, "_test.go") || containsPath(deleted, path) {
 			continue
 		}
-		diff, err := git(repo, "diff", "--cached", "--unified=0", "--no-color", "--no-ext-diff", "--", path)
+		// --text reads a file with a NUL byte as text too, so it can't hide a removed test.
+		diff, err := repo.git("diff", "--cached", "--text", "--unified=0", "--no-color", "--no-ext-diff", "--", path)
 		if err != nil {
 			return verdict{}, err
 		}
@@ -152,9 +163,14 @@ func evaluate(repo string, cfg config, in inputs) (verdict, error) {
 		}
 	}
 
-	changedLines, err := countChangedLines(repo)
+	changedLines, binary, err := countChangedLines(repo)
 	if err != nil {
 		return verdict{}, err
+	}
+	for _, path := range binary {
+		if !allowedBinary(path) {
+			reasons = append(reasons, fmt.Sprintf("%s is a binary file.", path))
+		}
 	}
 	if changedLines > cfg.MaxChangedLines {
 		reasons = append(reasons, fmt.Sprintf(
@@ -214,48 +230,65 @@ func classifierAsked(path string) (bool, error) {
 	return *classification.NeedsReview, nil
 }
 
-func changedPaths(repo string) ([]string, error) {
-	output, err := git(repo, "diff", "--cached", "--name-only", "--no-renames", "-z", "--")
+// allowedBinary says whether a binary file is an image or a font, which a diff can't show anyway.
+// Under .github/ even those need review.
+func allowedBinary(path string) bool {
+	if strings.HasPrefix(path, ".github/") {
+		return false
+	}
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".ttf", ".otf", ".woff", ".woff2":
+		return true
+	}
+	return false
+}
+
+func changedPaths(repo repository) ([]string, error) {
+	output, err := repo.git("diff", "--cached", "--name-only", "--no-renames", "-z", "--")
 	if err != nil {
 		return nil, err
 	}
 	return nulFields(output), nil
 }
 
-func deletedPaths(repo string) ([]string, error) {
-	output, err := git(repo, "diff", "--cached", "--diff-filter=D", "--name-only", "--no-renames", "-z", "--")
+func deletedPaths(repo repository) ([]string, error) {
+	output, err := repo.git("diff", "--cached", "--diff-filter=D", "--name-only", "--no-renames", "-z", "--")
 	if err != nil {
 		return nil, err
 	}
 	return nulFields(output), nil
 }
 
-func countChangedLines(repo string) (int, error) {
-	output, err := git(repo, "diff", "--cached", "--numstat", "--no-renames", "-z", "--")
+// countChangedLines counts the lines the patch adds and removes, and lists the files git reads
+// as binary, whose lines it can't count.
+func countChangedLines(repo repository) (int, []string, error) {
+	output, err := repo.git("diff", "--cached", "--numstat", "--no-renames", "-z", "--")
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	total := 0
+	var binary []string
 	for _, record := range nulFields(output) {
 		fields := strings.SplitN(record, "\t", 3)
 		if len(fields) != 3 {
-			return 0, fmt.Errorf("unexpected numstat record %q", record)
+			return 0, nil, fmt.Errorf("unexpected numstat record %q", record)
+		}
+		if fields[0] == "-" && fields[1] == "-" {
+			binary = append(binary, fields[2])
+			continue
 		}
 		if strings.HasPrefix(fields[2], generatedReferences) {
 			continue
 		}
 		for _, value := range fields[:2] {
-			if value == "-" {
-				continue
-			}
 			number, err := strconv.Atoi(value)
 			if err != nil {
-				return 0, fmt.Errorf("unexpected numstat count %q", value)
+				return 0, nil, fmt.Errorf("unexpected numstat count %q", value)
 			}
 			total += number
 		}
 	}
-	return total, nil
+	return total, binary, nil
 }
 
 func nulFields(output []byte) []string {
@@ -278,6 +311,25 @@ func containsPath(paths []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// repository runs git with the empty tree as the source of attributes, so a .gitattributes in the
+// patch can't decide how its own diff is read.
+type repository struct {
+	dir       string
+	emptyTree string
+}
+
+func openRepository(dir string) (repository, error) {
+	output, err := git(dir, "hash-object", "-t", "tree", os.DevNull)
+	if err != nil {
+		return repository{}, err
+	}
+	return repository{dir: dir, emptyTree: strings.TrimSpace(string(output))}, nil
+}
+
+func (repo repository) git(args ...string) ([]byte, error) {
+	return git(repo.dir, append([]string{"--attr-source=" + repo.emptyTree}, args...)...)
 }
 
 func git(repo string, args ...string) ([]byte, error) {
