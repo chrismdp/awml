@@ -10,14 +10,14 @@ config:
 ---
 flowchart TB
   w1_evening(["Every day 18#58;00"])
+  w2_morning(["Every day 07#58;00"])
+  s1[("Stock levels")]
   subgraph w1["The bakery#39;s stock count"]
     direction TB
   end
-  w2_morning(["Every day 07#58;00"])
   subgraph w2["The bakery#39;s morning order"]
     direction TB
   end
-  s1[("Stock levels")]
 
   w1_evening --> w1
   w2_morning --> w2

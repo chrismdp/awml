@@ -82,7 +82,7 @@ lines:
 	has(t, out, "\n  a --> r\n")
 	has(t, out, "\n  r -->|\"#91;yes#93;\"| f\n")
 	has(t, out, "\n  f --> o\n")
-	has(t, out, "\n  a <--> o\n")
+	has(t, out, "\n  o --> a\n")
 }
 
 // A line that reads from or writes to a context, a connector or a surface is dotted: it's
@@ -101,11 +101,13 @@ lines:
   - {from: c, to: b, kind: refused}`, kind))
 			has(t, out, "\n  a -.-> b\n")
 			has(t, out, "\n  b -.-> c\n")
-			has(t, out, "\n  b <-.-> c\n")
-			has(t, out, "\n  a <-.-> b\n")
+			has(t, out, "\n  c -.-> b\n")
+			has(t, out, "\n  b -.-> a\n")
 			has(t, out, "\n  a -.-x b\n")
-			has(t, out, "\n  b x-.-x c\n")
-			has(t, out, "\n  linkStyle 2,3,5 marker-end:none")
+			has(t, out, "\n  c -.-x b\n")
+			if strings.Contains(out, "linkStyle") {
+				t.Errorf("a linkStyle in\n%s", out)
+			}
 		})
 	}
 }
@@ -123,8 +125,8 @@ lines:
 	has(t, out, "\n  a ==> c\n")
 	has(t, out, "\n  a ==> b\n")
 	has(t, out, "\n  d ==> c\n")
-	has(t, out, "\n  a <==> d\n")
-	if !strings.HasSuffix(out, "\n  linkStyle 1,2 "+dotted+"\n  linkStyle 3 "+dotted+",marker-end:none") {
+	has(t, out, "\n  d ==> a\n")
+	if !strings.HasSuffix(out, "\n  linkStyle 1,2,3 "+dotted) {
 		t.Errorf("the drawing is\n%s", out)
 	}
 }
@@ -137,8 +139,8 @@ lines:
   - {from: b, to: a, kind: tie}
   - {from: a, to: c, kind: hidden}
   - {from: c, to: a, kind: tie}`)
-	has(t, out, "\n  a -.- b\n")
-	has(t, out, "\n  a -.- c\n")
+	has(t, out, "\n  b -.- a\n")
+	has(t, out, "\n  c -.- a\n")
 	if !strings.HasSuffix(out, "\n  linkStyle 0,2 "+grey) {
 		t.Errorf("the drawing is\n%s", out)
 	}
@@ -149,8 +151,8 @@ func TestARedDottedPublishLineIsRedThickAndDotted(t *testing.T) {
 	out := drawing(t, "security", `
 parts: [{id: a, kind: code, label: A}, {id: b, kind: surface, label: B}]
 lines: [{from: b, to: a, kind: publish, breaks: [wrong]}]`)
-	has(t, out, "\n  a <==>|\"wrong\"| b\n")
-	if !strings.HasSuffix(out, "\n  linkStyle 0 "+red+","+dotted+",marker-end:none") {
+	has(t, out, "\n  b ==>|\"wrong\"| a\n")
+	if !strings.HasSuffix(out, "\n  linkStyle 0 "+red+","+dotted) {
 		t.Errorf("the drawing is\n%s", out)
 	}
 }
@@ -217,7 +219,9 @@ lines: [{from: a, to: b, kind: data}]`)
 	}
 }
 
-func TestLinesBackToEarlierPartsAreReversedForLayoutWithTheRealArrowheadKept(t *testing.T) {
+// A line back to an earlier part is written in its own direction, from its from to its to, so the
+// Mermaid says which way it points without anyone knowing the order of the parts.
+func TestALineBackToAnEarlierPartIsWrittenFromItsFromToItsTo(t *testing.T) {
 	out := drawing(t, "security", `
 parts: [{id: first, kind: code, label: First}, {id: last, kind: code, label: Last}]
 lines:
@@ -227,23 +231,25 @@ lines:
   - {from: last, to: first, kind: publish}
   - {from: last, to: first, kind: tie}
   - {from: last, to: first, kind: hidden}`)
-	has(t, out, "\n  first <--> last\n")
-	has(t, out, "\n  first x--x last\n")
-	has(t, out, "\n  first <==> last\n")
-	has(t, out, "\n  first -.- last\n")
-	has(t, out, "\n  first ~~~ last\n")
-	has(t, out, "\n  linkStyle 0,1,2,3 marker-end:none\n  linkStyle 4 "+grey)
+	has(t, out, "\n  last --> first\n  last --> first\n")
+	has(t, out, "\n  last --x first\n")
+	has(t, out, "\n  last ==> first\n")
+	has(t, out, "\n  last -.- first\n")
+	has(t, out, "\n  last ~~~ first\n")
+	if !strings.HasSuffix(out, "\n  linkStyle 4 "+grey) {
+		t.Errorf("the drawing ends\n%s", out[strings.LastIndex(out, "\n  linkStyle"):])
+	}
 }
 
-func TestAReversedRedLineKeepsItsColourAndOnlyItsRealArrowhead(t *testing.T) {
+func TestARedLineBackToAnEarlierPartIsRedLikeAnyOther(t *testing.T) {
 	out := drawing(t, "security", `
 parts: [{id: first, kind: code, label: First}, {id: last, kind: code, label: Last}]
 lines:
   - {from: first, to: last, kind: hidden}
   - {from: last, to: first, kind: data, label: back, breaks: [wrong]}
   - {from: first, to: last, kind: data, breaks: [wrong]}`)
-	has(t, out, `first <-->|"back<br>wrong"| last`)
-	if !strings.HasSuffix(out, "\n  linkStyle 1 "+red+",marker-end:none\n  linkStyle 2 "+red) {
+	has(t, out, `last -->|"back<br>wrong"| first`)
+	if !strings.HasSuffix(out, "\n  linkStyle 1,2 "+red) {
 		t.Errorf("the drawing ends\n%s", out[strings.LastIndex(out, "\n  linkStyle"):])
 	}
 }
@@ -423,7 +429,7 @@ flowchart TB
   tAsk --> sFind
   cFam -.-> sFind
   cCar -.-> sFind
-  sFind x-.-x|"never read here"| cNadia
+  cNadia -.-x|"never read here"| sFind
   sFind --> sWord
   sWord -.->|"the answer#44; naming its notes"| uChat
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
@@ -443,8 +449,7 @@ flowchart TB
   class sFind code
   style zCarers fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
   style zFamily fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
-  style zNadia fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
-  linkStyle 3 marker-end:none`
+  style zNadia fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f`
 
 func TestTheQuestionDrawsAsTheApprovedPageDrewIt(t *testing.T) {
 	if got := Draw(parsed(t, questionFile)); got != approved {

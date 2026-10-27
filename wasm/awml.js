@@ -135,7 +135,8 @@ async function start(source) {
     },
     // graph gives what draw draws, with nothing laid out, as awml graph does: one workflow's view,
     // or the map of several workflows given together. It takes what draw takes, and throws what draw
-    // throws.
+    // throws. Every label is given exactly as the file wrote it, and no text in it is escaped, so a
+    // page that shows it must escape it itself, unlike draw, whose Mermaid escapes it.
     graphJSON(sourceText, implementation = "") {
       const sources = given(sourceText);
       if (sources.length > 1 && implementation) throw new Error("an implementation is given for one workflow, not several");
@@ -151,7 +152,8 @@ async function start(source) {
     graph(sourceText, implementation = "") {
       return JSON.parse(this.graphJSON(sourceText, implementation));
     },
-    // graphUntrusted gives what drawUntrusted draws, as awml graph --untrusted does.
+    // graphUntrusted gives what drawUntrusted draws, as awml graph --untrusted does, with its text
+    // unescaped as graph gives it.
     graphUntrustedJSON(sourceText) {
       const errors = this.unsound(sourceText);
       if (errors.length) throw new Error(errors.join("\n"));

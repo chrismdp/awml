@@ -44,7 +44,7 @@ flowchart TB
   save --> edit
   saved ==>|"the consultant takes the reply · loosens anthropic only to any company"| edit
   edit --> send
-  mailbox <-.-> send
+  send -.-> mailbox
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
   classDef con fill:#eceef2,stroke:#5d6472,color:#16171b
@@ -64,4 +64,3 @@ flowchart TB
   class edit person
   style private fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
   style business fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
-  linkStyle 15 marker-end:none

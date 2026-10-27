@@ -48,22 +48,7 @@ func graphOf(t *testing.T, src, implementation string) Graph {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return bare(GraphOf(view))
-}
-
-// bare leaves out where each part, comment and group comes in the drawing, which only its Mermaid
-// uses, so a graph can be compared with one written out.
-func bare(g Graph) Graph {
-	for i := range g.Parts {
-		g.Parts[i].at = 0
-	}
-	for i := range g.Comments {
-		g.Comments[i].at = 0
-	}
-	for i := range g.Groups {
-		g.Groups[i].at = 0
-	}
-	return g
+	return GraphOf(view)
 }
 
 func TestTheGraphOfAWorkflowHasItsParts(t *testing.T) {
@@ -204,7 +189,7 @@ func mustView(t *testing.T, doc *Map, implementation string) *Map {
 }
 
 func TestTheGraphOfAMapHasEachWorkflowsBox(t *testing.T) {
-	g := bare(GraphMap(together(t, "plan.yaml", planWorkflow, "shop.yaml", shopWorkflow)))
+	g := GraphMap(together(t, "plan.yaml", planWorkflow, "shop.yaml", shopWorkflow))
 	if g.View != "map" {
 		t.Errorf("view is %q", g.View)
 	}
@@ -294,5 +279,70 @@ func TestDrawDrawsTheGraph(t *testing.T) {
 	workflows := together(t, "plan.yaml", planWorkflow, "shop.yaml", shopWorkflow)
 	if DrawMap(workflows) != GraphMap(workflows).Mermaid() {
 		t.Error("DrawMap doesn't draw the graph")
+	}
+}
+
+// The Mermaid is drawn from what the graph lists, in the order it lists it, so a graph read back
+// from awml graph's JSON draws just as awml draw does.
+func TestAGraphReadBackFromItsJSONDrawsTheSame(t *testing.T) {
+	question := parsed(t, questionFile)
+	graphs := map[string]Graph{
+		"security": GraphOf(mustView(t, parsed(t, bakeryReplies), "")),
+		"platform": GraphOf(mustView(t, parsed(t, bakeryReplies), "home")),
+		"question": GraphOf(question),
+		"map":      GraphMap(together(t, "plan.yaml", planWorkflow, "shop.yaml", shopWorkflow)),
+	}
+	for name, g := range graphs {
+		encoded, err := json.Marshal(g)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var read Graph
+		if err := json.Unmarshal(encoded, &read); err != nil {
+			t.Fatal(err)
+		}
+		if got, want := read.Mermaid(), g.Mermaid(); got != want {
+			t.Errorf("%s read back draws\n%s\nnot\n%s", name, got, want)
+		}
+	}
+}
+
+// At each level, the Mermaid writes the parts in the order the graph lists them, then the
+// comments, then the groups, and each line from its from to its to.
+func TestTheMermaidWritesWhatTheGraphListsInItsOrder(t *testing.T) {
+	g := Graph{
+		View:     "security",
+		Groups:   []GraphGroup{{ID: "inner", Label: "Inner", In: "outer"}, {ID: "outer", Label: "Outer"}},
+		Parts:    []GraphPart{{ID: "b", Kind: "context", Label: "B", In: "outer"}, {ID: "a", Kind: "trigger", Label: "A"}, {ID: "d", Kind: "context", Label: "D", In: "inner"}},
+		Comments: []GraphComment{{ID: "c", Label: "C", In: "outer", Ties: []string{"b"}}},
+		Lines:    []GraphLine{{From: "b", To: "a", Kind: "data", Points: "to"}, {From: "c", To: "b", Kind: "tie", Points: "none"}},
+	}
+	has(t, g.Mermaid(), `flowchart TB
+  a(["A"])
+  subgraph outer["Outer"]
+    direction TB
+    b[("B")]
+    c@{ shape: notch-rect, label: "C" }
+    subgraph inner["Inner"]
+      direction TB
+      d[("D")]
+    end
+  end
+
+  b -.-> a
+  c -.- b
+`)
+}
+
+// The graph gives each label as the file wrote it, so a tool that shows it escapes it itself, as
+// the Mermaid does.
+func TestTheGraphGivesLabelsAsWrittenAndTheMermaidEscapesThem(t *testing.T) {
+	const label = `Say "yes" & <b>now</b>`
+	g := graphOf(t, "awml: \"0.7\"\ntitle: T\nparts:\n  - { id: a, kind: ai, label: '"+label+"' }\n", "")
+	if g.Parts[0].Label != label {
+		t.Errorf("the label is %q", g.Parts[0].Label)
+	}
+	if out := g.Mermaid(); strings.Contains(out, label) || !strings.Contains(out, text(label)) {
+		t.Errorf("the Mermaid doesn't escape the label:\n%s", out)
 	}
 }

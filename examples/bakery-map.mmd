@@ -10,15 +10,15 @@ config:
 ---
 flowchart TB
   w1_close(["Every day 18#58;00"])
+  w2_low(["Flour#44; butter or sugar runs low"])
+  s1[("Stock levels")]
   subgraph w1["The bakery#39;s stock count"]
     direction TB
     w1_start>"Start the supplier order#58; Allow"]
   end
-  w2_low(["Flour#44; butter or sugar runs low"])
   subgraph w2["The bakery#39;s supplier order"]
     direction TB
   end
-  s1[("Stock levels")]
 
   w1_close --> w1
   w2_low --> w2
