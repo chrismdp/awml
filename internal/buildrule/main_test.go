@@ -275,6 +275,98 @@ func TestEvaluateChangedLineLimit(t *testing.T) {
 	})
 }
 
+func TestEvaluateBinaryFiles(t *testing.T) {
+	t.Run("a new .gitattributes can't hide the patch's lines", func(t *testing.T) {
+		repo := newRepo(t)
+		stage(t, repo, ".gitattributes", "* -diff\n")
+		stage(t, repo, "large.txt", numberedLines("new", 500))
+
+		got, err := evaluate(repo, config{MaxChangedLines: 400}, inputs{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertVerdict(t, got, true, ".gitattributes changes how git reads files.")
+		assertVerdict(t, got, true, "The patch changes 501 lines, more than the limit of 400.")
+	})
+
+	t.Run("a .gitattributes in a subdirectory", func(t *testing.T) {
+		repo := newRepo(t)
+		stage(t, repo, "docs/.gitattributes", "*.md text\n")
+
+		got, err := evaluate(repo, config{MaxChangedLines: 400}, inputs{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertVerdict(t, got, true, "docs/.gitattributes changes how git reads files.")
+	})
+
+	t.Run("a .gitattributes can't hide a removed test function", func(t *testing.T) {
+		repo := newRepo(t)
+		stage(t, repo, "thing_test.go", "package thing\n\nfunc TestKept(t *testing.T) {}\nfunc TestRemoved(t *testing.T) {}\n")
+		commit(t, repo)
+		stage(t, repo, ".gitattributes", "*_test.go binary\n")
+		stage(t, repo, "thing_test.go", "package thing\n\nfunc TestKept(t *testing.T) {}\n")
+
+		got, err := evaluate(repo, config{MaxChangedLines: 400}, inputs{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertVerdict(t, got, true, "thing_test.go removes a test function.")
+		if contains(got.Reasons, "thing_test.go is a binary file.") {
+			t.Fatalf("reasons = %q, want thing_test.go read as text", got.Reasons)
+		}
+	})
+
+	t.Run("a NUL byte in a test that also loses a test function", func(t *testing.T) {
+		repo := newRepo(t)
+		stage(t, repo, "thing_test.go", "package thing\n\nfunc TestKept(t *testing.T) {}\nfunc TestRemoved(t *testing.T) {}\n")
+		commit(t, repo)
+		stage(t, repo, "thing_test.go", "package thing\n\x00\nfunc TestKept(t *testing.T) {}\n")
+
+		got, err := evaluate(repo, config{MaxChangedLines: 400}, inputs{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertVerdict(t, got, true, "thing_test.go is a binary file.")
+		assertVerdict(t, got, true, "thing_test.go removes a test function.")
+	})
+
+	t.Run("a changed image", func(t *testing.T) {
+		repo := newRepo(t)
+		stage(t, repo, "examples/picture.png", "\x89PNG\x00old")
+		commit(t, repo)
+		stage(t, repo, "examples/picture.png", "\x89PNG\x00new")
+
+		got, err := evaluate(repo, config{MaxChangedLines: 400}, inputs{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertVerdict(t, got, false, "No review rule matched this change.")
+	})
+
+	t.Run("a font with a capital extension", func(t *testing.T) {
+		repo := newRepo(t)
+		stage(t, repo, "examples/fonts/Inter.WOFF2", "wOF2\x00")
+
+		got, err := evaluate(repo, config{MaxChangedLines: 400}, inputs{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertVerdict(t, got, false, "No review rule matched this change.")
+	})
+
+	t.Run("an image under .github", func(t *testing.T) {
+		repo := newRepo(t)
+		stage(t, repo, ".github/picture.png", "\x89PNG\x00")
+
+		got, err := evaluate(repo, config{MaxChangedLines: 400}, inputs{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertVerdict(t, got, true, ".github/picture.png is a binary file.")
+	})
+}
+
 func assertVerdict(t *testing.T, got verdict, review bool, reason string) {
 	t.Helper()
 	if got.Review != review {
