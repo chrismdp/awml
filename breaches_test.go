@@ -134,11 +134,11 @@ func TestUntrustedTextGoesAlongALineThatBreaksARule(t *testing.T) {
 	if want := []string{"Pin the plan to the board: Allow", "Print the label: Allow"}; !reflect.DeepEqual(got.OutsideActions, want) {
 		t.Errorf("outside actions = %q, want %q", got.OutsideActions, want)
 	}
-	if !reflect.DeepEqual(Warnings(doc), []string{
+	if !reflect.DeepEqual(otherWarnings(doc), []string{
 		`untrusted text from part "form" reaches outside action "board": a review, a person's own step or a code step marked cleans in between would stop it`,
 		`untrusted text from part "form" reaches outside action "box": a review, a person's own step or a code step marked cleans in between would stop it`,
 	}) {
-		t.Errorf("Warnings gave %q", Warnings(doc))
+		t.Errorf("Warnings gave %q", otherWarnings(doc))
 	}
 }
 
@@ -153,7 +153,7 @@ lines:
   - { from: act, to: chat, kind: data }
   - { from: act, to: out, kind: start, label: "done by the live system" }
 `)
-	if got := Warnings(doc); !reflect.DeepEqual(got, []string{`do step "act" leads to 2 changes ("chat", "out"): each do step should make one`}) {
+	if got := otherWarnings(doc); !reflect.DeepEqual(got, []string{`do step "act" leads to 2 changes ("chat", "out"): each do step should make one`}) {
 		t.Errorf("Warnings gave %q", got)
 	}
 }

@@ -1,7 +1,7 @@
 awml: "0.7"
 title: The parts of a drawing
 description: |
-  Every kind of part, as a key to reading the drawings. The hidden lines only lay it out as a grid.
+  Every kind of part, as a key to reading the drawings, joined into one small workflow.
 parts:
   - { id: trigger, kind: trigger, label: "A trigger: a time or an event" }
   - { id: ai, kind: ai, label: "A step decided by AI" }
@@ -16,11 +16,16 @@ parts:
   - { id: outside, kind: outside, label: "An outside action, with its tier: Ask" }
   - { id: comment, kind: comment, label: "A comment, tied to what it explains: the black bar is a fork, where work splits" }
 lines:
-  - { from: trigger, to: review, kind: hidden }
-  - { from: review, to: approval, kind: hidden }
+  - { from: trigger, to: ai, kind: start }
+  - { from: ai, to: context, kind: data }
+  - { from: ai, to: fork, kind: start }
+  - { from: fork, to: code, kind: start }
+  - { from: fork, to: person, kind: start }
+  - { from: connector, to: code, kind: data }
+  - { from: code, to: review, kind: start }
+  - { from: review, to: outside, kind: data, label: "[yes]" }
+  - { from: code, to: approval, kind: start }
+  - { from: approval, to: outside, kind: data, label: "[within limits]" }
   - { from: approval, to: surface, kind: data, label: "lists each action it covers" }
-  - { from: ai, to: context, kind: hidden }
-  - { from: context, to: outside, kind: hidden }
-  - { from: code, to: connector, kind: hidden }
-  - { from: person, to: fork, kind: hidden }
+  - { from: person, to: surface, kind: data }
   - { from: fork, to: comment, kind: tie }

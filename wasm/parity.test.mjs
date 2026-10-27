@@ -505,7 +505,10 @@ lines:
 const badPath = new URL("testdata/bad.yaml", import.meta.url).pathname;
 const badRelative = badPath.slice(new URL("../", import.meta.url).pathname.length);
 const badSource = await readFile(badPath, "utf8");
-const badErrors = api.check(badSource).map((message) => `${badRelative}: ${message}\n`).join("");
+const badErrors = [
+  ...api.warnings(badSource).map((message) => `${badRelative}: warning: ${message}\n`),
+  ...api.check(badSource).map((message) => `${badRelative}: ${message}\n`),
+].join("");
 assert.equal(badErrors, runNative(["check", badRelative], 1), "invalid file: check messages");
 assert.equal(api.checksJSON([{ file: badRelative, source: badSource }]) + "\n", runNative(["check", "--json", badRelative], 1), "invalid file: checks JSON");
 

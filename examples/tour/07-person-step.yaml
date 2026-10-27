@@ -15,4 +15,5 @@ lines:
   - { from: car_notes, to: due, kind: data }
   - { from: due, to: list, kind: data, label: the MOT is due }
   - { from: list, to: book, kind: data }
+  - { from: due, to: book, kind: start, label: "[the MOT is due]" }
   - { from: book, to: car_notes, kind: data, label: the booking }

@@ -16,7 +16,8 @@ parts:
 lines:
   - { from: nightly, to: bring, kind: start }
   - { from: bring, to: new, kind: data }
-  - { from: new, to: sort, kind: data, label: when the laptop is on }
+  - { from: new, to: sort, kind: data }
+  - { from: bring, to: sort, kind: start, label: when the laptop is on }
   - { from: sort, to: albums, kind: data }
   - { from: wait, to: sort, kind: tie }
 implementations:

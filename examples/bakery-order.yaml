@@ -17,7 +17,7 @@ parts:
 lines:
   - { from: low, to: draft, kind: start }
   - { from: stock, to: draft, kind: data }
-  - { from: draft, to: ask, kind: data, label: the draft }
+  - { from: draft, to: ask, kind: start, label: the draft }
   - { from: ask, to: approve, kind: data }
   - { from: approve, to: place, kind: data, label: "[yes]" }
   - { from: place, to: supplier, kind: data }

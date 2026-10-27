@@ -15,8 +15,8 @@ parts:
   - { id: pay, kind: outside, label: "Pay the window cleaner £20: Ask", in: parents }
 lines:
   - { from: done, to: split, kind: start }
-  - { from: split, to: book_next, kind: data }
+  - { from: split, to: book_next, kind: start }
   - { from: book_next, to: book, kind: data }
-  - { from: split, to: make_payment, kind: data }
+  - { from: split, to: make_payment, kind: start }
   - { from: make_payment, to: approve, kind: data }
   - { from: approve, to: pay, kind: data, label: "[yes]" }

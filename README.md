@@ -6,7 +6,7 @@ The file lists the workflow's triggers, the steps that pass work along, the note
 
 ![A family's dinners, by who may see each part](examples/dinners.svg)
 
-A fictional family's dinners. On Thursday evening AI plans next week's dinners and posts the plan in the family chat. On Saturday code fills the supermarket basket, and checking out waits for a parent's yes to the exact basket. Every morning code checks the joint account against the bills expected, which only the parents see. The thick line is the meal plan moving out to a wider scope, so the carers can see it on the kitchen screen. The comment is a gap that drawing it found: nothing keeps that screen current.
+A fictional family's dinners. On Thursday evening AI plans next week's dinners and posts the plan in the family chat. Code then fills the supermarket basket from the plan, and checking out waits for a parent's yes to the exact basket. The thick line is the meal plan moving out to a wider scope, so the carers can see it on the kitchen screen. The comment is a gap that drawing it found: nothing keeps that screen current.
 
 [`SPEC.md`](SPEC.md) is the short, exact definition, and wherever it and this README differ, the spec is right.
 
@@ -162,7 +162,7 @@ A workflow whose every step is green ⚙️ has no AI in it, even if AI helped b
 
 | Line | Drawn as | Means |
 |---|---|---|
-| `start` | An arrow | Starts something, as a trigger starts a step |
+| `start` | An arrow | Starts something, as a trigger starts a step or one step starts the next |
 | `data` | An arrow, thick where it publishes | Moves data from one part to the next, and publishes where it moves content into a wider scope |
 | `refused` | A line ending in a cross | A read the design refuses |
 | `tie` | A grey dotted line | Links a comment to what it explains |
@@ -532,7 +532,7 @@ Every id, label, kind and reference to an id is text. `awml` reads YAML 1.2, whi
 
 ### What `awml check` reports
 
-`awml check` reports structural mistakes, invalid operations and tiers that disagree with the drawing. It also checks each implementation's block references, nesting and placement, and its comments' ties, and how each `ref` is written. It warns when AI decides a `do` step, when one `do` step leads to more than one change, and when untrusted text reaches an outside action. Warnings leave the exit status alone. A line that breaks a rule, such as one into a Block action, is still a mistake, but `awml draw` draws it red rather than refusing the file. [`SPEC.md`](SPEC.md) gives the exact rules.
+`awml check` reports structural mistakes, invalid operations and tiers that disagree with the drawing. It also checks each implementation's block references, nesting and placement, and its comments' ties, and how each `ref` is written. It warns when AI decides a `do` step, when one `do` step leads to more than one change, and when untrusted text reaches an outside action. It also warns when a file holds several workflows, when a part is linked to no trigger, when a comment is tied to nothing, and when no trigger starts a step through `start` lines. Warnings leave the exit status alone. A line that breaks a rule, such as one into a Block action, is still a mistake, but `awml draw` draws it red rather than refusing the file. [`SPEC.md`](SPEC.md) gives the exact rules.
 
 ### Examples to start from
 

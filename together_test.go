@@ -386,7 +386,7 @@ func TestAPartIsUntrustedIfAnyCopyIsMarked(t *testing.T) {
 	// Where the owner's copy is marked too, what it reaches in its own workflow is warned of there.
 	marked := strings.Replace(sorterWorkflow, "label: The shop inbox, in: office }", "label: The shop inbox, in: office, untrusted: true }", 1)
 	workflows = together(t, "sorter.yaml", marked, "replier.yaml", replierWorkflow)
-	if got := Warnings(workflows[0].Doc); !reflect.DeepEqual(got, []string{`untrusted text from part "mail" reaches outside action "label"` + stop}) {
+	if got := otherWarnings(workflows[0].Doc); !reflect.DeepEqual(got, []string{`untrusted text from part "mail" reaches outside action "label"` + stop}) {
 		t.Fatalf("the sorter alone warns %q", got)
 	}
 	want = [][]string{nil, {`untrusted text from part "mail" in sorter.yaml reaches outside action "send"` + stop}}

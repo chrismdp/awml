@@ -62,7 +62,9 @@ func TestTheChecksKeepTheirIDsAndTheSpecsOrder(t *testing.T) {
 		"tiers.written", "tiers.shape", "approvals.listed", "processing.written", "processing.nested",
 		"platform.blocks-only", "wait.duration", "at.path", "untrusted.parts", "cleans.code-only", "refs.written", "refs.parts", "placement.once", "placement.complete",
 		"refs.known", "refs.agree", "refs.starts", "refs.owner",
-		"warn.do-by-code", "warn.one-change", "warn.untrusted-outside", "warn.shared-writers", "warn.shared-readers",
+		"warn.do-by-code", "warn.one-change", "warn.untrusted-outside",
+		"warn.one-workflow", "warn.unreached", "warn.untied-comment", "warn.unstarted",
+		"warn.shared-writers", "warn.shared-readers",
 		"description.values", "description.ids",
 	}
 	if !reflect.DeepEqual(ids, want) {
@@ -334,6 +336,19 @@ lines:
   - { from: form, to: read, kind: start }
   - { from: read, to: d, kind: start }
   - { from: d, to: a, kind: start }
+`,
+		"shapes": `awml: "0.7"
+title: Shapes
+parts:
+  - { id: morning, kind: trigger, label: Morning }
+  - { id: evening, kind: trigger, label: Evening }
+  - { id: bake, kind: code, label: Bake }
+  - { id: stock, kind: context, label: Stock }
+  - { id: order, kind: code, label: Order }
+lines:
+  - { from: morning, to: bake, kind: start }
+  - { from: bake, to: stock, kind: data }
+  - { from: stock, to: order, kind: data }
 `,
 		"canonical lists":           "awml: \"0.7\"\ntitle: x\nparts: [3]\nimplementations: 3\n",
 		"canonical implementations": "awml: \"0.7\"\ntitle: x\nparts: []\nimplementations: 3\n",

@@ -22,13 +22,18 @@ flowchart TB
   outside>"An outside action#44; with its tier#58; Ask"]
   comment@{ shape: notch-rect, label: "A comment#44; tied to what it explains#58; the black bar is a fork#44; where work splits" }
 
-  trigger ~~~ review
-  review ~~~ approval
+  trigger --> ai
+  ai -.-> context
+  ai --> fork
+  code <--> fork
+  person <--> fork
+  code <-.-> connector
+  code --> review
+  review -->|"#91;yes#93;"| outside
+  code --> approval
+  approval -->|"#91;within limits#93;"| outside
   approval -.->|"lists each action it covers"| surface
-  ai ~~~ context
-  context ~~~ outside
-  code ~~~ connector
-  person ~~~ fork
+  person -.-> surface
   fork -.- comment
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
@@ -50,4 +55,5 @@ flowchart TB
   class person,review,approval person
   class fork uml
   class comment gap
-  linkStyle 7 stroke:#8a93a3
+  linkStyle 3,4,5 marker-end:none
+  linkStyle 12 stroke:#8a93a3

@@ -9,12 +9,10 @@ parts:
   - { id: council, kind: connector, label: "The council's bin calendar", in: house }
   - { id: copy, kind: code, op: bring-in, label: "Copy this week's bin day", in: house }
   - { id: bins, kind: context, label: "Bin days", in: house }
-  - { id: chat, kind: surface, label: "The house chat", in: house }
-  - { id: gap, kind: comment, label: "Missing from the design: nothing posts the bin day here the night before" }
+  - { id: gap, kind: comment, label: "Missing from the design: nothing posts the bin day in the house chat the night before" }
 lines:
   - { from: monday, to: copy, kind: start }
   - { from: council, to: copy, kind: data }
   - { from: copy, to: bins, kind: data }
-  # Layout only: keep the chat beneath the notes it should have come from.
-  - { from: bins, to: chat, kind: hidden }
-  - { from: gap, to: chat, kind: tie }
+  # The gap is tied to the bin days the post should have come from.
+  - { from: gap, to: bins, kind: tie }

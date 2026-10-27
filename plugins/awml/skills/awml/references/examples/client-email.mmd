@@ -32,13 +32,16 @@ flowchart TB
   weekdays --> bring
   mailbox -.-> bring
   bring --> rules
+  rules --> choose
   rules ==>|"standing rule#58; a client#39;s email · adds an associate"| choose
   engagements -.-> choose
   choose --> learn
   learn -.-> project
+  learn --> draft
   project -.-> draft
   draft --> save
   save --> saved
+  save --> edit
   saved ==>|"the consultant takes the reply · loosens anthropic only to any company"| edit
   edit --> send
   mailbox <-.-> send
@@ -61,4 +64,4 @@ flowchart TB
   class edit person
   style private fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
   style business fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
-  linkStyle 12 marker-end:none
+  linkStyle 15 marker-end:none

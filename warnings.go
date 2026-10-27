@@ -102,5 +102,6 @@ func warningList(doc any) mistakeList {
 			warnings.add("warn.one-change", fmt.Sprintf(`do step "%s" leads to %d changes (%s): each do step should make one`, id, changes, strings.Join(names, ", ")))
 		}
 	}
-	return append(warnings, untrustedWarnings(parts, lines)...)
+	warnings = append(warnings, untrustedWarnings(parts, lines)...)
+	return append(warnings, shapeWarnings(file, parts, lines)...)
 }

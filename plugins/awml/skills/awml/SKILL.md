@@ -11,7 +11,7 @@ AWML describes one workflow in one YAML file, with a design and its implementati
 Before you write or fix a file, read `references/spec.md` in full. It is short, and it is the authority: wherever this skill and the spec differ, the spec is right. Then read the examples nearest the person's workflow, in both views:
 
 - `references/examples/client-email.yaml`: a consultant's email, with two scopes side by side and a send the consultant does themselves.
-- `references/examples/dinners.yaml`: a family's dinners and money, with nested scopes, a review before checkout, a standing rule and a gap.
+- `references/examples/dinners.yaml`: a family's dinners and shopping, with nested scopes, a review before checkout, a standing rule and a gap.
 
 Each example's security drawing sits beside it as `.mmd`, and each implementation drawing adds `-ID.mmd`. The question in `references/examples/question.yaml` and photos in `references/examples/tour/09-platform-view.yaml` give smaller examples.
 
@@ -64,7 +64,7 @@ Add `implementations` as a map of ids to entries with a `label` and `blocks`. Ea
 
 Choose each line's kind by what it does:
 
-- `start` runs from a trigger to the step it starts. Several `start` lines into one step mean any of them can lead to it. Where the step waits for all of them, its label says so, as `"Once both reviews are done, sort their findings"`.
+- `start` runs from a trigger to the step it starts, and from each step to the step that runs after it, even where data moves along with it. Several `start` lines into one step mean any of them can lead to it. Where the step waits for all of them, its label says so, as `"Once both reviews are done, sort their findings"`.
 - `data` moves content. Where it moves content into a wider scope, a box it isn't already inside, it publishes, and `awml draw` draws it thick and adds to its label who it adds or what it loosens. Label each publish with the standing rule that allows it and whose words it moves, who must have agreed to that target, as `"co-op notes, under the bakery's rule, for customers who ticked the box"`, or say what yes releases it, as `"the consultant takes the reply"`.
 - `refused` is a read from a narrower scope that the design refuses, with a label such as `never read here`.
 - The one line out of each review is labelled `"[yes]"`.
@@ -87,7 +87,7 @@ If you have a shell, see whether `awml` is there and which release it is with `a
 awml check standup.yaml
 ```
 
-Give workflows that share parts together, as `awml check dinners.yaml shopping.yaml` or their folder, so it follows each `ref` between them, and untrusted text through the parts they share and into each workflow one starts. It prints `ok` for each sound file, or one line for each mistake, naming the part or line it is in. Fix every one and run it again until the file prints `ok`. In a drawing of a live system, a line that breaks a rule because the system really did that stays, and is drawn red. If it says the file is of a version it no longer reads, upgrade it with `awml convert old.yaml > new.yaml`, then check the new file.
+Give workflows that share parts together, as `awml check dinners.yaml shopping.yaml` or their folder, so it follows each `ref` between them, and untrusted text through the parts they share and into each workflow one starts. It prints `ok` for each sound file, or one line for each mistake, naming the part or line it is in. Fix every one and run it again until the file prints `ok`. In a drawing of a live system, a line that breaks a rule because the system really did that stays, and is drawn red. Read each warning too, though it doesn't fail the check. Where the file holds several workflows, split it at its triggers into files that refer to each other. Connect or remove a part linked to no trigger, tie or remove a comment tied to nothing, and give a step no trigger starts its missing start line, or split its work into another workflow that an outside action starts. If it says the file is of a version it no longer reads, upgrade it with `awml convert old.yaml > new.yaml`, then check the new file.
 
 If you have no shell, or `awml` can't be installed, go through `references/checking-by-hand.md` for each file instead. Then say plainly that the files were checked by hand, not by `awml check`, and that `awml check` will confirm them.
 

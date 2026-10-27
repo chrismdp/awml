@@ -128,7 +128,7 @@ func TestOnlyADoStepLeadsToAnOutsideActionThroughAStandingApproval(t *testing.T)
 // The listing surface is where the standing approval reports, not a change the do step makes.
 func TestAStandingApprovalsSurfaceIsntAChangeOfTheDoStep(t *testing.T) {
 	doc := tiered(t, "Send it: Ask", "{ from: act, to: ok, kind: data }", "{ from: ok, to: out, kind: data }")
-	if got := Warnings(doc); len(got) != 0 {
+	if got := otherWarnings(doc); len(got) != 0 {
 		t.Errorf("warnings: %v", got)
 	}
 }

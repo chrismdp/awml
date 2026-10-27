@@ -96,9 +96,11 @@ func TestDrawRefusesAFileWithMistakes(t *testing.T) {
 const live = `awml: "0.7"
 title: Old files
 parts:
+  - { id: nightly, kind: trigger, label: "Every night" }
   - { id: tidy, kind: code, op: do, label: "Tidy the old files" }
   - { id: wipe, kind: outside, label: "Delete a file: Block" }
 lines:
+  - { from: nightly, to: tidy, kind: start }
   - { from: tidy, to: wipe, kind: start, label: "one night in June" }
 `
 
@@ -108,7 +110,7 @@ func TestALineThatBreaksARuleFailsTheCheckButIsDrawnRed(t *testing.T) {
 	if r := awmlRun("check", path); r != (result{1, path + ": " + message + "\n", ""}) {
 		t.Errorf("check gave %+v", r)
 	}
-	if r := awmlRun("draw", path); r.code != 0 || r.stdout != awml.Draw(doc(t, live))+"\n" || !strings.Contains(r.stdout, "linkStyle 0 stroke:#d0342c") {
+	if r := awmlRun("draw", path); r.code != 0 || r.stdout != awml.Draw(doc(t, live))+"\n" || !strings.Contains(r.stdout, "linkStyle 1 stroke:#d0342c") {
 		t.Errorf("draw gave %+v", r)
 	}
 	if r := awmlRun("summary", "--json", path); r.code != 0 || !strings.Contains(r.stdout, `"redLines":1`) {
@@ -140,6 +142,7 @@ func TestCheckPrintsWarningsBeforeMistakesAndStillFailsForTheMistakes(t *testing
 	src := strings.Replace(bad, "kind: ai, label:", "kind: ai, op: do, label:", 1)
 	f := write(t, "warning-and-mistake.yaml", src)
 	want := f + `: warning: step "plan" is a do step decided by AI: a do step should be code acting on what an earlier step decided` + "\n" +
+		f + `: warning: part "plan" is linked to no trigger: connect it to the work, or remove it` + "\n" +
 		f + `: the line from "thu" to "plann" ends at unknown part "plann"` + "\n"
 	if r := awmlRun("check", f); r != (result{1, want, ""}) {
 		t.Errorf("check gave %+v", r)
@@ -149,7 +152,8 @@ func TestCheckPrintsWarningsBeforeMistakesAndStillFailsForTheMistakes(t *testing
 func TestCheckReportsEachMistakeAndFails(t *testing.T) {
 	g, b := write(t, "good.yaml", good), write(t, "bad.yaml", bad)
 	r := awmlRun("check", g, b)
-	want := result{1, g + ": ok\n" + b + `: the line from "thu" to "plann" ends at unknown part "plann"` + "\n", ""}
+	want := result{1, g + ": ok\n" + b + `: warning: part "plan" is linked to no trigger: connect it to the work, or remove it` + "\n" +
+		b + `: the line from "thu" to "plann" ends at unknown part "plann"` + "\n", ""}
 	if r != want {
 		t.Errorf("check gave %+v", r)
 	}

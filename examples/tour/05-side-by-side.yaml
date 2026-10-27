@@ -8,12 +8,15 @@ scopes:
   - { id: bakery, label: "bakery: Jo, Ben, Lou" }
   - { id: pottery, label: "pottery: Jo, Kit" }
 parts:
+  - { id: monday, kind: trigger, label: "Monday 09:00" }
   - { id: invoices, kind: context, label: "The bakery's invoices", in: bakery }
   - { id: checklist, kind: context, label: "Jo's checklist for chasing", in: bakery }
   - { id: chase, kind: ai, op: draft, label: "Draft a reminder for each late invoice", in: bakery }
   - { id: shop_notes, kind: context, label: "The shop's notes", in: pottery }
   - { id: remind, kind: ai, op: draft, label: "Draft a reminder for each late order", in: pottery }
 lines:
+  - { from: monday, to: chase, kind: start }
+  - { from: chase, to: remind, kind: start }
   - { from: invoices, to: chase, kind: data }
   - { from: checklist, to: chase, kind: data }
   - { from: checklist, to: shop_notes, kind: data, label: "the checklist, with no names in it" }
