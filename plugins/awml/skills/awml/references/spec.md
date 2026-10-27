@@ -51,6 +51,8 @@ A line's style says where it goes, not its kind. A line that reads from or write
 
 A line may carry a label. Words in square brackets are a guard, the condition the line is taken on, as in UML: `[yes]` leaves a review. A comment moves nothing, so only `tie` lines link it.
 
+A drawing says what happens, not how a platform schedules it. Several `start` lines into one step mean any of them can lead to it. Where the step waits for all of them, its label says so, as in `Once both reviews are done, sort their findings`.
+
 ## The security view: who may see each part
 
 A **scope** is a set of people. Everything belongs to one scope, which says who may see it and which companies may process it: the makers of the models the system uses, and services such as transcription or the host of a folder. Its terms say whether a company may keep the content, and a company that may train on it is never used. A scope may also allow no processing, as for something told in confidence. Its `processing` field names the companies, so `awml fit` can check them (see [Placing a workflow](#placing-a-workflow-where-it-can-run)). Scopes aren't a ladder: two may overlap, each with someone the other lacks, or one may hold only people the other has, under looser terms.

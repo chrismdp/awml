@@ -64,7 +64,7 @@ Add `implementations` as a map of ids to entries with a `label` and `blocks`. Ea
 
 Choose each line's kind by what it does:
 
-- `start` runs from a trigger to the step it starts.
+- `start` runs from a trigger to the step it starts. Several `start` lines into one step mean any of them can lead to it. Where the step waits for all of them, its label says so, as `"Once both reviews are done, sort their findings"`.
 - `data` moves content. Where it moves content into a wider scope, a box it isn't already inside, it publishes, and `awml draw` draws it thick and adds to its label who it adds or what it loosens. Label each publish with the standing rule that allows it and whose words it moves, who must have agreed to that target, as `"co-op notes, under the bakery's rule, for customers who ticked the box"`, or say what yes releases it, as `"the consultant takes the reply"`.
 - `refused` is a read from a narrower scope that the design refuses, with a label such as `never read here`.
 - The one line out of each review is labelled `"[yes]"`.
