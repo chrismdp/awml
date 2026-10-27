@@ -14,6 +14,30 @@ func publishedLines(doc *Map) any {
 	if !ok {
 		return lines
 	}
+	widens := widenings(doc)
+	out := make([]any, len(list))
+	for i, item := range list {
+		out[i] = item
+		if _, publishes := widens[i]; !publishes {
+			continue
+		}
+		l := item.(*Map)
+		said := []string{}
+		if label := str(l, "label"); label != "" {
+			said = append(said, label)
+		}
+		line := copyMap(l)
+		line.set("kind", "publish")
+		line.set("label", strings.Join(append(said, widens[i]...), " · "))
+		out[i] = line
+	}
+	return out
+}
+
+// widenings gives, for each of a workflow's data lines that publishes, by its place among the lines,
+// what the publish adds or loosens.
+func widenings(doc *Map) map[int][]string {
+	list, _ := doc.get("lines").([]any)
 	scopes, parts := soundMaps(doc.get("scopes")), soundMaps(doc.get("parts"))
 	byID, parent, children := map[string]*Map{}, map[string]string{}, map[string][]string{}
 	for _, s := range scopes {
@@ -25,10 +49,9 @@ func publishedLines(doc *Map) any {
 	for _, p := range parts {
 		known[str(p, "id")] = true
 	}
-	where := placed(parts, soundMaps(lines))
-	out := make([]any, len(list))
+	where := placed(parts, soundMaps(doc.get("lines")))
+	out := map[int][]string{}
 	for i, item := range list {
-		out[i] = item
 		l, ok := item.(*Map)
 		if !ok || l.get("kind") != "data" || !known[str(l, "from")] || !known[str(l, "to")] {
 			continue
@@ -40,15 +63,7 @@ func publishedLines(doc *Map) any {
 		if source != "" && byID[source] == nil || target != "" && byID[target] == nil || insideBox(parent, target, source) {
 			continue
 		}
-		said := []string{}
-		if label := str(l, "label"); label != "" {
-			said = append(said, label)
-		}
-		said = append(said, publishes(byID, children, source, target)...)
-		line := copyMap(l)
-		line.set("kind", "publish")
-		line.set("label", strings.Join(said, " · "))
-		out[i] = line
+		out[i] = publishes(byID, children, source, target)
 	}
 	return out
 }

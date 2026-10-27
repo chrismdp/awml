@@ -627,91 +627,10 @@ const workflowBox = "fill:#f6f7f9,stroke:#5d6472,color:#16171b"
 // each outside action that starts a workflow given, and its triggers outside it, each with a line
 // into it; and each shared part once, between the boxes, with a line from each workflow that leads
 // into it and to each that it leads into. Each hand-off is a line from the action to the trigger it
-// starts. Each workflow must have no mistakes but lines that break a rule.
+// starts. Each workflow must have no mistakes but lines that break a rule. It draws what GraphMap
+// gives.
 func DrawMap(workflows []Workflow) string {
-	l := link(workflows)
-	out := append([]string{}, header...)
-	var drawn []*Map
-	node := map[*Map]string{}
-	ends := map[*Map]bool{}
-	for _, h := range l.starts {
-		ends[h.action.part], ends[h.trigger.part] = true, true
-	}
-	var starts []string
-	for w, workflow := range workflows {
-		box := fmt.Sprintf("w%d", w+1)
-		var inside []string
-		for _, p := range items(workflow.Doc, "parts") {
-			trigger := str(p, "kind") == "trigger"
-			if _, shared := l.root[p]; shared || !trigger && !ends[p] {
-				continue
-			}
-			node[p] = box + "_" + str(p, "id")
-			drawn = append(drawn, p)
-			shape := node[p] + fmt.Sprintf(shapes[str(p, "kind")], label(p, false))
-			if trigger {
-				out = append(out, "  "+shape)
-				starts = append(starts, fmt.Sprintf("  %s --> %s", node[p], box))
-			} else {
-				inside = append(inside, "    "+shape)
-			}
-		}
-		out = append(out, fmt.Sprintf(`  subgraph %s["%s"]`, box, text(str(workflow.Doc, "title"))), "    direction TB")
-		out = append(append(out, inside...), "  end")
-	}
-	for n, copies := range l.shared {
-		root := copies[0].part
-		node[root] = fmt.Sprintf("s%d", n+1)
-		drawn = append(drawn, root)
-		out = append(out, "  "+node[root]+fmt.Sprintf(shapes[str(root, "kind")], label(l.sharedPart(copies[0]), false)))
-	}
-	out = append(append(out, ""), starts...)
-	for n, copies := range l.shared {
-		shared := fmt.Sprintf("s%d", n+1)
-		into, outOf := map[int]bool{}, map[int]bool{}
-		var order []int
-		for _, c := range copies {
-			if !isOneOfInt(c.workflow, order) {
-				order = append(order, c.workflow)
-			}
-			doc := workflows[c.workflow].Doc
-			into[c.workflow] = into[c.workflow] || leadsInto(doc, c.part)
-			outOf[c.workflow] = outOf[c.workflow] || leadsOutOf(doc, c.part)
-		}
-		sort.Ints(order)
-		dotted := str(copies[0].part, "kind") != "trigger"
-		for _, w := range order {
-			box := fmt.Sprintf("w%d", w+1)
-			arrow := map[[2]bool]string{{true, false}: "-->", {false, true}: "-->", {true, true}: "<-->", {false, false}: "---"}[[2]bool{into[w], outOf[w]}]
-			if dotted {
-				arrow = map[string]string{"-->": "-.->", "<-->": "<-.->", "---": "-.-"}[arrow]
-			}
-			if outOf[w] && !into[w] {
-				out = append(out, fmt.Sprintf("  %s %s %s", shared, arrow, box))
-			} else {
-				out = append(out, fmt.Sprintf("  %s %s %s", box, arrow, shared))
-			}
-		}
-	}
-	for _, h := range l.starts {
-		out = append(out, fmt.Sprintf("  %s --> %s", node[h.action.part], node[h.trigger.part]))
-	}
-	out = append(out, defs)
-	for _, cls := range []string{"trig", "ctx", "con", "surf", "out"} {
-		var ids []string
-		for _, p := range drawn {
-			if classes[str(p, "kind")] == cls {
-				ids = append(ids, node[p])
-			}
-		}
-		if ids != nil {
-			out = append(out, fmt.Sprintf("  class %s %s", strings.Join(ids, ","), cls))
-		}
-	}
-	for w := range workflows {
-		out = append(out, fmt.Sprintf("  style w%d %s", w+1, workflowBox))
-	}
-	return strings.Join(out, "\n")
+	return GraphMap(workflows).Mermaid()
 }
 
 func isOneOfInt(v int, choices []int) bool {

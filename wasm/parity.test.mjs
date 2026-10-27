@@ -38,12 +38,15 @@ for (const path of top.sort()) {
   }
   if (/^platform:/m.test(source)) {
     assert.throws(() => api.draw(source), /a platform description has no drawing/);
+    assert.throws(() => api.graph(source), /a platform description has no drawing/);
     passed++;
     continue;
   }
   assert.equal(api.draw(source) + "\n", runNative(["draw", relative]), `${relative}: Mermaid`);
+  assert.equal(api.graphJSON(source) + "\n", runNative(["graph", relative]), `${relative}: graph`);
   if (/untrusted: true/.test(source)) {
     assert.equal(api.drawUntrusted(source) + "\n", runNative(["draw", "--untrusted", relative]), `${relative}: untrusted Mermaid`);
+    assert.equal(api.graphUntrustedJSON(source) + "\n", runNative(["graph", "--untrusted", relative]), `${relative}: untrusted graph`);
     untrustedViews++;
   }
   if (!failed && !/^platform:/m.test(source)) {
@@ -53,6 +56,8 @@ for (const path of top.sort()) {
     for (const [, implementation] of (source.split("implementations:\n")[1] || "").matchAll(/^  (\w+):\s*$/gm)) {
       assert.equal(api.draw(source, implementation) + "\n",
         runNative(["draw", "--implementation", implementation, relative]), `${relative}: ${implementation} Mermaid`);
+      assert.equal(api.graphJSON(source, implementation) + "\n",
+        runNative(["graph", "--implementation", implementation, relative]), `${relative}: ${implementation} graph`);
       const fit = api.fit([source, ...descriptionSources], implementation);
       assert.equal(api.fitJSON([source, ...descriptionSources], implementation) + "\n",
         runNative(["fit", "--json", "--implementation", implementation, relative, ...descriptions], fit.gaps.length ? 1 : 0), `${relative}: ${implementation} fit`);
@@ -74,6 +79,9 @@ assert.deepEqual(api.check(canonicalSource), []);
 assert.equal(api.draw(canonicalSource, "home") + "\n", runNative(["draw", "--implementation", "home", canonicalPath]));
 assert.throws(() => api.draw(canonicalSource, "missing"), /unknown implementation/);
 assert.throws(() => api.drawUntrusted(canonicalSource), /marks no part untrusted/);
+assert.deepEqual(api.graph(canonicalSource, "home"), JSON.parse(runNative(["graph", "--implementation", "home", canonicalPath])));
+assert.throws(() => api.graph(canonicalSource, "missing"), /unknown implementation/);
+assert.throws(() => api.graphUntrusted(canonicalSource), /marks no part untrusted/);
 assert(untrustedViews > 0, "no example marks a part untrusted");
 assert.throws(() => api.fit([canonicalSource, ...descriptionSources], "missing"), /unknown implementation/);
 assert.equal(api.fitJSON([canonicalSource], "home") + "\n",
@@ -377,6 +385,8 @@ lines:
   assert.equal(api.checksJSON(handOff) + "\n", runNative(["check", "--json", ...handOffPaths]), "checks JSON together");
   assert.equal(api.draw(handOff) + "\n", runNative(["draw", ...handOffPaths]), "map Mermaid");
   assert.throws(() => api.draw(handOff, "home"), /one workflow, not several/);
+  assert.equal(api.graphJSON(handOff) + "\n", runNative(["graph", ...handOffPaths]), "map graph");
+  assert.throws(() => api.graph(handOff, "home"), /one workflow, not several/);
   assert.equal(api.summaryJSON(handOff) + "\n", runNative(["summary", "--json", ...handOffPaths]), "summary JSON together");
   const handOffFit = api.fit([...handOff, ...descriptionSources]);
   assert.equal(api.fitJSON([...handOff, ...descriptionSources]) + "\n",
@@ -398,9 +408,11 @@ lines:
   assert.equal(api.checksJSON(broken) + "\n", runNative(["check", "--json", ...handOffPaths], 1), "checks JSON together, with a ref to a part that isn't there");
   assert.equal(api.checks(broken).checks.find((check) => check.id === "refs.known").result, "fail");
 
-  // The mistakes following the refs finds stop draw, summary and fit, which say them as awml does.
+  // The mistakes following the refs finds stop draw, graph, summary and fit, which say them as awml
+  // does.
   for (const [name, call, args] of [
     ["draw", () => api.draw(broken), ["draw", ...handOffPaths]],
+    ["graph", () => api.graph(broken), ["graph", ...handOffPaths]],
     ["summary", () => api.summary(broken), ["summary", "--json", ...handOffPaths]],
     ["fit", () => api.fit([...broken, ...descriptionSources]), ["fit", "--json", ...handOffPaths, ...descriptions]],
   ]) {
@@ -489,6 +501,7 @@ lines:
   await writeFile(self.file, self.source);
   for (const [name, call, args] of [
     ["draw", () => api.draw(self), ["draw", self.file]],
+    ["graph", () => api.graph(self), ["graph", self.file]],
     ["summary", () => api.summary(self), ["summary", self.file]],
     ["fit", () => api.fit([self, ...descriptionSources]), ["fit", self.file, ...descriptions]],
   ]) {
@@ -532,6 +545,8 @@ assert.equal(api.draw(redSource) + "\n", runNative(["draw", redRelative]), "red 
 assert.match(api.draw(redSource), /linkStyle 1 stroke:#d0342c/);
 assert.equal(api.draw(redSource, "home") + "\n", runNative(["draw", "--implementation", "home", redRelative]), "red line: home Mermaid");
 assert.equal(api.drawUntrusted(redSource) + "\n", runNative(["draw", "--untrusted", redRelative]), "red line: untrusted Mermaid");
+assert.equal(api.graphJSON(redSource) + "\n", runNative(["graph", redRelative]), "red line: graph");
+assert(api.graph(redSource).lines.some((line) => line.breaks), "red line: the graph says which lines break a rule");
 assert.equal(api.summaryJSON(redSource) + "\n", runNative(["summary", "--json", redRelative]), "red line: summary JSON");
 assert.equal(api.summary(redSource).redLines, 1);
 
@@ -551,7 +566,7 @@ const family = await Promise.all(familyPaths.map(async (file) => ({ file, source
 assert.equal(api.draw(family) + "\n", await readFile(new URL("../examples/family-map.mmd", import.meta.url), "utf8"), "the family's map");
 assert.equal(api.summaryJSON(family) + "\n", runNative(["summary", "--json", ...familyPaths]), "the family's summary JSON");
 
-console.log(`Node wasm parity: ${passed} examples passed (check, warnings, summary, convert, Mermaid); ${placements} implementations; ${untrustedViews} untrusted views; ${conversions} conversions; invalid check messages and fit passed`);
+console.log(`Node wasm parity: ${passed} examples passed (check, warnings, summary, convert, Mermaid, graph); ${placements} implementations; ${untrustedViews} untrusted views; ${conversions} conversions; invalid check messages and fit passed`);
 
 async function yamlFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });

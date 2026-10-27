@@ -603,7 +603,7 @@ func TestTheOutputMayComeFirstOrBeJoinedToItsFlag(t *testing.T) {
 
 func TestHelpIsPrintedAndSucceeds(t *testing.T) {
 	r := awmlRun("-h")
-	if r.code != 0 || !strings.HasPrefix(r.stdout, "usage: awml [-h] [--version] [--registry URL] {draw,page,check,fit,summary,convert,login,push,pull} ...\n\nDraw agentic workflows written in AWML.\n") || !strings.Contains(r.stdout, "  --version          show program's version number and exit\n") {
+	if r.code != 0 || !strings.HasPrefix(r.stdout, "usage: awml [-h] [--version] [--registry URL] {draw,graph,page,check,fit,summary,convert,login,push,pull} ...\n\nDraw agentic workflows written in AWML.\n") || !strings.Contains(r.stdout, "  --version          show program's version number and exit\n") {
 		t.Errorf("-h gave %+v", r)
 	}
 	if r := awmlRun("page", "--help"); r.code != 0 || !strings.HasPrefix(r.stdout, "usage: awml page [-h] -o OUT files [files ...]\n") {
@@ -636,8 +636,8 @@ func TestAMistakeInTheCommandShowsHowToUseIt(t *testing.T) {
 		args []string
 		want string
 	}{
-		{nil, "usage: awml [-h] [--version] [--registry URL] {draw,page,check,fit,summary,convert,login,push,pull} ...\nawml: error: the following arguments are required: command\n"},
-		{[]string{"drew", "a.yaml"}, "usage: awml [-h] [--version] [--registry URL] {draw,page,check,fit,summary,convert,login,push,pull} ...\nawml: error: argument command: invalid choice: 'drew' (choose from 'draw', 'page', 'check', 'fit', 'summary', 'convert', 'login', 'push', 'pull')\n"},
+		{nil, "usage: awml [-h] [--version] [--registry URL] {draw,graph,page,check,fit,summary,convert,login,push,pull} ...\nawml: error: the following arguments are required: command\n"},
+		{[]string{"drew", "a.yaml"}, "usage: awml [-h] [--version] [--registry URL] {draw,graph,page,check,fit,summary,convert,login,push,pull} ...\nawml: error: argument command: invalid choice: 'drew' (choose from 'draw', 'graph', 'page', 'check', 'fit', 'summary', 'convert', 'login', 'push', 'pull')\n"},
 		{[]string{"draw"}, "usage: awml draw [-h] [--implementation ID | --untrusted] files [files ...]\nawml draw: error: the following arguments are required: files\n"},
 		{[]string{"check"}, "usage: awml check [-h] [--json] files [files ...]\nawml check: error: the following arguments are required: files\n"},
 		{[]string{"page", "a.yaml"}, "usage: awml page [-h] -o OUT files [files ...]\nawml page: error: the following arguments are required: -o/--out\n"},

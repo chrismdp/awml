@@ -65,11 +65,23 @@ func View(doc *Map, implementation string) (*Map, error) {
 			words[line] = append(words[line], m.breach)
 		}
 	}
+	// Each line that publishes keeps, in widens, what it adds or loosens, which its label ends with.
+	widens := widenings(doc)
 	var lines []any
-	for _, line := range items(view, "lines") {
-		if breaches := words[line]; breaches != nil {
+	for i, line := range items(view, "lines") {
+		said, publishes := widens[i]
+		if breaches := words[line]; breaches != nil || publishes {
 			line = copyMap(line)
-			line.set("breaks", breaches)
+			if breaches != nil {
+				line.set("breaks", breaches)
+			}
+			if publishes {
+				list := make([]any, len(said))
+				for n, words := range said {
+					list[n] = words
+				}
+				line.set("widens", list)
+			}
 		}
 		lines = append(lines, line)
 	}
