@@ -27,9 +27,9 @@ implementations:
   home:
     label: At home
     blocks:
-      - { id: server, label: "Server: claude-sonnet-4-5", parts: [favourites, plan, mealplan, screen_gap] }
+      - { id: server, label: "Server: claude-sonnet-4-5", parts: [favourites, plan, mealplan] }
       - { id: app, label: "The family messaging app", parts: [chat] }
-      - { id: wall, label: "The kitchen screen", parts: [screen] }
+      - { id: wall, label: "The kitchen screen", parts: [screen, screen_gap] }
     comments:
       - { id: scored, label: "For example: scored against the plans the family kept", in: server, ties: [plan] }
       - { id: tried, label: "For example: tried on a second model some weeks", in: server, ties: [plan] }
