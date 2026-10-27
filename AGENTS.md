@@ -53,6 +53,8 @@ go run ./cmd/awml check examples/*.yaml examples/tour/*.yaml examples/platforms/
 make test-wasm
 ```
 
+The build rule's tests need git 2.40 or later, for `--attr-source`; the git that comes with Xcode is older.
+
 - **The tests check that the skill's copies match their sources.** `SPEC.md` is copied to `plugins/awml/skills/awml/references/spec.md`, `GUIDE.md` to `references/guide.md`, and four examples to `references/examples/`. Run `make references` whenever a source changes.
 - **`references/drawing-by-hand.md` must match what `awml draw` writes,** and a test checks it.
 - **When `awml draw`'s output changes, redraw every example** with `examples/render.sh`. It needs Node and a Chrome. Point `PUPPETEER_EXECUTABLE_PATH` at the Chrome if Puppeteer can't find one.

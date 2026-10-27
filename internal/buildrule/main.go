@@ -231,12 +231,13 @@ func classifierAsked(path string) (bool, error) {
 }
 
 // allowedBinary says whether a binary file is an image or a font, which a diff can't show anyway.
-// Under .github/ even those need review.
+// Under .github/ even those need review. It matches the extension's case exactly, as the list in
+// .github/workflows/review.yml does, so the two agree.
 func allowedBinary(path string) bool {
 	if strings.HasPrefix(path, ".github/") {
 		return false
 	}
-	switch strings.ToLower(filepath.Ext(path)) {
+	switch filepath.Ext(path) {
 	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".ttf", ".otf", ".woff", ".woff2":
 		return true
 	}
