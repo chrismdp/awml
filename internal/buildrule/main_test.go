@@ -344,7 +344,7 @@ func TestEvaluateBinaryFiles(t *testing.T) {
 		assertVerdict(t, got, false, "No review rule matched this change.")
 	})
 
-	t.Run("a font with a capital extension", func(t *testing.T) {
+	t.Run("a font with a capital extension, as the review workflow reads it, case and all", func(t *testing.T) {
 		repo := newRepo(t)
 		stage(t, repo, "examples/fonts/Inter.WOFF2", "wOF2\x00")
 
@@ -352,7 +352,9 @@ func TestEvaluateBinaryFiles(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertVerdict(t, got, false, "No review rule matched this change.")
+		if !got.Review {
+			t.Errorf("a binary Inter.WOFF2 merged by itself, though review.yml's list, which is case-sensitive, refuses it: %+v", got)
+		}
 	})
 
 	t.Run("an image under .github", func(t *testing.T) {
