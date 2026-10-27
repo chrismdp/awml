@@ -186,8 +186,16 @@ jobs:
             cat "$previous/failed.md"
           } >> "$RUNNER_TEMP/build/issue.md"
 
-      - name: Install Claude Code
-        run: npm install -g @anthropic-ai/claude-code
+      # Claude Code scrubs its login token from the commands it runs inside bubblewrap, and stops
+      # without it. Ubuntu's runners restrict the user namespaces bubblewrap needs, so allow them on
+      # this throwaway machine, and check bubblewrap works before Claude starts.
+      - name: Install Claude Code and bubblewrap
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          bwrap --dev-bind / / --unshare-pid true
+          npm install -g @anthropic-ai/claude-code
 
       - name: Draft the change
         env:
@@ -344,8 +352,16 @@ jobs:
           done
           git apply --index "$RUNNER_TEMP/change/change.patch"
 
-      - name: Install Claude Code
-        run: npm install -g @anthropic-ai/claude-code
+      # Claude Code scrubs its login token from the commands it runs inside bubblewrap, and stops
+      # without it. Ubuntu's runners restrict the user namespaces bubblewrap needs, so allow them on
+      # this throwaway machine, and check bubblewrap works before Claude starts.
+      - name: Install Claude Code and bubblewrap
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          bwrap --dev-bind / / --unshare-pid true
+          npm install -g @anthropic-ai/claude-code
 
       # Each review is its own claude run, started together, so neither sees the other's session.
       - name: Review the patch for bugs and for security, side by side
