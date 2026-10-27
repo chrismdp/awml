@@ -45,12 +45,9 @@ var beside = map[string]bool{"context": true, "connector": true, "surface": true
 // The dotted arrows. A publish line stays thick, and takes its dashes from linkStyle.
 var dottedArrows = map[string]string{"start": "-.->", "data": "-.->", "refused": "-.-x"}
 
-// Mermaid's layout follows an edge's written direction. For a line back to an earlier part, draw
-// the edge in file order with two heads; linkStyle removes the head at the real source.
-var backwardsArrows = map[string]string{"-->": "<-->", "-.->": "<-.->", "==>": "<==>", "--x": "x--x", "-.-x": "x-.-x"}
-
-// A map's line between a workflow and a part it shares, where no line in the workflow leads into
-// the part or out of it, has no head.
+// A map's line between a workflow and a part it shares has a head at each end where lines in the
+// workflow lead both into the part and out of it, and no head where none leads into it or out of it.
+var twoWay = map[string]string{"-->": "<-->", "-.->": "<-.->"}
 var headless = map[string]string{"-->": "---", "-.->": "-.-"}
 
 const defs = `  classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b

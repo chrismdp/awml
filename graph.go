@@ -28,7 +28,6 @@ type GraphGroup struct {
 	In        string `json:"in,omitempty"`
 	File      string `json:"file,omitempty"`
 	Published string `json:"published,omitempty"`
-	at        int
 }
 
 // A GraphPart is a part other than a comment, with the box it's drawn in. Decider is who decides
@@ -46,7 +45,6 @@ type GraphPart struct {
 	Untrusted bool   `json:"untrusted,omitempty"`
 	Reached   bool   `json:"reached,omitempty"`
 	Stops     bool   `json:"stops,omitempty"`
-	at        int
 }
 
 // A GraphLine is a line from one part or box to another. A publish is a data line that Publishes,
@@ -73,7 +71,6 @@ type GraphComment struct {
 	In    string   `json:"in,omitempty"`
 	Gap   bool     `json:"gap"`
 	Ties  []string `json:"ties"`
-	at    int
 }
 
 // A GraphPlace is the colour a platform view gives a block.
@@ -99,19 +96,19 @@ func GraphOf(doc *Map) Graph {
 	if g.View == "untrusted" {
 		tinted, stopper = untrustedLooks(parts, lines)
 	}
-	for i, p := range parts {
+	for _, p := range parts {
 		id := str(p, "id")
 		if str(p, "kind") == "comment" {
 			g.Comments = append(g.Comments, GraphComment{ID: id, Label: str(p, "label"), In: where[id],
-				Gap: strings.HasPrefix(str(p, "label"), gapLabel), Ties: tiedTo(id, lines), at: i})
+				Gap: strings.HasPrefix(str(p, "label"), gapLabel), Ties: tiedTo(id, lines)})
 			continue
 		}
 		part := graphPart(p, id)
-		part.In, part.Reached, part.Stops, part.at = where[id], tinted[id] != "", stopper[id], i
+		part.In, part.Reached, part.Stops = where[id], tinted[id] != "", stopper[id]
 		g.Parts = append(g.Parts, part)
 	}
 	for i, group := range groups {
-		g.Groups = append(g.Groups, GraphGroup{ID: str(group, "id"), Label: str(group, "label"), In: str(group, "in"), at: len(parts) + i})
+		g.Groups = append(g.Groups, GraphGroup{ID: str(group, "id"), Label: str(group, "label"), In: str(group, "in")})
 		if g.View == "platform" {
 			fill, stroke, _ := strings.Cut(pastel[i%len(pastel)], ",")
 			g.Places = append(g.Places, GraphPlace{ID: str(group, "id"), Fill: strings.TrimPrefix(fill, "fill:"), Stroke: strings.TrimPrefix(stroke, "stroke:")})
@@ -148,8 +145,6 @@ func GraphOf(doc *Map) Graph {
 func GraphMap(workflows []Workflow) Graph {
 	l := link(workflows)
 	g := emptyGraph("map")
-	at := 0
-	next := func() int { at++; return at - 1 }
 	node := map[*Map]string{}
 	ends := map[*Map]bool{}
 	for _, h := range l.starts {
@@ -168,7 +163,6 @@ func GraphMap(workflows []Workflow) Graph {
 			node[p] = box + "_" + str(p, "id")
 			part := graphPart(p, node[p])
 			if trigger {
-				part.at = next()
 				g.Parts = append(g.Parts, part)
 				starts = append(starts, GraphLine{From: node[p], To: box, Kind: "start", Points: "to", Joins: joins(box, workflow.Doc, []partAt{{w, p}})})
 			} else {
@@ -176,16 +170,11 @@ func GraphMap(workflows []Workflow) Graph {
 				inside = append(inside, part)
 			}
 		}
-		g.Groups = append(g.Groups, GraphGroup{ID: box, Label: str(workflow.Doc, "title"), File: workflow.File, Published: published[w], at: next()})
-		for _, part := range inside {
-			part.at = next()
-			g.Parts = append(g.Parts, part)
-		}
+		g.Groups = append(g.Groups, GraphGroup{ID: box, Label: str(workflow.Doc, "title"), File: workflow.File, Published: published[w]})
+		g.Parts = append(g.Parts, inside...)
 	}
 	for n, copies := range l.shared {
-		part := graphPart(l.sharedPart(copies[0]), fmt.Sprintf("s%d", n+1))
-		part.at = next()
-		g.Parts = append(g.Parts, part)
+		g.Parts = append(g.Parts, graphPart(l.sharedPart(copies[0]), fmt.Sprintf("s%d", n+1)))
 	}
 	g.Lines = append(g.Lines, starts...)
 	for n, copies := range l.shared {
@@ -302,27 +291,29 @@ func publishedNames(workflows []Workflow) []string {
 	return names
 }
 
-// Mermaid draws the graph, so every drawing uses the same shapes and colours.
+// Mermaid draws the graph, so every drawing uses the same shapes and colours. It draws from the
+// graph's fields alone, so a graph read back from its JSON draws the same. At each level it writes
+// the parts in the order the graph lists them, then the comments, then the groups, and it writes
+// each line from its from to its to.
 func (g Graph) Mermaid() string {
 	out := append([]string{}, header...)
 	type node struct {
-		at, group     int
+		group         int
 		in, id, shape string
 	}
 	var nodes []node
-	kinds, at := map[string]string{}, map[string]int{}
+	kinds := map[string]string{}
 	for _, p := range g.Parts {
-		kinds[p.ID], at[p.ID] = p.Kind, p.at
-		nodes = append(nodes, node{p.at, -1, p.In, p.ID, fmt.Sprintf(shapes[p.Kind], p.mermaidLabel())})
+		kinds[p.ID] = p.Kind
+		nodes = append(nodes, node{-1, p.In, p.ID, fmt.Sprintf(shapes[p.Kind], p.mermaidLabel())})
 	}
 	for _, c := range g.Comments {
-		kinds[c.ID], at[c.ID] = "comment", c.at
-		nodes = append(nodes, node{c.at, -1, c.In, c.ID, fmt.Sprintf(shapes["comment"], text(c.Label))})
+		kinds[c.ID] = "comment"
+		nodes = append(nodes, node{-1, c.In, c.ID, fmt.Sprintf(shapes["comment"], text(c.Label))})
 	}
 	for i, group := range g.Groups {
-		nodes = append(nodes, node{group.at, i, group.In, group.ID, ""})
+		nodes = append(nodes, node{i, group.In, group.ID, ""})
 	}
-	sort.Slice(nodes, func(a, b int) bool { return nodes[a].at < nodes[b].at })
 	var emit func(parent, indent string)
 	emit = func(parent, indent string) {
 		for _, n := range nodes {
@@ -345,9 +336,6 @@ func (g Graph) Mermaid() string {
 	// A line's style says where it goes: solid from one step to the next, dotted into or out of a
 	// context, a connector or a surface.
 	aside := func(l GraphLine) bool { return beside[kinds[l.From]] || beside[kinds[l.To]] }
-	// A view draws a line back to an earlier part in file order, with two heads. A map draws each
-	// line as it points.
-	backwards := func(l GraphLine) bool { return g.View != "map" && at[l.From] > at[l.To] }
 	kindOf := func(l GraphLine) string {
 		if l.Publishes {
 			return "publish"
@@ -355,22 +343,16 @@ func (g Graph) Mermaid() string {
 		return l.Kind
 	}
 	for _, l := range g.Lines {
-		from, to, kind := l.From, l.To, kindOf(l)
+		kind := kindOf(l)
 		arrow := arrows[kind]
 		if aside(l) && dottedArrows[kind] != "" {
 			arrow = dottedArrows[kind]
 		}
 		switch {
 		case l.Points == "both":
-			arrow = backwardsArrows[arrow]
+			arrow = twoWay[arrow]
 		case l.Points == "none" && headless[arrow] != "":
 			arrow = headless[arrow]
-		}
-		if backwards(l) {
-			from, to = to, from
-			if flipped := backwardsArrows[arrow]; flipped != "" {
-				arrow = flipped
-			}
 		}
 		var words []string
 		if said := strings.Join(append(nonEmpty(l.Label), l.Widens...), " · "); said != "" {
@@ -384,7 +366,7 @@ func (g Graph) Mermaid() string {
 		if words != nil {
 			mid = fmt.Sprintf(`|"%s"|`, strings.Join(words, "<br>"))
 		}
-		out = append(out, fmt.Sprintf("  %s %s%s %s", from, arrow, mid, to))
+		out = append(out, fmt.Sprintf("  %s %s%s %s", l.From, arrow, mid, l.To))
 	}
 	out = append(out, defs)
 	if g.View == "untrusted" {
@@ -432,8 +414,7 @@ func (g Graph) Mermaid() string {
 	}
 	// linkStyle counts every line, hidden ones too, and a line's last linkStyle replaces any before
 	// it, so each line gets its whole style at once. Lines of the same style share a linkStyle, in
-	// the order of the first of them. A backwards arrow is drawn with a head at both ends, then loses
-	// the head at its drawn end, leaving the one at the real target.
+	// the order of the first of them.
 	var looks []string
 	numbers := map[string][]string{}
 	for i, l := range g.Lines {
@@ -446,9 +427,6 @@ func (g Graph) Mermaid() string {
 		}
 		if l.Publishes && aside(l) {
 			look = append(look, dotted)
-		}
-		if backwards(l) && backwardsArrows[arrows[kindOf(l)]] != "" {
-			look = append(look, "marker-end:none")
 		}
 		if look == nil {
 			continue

@@ -131,10 +131,7 @@ func TestTheGuideToDrawingByHandMatchesDraw(t *testing.T) {
 	for _, arrow := range dottedArrows {
 		want = append(want, "`"+arrow+"`")
 	}
-	for _, arrow := range backwardsArrows {
-		want = append(want, "`"+arrow+"`")
-	}
-	want = append(want, "marker-end:none", "  classDef taint "+taint, "  classDef taintout "+taintOut, "⚠️", "🛡️", "`taint`", "`taintout`")
+	want = append(want, "  classDef taint "+taint, "  classDef taintout "+taintOut, "⚠️", "🛡️", "`taint`", "`taintout`")
 	want = append(want, pastel...)
 	for op, emoji := range ops {
 		want = append(want, fmt.Sprintf("| %s | `%s` |", emoji, op))
@@ -145,6 +142,12 @@ func TestTheGuideToDrawingByHandMatchesDraw(t *testing.T) {
 	for _, w := range want {
 		if !strings.Contains(guide, w) {
 			t.Errorf("%s doesn't hold what awml draws: %q", path, w)
+		}
+	}
+	// Every line is written from its from to its to, so none is drawn backwards and loses a head.
+	for _, never := range []string{"marker-end", "<-->", "x--x", "ackwards"} {
+		if strings.Contains(guide, never) {
+			t.Errorf("%s still draws a line backwards: %q", path, never)
 		}
 	}
 }

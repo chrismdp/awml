@@ -23,7 +23,7 @@ flowchart TB
 
   ask --> answer
   flat_notes -.-> answer
-  answer x-.-x|"never read here"| tom_notes
+  tom_notes -.-x|"never read here"| answer
   answer -.->|"the answer#44; naming its notes"| chat
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
@@ -41,4 +41,3 @@ flowchart TB
   class answer ai
   style flat fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
   style tom fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
-  linkStyle 2 marker-end:none

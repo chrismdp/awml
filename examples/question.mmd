@@ -29,7 +29,7 @@ flowchart TB
   ask --> find
   family_notes -.-> find
   carers_notes -.-> find
-  find x-.-x|"never read here"| nadia_notes
+  nadia_notes -.-x|"never read here"| find
   find --> word
   word -.->|"the answer#44; naming its notes"| chat
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
@@ -50,4 +50,3 @@ flowchart TB
   style carers fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
   style family fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
   style nadia fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
-  linkStyle 3 marker-end:none

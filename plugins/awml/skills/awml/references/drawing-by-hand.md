@@ -26,7 +26,7 @@ flowchart TB
 
 ## 2. The parts and groups
 
-Write the top level first, indented two spaces. At each level, write the parts that sit there, in the file's order, then each group that sits there, in the file's order. A part sits in the group its `in` names, or at the top level if it has none, except a trigger or comment with no `in`: it sits in the group of the part at the other end of its first line that isn't `hidden`.
+Write the top level first, indented two spaces. At each level, write the parts that sit there other than comments, in the file's order, then the comments that sit there, in the file's order, then each group that sits there, in the file's order. A part sits in the group its `in` names, or at the top level if it has none, except a trigger or comment with no `in`: it sits in the group of the part at the other end of its first line that isn't `hidden`.
 
 A group is written as `subgraph id["label"]`, then `direction TB` on the next line, then what sits inside it indented two more spaces, then `end`.
 
@@ -77,16 +77,16 @@ First find each publish in the security view's scopes. Skip any line that isn't 
 
 A line with no label of its own takes only what it does, as `adds an associate`.
 
-After the parts and groups, leave one empty line, then write each line in the file's order, indented two spaces: `from ARROW to`, or with a label, `from ARROW|"label"| to`. A line is solid from one step to the next, and dotted when either end is a `context`, a `connector` or a `surface`. Find the position of each end in `parts`. When `from` comes after `to`, swap the written ends and use the backwards arrow in the table. For `tie` and `hidden`, which have no arrowhead, swap the ends but keep the same line.
+After the parts and groups, leave one empty line, then write each line in the file's order, indented two spaces, from its `from` to its `to`, wherever its ends come in `parts`: `from ARROW to`, or with a label, `from ARROW|"label"| to`. A line is solid from one step to the next, and dotted when either end is a `context`, a `connector` or a `surface`.
 
-| Line `kind` | Arrow | Backwards arrow | Dotted arrow | Dotted backwards arrow |
-|---|---|---|---|---|
-| `start` | `-->` | `<-->` | `-.->` | `<-.->` |
-| `data` | `-->` | `<-->` | `-.->` | `<-.->` |
-| `publish` | `==>` | `<==>` | `==>` | `<==>` |
-| `refused` | `--x` | `x--x` | `-.-x` | `x-.-x` |
-| `tie` | `-.-` | `-.-` | `-.-` | `-.-` |
-| `hidden` | `~~~` | `~~~` | `~~~` | `~~~` |
+| Line `kind` | Arrow | Dotted arrow |
+|---|---|---|
+| `start` | `-->` | `-.->` |
+| `data` | `-->` | `-.->` |
+| `publish` | `==>` | `==>` |
+| `refused` | `--x` | `-.-x` |
+| `tie` | `-.-` | `-.-` |
+| `hidden` | `~~~` | `~~~` |
 
 A dotted `publish` line keeps its thick arrow and takes its dots from its style, below.
 
@@ -131,9 +131,8 @@ Last, style the lines. Count every line from 0 in the file's order, hidden lines
 
 1. For a red line, the red style `stroke:#d0342c,stroke-width:2.5px,color:#b0271f`. Otherwise, for a `tie` line, the grey `stroke:#8a93a3`.
 2. For a dotted `publish` line, `stroke-dasharray:3`.
-3. For a backwards `start`, `data`, `publish` or `refused` line, `marker-end:none`. This hides the spare head and leaves the head pointing at the real `to` part.
 
-A line with none of these has no style. Lines with the same style share one line, `  linkStyle 4,7 STYLE` with their numbers, and these lines come in the order of the first line each one styles. So a backwards red line and a red line are `  linkStyle 4 stroke:#d0342c,stroke-width:2.5px,color:#b0271f,marker-end:none` and then `  linkStyle 7 stroke:#d0342c,stroke-width:2.5px,color:#b0271f`.
+A line with neither has no style. Lines with the same style share one line, `  linkStyle 4,7 STYLE` with their numbers, and these lines come in the order of the first line each one styles. So a red dotted `publish` line and a red line are `  linkStyle 4 stroke:#d0342c,stroke-width:2.5px,color:#b0271f,stroke-dasharray:3` and then `  linkStyle 7 stroke:#d0342c,stroke-width:2.5px,color:#b0271f`.
 
 ## 5. The untrusted view
 

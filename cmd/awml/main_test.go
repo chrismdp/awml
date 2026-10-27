@@ -611,6 +611,20 @@ func TestHelpIsPrintedAndSucceeds(t *testing.T) {
 	}
 }
 
+func TestHelpListsEachCommandsDescriptionInOneColumn(t *testing.T) {
+	_, list, _ := strings.Cut(awmlRun("-h").stdout, "positional arguments:\n")
+	list, _, _ = strings.Cut(list, "\n\n")
+	column := map[int][]string{}
+	for _, line := range strings.Split(list, "\n")[1:] {
+		name := strings.Fields(line)[0]
+		after := strings.TrimLeft(line[strings.Index(line, name)+len(name):], " ")
+		column[len(line)-len(after)] = append(column[len(line)-len(after)], name)
+	}
+	if len(column) != 1 {
+		t.Errorf("the commands' descriptions start in different columns: %v", column)
+	}
+}
+
 func TestVersionPrintsTheReleaseVersion(t *testing.T) {
 	previous := version
 	version = "0.3.1"

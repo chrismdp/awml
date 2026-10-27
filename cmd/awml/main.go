@@ -30,7 +30,7 @@ positional arguments:
   {draw,graph,page,check,fit,summary,convert,login,push,pull}
     draw             print a file's Mermaid
     graph            print what a file's drawing shows, as JSON
-    page            write one HTML page that draws each file
+    page             write one HTML page that draws each file
     check            report warnings and structural mistakes
     fit              judge where workflows can run
     summary          count the parts and lines in workflows

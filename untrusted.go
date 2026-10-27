@@ -3,7 +3,6 @@ package awml
 import (
 	"errors"
 	"fmt"
-	"strings"
 )
 
 // marks holds a part to where untrusted and cleans may go. Only a trigger, connector
@@ -172,17 +171,4 @@ func untrustedLooks(parts, lines []*Map) (class map[string]string, marked map[st
 		}
 	}
 	return class, marked
-}
-
-// untrustedLabel adds a part's marks to its label: ⚠️ for a part marked untrusted, and in the
-// untrusted view 🛡️ for one that stops the text.
-func untrustedLabel(p *Map, words string, stopper bool) string {
-	var marks []string
-	if p.get("untrusted") == true {
-		marks = append(marks, "⚠️")
-	}
-	if stopper {
-		marks = append(marks, "🛡️")
-	}
-	return strings.Join(append([]string{words}, marks...), " ")
 }

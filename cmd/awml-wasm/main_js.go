@@ -122,7 +122,7 @@ func main() {
 		return graph.Mermaid()
 	})
 	// __awmlGraphMap gives what the map of the workflows given together draws, as awml graph does
-	// given several.
+	// given several, with its text unescaped as __awmlGraph gives it.
 	expose("__awmlGraphMap", func(args []js.Value) string {
 		graph, err := mapOf(args)
 		if err != nil {
@@ -178,7 +178,9 @@ func main() {
 		return awml.Draw(view)
 	})
 	// __awmlGraph and __awmlGraphUntrusted give what __awmlDraw and __awmlDrawUntrusted draw, as awml
-	// graph does.
+	// graph does. Every label is given exactly as the file wrote it, and no text in the JSON is
+	// escaped, so a page that shows it must escape it itself, unlike __awmlDraw, whose Mermaid
+	// escapes it.
 	expose("__awmlGraph", func(args []js.Value) string {
 		view, err := viewOf(args, false)
 		if err != nil || view == nil {
