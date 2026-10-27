@@ -3,6 +3,7 @@ package awml
 import (
 	"encoding/json"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -425,6 +426,49 @@ func TestFitOfSeveralNamesEachGapByItsWorkflow(t *testing.T) {
 	report := JudgeTogether(together(t, "plan.yaml", planWorkflow, "shop.yaml", shop), fitDocs(t, laptop))
 	if want := []string{`trigger "shop#ready" has no wait`}; !reflect.DeepEqual(report.Gaps, want) {
 		t.Errorf("gaps are %q, want %q", report.Gaps, want)
+	}
+}
+
+// fitModels gives the AI steps fit names on the laptop, sorted.
+func fitModels(t *testing.T, workflows []Workflow) []string {
+	t.Helper()
+	report := JudgeTogether(workflows, fitDocs(t, laptop))
+	if len(report.Gaps) != 0 || len(report.Results) != 1 {
+		t.Fatalf("fit gave %+v", report)
+	}
+	var names []string
+	for name := range report.Results[0].Models {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// Each workflow is named by the shortest end of its path, without .yaml, that no other file given
+// shares, and one given as text alone by where it comes among them.
+func TestFitNamesEachWorkflowByTheShortestEndOfItsPathThatsItsOwn(t *testing.T) {
+	plan := strings.Replace(planWorkflow, "  - { id: ready, kind: trigger, label: The shopping list is ready, ref: shop.yaml#ready }\n", "", 1)
+	plan = strings.Replace(plan, "  - { from: plan, to: ready, kind: start }\n", "", 1)
+	other := strings.Replace(plan, "Plan next week's dinners", "Plan the week's dinners", 1)
+	for _, tc := range []struct {
+		files, paths, want []string
+	}{
+		{[]string{"x/dinners.yaml", "y/dinners.yaml"}, nil, []string{"x/dinners#plan", "y/dinners#plan"}},
+		{[]string{"home/x/dinners.yaml", "home/y/dinners.yaml", "plan.yaml"}, nil, []string{"plan#plan", "x/dinners#plan", "y/dinners#plan"}},
+		{[]string{"dinners.yaml", "x/dinners.yaml"}, nil, []string{"dinners#plan", "x/dinners#plan"}},
+		{[]string{"dinners.yaml", "../work/dinners.yaml"}, []string{"/home/ana/family/dinners.yaml", "/home/ana/work/dinners.yaml"}, []string{"family/dinners#plan", "work/dinners#plan"}},
+		{[]string{"", ""}, nil, []string{"1#plan", "2#plan"}},
+	} {
+		workflows := together(t, tc.files[0], plan, tc.files[1], other)
+		if len(tc.files) > 2 {
+			workflows = append(workflows, together(t, tc.files[2], plan)...)
+		}
+		for i, path := range tc.paths {
+			workflows[i].Path = path
+		}
+		if got := fitModels(t, workflows); !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%q: fit names %q, want %q", tc.files, got, tc.want)
+		}
 	}
 }
 

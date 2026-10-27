@@ -5,6 +5,7 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -361,11 +362,12 @@ func (l linked) join() joined {
 		}
 		return fmt.Sprintf("w%d_%s", w, id)
 	}
+	named := workflowNames(l.workflows)
 	name := func(w int, id string) string {
 		if !several {
 			return id
 		}
-		return strings.TrimSuffix(path.Base(filepath.ToSlash(l.workflows[w].File)), ".yaml") + "#" + id
+		return named[w] + "#" + id
 	}
 	for w, workflow := range l.workflows {
 		if !IsCanonical(workflow.Doc) {
@@ -465,6 +467,37 @@ func (l linked) warnedAlone(source, action partAt) bool {
 		}
 	}
 	return false
+}
+
+// workflowNames gives the name each workflow's parts and scopes are reported by, after a #: the
+// shortest end of its path, without .yaml, that no other file given shares, as x/dinners beside
+// y/dinners, or where it comes among them, from 1, for one given as text alone.
+func workflowNames(workflows []Workflow) []string {
+	stems := make([]string, len(workflows))
+	for i, w := range workflows {
+		if w.File != "" || w.Path != "" {
+			stems[i] = "/" + strings.TrimPrefix(strings.TrimSuffix(w.at(), ".yaml"), "/")
+		}
+	}
+	names := make([]string, len(workflows))
+	for i, stem := range stems {
+		if stem == "" {
+			names[i] = strconv.Itoa(i + 1)
+			continue
+		}
+		parts := strings.Split(stem[1:], "/")
+		for n := 1; n <= len(parts); n++ {
+			names[i] = strings.Join(parts[len(parts)-n:], "/")
+			shared := false
+			for j, other := range stems {
+				shared = shared || j != i && other != "" && strings.HasSuffix(other, "/"+names[i])
+			}
+			if !shared {
+				break
+			}
+		}
+	}
+	return names
 }
 
 // warnUntrusted warns of each outside action that untrusted text reaches through a part shared with

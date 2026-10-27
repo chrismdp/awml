@@ -69,7 +69,8 @@ async function start(source) {
       return JSON.parse(this.summaryJSON(sourceTexts));
     },
     // fit judges each platform described as running every workflow given, telling the two apart by
-    // what they hold.
+    // what they hold. Given several workflows, it names each part after its file, as awml fit does,
+    // and after where it comes among the workflows, as in 1#plan, for one given as text alone.
     fitJSON(sourceTexts, implementation = "") {
       const sources = given(sourceTexts);
       for (const sourceText of sources) {

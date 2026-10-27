@@ -418,6 +418,18 @@ lines:
   assert.equal(api.draw(fired) + "\n", runNative(["draw", ...fired.map(({ file }) => file)]), "map of a workflow that fires a trigger");
   assert(!api.draw(fired).includes("The shopping list is ready"), "the map draws a trigger its workflow only fires");
 
+  // fit names each workflow by the shortest end of its path that's its own, and one given as text
+  // alone by where it comes.
+  await mkdir(`${temporary}/x`);
+  await mkdir(`${temporary}/y`);
+  const alike = ["x/sorter.yaml", "y/sorter.yaml"].map((file) => ({ file, source: sorter.replace("kind: code, op: sort", "kind: ai, op: sort") }));
+  for (const { file, source } of alike) await writeFile(`${temporary}/${file}`, source);
+  const alikeFit = api.fit([...alike, ...descriptionSources]);
+  assert.equal(api.fitJSON([...alike, ...descriptionSources]) + "\n",
+    runNative(["fit", "--json", ...alike.map(({ file }) => file), ...descriptions], alikeFit.gaps.length ? 1 : 0, temporary), "fit of two files of the same name");
+  assert.deepEqual(Object.keys(alikeFit.results.find((result) => result.fits).models), ["x/sorter#sort", "y/sorter#sort"]);
+  assert.deepEqual(Object.keys(api.fit([...alike.map(({ source }) => source), ...descriptionSources]).results.find((result) => result.fits).models), ["1#sort", "2#sort"]);
+
   // One file given by name is held to a ref it makes to itself.
   const self = { file: `${temporary}/self.yaml`, source: plan.replace("shop.yaml#ready", "self.yaml#thu") };
   await writeFile(self.file, self.source);
