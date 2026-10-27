@@ -27,12 +27,17 @@ func Upgrade(doc any) (*Map, error) {
 // author to do by hand.
 func upgrade(doc any) (*Map, []string, error) {
 	file, err := upgradeFile(doc)
-	if err != nil || file == doc || doc.(*Map).get("awml") == "0.7" {
+	if err != nil || file == doc || !isOneOf(doc.(*Map).get("awml"), rewrittenFormats...) {
 		return file, nil, err
 	}
 	notes := startOutsideActions(file)
 	return file, notes, nil
 }
+
+// rewrittenFormats are the versions whose workflows change in more than their version when
+// they're converted, the last of which let a do step lead into another workflow's trigger. A
+// later version changes only its version.
+var rewrittenFormats = []string{"0.2", "0.3", "0.4", "0.5", "0.6"}
 
 func upgradeFile(doc any) (*Map, error) {
 	file, ok := doc.(*Map)
@@ -45,7 +50,7 @@ func upgradeFile(doc any) (*Map, error) {
 		return file, nil
 	case !isOneOf(version, olderFormats...):
 		return nil, fmt.Errorf(`awml convert reads versions %s to %s, not "%s"`, olderFormats[0], currentFormat, show(version))
-	case file.has("platform") || version == "0.7":
+	case file.has("platform") || !isOneOf(version, rewrittenFormats...):
 		out := copyMap(file)
 		out.set("awml", currentFormat)
 		return out, nil
