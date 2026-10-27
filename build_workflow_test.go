@@ -8,6 +8,7 @@ import (
 )
 
 type workflowStep struct {
+	ID   string            `yaml:"id"`
 	Name string            `yaml:"name"`
 	Uses string            `yaml:"uses"`
 	Run  string            `yaml:"run"`
@@ -21,8 +22,9 @@ type workflowJob struct {
 }
 
 type factoryWorkflow struct {
-	On   map[string]any         `yaml:"on"`
-	Jobs map[string]workflowJob `yaml:"jobs"`
+	RunName string                 `yaml:"run-name"`
+	On      map[string]any         `yaml:"on"`
+	Jobs    map[string]workflowJob `yaml:"jobs"`
 }
 
 func readFactoryWorkflow(t *testing.T, name string) factoryWorkflow {
@@ -210,6 +212,79 @@ func TestLandRunsOnlyMainsCode(t *testing.T) {
 			if strings.HasPrefix(step.Uses, "actions/checkout") && step.With["ref"] != "${{ github.sha }}" {
 				t.Errorf("land.yml's %s checks out %q, not main's commit", name, step.With["ref"])
 			}
+		}
+	}
+}
+
+// Once Claude's patch is applied in the open job, the workspace holds the change's code, and later
+// steps hold the app's token. So no step after the patch runs anything from the workspace: a
+// script it needs is copied from main before the patch.
+func TestOpenRunsNothingFromTheChange(t *testing.T) {
+	open := readBuildWorkflow(t)["open"]
+	applied := false
+	for _, step := range open.Steps {
+		if step.Name == "Apply the change to main as it is now" {
+			applied = true
+			continue
+		}
+		if !applied {
+			continue
+		}
+		if step.Uses != "" && !strings.HasPrefix(step.Uses, "actions/") {
+			t.Errorf("open's step %q uses %s after the patch is applied", step.Name, step.Uses)
+		}
+		for _, from := range []string{".github/", "examples/", "go run", "go build", "go test", "make ", "npm ", "npx ", "node ", "bash ", "source "} {
+			if strings.Contains(step.Run, from) {
+				t.Errorf("open's step %q runs %q from the workspace after the patch is applied", step.Name, from)
+			}
+		}
+	}
+	if !applied {
+		t.Fatal("open has no step that applies the change to main as it is now")
+	}
+}
+
+// The change's code runs in the draft and check jobs, so they don't save Go's module cache, which
+// land's find job would otherwise restore before it builds the rule. The find job saves none
+// either.
+func TestTheGoCacheIsNeverShared(t *testing.T) {
+	for file, jobs := range map[string]map[string]workflowJob{
+		"build.yml": readBuildWorkflow(t),
+		"land.yml":  readFactoryWorkflow(t, "land.yml").Jobs,
+	} {
+		for name, job := range jobs {
+			for _, step := range job.Steps {
+				if strings.HasPrefix(step.Uses, "actions/setup-go") && step.With["cache"] != "false" {
+					t.Errorf("%s's %s sets up Go with its cache on", file, name)
+				}
+			}
+		}
+	}
+}
+
+// Each build and retry run is named for its issue and try by GitHub, from its own inputs, so a run
+// that reads another can check that the run is the one it means before it trusts its artifacts.
+func TestRunsAreCheckedBeforeTheirRecordsAreTrusted(t *testing.T) {
+	for _, file := range []string{"build.yml", "retry.yml"} {
+		name := readFactoryWorkflow(t, file).RunName
+		if !strings.Contains(name, "issue") || !strings.Contains(name, "try") {
+			t.Errorf("%s's run-name is %q, which doesn't name the issue and the try", file, name)
+		}
+	}
+	build := readBuildWorkflow(t)
+	for _, name := range []string{"start", "draft"} {
+		runs := build[name].runs()
+		if !strings.Contains(runs, "display_title") || !strings.Contains(runs, "retry.yml") {
+			t.Errorf("build.yml's %s doesn't check that the previous run is retry.yml's for this issue", name)
+		}
+	}
+	if !strings.Contains(readFactoryWorkflow(t, "retry.yml").Jobs["retry"].runs(), "display_title") {
+		t.Error("retry.yml doesn't check that the build it reads is this issue's")
+	}
+	find := readFactoryWorkflow(t, "land.yml").Jobs["find"].runs()
+	for _, want := range []string{"display_title", "head_branch", ".bot"} {
+		if !strings.Contains(find, want) {
+			t.Errorf("land.yml's find doesn't check the build run's %s", want)
 		}
 	}
 }
