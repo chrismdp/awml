@@ -1130,7 +1130,7 @@ func TestTheReviewAppliesAPatchWithBinaryFiles(t *testing.T) {
 	for file, text := range map[string]string{
 		".github/review-bugs-prompt.md": "Review for bugs.\n", ".github/review-security-prompt.md": "Review for security.\n",
 		"REVIEW.md": "What failure looks like.\n", "recipes.md": "Bread\n", "logo.png": "\x89PNG\x00old",
-		"badge.png": "\x89PNG\x00badge",
+		"badge.png": "\x89PNG\x00" + strings.Repeat("badge pixels ", 400),
 	} {
 		r.write(filepath.Join(repo, file), text)
 	}
@@ -1145,10 +1145,14 @@ func TestTheReviewAppliesAPatchWithBinaryFiles(t *testing.T) {
 	// both its names.
 	r.write(filepath.Join(repo, "images/café.png"), "\x00accent")
 	gitIn(t, repo, "mv", "badge.png", "images/badge.png")
-	r.write(filepath.Join(repo, "images/badge.png"), "\x89PNG\x00badge, redrawn")
+	r.write(filepath.Join(repo, "images/badge.png"), "\x89PNG\x00"+strings.Repeat("badge pixels ", 400)+"redrawn")
 	gitIn(t, repo, "add", "-A")
 	// GitHub's diff, like git's without --binary, says only that a binary file differs.
-	patch := r.write("change/change.patch", gitIn(t, repo, "diff", "--cached")+"\n")
+	diff := gitIn(t, repo, "diff", "--cached", "-M")
+	if !strings.Contains(diff, "rename from badge.png") {
+		t.Fatalf("the test's patch doesn't rename badge.png:\n%s", diff)
+	}
+	patch := r.write("change/change.patch", diff+"\n")
 	gitIn(t, repo, "reset", "-q", "--hard")
 	r.dir = repo
 	r.run(pull, map[string]string{
@@ -1160,8 +1164,8 @@ func TestTheReviewAppliesAPatchWithBinaryFiles(t *testing.T) {
 		t.Errorf("staged %q, want recipes.md", staged)
 	}
 	told := r.read("review/pull-request.md")
-	for _, path := range []string{"logo.png", "fonts/Bakery.ttf", "images/café.png", "images/badge.png"} {
-		if !strings.Contains(told, path) {
+	for _, path := range []string{"logo.png", "fonts/Bakery.ttf", "images/café.png", "images/badge.png", "badge.png"} {
+		if !strings.Contains(told, "\n- "+path+"\n") {
 			t.Errorf("the reviewers aren't told that %s changed:\n%s", path, told)
 		}
 	}
@@ -1178,7 +1182,7 @@ func TestTheReviewStopsAtABinaryFileItCantRead(t *testing.T) {
 	answers := `
   *"vnd.github.diff"*) cat "$PATCH" ;;
   "api repos/owner/repo/compare/"*) answer <<< "{\"merge_base_commit\": {\"sha\": \"$BASE\"}}" ;;`
-	for _, path := range []string{"examples/render.sh", ".github/logo.png", "wasm/awml.js"} {
+	for _, path := range []string{"examples/render.sh", ".github/logo.png", "wasm/awml.js", "wasm/awml.wasm"} {
 		r := newRehearsal(t)
 		repo := filepath.Join(r.root, "repo")
 		for file, text := range map[string]string{
@@ -1241,6 +1245,45 @@ func TestTheReviewRefusesABinaryChangeToClaudesOwnFiles(t *testing.T) {
 	}, answers)
 	if !r.failed || !strings.Contains(r.printed, ".claude/settings.json") {
 		t.Errorf("a binary change to .claude/settings.json got through to the reviews:\n%s", r.printed)
+	}
+}
+
+// Moving one of Claude Code's own files out of the way is a change to it too, though git's numstat
+// names only where it went.
+func TestTheReviewRefusesARenameOfClaudesOwnFiles(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git isn't installed")
+	}
+	pull, _ := readFactoryWorkflow(t, "review.yml").Jobs["review"].step(t, "bring")
+	answers := `
+  *"vnd.github.diff"*) cat "$PATCH" ;;
+  "api repos/owner/repo/compare/"*) answer <<< "{\"merge_base_commit\": {\"sha\": \"$BASE\"}}" ;;`
+	r := newRehearsal(t)
+	repo := filepath.Join(r.root, "repo")
+	for file, text := range map[string]string{
+		".github/review-bugs-prompt.md": "Review for bugs.\n", ".github/review-security-prompt.md": "Review for security.\n",
+		"REVIEW.md": "What failure looks like.\n", "CLAUDE.md": strings.Repeat("Bake on Fridays.\n", 20),
+	} {
+		r.write(filepath.Join(repo, file), text)
+	}
+	gitIn(t, repo, "init", "-q")
+	gitIn(t, repo, "add", "-A")
+	gitIn(t, repo, "commit", "-q", "-m", "The bakery's main")
+	base := gitIn(t, repo, "rev-parse", "HEAD")
+	gitIn(t, repo, "mv", "CLAUDE.md", "notes.md")
+	diff := gitIn(t, repo, "diff", "--cached", "-M")
+	if !strings.Contains(diff, "rename from CLAUDE.md") {
+		t.Fatalf("the test's patch doesn't rename CLAUDE.md:\n%s", diff)
+	}
+	patch := r.write("change/change.patch", diff+"\n")
+	gitIn(t, repo, "reset", "-q", "--hard")
+	r.dir = repo
+	r.run(pull, map[string]string{
+		"HEAD_SHA": strings.Repeat("cd", 20), "BASE": base, "PATCH": patch,
+		"GITHUB_EVENT_PATH": r.write("event.json", `{"pull_request": {"title": "Move the notes", "body": "Tidy."}}`),
+	}, answers)
+	if !r.failed || !strings.Contains(r.printed, "CLAUDE.md") {
+		t.Errorf("a rename of CLAUDE.md got through to the reviews:\n%s", r.printed)
 	}
 }
 
