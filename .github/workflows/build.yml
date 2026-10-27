@@ -241,13 +241,14 @@ jobs:
             cat "$previous/failed.md"
           } >> "$RUNNER_TEMP/build/issue.md"
 
-      # Claude Code scrubs its login token from the commands it runs inside bubblewrap, and stops
-      # without it. Ubuntu's runners restrict the user namespaces bubblewrap needs, so allow them on
-      # this throwaway machine, and check bubblewrap works before Claude starts.
+      # Claude Code runs its commands in a sandbox, bubblewrap with socat for its network, so that it
+      # can scrub its login token from them, and they can't start without both. Ubuntu's runners
+      # restrict the user namespaces bubblewrap needs, so allow them on this throwaway machine, and
+      # check bubblewrap works before Claude starts.
       - name: Install Claude Code and bubblewrap
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y bubblewrap
+          sudo apt-get install -y bubblewrap socat
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           bwrap --dev-bind / / --unshare-pid true
           npm install -g @anthropic-ai/claude-code
@@ -425,13 +426,14 @@ jobs:
             exit 1
           fi
 
-      # Claude Code scrubs its login token from the commands it runs inside bubblewrap, and stops
-      # without it. Ubuntu's runners restrict the user namespaces bubblewrap needs, so allow them on
-      # this throwaway machine, and check bubblewrap works before Claude starts.
+      # Claude Code runs its commands in a sandbox, bubblewrap with socat for its network, so that it
+      # can scrub its login token from them, and they can't start without both. Ubuntu's runners
+      # restrict the user namespaces bubblewrap needs, so allow them on this throwaway machine, and
+      # check bubblewrap works before Claude starts.
       - name: Install Claude Code and bubblewrap
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y bubblewrap
+          sudo apt-get install -y bubblewrap socat
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           bwrap --dev-bind / / --unshare-pid true
           npm install -g @anthropic-ai/claude-code
