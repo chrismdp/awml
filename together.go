@@ -536,7 +536,8 @@ func (l linked) list(warnings bool) [][]string {
 const workflowBox = "fill:#f6f7f9,stroke:#5d6472,color:#16171b"
 
 // DrawMap draws workflows given together as their map: a box for each workflow, with its title and
-// the triggers it runs on that it shares with none, and each shared part once, between the boxes,
+// the triggers it runs on, those with a line out of them, that it shares with none, and each shared
+// part once, between the boxes,
 // with a line from each workflow that leads into it and to each that it leads into. Each workflow
 // must have no mistakes but lines that break a rule.
 func DrawMap(workflows []Workflow) string {
@@ -548,7 +549,7 @@ func DrawMap(workflows []Workflow) string {
 		box := fmt.Sprintf("w%d", w+1)
 		out = append(out, fmt.Sprintf(`  subgraph %s["%s"]`, box, text(str(workflow.Doc, "title"))), "    direction TB")
 		for _, p := range items(workflow.Doc, "parts") {
-			if _, shared := l.root[p]; shared || str(p, "kind") != "trigger" {
+			if _, shared := l.root[p]; shared || str(p, "kind") != "trigger" || !leadsOutOf(workflow.Doc, p) {
 				continue
 			}
 			node[p] = box + "_" + str(p, "id")

@@ -413,6 +413,11 @@ lines:
   assert.equal(api.draw(inbox) + "\n", runNative(["draw", ...inboxPaths]), "map of a part marked untrusted by a copy");
   assert.deepEqual(api.summary(inbox).untrusted.map(({ outsideActions }) => outsideActions), [["Send the reply: Allow"]]);
 
+  // A box holds only the triggers its workflow runs on, so not the plan's, which it only fires.
+  const fired = [handOff[0], inbox[0]];
+  assert.equal(api.draw(fired) + "\n", runNative(["draw", ...fired.map(({ file }) => file)]), "map of a workflow that fires a trigger");
+  assert(!api.draw(fired).includes("The shopping list is ready"), "the map draws a trigger its workflow only fires");
+
   // One file given by name is held to a ref it makes to itself.
   const self = { file: `${temporary}/self.yaml`, source: plan.replace("shop.yaml#ready", "self.yaml#thu") };
   await writeFile(self.file, self.source);
