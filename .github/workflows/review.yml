@@ -1,9 +1,11 @@
-# Every pull request from a branch of this repository is reviewed for bugs and for security, each
-# time it's opened or pushed to, whoever opened it, and each review is posted as a check on its head
-# commit, beside CI. Two fresh Claude sessions read the patch against main, with main's REVIEW.md and
-# prompts, never the branch's. A review that finds nothing passes; one with findings is neutral, since
-# the build rule already asks for review when a finding is open. A pull request from a fork gets no
-# review, since the sessions hold the maintainer's login token.
+# Every pull request from a branch of this repository, opened by someone with write access or by the
+# repository's own app, is reviewed for bugs and for security each time it's opened or pushed to,
+# and each review is posted as a check on its head commit, beside CI. Two fresh Claude sessions read
+# the patch against main, with main's REVIEW.md and prompts, never the branch's. A review that finds
+# nothing passes; one with findings is neutral, since the build rule already asks for review when a
+# finding is open. A pull request from a fork gets no review, and neither does one opened by anyone
+# else, since the sessions hold the maintainer's login token and read the pull request's
+# description.
 # Drawn at https://awml.io/chrismdp/review-a-pull-request
 name: Review a pull request
 
@@ -32,10 +34,10 @@ jobs:
   # each its own claude run. Neither can run the change's code: they read the patch, applied to
   # main, and the repository, with no tool that runs anything but git's reads.
   review:
-    # A fork's pull request starts nothing here: its author could steer the sessions, which hold the
-    # maintainer's login token. Anyone who can read the repository can open a pull request between
-    # two of its branches, with a title and description the sessions read, so it's reviewed only if
-    # the owner, a member, a collaborator or the build's app opened it.
+    # A fork's pull request, or one opened by anyone without write access, starts nothing here: its
+    # author could steer the sessions, which hold the maintainer's login token. Anyone who can read
+    # the repository can open a pull request between two of its branches, so the opener must be the
+    # owner, a member, a collaborator or the build's app.
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository &&
       (contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association) ||
@@ -57,9 +59,9 @@ jobs:
       # The reviews read the patch as data and follow main's prompts and REVIEW.md, so a branch
       # can't rewrite what it's held to. They're kept before the patch is applied. The patch is
       # GitHub's diff of the head commit against the commit of main the branch started from, so it
-      # applies there as it is, and `git diff --cached` shows the whole change. A Claude Code session
-      # loads its tree's settings, servers and instructions, so a patch that adds or changes any of
-      # them, anywhere in the tree, is refused before a session starts, and nothing is posted.
+      # applies there as it is, and `git diff --cached` shows the whole change. A patch that touches
+      # Claude Code's own settings, .claude/, .mcp.json or a CLAUDE.md, is refused before any session
+      # starts, and no session loads settings or servers from the tree.
       - name: Bring in the pull request's patch against main, and main's REVIEW.md and review prompts
         id: bring
         env:
@@ -130,8 +132,9 @@ jobs:
           done
           exit "$status"
 
-      # Anyone who can read the repository can download the artifact, so findings that carry what
-      # looks like the login token aren't kept, and nothing is posted.
+      # Findings that carry anything like the login token are refused, never uploaded or posted.
+      # Anyone who can read the repository can download the artifact, so they're refused here, before
+      # the upload, and again by the post job, which reads the artifact as data.
       - name: Keep the findings only if they carry no login token
         id: keep
         run: |
@@ -152,10 +155,10 @@ jobs:
   # Once both reviews are done, posts each as a check on the head commit: passed if it found
   # nothing, neutral if it found something, with its findings ranked. Findings never fail the
   # check: the build rule already sends a change with open findings to review, and the maintainer
-  # decides. Each review's file must be a list of findings, each ranked, with nothing in it that
-  # looks like the login token, or nothing is posted. Text the reviews wrote goes into the summary
-  # with nothing in it that can hide the rest, each title cut to 200 characters and each detail to
-  # 2,000.
+  # decides. Each review's file must be a list of findings, each ranked, or nothing is posted, and
+  # findings that carry anything like the login token are refused, never uploaded or posted. Text
+  # the reviews wrote goes into the summary with nothing in it that can hide the rest, each title
+  # cut to 200 characters and each detail to 2,000.
   post:
     needs: review
     runs-on: ubuntu-latest

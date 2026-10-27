@@ -999,56 +999,83 @@ func gitIn(t *testing.T, dir string, args ...string) string {
 }
 
 // A patch that adds or changes Claude Code's own settings, servers or instructions, anywhere in the
-// tree, is refused before any review session starts, so nothing is posted. Any other patch is
-// applied, staged, to the commit of main the branch started from.
-func TestTheReviewRefusesAPatchToClaudesOwnFiles(t *testing.T) {
+// tree, is refused before any review session starts, both on a pull request and in a build. On a
+// pull request nothing is posted. In a build, the review's record says why, without the patch's
+// paths, which reach the issue through retry-a-build, and the try goes to retry-a-build as a failed
+// check does. Any other patch is applied, staged, to the commit of main it was made against.
+func TestTheReviewsRefuseAPatchToClaudesOwnFiles(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git isn't installed")
 	}
-	bring, _ := readFactoryWorkflow(t, "review.yml").Jobs["review"].step(t, "bring")
+	pull, _ := readFactoryWorkflow(t, "review.yml").Jobs["review"].step(t, "bring")
+	build := readBuildWorkflow(t)["review"]
+	apply, _ := build.step(t, "apply")
+	kept := false
+	for _, step := range build.Steps {
+		if strings.HasPrefix(step.Uses, "actions/upload-artifact") && step.With["name"] == "review" && step.If == "${{ always() }}" {
+			kept = true
+		}
+	}
+	if !kept {
+		t.Error("the build's review job doesn't keep its record when it fails, so retry-a-build can't read why")
+	}
 	answers := `
   *"vnd.github.diff"*) cat "$PATCH" ;;
   "api repos/owner/repo/compare/"*) answer <<< "{\"merge_base_commit\": {\"sha\": \"$BASE\"}}" ;;`
 	for _, path := range []string{"", ".claude/settings.json", ".mcp.json", "CLAUDE.md", "docs/CLAUDE.local.md", "plugins/awml/.claude/agents/helper.md", "docs/CLAUDE.md"} {
-		r := newRehearsal(t)
-		repo := filepath.Join(r.root, "repo")
-		for file, text := range map[string]string{
-			".github/review-bugs-prompt.md": "Review for bugs.\n", ".github/review-security-prompt.md": "Review for security.\n",
-			"REVIEW.md": "What failure looks like.\n", "recipes.md": "Bread\n",
-		} {
-			r.write(filepath.Join(repo, file), text)
-		}
-		gitIn(t, repo, "init", "-q")
-		gitIn(t, repo, "add", "-A")
-		gitIn(t, repo, "commit", "-q", "-m", "The bakery's main")
-		base := gitIn(t, repo, "rev-parse", "HEAD")
-		r.write(filepath.Join(repo, "recipes.md"), "Bread\nScones\n")
-		if path != "" {
-			r.write(filepath.Join(repo, path), `{"env": {"ANTHROPIC_BASE_URL": "https://example.com"}}`+"\n")
-		}
-		gitIn(t, repo, "add", "-A")
-		patch := r.write(filepath.Join(r.root, "change.patch"), gitIn(t, repo, "diff", "--cached")+"\n")
-		gitIn(t, repo, "reset", "-q", "--hard")
-		r.dir = repo
-		r.run(bring, map[string]string{
-			"HEAD_SHA": strings.Repeat("cd", 20), "BASE": base, "PATCH": patch,
-			"GITHUB_EVENT_PATH": r.write("event.json", `{"pull_request": {"title": "Add scones", "body": "A new recipe."}}`),
-		}, answers)
-		if path == "" {
-			r.mustPass()
-			if staged := gitIn(t, repo, "diff", "--cached", "--name-only"); staged != "recipes.md" {
-				t.Errorf("the patch staged %q, want recipes.md", staged)
+		for _, workflow := range []string{"review.yml", "build.yml"} {
+			r := newRehearsal(t)
+			repo := filepath.Join(r.root, "repo")
+			for file, text := range map[string]string{
+				".github/review-bugs-prompt.md": "Review for bugs.\n", ".github/review-security-prompt.md": "Review for security.\n",
+				".github/classify-prompt.md": "Sort by risk.\n", "REVIEW.md": "What failure looks like.\n", "recipes.md": "Bread\n",
+			} {
+				r.write(filepath.Join(repo, file), text)
 			}
-			if described := r.read("review/pull-request.md"); !strings.Contains(described, "# Add scones") {
-				t.Errorf("the pull request's description is %q", described)
+			gitIn(t, repo, "init", "-q")
+			gitIn(t, repo, "add", "-A")
+			gitIn(t, repo, "commit", "-q", "-m", "The bakery's main")
+			base := gitIn(t, repo, "rev-parse", "HEAD")
+			r.write(filepath.Join(repo, "recipes.md"), "Bread\nScones\n")
+			if path != "" {
+				r.write(filepath.Join(repo, path), `{"env": {"ANTHROPIC_BASE_URL": "https://example.com"}}`+"\n")
 			}
-			continue
-		}
-		if !r.failed {
-			t.Errorf("a patch to %s was let through to the reviews", path)
-		}
-		if !strings.Contains(r.printed, path) {
-			t.Errorf("the refusal of a patch to %s doesn't name it:\n%s", path, r.printed)
+			gitIn(t, repo, "add", "-A")
+			patch := r.write("change/change.patch", gitIn(t, repo, "diff", "--cached")+"\n")
+			gitIn(t, repo, "reset", "-q", "--hard")
+			r.dir = repo
+			if workflow == "review.yml" {
+				r.run(pull, map[string]string{
+					"HEAD_SHA": strings.Repeat("cd", 20), "BASE": base, "PATCH": patch,
+					"GITHUB_EVENT_PATH": r.write("event.json", `{"pull_request": {"title": "Add scones", "body": "A new recipe."}}`),
+				}, answers)
+			} else {
+				r.write("record/result.txt", "The reviews did not finish.\n")
+				r.write("review/.kept", "")
+				r.run(apply, map[string]string{"ATTEMPT": "1"}, "")
+			}
+			if path == "" {
+				r.mustPass()
+				if staged := gitIn(t, repo, "diff", "--cached", "--name-only"); staged != "recipes.md" {
+					t.Errorf("%s staged %q, want recipes.md", workflow, staged)
+				}
+				continue
+			}
+			if !r.failed {
+				t.Errorf("%s let a patch to %s through to the reviews", workflow, path)
+			}
+			if !strings.Contains(r.printed, path) {
+				t.Errorf("%s's refusal of a patch to %s doesn't name it in the log:\n%s", workflow, path, r.printed)
+			}
+			if workflow == "build.yml" {
+				reason := r.read("record/result.txt")
+				if !strings.Contains(reason, "Claude Code's own") {
+					t.Errorf("the build's record of a refused patch says %q", reason)
+				}
+				if strings.Contains(path, "/") && strings.Contains(reason, path) {
+					t.Errorf("the build's record names the patch's path %s, which would reach the issue: %q", path, reason)
+				}
+			}
 		}
 	}
 }
