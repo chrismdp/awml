@@ -330,7 +330,7 @@ func TestTheMermaidWritesWhatTheGraphListsInItsOrder(t *testing.T) {
   end
 
   b -.-> a
-  c -.- b
+  b -.- c
 `)
 }
 

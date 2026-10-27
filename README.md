@@ -144,7 +144,7 @@ The operating model has little to do with AI: it's how work is organised, whoeve
 - A **connector** is a grey hexagon: someone's access to an outside service, such as a calendar, a mailbox or a bank account.
 - A **surface** is a white window box: where people meet the system's work, such as a chat, a list on their phone or a screen on a wall.
 - An **outside action** is a coral flag: something that changes the world outside the system, such as sending an email or paying a bill. Its label gives its [tier](#tiers-and-yeses) after its last colon, such as `Send the reply: Ask`.
-- A **comment** is a dashed box with a cut corner. It points out a gap, or gives an example of what a part could carry, and is tied to what it explains.
+- A **comment** is a dashed box with a cut corner. It points out a gap, or gives an example of what a part could carry, and is tied to what it explains, below or beside it.
 
 Posting on a shared surface to the people it serves is delivery, not an outside action, so a family chat needs no flag and no review.
 

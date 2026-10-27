@@ -139,11 +139,26 @@ lines:
   - {from: b, to: a, kind: tie}
   - {from: a, to: c, kind: hidden}
   - {from: c, to: a, kind: tie}`)
-	has(t, out, "\n  b -.- a\n")
-	has(t, out, "\n  c -.- a\n")
+	has(t, out, "\n  a -.- b\n")
+	has(t, out, "\n  a ~~~ c\n")
+	has(t, out, "\n  a -.- c\n")
 	if !strings.HasSuffix(out, "\n  linkStyle 0,2 "+grey) {
 		t.Errorf("the drawing is\n%s", out)
 	}
+}
+
+// A tie has no direction, so it's written from the part to the comment whichever way the file
+// lists it, and the comment hangs below or beside what it explains. A hidden line is the author's
+// hint for the layout, so it stays as written.
+func TestATieIsWrittenFromThePartToTheComment(t *testing.T) {
+	out := drawing(t, "security", `
+parts: [{id: b, kind: comment, label: B}, {id: a, kind: code, label: A}, {id: c, kind: comment, label: C}, {id: d, kind: comment, label: D}]
+lines:
+  - {from: b, to: a, kind: tie}
+  - {from: a, to: c, kind: tie}
+  - {from: c, to: d, kind: tie}
+  - {from: d, to: a, kind: hidden}`)
+	has(t, out, "\n  a -.- b\n  a -.- c\n  c -.- d\n  d ~~~ a\n")
 }
 
 // A red line takes the red style, and stays thick and dotted where it would be.
