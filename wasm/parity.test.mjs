@@ -440,6 +440,11 @@ lines:
   assert.equal(api.checks(scoped).checks.find((check) => check.id === "refs.agree").result, "fail");
   for (const { file, source } of broken) await writeFile(file, source);
 
+  // A trigger the plan only fires needs no wait, so the plan alone can be fitted.
+  const firing = api.fit([handOff[0], ...descriptionSources]);
+  assert.deepEqual(firing.gaps, [], "fit asks for a wait on a trigger the workflow only fires");
+  assert.equal(api.fitJSON([handOff[0], ...descriptionSources]) + "\n", runNative(["fit", "--json", handOff[0].file, ...descriptions]), "fit of a workflow that fires a trigger");
+
   // One file given by name is held to a ref it makes to itself.
   const self = { file: `${temporary}/self.yaml`, source: plan.replace("shop.yaml#ready", "self.yaml#thu") };
   await writeFile(self.file, self.source);

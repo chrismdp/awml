@@ -81,6 +81,8 @@ scopes: [{id: private, label: private}]
 parts:
   - {id: hourly, kind: trigger, label: Hourly, in: private}
   - {id: loose, kind: ai, op: sort, label: Loose}
+lines:
+  - {from: hourly, to: loose, kind: start}
 `
 	docs := fitDocs(t, security, goodPlatform)
 	lines, gaps := Fit(docs[0], nil, docs[1:])

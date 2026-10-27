@@ -106,7 +106,7 @@ This path is hardest when a builder can't see the data that the workflow handles
 **What a workflow needs.** Most of it is already in the drawing: the contexts, connectors and AI steps the workflow reaches. Three fields add the rest:
 
 - **Who may process it.** A scope's `processing` names the companies that may process its content, and for which operations. `{ anthropic: any, openai: [sort] }` lets Anthropic's models do anything in the scope and OpenAI's only sort. `any` lets every company in, and `none` keeps them all out, as for something told in confidence. A company is a short id, which only has to match the id the platform descriptions use. Where one company offers different terms, name the agreement instead, as in `openai-zero-retention`.
-- **How long work may wait.** A trigger's `wait` is the longest the work may wait once the trigger fires, as an ISO 8601 duration: `PT5M` for urgent mail, `P1D` for a weekly review. Durations may use weeks, days, hours, minutes and seconds; years and months aren't accepted because they have no fixed length. This is what "always on" means for a workflow.
+- **How long work may wait.** A trigger's `wait` is the longest the work may wait once the trigger fires, as an ISO 8601 duration: `PT5M` for urgent mail, `P1D` for a weekly review. Durations may use weeks, days, hours, minutes and seconds; years and months aren't accepted because they have no fixed length. This is what "always on" means for a workflow. Only a trigger the workflow runs on, one with a line out of it, needs a `wait`: one it only fires, with a line into it, waits for nothing in it.
 - **Where a context is kept.** A context's `at` names the folder or store it already is, as a path such as `notes/projects`. A context without `at` isn't looked for: it's state the workflow makes wherever it's installed, or kept by a service a connector reaches.
 
 **What a platform offers.** A platform description is a file of its own. It describes one kind of platform, such as a container on a server, or one real machine, and names no workflow:
@@ -131,7 +131,7 @@ A description of a kind of platform is a starting point. A real machine's descri
 
 **How `awml fit` decides.** Given a workflow and some platform descriptions, `awml fit` says of each platform that the workflow fits, or gives every reason it doesn't:
 
-1. **It's on often enough.** Every trigger's `wait` is at least the platform's `off_for_up_to`.
+1. **It's on often enough.** The `wait` of every trigger the workflow runs on is at least the platform's `off_for_up_to`.
 2. **Every agent there may see what it holds.** Each company in `agents` is allowed `any` by every scope that has a step, context or connector of the workflow on the platform. This is the platform view's rule for a machine. A person's own steps and reviews happen on their own devices, so they don't count.
 3. **Every AI step has a model it may use.** Each AI step's scope allows at least one company, for the step's operation, that the platform reaches through `agents` or `calls`. The fit names those companies for each AI step. Which model to use is the implementation's choice.
 4. **Every context it relies on is there.** Each context with `at` is in something the platform `holds`.
@@ -143,7 +143,7 @@ A block names a description of its owner's own by a bare id, such as `scripts-ma
 
 An implementation that names a description not given to the command is a mistake, and for a published one `awml fit` says to pull it. Two given descriptions with the same id are a mistake too.
 
-A scope without `processing`, or a trigger without `wait`, is a gap, and `awml fit` reports it rather than guess. Take the client email in the examples, with the private scope allowing any company, the business scope allowing only Anthropic, the engagements and their projects kept under `notes`, and the trigger allowed to wait two hours. Given four platforms, `awml fit` might say:
+A scope without `processing`, or a trigger the workflow runs on without `wait`, is a gap, and `awml fit` reports it rather than guess. Take the client email in the examples, with the private scope allowing any company, the business scope allowing only Anthropic, the engagements and their projects kept under `notes`, and the trigger allowed to wait two hours. Given four platforms, `awml fit` might say:
 
 ```text
 $ awml fit client-email.yaml cowork-mac-mini.yaml scripts-mac-mini.yaml codex-laptop.yaml worker.yaml
