@@ -485,6 +485,15 @@ func TestTheGoCacheIsNeverShared(t *testing.T) {
 			}
 		}
 	})
+	// A release builds the binaries people download, so it restores no cache a run of a change's
+	// code could have written (#159).
+	for name, job := range readFactoryWorkflow(t, "release.yml").Jobs {
+		for _, step := range job.Steps {
+			if strings.HasPrefix(step.Uses, "actions/setup-go") && step.With["cache"] != "false" {
+				t.Errorf("release.yml's %s sets up Go with its cache on", name)
+			}
+		}
+	}
 }
 
 // No step expands an expression in its script. Event, issue, log, Claude and artifact text reaches a
