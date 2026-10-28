@@ -1,0 +1,265 @@
+package awml
+
+import (
+	"encoding/json"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// land.yml runs main's code when CI finishes, never the branch's: its find job reads with a token
+// that can't write and checks out main's commit, and its land job checks out nothing.
+func TestLandRunsOnlyMainsCode(t *testing.T) {
+	jobs := readFactoryWorkflow(t, "land.yml").Jobs
+	onlyReads(t, "land.yml", "find", jobs["find"])
+	for name, job := range jobs {
+		for _, step := range job.Steps {
+			if strings.HasPrefix(step.Uses, "actions/checkout") && (name != "find" || step.With["ref"] != "${{ github.sha }}") {
+				t.Errorf("land.yml's %s checks out %q, not main's commit", name, step.With["ref"])
+			}
+		}
+	}
+	if got := jobs["land"].needs(); len(got) != 1 || got[0] != "find" {
+		t.Errorf("the land job needs %v, want find", got)
+	}
+	for _, output := range []string{"outcome", "reasons", "pr", "head_sha", "labeller", "classify"} {
+		if jobs["find"].Outputs[output] == "" {
+			t.Errorf("the find job doesn't pass on %s", output)
+		}
+	}
+	if len(jobs["find"].Outputs) != 6 {
+		t.Errorf("the find job passes on %v, want only the sha, the outcome, the login, the reasons and the links", jobs["find"].Outputs)
+	}
+}
+
+func landRun(event, branch string) string {
+	return `
+  "api repos/owner/repo/actions/runs/77"*) answer <<< '{"path": ".github/workflows/ci.yml", "event": "` + event + `", "status": "completed",
+    "head_sha": "` + strings.Repeat("ab", 20) + `", "head_branch": "` + branch + `", "html_url": "https://github.com/owner/repo/actions/runs/77",
+    "head_repository": {"full_name": "owner/repo"}}' ;;`
+}
+
+func landJobs(jobs ...string) string {
+	return `
+  "api --paginate repos/owner/repo/actions/runs/77/jobs"*) answer <<< '{"jobs": [` + strings.Join(jobs, ", ") + `]}' ;;`
+}
+
+func landJob(name, status, conclusion string) string {
+	return `{"name": "` + name + `", "status": "` + status + `", "conclusion": "` + conclusion + `", "html_url": "https://github.com/owner/repo/actions/runs/77/job/1"}`
+}
+
+func landPulls(user, sha string) string {
+	pulls := "[]"
+	if user != "" {
+		pulls = `[{"number": 8, "base": {"ref": "main"}, "head": {"ref": "build/issue-120", "sha": "` + sha +
+			`", "repo": {"full_name": "owner/repo"}}, "user": {"login": "` + user + `"}}]`
+	}
+	return `
+  "api repos/owner/repo/pulls?head=owner:build/issue-120&base=main&state=open"*) answer <<< '` + pulls + `' ;;
+  "api --paginate repos/owner/repo/issues/120/events"*) answer <<< '[
+    {"event": "labeled", "label": {"name": "build"}, "actor": {"login": "the-maintainer", "type": "User"}},
+    {"event": "labeled", "label": {"name": "build"}, "actor": {"login": "awml-factory[bot]", "type": "Bot"}}]' ;;`
+}
+
+// land.yml exits quietly unless CI's run is a pull_request run on a factory branch of this
+// repository, the pull request is the app's and open, its head is CI's commit, and every check has
+// finished and passed: a failed check is retry-a-build's or the fixer's. It finds who last added
+// the issue's build label, a person, to tell or ask.
+func TestLandExitsQuietlyUnlessEveryCheckPassedOnTheHead(t *testing.T) {
+	ready, _ := readFactoryWorkflow(t, "land.yml").Jobs["find"].step(t, "ready")
+	head := strings.Repeat("ab", 20)
+	passed := landJobs(landJob("test (1.22)", "completed", "success"), landJob("test (stable)", "completed", "success"),
+		landJob("Bug review", "completed", "success"), landJob("Security review", "completed", "success"),
+		landJob("Classify", "completed", "success"), landJob("report", "completed", "skipped"))
+
+	r := newRehearsal(t)
+	r.run(ready, map[string]string{"CI_RUN": "77"}, landRun("pull_request", "build/issue-120")+passed+landPulls("awml-factory[bot]", head))
+	r.mustPass()
+	if r.outputs["ready"] != "true" || r.outputs["pr"] != "8" || r.outputs["head_sha"] != head ||
+		r.outputs["labeller"] != "the-maintainer" || r.outputs["classify"] != "https://github.com/owner/repo/actions/runs/77/job/1" {
+		t.Errorf("land didn't find the pull request ready to judge: %v", r.outputs)
+	}
+
+	quiet := map[string]string{
+		"a push's run":            landRun("push", "build/issue-120") + passed + landPulls("awml-factory[bot]", head),
+		"a person's branch":       landRun("pull_request", "scones") + passed + landPulls("awml-factory[bot]", head),
+		"a failed review":         landRun("pull_request", "build/issue-120") + landJobs(landJob("test (1.22)", "completed", "success"), landJob("test (stable)", "completed", "success"), landJob("Bug review", "completed", "failure"), landJob("Security review", "completed", "success")) + landPulls("awml-factory[bot]", head),
+		"a failed test":           landRun("pull_request", "build/issue-120") + landJobs(landJob("test (1.22)", "completed", "failure"), landJob("test (stable)", "completed", "success"), landJob("Bug review", "completed", "success"), landJob("Security review", "completed", "success")) + landPulls("awml-factory[bot]", head),
+		"an unfinished Classify":  landRun("pull_request", "build/issue-120") + landJobs(landJob("test (1.22)", "completed", "success"), landJob("test (stable)", "completed", "success"), landJob("Bug review", "completed", "success"), landJob("Security review", "completed", "success"), landJob("Classify", "in_progress", "")) + landPulls("awml-factory[bot]", head),
+		"reviews that never ran":  landRun("pull_request", "build/issue-120") + landJobs(landJob("test (1.22)", "completed", "success"), landJob("test (stable)", "completed", "success"), landJob("Bug review", "completed", "skipped"), landJob("Security review", "completed", "skipped")) + landPulls("awml-factory[bot]", head),
+		"a moved head":            landRun("pull_request", "build/issue-120") + passed + landPulls("awml-factory[bot]", strings.Repeat("cd", 20)),
+		"a person's pull request": landRun("pull_request", "build/issue-120") + passed + landPulls("someone", head),
+		"no open pull request":    landRun("pull_request", "build/issue-120") + passed + landPulls("", head),
+	}
+	for name, answers := range quiet {
+		q := newRehearsal(t)
+		q.run(ready, map[string]string{"CI_RUN": "77"}, answers)
+		q.mustPass()
+		if q.outputs["ready"] != "false" {
+			t.Errorf("with %s, land went on: %v", name, q.outputs)
+		}
+		if strings.Contains(q.calls, "comment") {
+			t.Errorf("with %s, land commented", name)
+		}
+	}
+}
+
+// rehearseJudge rehearses land's judge step on a branch of the given commits, made on a bakery's main in an
+// origin of its own, with the reviews' checks and Classify's verdict as the stub answers them, and
+// main's rule built from this repository.
+func rehearseJudge(t *testing.T, commits []struct{ author, message string }, annotations, verdict string) *rehearsal {
+	t.Helper()
+	find := readFactoryWorkflow(t, "land.yml").Jobs["find"]
+	step, _ := find.step(t, "judge")
+	r := newRehearsal(t)
+	build := exec.Command("go", "build", "-o", filepath.Join(r.temp, "build-rule"), "./internal/buildrule")
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("building the rule: %v\n%s", err, out)
+	}
+	r.write("build-rules.yml", readText(t, ".github/build-rules.yml"))
+	r.write("read-findings.sh", readText(t, ".github/read-findings.sh"))
+	origin, _ := r.newRepo("origin", map[string]string{"recipes.md": "Bread\n"})
+	gitIn(t, origin, "switch", "-q", "-c", "build/issue-120")
+	for at, c := range commits {
+		r.write(filepath.Join(origin, "recipes.md"), "Bread\n"+strings.Repeat("Scones\n", at+1))
+		gitIn(t, origin, "add", "-A")
+		gitIn(t, origin, "-c", "user.name=x", "-c", "user.email="+c.author, "commit", "-q", "--author", "Someone <"+c.author+">", "-m", c.message)
+	}
+	head := gitIn(t, origin, "rev-parse", "HEAD")
+	gitIn(t, origin, "switch", "-q", "main")
+	work := filepath.Join(r.root, "work")
+	gitIn(t, r.root, "clone", "-q", "--branch", "main", origin, work)
+	r.dir = work
+	r.run(step, map[string]string{"CI_RUN": "77", "HEAD_SHA": head}, `
+  "api --paginate repos/owner/repo/actions/runs/77/jobs"*) answer <<< '{"jobs": [
+    {"name": "Bug review", "check_run_url": "https://api.github.com/repos/owner/repo/check-runs/2"},
+    {"name": "Security review", "check_run_url": "https://api.github.com/repos/owner/repo/check-runs/3"},
+    {"name": "Classify", "check_run_url": "https://api.github.com/repos/owner/repo/check-runs/4"}]}' ;;
+  "api --paginate repos/owner/repo/check-runs/2/annotations"*) answer <<< '`+annotations+`' ;;
+  "api --paginate repos/owner/repo/check-runs/3/annotations"*) answer <<< '[]' ;;
+  "api --paginate repos/owner/repo/check-runs/4/annotations"*) answer <<< '[`+verdict+`]' ;;`)
+	r.mustPass()
+	return r
+}
+
+// The rule judges the pushed commit with git, reading the branch's commits since main, the reviews'
+// findings and Classify's verdict, and can only move the verdict towards ask: a fix commit, or a
+// Nit left unfixed, means at least show; a commit that isn't the factory's, or no verdict, means ask.
+func TestLandJudgesThePushedCommit(t *testing.T) {
+	const app = "41+awml-factory[bot]@users.noreply.github.com"
+	type made = struct{ author, message string }
+	ship := `{"annotation_level": "notice", "title": "Verdict", "message": "ship"}`
+	nit := `[{"annotation_level": "warning", "title": "Nit: A clearer name", "path": "recipes.md", "start_line": 1, "message": "Say it."}]`
+	tests := []struct {
+		name        string
+		commits     []made
+		annotations string
+		verdict     string
+		outcome     string
+		reason      string
+	}{
+		{name: "a build commit Classify ships", commits: []made{{app, "Add scones"}}, annotations: "[]", verdict: ship,
+			outcome: "ship", reason: "No rule moved the verdict towards ask."},
+		{name: "a fix commit on top", commits: []made{{app, "Add scones"}, {app, "Fix\n\nFixed-by: fix-review-findings"}}, annotations: "[]", verdict: ship,
+			outcome: "show", reason: "The branch carries 1 fix commit."},
+		{name: "a Nit left unfixed", commits: []made{{app, "Add scones"}}, annotations: nit, verdict: ship,
+			outcome: "show", reason: "The reviews left 1 Nit unfixed."},
+		{name: "a person's commit", commits: []made{{app, "Add scones"}, {"someone@example.com", "Tweak"}}, annotations: "[]", verdict: ship,
+			outcome: "ask", reason: "A commit since main isn't the factory's."},
+		{name: "no verdict", commits: []made{{app, "Add scones"}}, annotations: "[]", verdict: "",
+			outcome: "ask", reason: "Classify gave no verdict, so the change waits for review."},
+	}
+	for _, tt := range tests {
+		r := rehearseJudge(t, tt.commits, tt.annotations, tt.verdict)
+		var reasons []string
+		if err := json.Unmarshal([]byte(r.outputs["reasons"]), &reasons); err != nil {
+			t.Fatalf("%s: the reasons %q aren't a list: %v", tt.name, r.outputs["reasons"], err)
+		}
+		if r.outputs["outcome"] != tt.outcome || !contains(reasons, tt.reason) {
+			t.Errorf("%s: land judged %s for %q, want %s for %q", tt.name, r.outputs["outcome"], reasons, tt.outcome, tt.reason)
+		}
+		if got := gitIn(t, r.dir, "status", "--porcelain"); got != "" {
+			t.Errorf("%s: judging changed main's checkout: %s", tt.name, got)
+		}
+	}
+}
+
+func contains(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+// Ship merges, pinned with --match-head-commit to the commit judged, with the app's token. Show
+// merges the same way, then tells the person who added the label what to look at, in a new
+// comment. Ask requests their review in a new comment and doesn't merge. The rule's reasons are
+// cleaned, and Classify's are linked, never quoted.
+func TestLandShipsShowsOrAsks(t *testing.T) {
+	land := readFactoryWorkflow(t, "land.yml").Jobs["land"]
+	write, _ := land.step(t, "write")
+	merge, _ := land.step(t, "merge")
+	show, _ := land.step(t, "show")
+	ask, _ := land.step(t, "ask")
+	if merge.If != "env.OUTCOME == 'ship' || env.OUTCOME == 'show'" || merge.Env["GH_TOKEN"] != "${{ steps.app.outputs.token }}" {
+		t.Errorf("the merge runs if %q with %q, want ship or show, with the app's token", merge.If, merge.Env["GH_TOKEN"])
+	}
+	if show.If != "env.OUTCOME == 'show'" || ask.If != "env.OUTCOME == 'ask'" {
+		t.Errorf("show runs if %q and ask if %q", show.If, ask.If)
+	}
+	if strings.Contains(ask.Run, "pr merge") {
+		t.Error("ask merges")
+	}
+	head := strings.Repeat("ab", 20)
+	env := map[string]string{"OUTCOME": "show", "PR_NUMBER": "8", "HEAD_SHA": head, "LABELLER": "the-maintainer",
+		"CLASSIFY": "https://github.com/owner/repo/actions/runs/77/job/1",
+		"REASONS":  `["The branch carries 1 fix commit.", "` + "`docs/@someone <b>.md`" + ` is a path that always needs review."]`}
+
+	r := newRehearsal(t)
+	r.run(write, env, "")
+	r.mustPass()
+	shown := r.read("show.md")
+	for _, want := range []string{"@the-maintainer,", "- The branch carries 1 fix commit.", "@\u200bsomeone &lt;b>", "[Classify's reasons](https://github.com/owner/repo/actions/runs/77/job/1)"} {
+		if !strings.Contains(shown, want) {
+			t.Errorf("the show comment lacks %q:\n%s", want, shown)
+		}
+	}
+	if !strings.Contains(r.read("merge.md"), "Shown by land.yml") || !strings.Contains(r.read("ask.md"), "needs your review") {
+		t.Errorf("the merge message or the ask comment don't say what land did:\n%s\n%s", r.read("merge.md"), r.read("ask.md"))
+	}
+
+	r.run(merge, env, `  "pr merge"*) ;;`)
+	r.mustPass()
+	if !strings.Contains(r.calls, "pr merge 8 --repo owner/repo --squash --match-head-commit "+head+" --body-file") {
+		t.Errorf("the merge isn't pinned to the commit judged:\n%s", r.calls)
+	}
+
+	asked := newRehearsal(t)
+	env["OUTCOME"] = "ask"
+	asked.run(write, env, "")
+	asked.run(ask, env, `
+  "pr edit 8 --repo owner/repo --add-reviewer the-maintainer"*) ;;
+  "pr comment 8"*) ;;`)
+	asked.mustPass()
+	if bodies := asked.bodies(); len(bodies) != 1 || !strings.Contains(bodies[0], "@the-maintainer, CI passed") {
+		t.Errorf("ask said %q, want a new comment asking the labeller", bodies)
+	}
+
+	for _, bad := range []map[string]string{{"OUTCOME": "merge"}, {"LABELLER": "a b"}, {"HEAD_SHA": "main"}, {"CLASSIFY": "javascript:x"}} {
+		b := newRehearsal(t)
+		broken := map[string]string{}
+		for k, v := range env {
+			broken[k] = v
+		}
+		for k, v := range bad {
+			broken[k] = v
+		}
+		b.run(write, broken, "")
+		if !b.failed {
+			t.Errorf("the land job took %v from the find job", bad)
+		}
+	}
+}

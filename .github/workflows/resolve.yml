@@ -1,32 +1,24 @@
-# Resolves open pull requests that conflict when a commit lands on main. This is the workflow drawn
-# at https://awml.io/chrismdp/rebase-conflicting-pull-requests.
+# A pull request that conflicts with main is rebased onto it. The repository is public, so
+# everything sits in one scope: anyone may read the pull requests and their branches. What matters
+# is who may act. Only branches in the repository itself, opened by its own people or by the build
+# workflow, are touched. A plain git rebase comes first, and a clean one is pushed straight away.
+# Only a real conflict starts a Claude session, which resolves it with a read-only token and hands
+# back the rebased branch. The app replaces the branch only if nobody has pushed to it meanwhile, and
+# runs no checks of its own: its push starts CI, which judges the rebased commit as it judges every
+# push, reviews included, since a resolution is new code. When it ends, one comment on the pull
+# request says what was pushed, or why it couldn't be.
+# Drawn in .github/drawings/rebase-conflicting-pull-requests.yaml
 #
-# Only pull requests from this repository, opened by its own people or by the build workflow, are
-# considered. Claude works with a read-only token and returns the rebased branch as a bundle, so it
-# never holds the credentials that can push its change. The checks run in another job that can only
-# read. A separate push job runs nothing from the branch and force-pushes it only if the branch
-# hasn't moved. The old commit stays on GitHub and the comment names it, so the replacement can be
-# undone with one push.
+# Finding the conflicting pull requests runs in one job, with the plain git rebase, and Claude
+# resolves a conflict in a second. The push and the comment run in a third job on a fresh runner,
+# which shares none of the second's access and runs nothing from the branch. Each job that makes a
+# bundle gives its sha256 as an output, and the push job checks each bundle against it.
 #
 # The repository's GitHub App pushes the rebased branch, because GitHub starts CI from an app's push
-# but not from one by the Actions token. So CI runs on the rebased branch and shows on the pull
-# request, and main's rule holds the merge until it passes. The push job mints the app's token and
-# gives it only to the push. The find job needs no token of the app's: it knows the build's pull
-# requests as a bot's, from a build/issue- branch in this repository. Comments use the Actions
-# token.
-#
-# Each pull request it redoes gets a status comment of this run's own, marked with a hidden
-# <!-- factory-resolve-status -->. A job posts it as soon as the find job names the pull request,
-# saying that main has moved on, that the pull request now clashes with it and that it is being
-# redone on top of main, with a link to the run. That job checks out nothing and runs only gh, and
-# nothing waits for it, so the rebase goes on even if it can't comment. When the push job ends, it
-# edits the comment to say either that the new branch was pushed and CI is running again, or that
-# the redo failed. It finds the comment by this run's link, so a later run posts a new comment and
-# never edits an older run's. The comments saying how it went are still posted as well, because
-# GitHub sends no notification for an edit.
-#
-# Before it works, a repository needs the GitHub App, its two secrets and the
-# CLAUDE_CODE_OAUTH_TOKEN secret that build.yml lists.
+# but not from one by the Actions token. The push job mints the app's token, for this repository
+# alone, and gives it only to the push. Comments use the Actions token. Before it works, a
+# repository needs the GitHub App, its two secrets and the CLAUDE_CODE_OAUTH_TOKEN secret that
+# build.yml lists.
 name: Rebase conflicting pull requests
 
 on:
@@ -39,6 +31,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Finds the open pull requests GitHub flags as conflicting with main, keeps those from a branch
+  # of this repository opened by its own people or the build's app, and rebases each with git
+  # alone, hooks and fsmonitor off, running nothing from the branch. A clean rebase is bundled
+  # for the push job, and a real conflict is left for Claude. It holds a token that only reads.
   find:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -47,156 +43,135 @@ jobs:
       pull-requests: read
     outputs:
       pulls: ${{ steps.find.outputs.pulls }}
+      conflicts: ${{ steps.find.outputs.conflicts }}
+      digests: ${{ steps.find.outputs.digests }}
       main_sha: ${{ steps.find.outputs.main_sha }}
     steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
       # A pull request is the build workflow's when a bot opened it from a build/issue- branch in
-      # this repository, whether the bot is the app or, as before the build used the app, the
-      # Actions token.
-      - name: Find conflicting pull requests
+      # this repository. The rebase commits as the app's bot, so a person's commit keeps its author
+      # and stays theirs.
+      - name: Find the conflicting pull requests and rebase each with git alone
         id: find
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if ! [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Main's commit isn't a commit id: $GITHUB_SHA"
+            exit 1
+          fi
+          id="$(gh api "users/awml-factory%5Bbot%5D" --jq .id)"
+          case "$id" in ''|*[!0-9]*) echo "The app's bot has no user id: $id"; exit 1 ;; esac
+          rebased="$RUNNER_TEMP/rebased"
+          mkdir -p "$rebased"
+          git() {
+            command git -c core.hooksPath=/dev/null -c core.fsmonitor=false \
+              -c user.name="awml-factory[bot]" -c user.email="$id+awml-factory[bot]@users.noreply.github.com" "$@"
+          }
           pulls='[]'
           while read -r number; do
+            case "$number" in ''|*[!0-9]*) continue ;; esac
             mergeable=UNKNOWN
-            head_sha=
             for attempt in 1 2 3 4 5; do
-              details="$(gh pr view "$number" --repo "$GITHUB_REPOSITORY" \
-                --json mergeable,headRefOid)"
-              mergeable="$(jq -r '.mergeable' <<< "$details")"
-              head_sha="$(jq -r '.headRefOid' <<< "$details")"
+              mergeable="$(gh pr view "$number" --repo "$GITHUB_REPOSITORY" --json mergeable --jq .mergeable)"
               [ "$mergeable" != UNKNOWN ] && break
               sleep 2
             done
             [ "$mergeable" = CONFLICTING ] || continue
 
             pull="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$number")"
-            eligible="$(jq -r --arg repository "$GITHUB_REPOSITORY" '
+            jq -e --arg repository "$GITHUB_REPOSITORY" '
               .base.ref == "main" and
               .head.repo.full_name == $repository and
               .head.ref != "factory-media" and
-              ((.author_association == "OWNER" or
-                .author_association == "MEMBER" or
-                .author_association == "COLLABORATOR") or
-               (.user.type == "Bot" and (.head.ref | startswith("build/issue-"))))
-            ' <<< "$pull")"
-            [ "$eligible" = true ] || continue
+              ((.author_association | IN("OWNER", "MEMBER", "COLLABORATOR")) or
+               (.user.type == "Bot" and (.head.ref | startswith("build/issue-"))))' <<< "$pull" > /dev/null || continue
+            branch="$(jq -r .head.ref <<< "$pull")"
+            head_sha="$(jq -r .head.sha <<< "$pull")"
+            if ! [[ "$branch" =~ ^[A-Za-z0-9._/-]+$ ]] || ! [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "#$number's branch or head isn't one this workflow handles."
+              continue
+            fi
 
-            branch="$(jq -r '.head.ref' <<< "$pull")"
-            pulls="$(jq -c --argjson number "$number" --arg branch "$branch" \
-              --arg head_sha "$head_sha" \
-              '. + [{number: $number, branch: $branch, head_sha: $head_sha}]' <<< "$pulls")"
-          done < <(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100" \
-            --jq '.[].number')
+            git fetch -q --no-tags origin "$head_sha"
+            work="$RUNNER_TEMP/work/$number"
+            git worktree add -q --detach "$work" "$head_sha"
+            if git -C "$work" rebase -q "$GITHUB_SHA"; then
+              git -C "$work" bundle create "$rebased/$number.bundle" "$GITHUB_SHA..HEAD"
+              clean=true
+            else
+              git -C "$work" rebase --abort
+              clean=false
+            fi
+            git worktree remove --force "$work"
+            pulls="$(jq -c --argjson number "$number" --arg branch "$branch" --arg head_sha "$head_sha" --argjson clean "$clean" \
+              '. + [{number: $number, branch: $branch, head_sha: $head_sha, clean: $clean}]' <<< "$pulls")"
+          done < <(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100" --jq '.[].number')
 
-          echo "pulls=$pulls" >> "$GITHUB_OUTPUT"
-          echo "main_sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
-
-  # Says on each pull request that it clashes with main and is being redone, while Claude starts on
-  # it. Each run posts a new comment, which the push job edits when the run ends. It checks out
-  # nothing and runs only gh. No job waits for it, so if it can't comment, the rebase goes on.
-  start:
-    needs: find
-    if: ${{ needs.find.outputs.pulls != '[]' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        pull: ${{ fromJSON(needs.find.outputs.pulls) }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      pull-requests: write
-    steps:
-      # A push to main names the commit's message, whose first line has the merged pull request's
-      # number when it was squashed. A run started by hand has only the commit.
-      - name: Post the status comment
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-          MAIN_MESSAGE: ${{ github.event.head_commit.message }}
-          MAIN_SHA: ${{ needs.find.outputs.main_sha }}
-          PR_NUMBER: ${{ matrix.pull.number }}
-        run: |
-          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          title="$(printf '%s\n' "$MAIN_MESSAGE" | head -n 1 | cut -c 1-200)"
-          moved="$MAIN_SHA"
-          [ -z "$title" ] || moved="$MAIN_SHA, \"$title\","
+          digests='{}'
+          for bundle in "$rebased"/*.bundle; do
+            [ -f "$bundle" ] || continue
+            number="$(basename "$bundle" .bundle)"
+            digests="$(jq -c --arg number "$number" --arg digest "$(sha256sum < "$bundle" | cut -c 1-64)" \
+              '. + {($number): $digest}' <<< "$digests")"
+          done
           {
-            echo "<!-- factory-resolve-status -->"
-            echo "**Redoing this pull request on top of \`main\`.** [The run]($run_url)"
-            echo
-            echo "\`main\` has moved on to $moved and this pull request now clashes with it."
-          } > "$RUNNER_TEMP/status.md"
-          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/status.md"
+            echo "pulls=$pulls"
+            echo "conflicts=$(jq -c '[.[] | select(.clean | not)]' <<< "$pulls")"
+            echo "digests=$digests"
+            echo "main_sha=$GITHUB_SHA"
+          } | tee -a "$GITHUB_OUTPUT"
 
+      - uses: actions/upload-artifact@v4
+        if: steps.find.outputs.digests != '{}'
+        with:
+          name: rebased
+          path: ${{ runner.temp }}/rebased
+
+  # Claude resolves each real conflict here, with a read-only token, one pull request after
+  # another, each in a tree of its own. The job rebases with git alone, hooks and fsmonitor off, and
+  # at each commit that stops with conflicts a fresh session resolves the files, editing nothing
+  # else; the job then stages them and continues. The job runs nothing of its own beside the login
+  # token: Claude runs its commands, the checks among them, in its sandbox.
   draft:
     needs: find
-    if: ${{ needs.find.outputs.pulls != '[]' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        pull: ${{ fromJSON(needs.find.outputs.pulls) }}
+    if: needs.find.outputs.conflicts != '[]' && needs.find.outputs.conflicts != ''
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     permissions:
       contents: read
       pull-requests: read
+    outputs:
+      digests: ${{ steps.pack.outputs.digests }}
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ matrix.pull.head_sha }}
           fetch-depth: 0
           persist-credentials: false
+      # The session runs the branch's code, so Go's cache is neither saved nor restored.
       - uses: actions/setup-go@v5
         with:
           go-version: stable
+          cache: false
       - uses: actions/setup-node@v5
         with:
           node-version: 22
 
-      - name: Start the rebase and prepare its context
-        id: rebase
-        env:
-          GH_TOKEN: ${{ github.token }}
-          MAIN_SHA: ${{ needs.find.outputs.main_sha }}
-          PR_NUMBER: ${{ matrix.pull.number }}
+      - name: Keep main's prompt and AGENTS.md
         run: |
-          mkdir -p "$RUNNER_TEMP/resolve"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          pull="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")"
-          jq -r '"# " + .title + "\n\n" + (.body // "")' <<< "$pull" \
-            > "$RUNNER_TEMP/resolve/pull-request.md"
-          base="$(git merge-base HEAD "$MAIN_SHA")"
-          git log --oneline "$base"..HEAD > "$RUNNER_TEMP/resolve/branch-log.txt"
-          git log --oneline "$base".."$MAIN_SHA" > "$RUNNER_TEMP/resolve/main-log.txt"
-
-          if git rebase "$MAIN_SHA"; then
-            echo "Pull request #$PR_NUMBER no longer conflicts with main"
-            echo "conflicts=false" >> "$GITHUB_OUTPUT"
-            {
-              echo "Rebased this pull request onto the latest main commit."
-              echo
-              echo "The earlier conflict had gone away, so no manual conflict resolution was needed."
-            } > "$RUNNER_TEMP/resolve/message.md"
-            exit 0
-          fi
-
-          git diff --name-only --diff-filter=U > "$RUNNER_TEMP/resolve/conflicted-files.txt"
-          if [ ! -s "$RUNNER_TEMP/resolve/conflicted-files.txt" ]; then
-            echo "The rebase failed without leaving conflicted files"
-            exit 1
-          fi
-          echo "conflicts=true" >> "$GITHUB_OUTPUT"
+          mkdir -p "$RUNNER_TEMP/main"
+          cp .github/resolve-prompt.md AGENTS.md "$RUNNER_TEMP/main/"
 
       # Claude Code runs its commands in a sandbox, bubblewrap with socat for its network, so that it
       # can scrub its login token from them, and they can't start without both. Ubuntu's runners
       # restrict the user namespaces bubblewrap needs, so allow them on this throwaway machine, and
-      # check bubblewrap works before Claude starts.
+      # check bubblewrap works before Claude starts. Installing Claude Code runs nothing from the
+      # branch.
       - name: Install Claude Code and bubblewrap
-        if: ${{ steps.rebase.outputs.conflicts == 'true' }}
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y bubblewrap socat
@@ -204,387 +179,243 @@ jobs:
           bwrap --dev-bind / / --unshare-pid true
           npm install -g @anthropic-ai/claude-code
 
-      # Claude works on the branch's tree, so it loads only the user's settings and no MCP servers: a
-      # settings file or a .mcp.json on the branch can't set its hooks or where it sends the login
-      # token.
+      # Each session loads only the user's settings and no MCP servers, so a settings file or a
+      # .mcp.json on the branch can't set its hooks or where it sends the login token. It reads only
+      # its tree and its own folders, never /proc, and can't change .git. Its log is shown with
+      # workflow commands stopped. Git runs between sessions with hooks and fsmonitor off. A
+      # session that leaves a conflict marker in a file it was given has given up, and the rebase is
+      # abandoned. Everything each session changed is scanned for anything like the login token
+      # before it's kept.
       - name: Resolve the conflicts
-        if: ${{ steps.rebase.outputs.conflicts == 'true' }}
+        id: resolve
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
-          RESOLVE_DIR: ${{ runner.temp }}/resolve
-          # So a plain git rebase --continue, which Claude may run, never waits for an editor.
-          GIT_EDITOR: "true"
-        run: |
-          prompt="$(sed "s|RESOLVE_DIR|$RESOLVE_DIR|g" .github/resolve-prompt.md)"
-          claude -p "$prompt" --model opus --max-turns 200 --permission-mode acceptEdits \
-            --setting-sources user --strict-mcp-config \
-            --allowedTools "Read" "Edit" "Write" "Glob" "Grep" \
-              "Bash(go:*)" "Bash(gofmt:*)" "Bash(make:*)" "Bash(node:*)" \
-              "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" \
-              "Bash(git add:*)" "Bash(git rebase:*)" "Bash(git show:*)" \
-              "Bash(git checkout:*)" \
-              "Bash(ls:*)" "Bash(cp:*)" "Bash(mkdir:*)"
-
-      - name: Make the bundle
-        env:
+          GH_TOKEN: ${{ github.token }}
+          CONFLICTS: ${{ needs.find.outputs.conflicts }}
           MAIN_SHA: ${{ needs.find.outputs.main_sha }}
+          PUPPETEER_EXECUTABLE_PATH: /usr/bin/google-chrome
         run: |
-          if [ ! -s "$RUNNER_TEMP/resolve/message.md" ]; then
-            echo "Claude did not write message.md"
+          if ! [[ "$MAIN_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Main's commit isn't a commit id: $MAIN_SHA"
             exit 1
           fi
-          git_dir="$(git rev-parse --git-dir)"
-          if [ -d "$git_dir/rebase-merge" ] || [ -d "$git_dir/rebase-apply" ]; then
-            echo "Claude left a rebase in progress"
-            exit 1
-          fi
-          if ! git merge-base --is-ancestor "$MAIN_SHA" HEAD; then
-            echo "The rebased branch does not descend from main"
-            exit 1
-          fi
-          git bundle create "$RUNNER_TEMP/resolve/rebased.bundle" "$MAIN_SHA"..HEAD
+          id="$(gh api "users/awml-factory%5Bbot%5D" --jq .id)"
+          case "$id" in ''|*[!0-9]*) echo "The app's bot has no user id: $id"; exit 1 ;; esac
+          git() {
+            command git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c core.editor=true \
+              -c user.name="awml-factory[bot]" -c user.email="$id+awml-factory[bot]@users.noreply.github.com" "$@"
+          }
+          looks_like_token() {
+            LC_ALL=C sed -E 's#base64,[A-Za-z0-9+/]+=*##g; s#data-points="[A-Za-z0-9+/]+=*"##g' |
+              LC_ALL=C grep -aoiE 'sk-ant-|[A-Za-z0-9_-]{80,}' | grep -iE 'sk-ant-|[0-9]' > /dev/null
+          }
+          resolved="$RUNNER_TEMP/resolved"
+          mkdir -p "$resolved"
+          stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+          while IFS=$'\t' read -r number head_sha; do
+            case "$number" in ''|*[!0-9]*) continue ;; esac
+            [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]] || continue
+            work="$RUNNER_TEMP/work/$number"
+            dir="$RUNNER_TEMP/resolve/$number"
+            out="$RUNNER_TEMP/out/$number"
+            mkdir -p "$dir" "$out"
+            cp "$RUNNER_TEMP/main/AGENTS.md" "$dir/"
+            gh api "repos/$GITHUB_REPOSITORY/pulls/$number" --jq '"# " + .title + "\n\n" + (.body // "")' > "$dir/pull-request.md"
+            git fetch -q --no-tags origin "$head_sha"
+            git worktree add -q --detach "$work" "$head_sha"
+            base="$(git merge-base "$head_sha" "$MAIN_SHA")"
+            git log --oneline "$base..$head_sha" > "$dir/branch-log.txt"
+            git log --oneline "$base..$MAIN_SHA" > "$dir/main-log.txt"
+            outcome=resolved
+            git -C "$work" rebase -q "$MAIN_SHA" || outcome=stopped
+            stops=0
+            while [ "$outcome" = stopped ]; do
+              stops=$((stops + 1))
+              git -C "$work" diff --name-only --diff-filter=U > "$dir/conflicted-files.txt"
+              if [ ! -s "$dir/conflicted-files.txt" ] || [ "$stops" -gt 30 ]; then
+                outcome=failed
+                break
+              fi
+              chmod -R a-w "$dir"
+              prompt="$(sed -e "s|RESOLVE_DIR|$dir|g" -e "s|OUT_DIR|$out|g" "$RUNNER_TEMP/main/resolve-prompt.md")"
+              status=0
+              (cd "$work" && claude -p "$prompt" --model opus --max-turns 200 --permission-mode acceptEdits \
+                --setting-sources user --strict-mcp-config --add-dir "$dir" --add-dir "$out" \
+                --disallowedTools "Read(//proc/**)" "Edit(./.git/**)" "Write(./.git/**)" \
+                --allowedTools "Read(./**)" "Read(/$dir/**)" "Read(/$out/**)" "Edit(./**)" "Edit(/$out/**)" "Glob" "Grep" \
+                  "Bash(go:*)" "Bash(gofmt:*)" "Bash(make:*)" "Bash(node:*)" \
+                  "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" "Bash(git show:*)" \
+                  "Bash(ls:*)" "Bash(cp:*)" "Bash(mkdir:*)" \
+                > "$out/session.log" 2>&1) || status=$?
+              chmod -R u+w "$dir"
+              echo "::stop-commands::$stop"
+              cat "$out/session.log"
+              echo "::$stop::"
+              rm -f "$out/session.log"
+              if [ "$status" != 0 ] || (cd "$work" && tr '\n' '\0' < "$dir/conflicted-files.txt" |
+                  xargs -0 -r grep -lE '^(<<<<<<<|>>>>>>>)( |$)' -- > /dev/null 2>&1); then
+                outcome=failed
+                break
+              fi
+              if git -C "$work" diff | LC_ALL=C grep -a '^+' | looks_like_token; then
+                echo "The resolution of #$number adds what looks like a login token, so it isn't kept."
+                outcome=failed
+                break
+              fi
+              git -C "$work" add -A
+              if git -C "$work" rebase --continue; then
+                outcome=resolved
+              fi
+            done
+            if [ "$outcome" = resolved ] && git -C "$work" merge-base --is-ancestor "$MAIN_SHA" HEAD; then
+              git -C "$work" bundle create "$resolved/$number.bundle" "$MAIN_SHA..HEAD"
+            else
+              git -C "$work" rebase --abort 2> /dev/null || true
+            fi
+            if [ -f "$out/message.md" ]; then
+              if looks_like_token < "$out/message.md"; then
+                echo "Claude's note on #$number carries what looks like a login token, so it isn't kept."
+              else
+                cp "$out/message.md" "$resolved/$number.md"
+              fi
+            fi
+            git worktree remove --force "$work"
+          done < <(jq -r '.[] | [.number, .head_sha] | @tsv' <<< "$CONFLICTS")
+
+      # Each bundle's and note's sha256 is the job's output, which the push job checks them against.
+      - name: Take each bundle's digest
+        id: pack
+        if: ${{ !cancelled() }}
+        run: |
+          digests='{}'
+          for file in "$RUNNER_TEMP/resolved"/*; do
+            [ -f "$file" ] || continue
+            digests="$(jq -c --arg name "$(basename "$file")" --arg digest "$(sha256sum < "$file" | cut -c 1-64)" \
+              '. + {($name): $digest}' <<< "$digests")"
+          done
+          echo "digests=$digests" | tee -a "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.pack.outputs.digests != '{}' }}
         with:
-          name: resolve-${{ matrix.pull.number }}
-          path: ${{ runner.temp }}/resolve/rebased.bundle
+          name: resolved
+          path: ${{ runner.temp }}/resolved
 
-      - uses: actions/upload-artifact@v4
-        if: ${{ always() }}
-        with:
-          name: resolve-note-${{ matrix.pull.number }}
-          path: ${{ runner.temp }}/resolve/message.md
-          if-no-files-found: ignore
-
-  check:
+  # Guards, pushes and comments, one pull request after another, on a fresh runner that runs nothing
+  # from the branches. Each bundle must have the digest the job that made it gave. The guards are
+  # git's alone: the rebased branch sits on main, carries no conflict marker, and changes nothing
+  # under .github/ or in Claude Code's own files, which the app never pushes. The push names the
+  # head the find job saw, so GitHub refuses it if anyone pushed meanwhile. When it ends, one new
+  # comment says what was pushed, with links to the old and new commits, or why it couldn't be,
+  # with Claude's note escaped: < escaped, mentions broken, length capped.
+  push:
     needs: [find, draft]
     if: ${{ !cancelled() && needs.find.result == 'success' && needs.find.outputs.pulls != '[]' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        pull: ${{ fromJSON(needs.find.outputs.pulls) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - name: Prepare the result
-        run: |
-          mkdir -p "$RUNNER_TEMP/result"
-          echo "The workflow failed before it could check the proposed resolution." \
-            > "$RUNNER_TEMP/result/result.txt"
-
-      - uses: actions/checkout@v5
-        id: checkout
-        with:
-          ref: ${{ needs.find.outputs.main_sha }}
-          fetch-depth: 0
-          persist-credentials: false
-
-      - uses: actions/download-artifact@v4
-        id: bundle
-        if: ${{ always() }}
-        continue-on-error: true
-        with:
-          name: resolve-${{ matrix.pull.number }}
-          path: ${{ runner.temp }}/draft
-
-      - uses: actions/download-artifact@v4
-        id: note
-        if: ${{ always() }}
-        continue-on-error: true
-        with:
-          name: resolve-note-${{ matrix.pull.number }}
-          path: ${{ runner.temp }}/note
-
-      - name: Verify and fetch the bundle
-        if: ${{ always() }}
-        env:
-          BUNDLE_OUTCOME: ${{ steps.bundle.outcome }}
-          CHECKOUT_OUTCOME: ${{ steps.checkout.outcome }}
-          MAIN_SHA: ${{ needs.find.outputs.main_sha }}
-          NOTE_OUTCOME: ${{ steps.note.outcome }}
-        run: |
-          if [ "$CHECKOUT_OUTCOME" != success ]; then
-            echo "The main commit could not be checked out." \
-              > "$RUNNER_TEMP/result/result.txt"
-            exit 1
-          fi
-          if [ "$BUNDLE_OUTCOME" != success ]; then
-            echo "The draft job did not produce a bundle for this pull request." \
-              > "$RUNNER_TEMP/result/result.txt"
-            exit 1
-          fi
-          if [ "$NOTE_OUTCOME" != success ] || [ ! -s "$RUNNER_TEMP/note/message.md" ]; then
-            echo "The draft job did not produce a resolution note for this pull request." \
-              > "$RUNNER_TEMP/result/result.txt"
-            exit 1
-          fi
-
-          bundle="$RUNNER_TEMP/draft/rebased.bundle"
-          if ! git bundle verify "$bundle"; then
-            echo "The rebased branch bundle could not be verified." \
-              > "$RUNNER_TEMP/result/result.txt"
-            exit 1
-          fi
-          if ! git fetch "$bundle" HEAD:refs/rebased; then
-            echo "The rebased branch could not be fetched from its bundle." \
-              > "$RUNNER_TEMP/result/result.txt"
-            exit 1
-          fi
-          if ! git merge-base --is-ancestor "$MAIN_SHA" refs/rebased; then
-            echo "The rebased branch does not descend from the main commit." \
-              > "$RUNNER_TEMP/result/result.txt"
-            exit 1
-          fi
-          workflow_files="$(git log --format= --name-only \
-            "$MAIN_SHA"..refs/rebased -- .github/workflows/ | sed '/^$/d')"
-          if [ -n "$workflow_files" ]; then
-            printf '%s\n' "$workflow_files"
-            echo "The rebased commits change a workflow file, which this workflow doesn't push. Rebase this pull request by hand." \
-              > "$RUNNER_TEMP/result/result.txt"
-            exit 1
-          fi
-          git checkout --detach refs/rebased
-          if git grep -nE '^(<<<<<<<|>>>>>>>)'; then
-            echo "The proposed resolution still contains conflict markers." \
-              > "$RUNNER_TEMP/result/result.txt"
-            exit 1
-          fi
-          echo "The repository checks did not all pass." > "$RUNNER_TEMP/result/result.txt"
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version: stable
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 22
-
-      - name: Run the checks
-        run: |
-          go test ./...
-          go vet ./...
-          go run ./cmd/awml check examples/*.yaml examples/tour/*.yaml examples/platforms/*.yaml
-          make test-wasm
-
-      - name: Record the successful result
-        run: echo pass > "$RUNNER_TEMP/result/result.txt"
-
-      - name: Keep the resolution note with the result
-        if: ${{ always() }}
-        run: |
-          if [ -s "$RUNNER_TEMP/note/message.md" ]; then
-            cat "$RUNNER_TEMP/note/message.md" > "$RUNNER_TEMP/result/message.md"
-          fi
-
-      - uses: actions/upload-artifact@v4
-        if: ${{ always() }}
-        with:
-          name: resolve-result-${{ matrix.pull.number }}
-          path: ${{ runner.temp }}/result
-
-  push:
-    needs: [find, check]
-    if: ${{ !cancelled() && needs.find.result == 'success' && needs.find.outputs.pulls != '[]' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        pull: ${{ fromJSON(needs.find.outputs.pulls) }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    # The Actions token only reads, comments and edits the status comment here. The app's token
-    # pushes.
+    # The Actions token only reads and comments here. The app's token pushes.
     permissions:
       contents: read
       pull-requests: write
     steps:
-      - name: Prepare the failure reason
-        run: |
-          echo "The workflow failed before it could prepare a resolution." \
-            > "$RUNNER_TEMP/resolve-failure.txt"
-
       - uses: actions/checkout@v5
-        id: checkout
         with:
           ref: ${{ needs.find.outputs.main_sha }}
           fetch-depth: 0
           persist-credentials: false
 
       - uses: actions/download-artifact@v4
-        id: bundle
-        if: ${{ always() }}
-        continue-on-error: true
+        if: needs.find.outputs.digests != '{}'
         with:
-          name: resolve-${{ matrix.pull.number }}
-          path: ${{ runner.temp }}/draft
-
+          name: rebased
+          path: ${{ runner.temp }}/rebased
       - uses: actions/download-artifact@v4
-        id: result
-        if: ${{ always() }}
-        continue-on-error: true
+        if: needs.draft.outputs.digests != '{}' && needs.draft.outputs.digests != ''
         with:
-          name: resolve-result-${{ matrix.pull.number }}
-          path: ${{ runner.temp }}/result
-
-      - name: Read the check result
-        id: checked
-        if: ${{ always() }}
-        env:
-          CHECKOUT_OUTCOME: ${{ steps.checkout.outcome }}
-          RESULT_OUTCOME: ${{ steps.result.outcome }}
-        run: |
-          if [ "$CHECKOUT_OUTCOME" != success ]; then
-            echo "The main commit could not be checked out." \
-              > "$RUNNER_TEMP/resolve-failure.txt"
-            echo "passed=false" >> "$GITHUB_OUTPUT"
-            exit 1
-          fi
-          if [ "$RESULT_OUTCOME" != success ] || [ ! -s "$RUNNER_TEMP/result/result.txt" ]; then
-            echo "The check job did not produce a result for this pull request." \
-              > "$RUNNER_TEMP/resolve-failure.txt"
-            echo "passed=false" >> "$GITHUB_OUTPUT"
-            exit 1
-          fi
-          if [ "$(cat "$RUNNER_TEMP/result/result.txt")" != pass ]; then
-            cat "$RUNNER_TEMP/result/result.txt" > "$RUNNER_TEMP/resolve-failure.txt"
-            echo "passed=false" >> "$GITHUB_OUTPUT"
-            exit 1
-          fi
-          echo "passed=true" >> "$GITHUB_OUTPUT"
-
-      - name: Verify and fetch the bundle
-        if: ${{ steps.checked.outputs.passed == 'true' }}
-        env:
-          BUNDLE_OUTCOME: ${{ steps.bundle.outcome }}
-          MAIN_SHA: ${{ needs.find.outputs.main_sha }}
-        run: |
-          if [ "$BUNDLE_OUTCOME" != success ]; then
-            echo "The draft job did not produce a bundle for this pull request." \
-              > "$RUNNER_TEMP/resolve-failure.txt"
-            exit 1
-          fi
-
-          bundle="$RUNNER_TEMP/draft/rebased.bundle"
-          if ! git bundle verify "$bundle"; then
-            echo "The rebased branch bundle could not be verified." \
-              > "$RUNNER_TEMP/resolve-failure.txt"
-            exit 1
-          fi
-          if ! git fetch "$bundle" HEAD:refs/rebased; then
-            echo "The rebased branch could not be fetched from its bundle." \
-              > "$RUNNER_TEMP/resolve-failure.txt"
-            exit 1
-          fi
-          if ! git merge-base --is-ancestor "$MAIN_SHA" refs/rebased; then
-            echo "The rebased branch does not descend from the main commit." \
-              > "$RUNNER_TEMP/resolve-failure.txt"
-            exit 1
-          fi
+          name: resolved
+          path: ${{ runner.temp }}/resolved
 
       - name: Make the app's token
         id: app
-        if: ${{ steps.checked.outputs.passed == 'true' }}
         uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ secrets.FACTORY_APP_ID }}
           private-key: ${{ secrets.FACTORY_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
 
-      - name: Push the rebased branch
+      - name: Guard, push and comment on each pull request
         id: push
         env:
-          BRANCH: ${{ matrix.pull.branch }}
-          GH_TOKEN: ${{ steps.app.outputs.token }}
-          HEAD_SHA: ${{ matrix.pull.head_sha }}
+          APP_TOKEN: ${{ steps.app.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
+          PULLS: ${{ needs.find.outputs.pulls }}
+          FOUND: ${{ needs.find.outputs.digests }}
+          RESOLVED: ${{ needs.draft.outputs.digests }}
+          MAIN_SHA: ${{ needs.find.outputs.main_sha }}
         run: |
-          if ! git -c core.hooksPath=/dev/null \
-            -c http.https://github.com/.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" \
-            push --force-with-lease="refs/heads/$BRANCH:$HEAD_SHA" origin \
-              "refs/rebased:refs/heads/$BRANCH"; then
-            echo "The branch moved while this ran; nothing was changed." \
-              > "$RUNNER_TEMP/resolve-failure.txt"
+          if ! [[ "$MAIN_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Main's commit isn't a commit id: $MAIN_SHA"
             exit 1
           fi
-
-      - name: Comment on the pull request
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BRANCH: ${{ matrix.pull.branch }}
-          HEAD_SHA: ${{ matrix.pull.head_sha }}
-          PR_NUMBER: ${{ matrix.pull.number }}
-        run: |
-          {
-            echo "**Rebased this pull request onto \`main\` and force-pushed the branch.**"
-            echo
-            echo "- The old head was \`$HEAD_SHA\`. To put the branch back, run \`git push --force origin $HEAD_SHA:$BRANCH\`."
-            echo
-            echo "### How it was resolved"
-            echo
-            cat "$RUNNER_TEMP/result/message.md"
-            echo
-            printf '[The run](%s/%s/actions/runs/%s)\n' \
-              "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
-          } > "$RUNNER_TEMP/comment.md"
-          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
-            --body-file "$RUNNER_TEMP/comment.md"
-
-      - name: Comment when resolution failed
-        if: ${{ failure() }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ matrix.pull.number }}
-        run: |
-          reason="The workflow failed before it could prepare a resolution."
-          if [ -s "$RUNNER_TEMP/resolve-failure.txt" ]; then
-            reason="$(cat "$RUNNER_TEMP/resolve-failure.txt")"
-          fi
-          {
-            echo "**The workflow couldn't resolve the conflicts with \`main\`.**"
-            echo
-            printf -- '- %s\n' "$reason"
-            echo "- A maintainer should resolve this pull request by hand."
-            echo
-            if [ ! -s "$RUNNER_TEMP/draft/rebased.bundle" ] && \
-              [ -s "$RUNNER_TEMP/result/message.md" ]; then
-              echo "### Claude's note"
-              echo
-              cat "$RUNNER_TEMP/result/message.md"
-              echo
-            fi
-            printf '[The run](%s/%s/actions/runs/%s)\n' \
-              "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
-          } > "$RUNNER_TEMP/resolve-failure-comment.md"
-          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
-            --body-file "$RUNNER_TEMP/resolve-failure-comment.md"
-
-      # The status comment this run posted says how it ended, going by whether the branch was
-      # pushed. The comments above say so too, since GitHub sends no notification for an edit. The
-      # comment is found by this run's link, so an older run's is never touched, and if the start
-      # job posted none, there is nothing to edit.
-      - name: Edit the status comment
-        if: ${{ !cancelled() }}
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ matrix.pull.number }}
-          PUSHED: ${{ steps.push.outcome }}
-        run: |
+          [ -n "$RESOLVED" ] || RESOLVED='{}'
+          git() { command git -c core.hooksPath=/dev/null -c core.fsmonitor=false "$@"; }
           run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          {
-            echo "<!-- factory-resolve-status -->"
-            if [ "$PUSHED" = success ]; then
-              echo "**Redone on top of \`main\`.** The new branch is pushed, and CI is running on it again. The comment below has the details and how to undo it. [The run]($run_url)"
-            else
-              echo "**The redo failed**, so this pull request needs resolving by hand. The comment below says why. [The run]($run_url)"
+          commit_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit"
+          claudes='(^|/)\.claude(/|$)|(^|/)\.mcp\.json$|(^|/)CLAUDE(\.local)?\.md$'
+          failed=0
+          while IFS=$'\t' read -r number branch head_sha clean; do
+            case "$number" in ''|*[!0-9]*) echo "A pull request's number isn't a number: $number"; exit 1 ;; esac
+            if ! [[ "$branch" =~ ^[A-Za-z0-9._/-]+$ ]] || ! [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "#$number's branch or head isn't one this workflow handles."
+              exit 1
             fi
-          } > "$RUNNER_TEMP/status.md"
-          id="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" |
-            jq -r --arg link "($run_url)" '.[] | select(.user.login == "github-actions[bot]"
-              and (.body | contains("<!-- factory-resolve-status -->")) and (.body | contains($link))) | .id' |
-            tail -n 1)"
-          if [ -z "$id" ]; then
-            echo "This run posted no status comment on #$PR_NUMBER, so there is none to edit."
-            exit 0
-          fi
-          jq -n --rawfile body "$RUNNER_TEMP/status.md" '{body: $body}' |
-            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" --input - > /dev/null
+            note=""
+            if [ "$clean" = true ]; then
+              bundle="$RUNNER_TEMP/rebased/$number.bundle"
+              want="$(jq -r --arg n "$number" '.[$n] // ""' <<< "$FOUND")"
+            else
+              bundle="$RUNNER_TEMP/resolved/$number.bundle"
+              want="$(jq -r --arg n "$number.bundle" '.[$n] // ""' <<< "$RESOLVED")"
+              notes="$RUNNER_TEMP/resolved/$number.md"
+              if [ -f "$notes" ] && [ "$(sha256sum < "$notes" | cut -c 1-64)" = "$(jq -r --arg n "$number.md" '.[$n] // ""' <<< "$RESOLVED")" ]; then
+                note="$notes"
+              fi
+            fi
+            why=""
+            if [ -z "$want" ] || [ ! -f "$bundle" ]; then
+              why="Claude couldn't resolve its conflicts with \`main\` with confidence."
+            elif [ "$(sha256sum < "$bundle" | cut -c 1-64)" != "$want" ]; then
+              why="The rebased branch isn't the one the job that rebased it made."
+            elif ! git bundle verify -q "$bundle" > /dev/null 2>&1 || ! git fetch -q "$bundle" "HEAD:refs/rebased/$number"; then
+              why="The rebased branch couldn't be read from its bundle."
+            elif ! git merge-base --is-ancestor "$MAIN_SHA" "refs/rebased/$number"; then
+              why="The rebased branch doesn't sit on \`main\`."
+            elif git grep -qE '^(<<<<<<<|>>>>>>>)( |$)' "refs/rebased/$number" --; then
+              why="The rebased branch still carries conflict markers."
+            elif git diff --name-only --no-renames -z "$MAIN_SHA" "refs/rebased/$number" | grep -zqE "^\.github/|$claudes"; then
+              why="The branch changes \`.github/\` or Claude Code's own files, which the app never pushes."
+            elif ! git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$APP_TOKEN" | base64 -w0)" \
+                push --force-with-lease="refs/heads/$branch:$head_sha" origin "refs/rebased/$number:refs/heads/$branch"; then
+              why="The branch moved while this ran, so nothing was changed."
+            fi
+            {
+              if [ -z "$why" ]; then
+                new="$(git rev-parse "refs/rebased/$number")"
+                printf '**Rebased this pull request onto `main` and pushed it.** The old head was [`%s`](%s/%s), and the new head is [`%s`](%s/%s). CI runs on it again. To put the branch back, run `git push --force origin %s:%s`. [The run](%s)\n' \
+                  "${head_sha:0:12}" "$commit_url" "$head_sha" "${new:0:12}" "$commit_url" "$new" "$head_sha" "$branch" "$run_url"
+              else
+                failed=1
+                printf '**This pull request conflicts with `main`, and the rebase couldn'"'"'t be pushed.** %s A person should rebase it by hand. [The run](%s)\n' "$why" "$run_url"
+              fi
+              if [ -n "$note" ]; then
+                echo
+                echo "### Claude's note"
+                echo
+                jq -Rrs '.[0:5000] | gsub("<"; "&lt;") | gsub("@(?=[A-Za-z0-9])"; "@​")' "$note" | sed 's/^/> /'
+              fi
+            } > "$RUNNER_TEMP/comment.md"
+            gh pr comment "$number" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
+          done < <(jq -r '.[] | [.number, .branch, .head_sha, .clean] | @tsv' <<< "$PULLS")
+          exit "$failed"
