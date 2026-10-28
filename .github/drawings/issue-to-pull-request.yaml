@@ -38,7 +38,7 @@ parts:
   - { id: push, kind: code, op: do, label: "Push the branch and its pictures as the app", in: public }
   - { id: standing, kind: approval, label: "The maintainer's standing approval: the app's pushes to the issue's own branch only, up to three builds an issue, accepted by the maintainer in #160, under rule 4", in: public }
   - { id: branch, kind: outside, label: "Push the issue's branch and its pictures: Ask", in: public }
-  - { id: open, kind: code, op: do, label: "Open a pull request that says Closes #n, unless one is open from the branch already", in: public }
+  - { id: open, kind: code, op: do, label: "Open a pull request that says Closes #n, or give the one open from the branch already this try's title and description", in: public }
   - { id: standingpr, kind: approval, label: "The maintainer's standing approval: one open pull request an issue, from its own branch, accepted by the maintainer in #160, under rule 4", in: public }
   - { id: pr, kind: outside, label: "Open the pull request: Ask", in: public }
   - { id: listed, kind: surface, label: "The repository's branches and pull requests, where each push is listed with its commit", in: public }
@@ -51,7 +51,7 @@ parts:
   - { id: startcomment, kind: comment, label: "Decided in #160's follow-up: one new comment when the build starts, linking the run. It's never edited or parsed. The pull request links to the issue by Closes #n (#160 rule 5)" }
   - { id: seen, kind: comment, label: "Only a change to what a drawing or a page shows is pictured, and a picture that looks the same before and after is left out. A moving image only for something that moves" }
   - { id: layout, kind: comment, label: "The description is Claude's note, escaped, then what changed, the decisions the issue didn't settle, the pictures, and Closes #n. No record line and no digests: nothing reads the description back (#160)" }
-  - { id: reused, kind: comment, label: "The branch is reused, so a new try's push updates the open pull request, and no earlier one needs closing (#160's follow-up)" }
+  - { id: reused, kind: comment, label: "The branch is reused, so a new try's push updates the open pull request's commits, and the build gives it the new try's title and description, so the reviews judge the new commit against what it says and a squash keeps the new title. No earlier one needs closing (#160's follow-up)" }
   - { id: ownfiles, kind: comment, label: "Decided in #160's follow-up: the build works as the fixer does. A draft touching .github/ or Claude Code's own settings, .claude/, .mcp.json or a CLAUDE.md, isn't pushed: it's offered in a new comment, and the build stops without a retry, since nothing is pushed for CI to fail. No session loads settings or servers from the tree" }
   - { id: rendered, kind: comment, label: "The label approves the issue as the maintainer saw it, so the issue and its people's comments are read as GitHub renders them, bodyHTML from GraphQL, never the Markdown behind them: an HTML comment or other text the page hides never reaches Claude (#150)" }
   - { id: starts, kind: comment, label: "GitHub starts other workflows from the app's pull request, but not from the Actions token's, so CI runs when the pull request opens" }

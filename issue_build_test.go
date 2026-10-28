@@ -339,7 +339,9 @@ func TestTheBuildOffersAChangeToGithubAndStops(t *testing.T) {
 }
 
 // The pull request opens only if none is open from the issue's branch, since the branch is reused
-// and the push updates an open one. Its description is Claude's, escaped, and says Closes #n.
+// and the push updates an open one. Then the open one is given this try's title and description, so
+// the reviews and Classify judge the new commit against what it says it does, and a squash keeps
+// the new title. The description is Claude's, escaped, and says Closes #n.
 func TestABuildOpensItsPullRequestOnlyIfNoneIsOpen(t *testing.T) {
 	pull, _ := readBuildWorkflow(t)["open"].step(t, "pull")
 	for _, open := range []bool{true, false} {
@@ -357,14 +359,15 @@ func TestABuildOpensItsPullRequestOnlyIfNoneIsOpen(t *testing.T) {
 			map[string]string{"ISSUE": "120", "BRANCH": "build/issue-120", "CHANGE_DIR": filepath.Join(r.temp, "change"),
 				"PICTURES": filepath.Join(r.temp, "pictures.txt"), "PICTURES_LEFT_OUT": filepath.Join(r.temp, "pictures-left-out.txt")}, `
   "api repos/owner/repo/pulls?head=owner:build/issue-120&base=main&state=open"*) answer <<< '`+listed+`' ;;
-  "pr create"*) echo "https://github.com/owner/repo/pull/8" ;;`)
+  "pr create"*) echo "https://github.com/owner/repo/pull/8" ;;
+  "pr edit 7 --repo owner/repo --title"*) ;;`)
 		r.mustPass()
 		created := strings.Contains(r.calls, "pr create")
 		if created == open {
 			t.Errorf("with a pull request open %v, the build opened one: %v", open, created)
 		}
-		if open {
-			continue
+		if edited := strings.Contains(r.calls, "pr edit 7 --repo owner/repo --title Add scones for @\u200bsomeone --body-file"); edited != open {
+			t.Errorf("with a pull request open %v, the build gave it this try's title and description: %v\n%s", open, edited, r.calls)
 		}
 		body := r.bodies()[0]
 		if !strings.Contains(body, "Closes #120") || strings.Contains(body, "<!--") || !strings.Contains(body, "@\u200bsomeone") {
@@ -490,6 +493,41 @@ func TestTheReviewsTrustBranchesSayingWhy(t *testing.T) {
 	for _, file := range []string{".github/workflows/ci.yml", "AGENTS.md"} {
 		if !strings.Contains(readText(t, file), "pull request's own ci.yml") {
 			t.Errorf("%s doesn't say a pull request runs its own ci.yml, and why that's accepted", file)
+		}
+	}
+}
+
+// After a session, the folder its draft or fix is kept in is made afresh, and the session's sandbox
+// denies it, so nothing the session planted there is uploaded. The pack step scans every file in it
+// for a token, and refuses a symbolic link or anything but a plain file.
+func TestTheKeptChangeHoldsOnlyWhatThePatchStepPutThere(t *testing.T) {
+	for _, at := range []struct{ file, job, folder string }{{"build.yml", "draft", `"$RUNNER_TEMP/change"`}, {"fix.yml", "fix", `"$RUNNER_TEMP/fix/change"`}} {
+		job := readFactoryWorkflow(t, at.file).Jobs[at.job]
+		session := job.Steps[job.session()].Run
+		if settings := sandboxSettings.FindString(session); !strings.Contains(settings, at.folder) {
+			t.Errorf("%s's %s session can write %s: %s", at.file, at.job, at.folder, settings)
+		}
+		patch, _ := job.step(t, "patch")
+		if !regexp.MustCompile(`rm -rf "\$[a-z]+"\n\s*mkdir "\$[a-z]+"`).MatchString(patch.Run) {
+			t.Errorf("%s's %s doesn't make its change folder afresh after the session", at.file, at.job)
+		}
+		pack, _ := job.step(t, "pack")
+		folder := strings.Trim(strings.ReplaceAll(at.folder, "$RUNNER_TEMP/", ""), `"`)
+		for name, plant := range map[string]func(r *rehearsal){
+			"a token in a planted file": func(r *rehearsal) { r.write(folder+"/notes.txt", "sk-ant-oat01-secret\n") },
+			"a symbolic link": func(r *rehearsal) {
+				if err := os.Symlink("/etc/hostname", filepath.Join(r.temp, folder, "link")); err != nil {
+					t.Fatal(err)
+				}
+			},
+		} {
+			r := newRehearsal(t)
+			r.write(folder+"/"+map[bool]string{true: "change.patch", false: "fix.patch"}[at.file == "build.yml"], "+plain\n")
+			plant(r)
+			r.run(pack, nil, "")
+			if !r.failed || r.outputs["digest"] != "" {
+				t.Errorf("%s's %s pack kept a change with %s", at.file, at.job, name)
+			}
 		}
 	}
 }

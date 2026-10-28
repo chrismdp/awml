@@ -50,6 +50,7 @@ jobs:
       branch: ${{ steps.tries.outputs.branch }}
       head_sha: ${{ steps.tries.outputs.head_sha }}
       digest: ${{ steps.pack.outputs.digest }}
+      session: ${{ steps.session.outcome }}
     steps:
       # Main's script that reads the checks, its prompt, AGENTS.md and REVIEW.md are kept before the
       # branch is checked out, so a branch can't rewrite what it's asked to do.
@@ -229,7 +230,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/baseline"
           cp .git/config "$RUNNER_TEMP/baseline/git-config"
           stat -c %d:%i "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.git" > "$RUNNER_TEMP/baseline/folders"
-          bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/session/home" "$GITHUB_WORKSPACE" workspace "$RUNNER_TEMP/baseline"
+          bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/session/home" "$GITHUB_WORKSPACE" workspace "$RUNNER_TEMP/baseline" "$RUNNER_TEMP/fix/change"
           prompt="$(sed -e "s|FIX_DIR|$FIX_DIR|g" -e "s|OUT_DIR|$OUT_DIR|g" "$RUNNER_TEMP/fix-prompt.md")"
           status=0
           HOME="$RUNNER_TEMP/session/home" claude -p "$prompt" --model opus --max-turns 200 --permission-mode default \
@@ -267,7 +268,8 @@ jobs:
             exit 1
           fi
           fix="$RUNNER_TEMP/fix/change"
-          mkdir -p "$fix"
+          rm -rf "$fix"
+          mkdir "$fix"
           git add -A
           git diff --cached --binary --no-ext-diff --no-textconv "$HEAD_SHA" > "$fix/fix.patch"
           if [ -f "$RUNNER_TEMP/fix/out/message.md" ]; then cp "$RUNNER_TEMP/fix/out/message.md" "$fix/"; fi
@@ -289,14 +291,21 @@ jobs:
             LC_ALL=C sed -E 's#base64,[A-Za-z0-9+/]+=*##g; s#data-points="[A-Za-z0-9+/]+=*"##g' |
               LC_ALL=C grep -aoiE 'sk-ant-|[A-Za-z0-9_-]{80,}' | grep -iE 'sk-ant-|[0-9]' > /dev/null
           }
-          if LC_ALL=C grep -a '^+' "$fix/fix.patch" | looks_like_token; then
-            echo "The fix adds what looks like a login token, so it isn't kept."
+          if [ -n "$(find "$fix" ! -type f ! -type d -print -quit)" ]; then
+            echo "The kept change holds a symbolic link or something else that isn't a plain file, so it isn't kept."
             exit 1
           fi
-          if [ -f "$fix/message.md" ] && looks_like_token < "$fix/message.md"; then
-            echo "The fix's message carries what looks like a login token, so it isn't kept."
-            exit 1
-          fi
+          while IFS= read -r -d '' file; do
+            if [ "$file" = "$fix/fix.patch" ]; then
+              if LC_ALL=C grep -a '^+' "$file" | looks_like_token; then
+                echo "The fix adds what looks like a login token, so it isn't kept."
+                exit 1
+              fi
+            elif looks_like_token < "$file"; then
+              echo "The fix's ${file#"$fix/"} carries what looks like a login token, so it isn't kept."
+              exit 1
+            fi
+          done < <(find "$fix" -type f -print0)
           digest() { (cd "$1" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum) | sha256sum | cut -c 1-64; }
           echo "digest=$(digest "$fix")" >> "$GITHUB_OUTPUT"
 
@@ -346,6 +355,7 @@ jobs:
         env:
           CHANGE_DIGEST: ${{ needs.fix.outputs.digest }}
           STOPPED: ${{ needs.fix.outputs.reason }}
+          SESSION: ${{ needs.fix.outputs.session }}
         run: |
           stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
           echo "::stop-commands::$stop"
@@ -362,7 +372,10 @@ jobs:
               *) give_up stopped ;;
             esac
           fi
-          [ "$FIXED" = success ] || give_up session
+          if [ "$FIXED" != success ]; then
+            if [ "$SESSION" = failure ]; then give_up session; fi
+            give_up unkept
+          fi
           digest() { (cd "$1" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum) | sha256sum | cut -c 1-64; }
           if [ "$(digest "$RUNNER_TEMP/fix")" != "$CHANGE_DIGEST" ]; then
             echo "The fix isn't the one the fix job made."
@@ -466,6 +479,7 @@ jobs:
             unread) why="A review failed, but its check carries no Important finding to fix." ;;
             nothing) why="Claude changed nothing." ;;
             session) why="The Claude session that fixes the findings failed or ran out of time." ;;
+            unkept) why="The fix job failed before the fix was kept. The run says why." ;;
             apply) why="The fix didn't apply to the commit the reviews read." ;;
             *) why="The fix stopped before it finished. The run says why." ;;
           esac

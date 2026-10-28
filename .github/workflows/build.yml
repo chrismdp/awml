@@ -287,7 +287,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/baseline"
           cp .git/config "$RUNNER_TEMP/baseline/git-config"
           stat -c %d:%i "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.git" > "$RUNNER_TEMP/baseline/folders"
-          bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/session/home" "$GITHUB_WORKSPACE" workspace "$RUNNER_TEMP/baseline"
+          bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/session/home" "$GITHUB_WORKSPACE" workspace "$RUNNER_TEMP/baseline" "$RUNNER_TEMP/change"
           prompt="$(sed "s|BUILD_DIR|$BUILD_DIR|g" "$RUNNER_TEMP/build-prompt.md")"
           status=0
           HOME="$RUNNER_TEMP/session/home" claude -p "$prompt" --model opus --max-turns 200 --permission-mode default \
@@ -322,7 +322,8 @@ jobs:
             exit 1
           fi
           change="$RUNNER_TEMP/change"
-          mkdir -p "$change"
+          rm -rf "$change"
+          mkdir "$change"
           git add -A
           git diff --cached --binary --no-ext-diff --no-textconv > "$change/change.patch"
           for file in message.md pull-request.md; do
@@ -344,6 +345,10 @@ jobs:
         id: pack
         run: |
           change="$RUNNER_TEMP/change"
+          if [ -n "$(find "$change" ! -type f ! -type d -print -quit)" ]; then
+            echo "The kept change holds a symbolic link or something else that isn't a plain file, so it isn't kept."
+            exit 1
+          fi
           looks_like_token() {
             LC_ALL=C sed -E 's#base64,[A-Za-z0-9+/]+=*##g; s#data-points="[A-Za-z0-9+/]+=*"##g' |
               LC_ALL=C grep -aoiE 'sk-ant-|[A-Za-z0-9_-]{80,}' | grep -iE 'sk-ant-|[0-9]' > /dev/null
@@ -618,8 +623,10 @@ jobs:
 
       # gh pr view finds a branch's closed or merged pull request when it has no open one, so only
       # GitHub's list of the branch's open pull requests decides whether there's one already. If
-      # there is, the push has updated it, and nothing more is done.
-      - name: Open a pull request that says Closes #n, unless one is open from the branch
+      # there is, the push has updated its commits, and it's given this try's title and description,
+      # so the reviews and Classify judge the new commit against what it says it does, and a squash
+      # keeps the new title.
+      - name: Open a pull request that says Closes #n, or give the open one this try's title and description
         id: pull
         if: steps.guard.outputs.outcome == 'push'
         env:
@@ -629,14 +636,15 @@ jobs:
           PICTURES: ${{ runner.temp }}/pictures.txt
           PICTURES_LEFT_OUT: ${{ runner.temp }}/pictures-left-out.txt
         run: |
-          number="$(gh api "repos/$GITHUB_REPOSITORY/pulls?head=$GITHUB_REPOSITORY_OWNER:$BRANCH&base=main&state=open" \
-            --jq '[.[] | .number] | first // empty')"
-          if [ -n "$number" ]; then
-            echo "#$number is open from $BRANCH already, and the push has updated it."
-            exit 0
-          fi
           export MEDIA_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/raw/factory-media/issue-$ISSUE/run-$GITHUB_RUN_ID"
           "$RUNNER_TEMP/pull-request-body.sh" > "$RUNNER_TEMP/pull-request.md"
           title="$("$RUNNER_TEMP/pull-request-body.sh" title)"
+          number="$(gh api "repos/$GITHUB_REPOSITORY/pulls?head=$GITHUB_REPOSITORY_OWNER:$BRANCH&base=main&state=open" \
+            --jq '[.[] | .number] | first // empty')"
+          case "$number" in *[!0-9]*) echo "The open pull request's number isn't a number: $number"; exit 1 ;; esac
+          if [ -n "$number" ]; then
+            gh pr edit "$number" --repo "$GITHUB_REPOSITORY" --title "$title" --body-file "$RUNNER_TEMP/pull-request.md"
+            exit 0
+          fi
           gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$BRANCH" \
             --title "$title" --body-file "$RUNNER_TEMP/pull-request.md"

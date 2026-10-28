@@ -162,10 +162,21 @@ func TestTheFixIsPushedOfferedOrLeft(t *testing.T) {
 			t.Errorf("a fix that stopped for %q ended %q, %q", env, r.outputs["outcome"], r.outputs["reason"])
 		}
 	}
-	session := fixGuard(t, map[string]string{"FIXED": "failure"}, plain, false)
+	session := fixGuard(t, map[string]string{"FIXED": "failure", "SESSION": "failure"}, plain, false)
 	session.mustPass()
 	if session.outputs["reason"] != "session" {
 		t.Errorf("a failed session ended %q", session.outputs["reason"])
+	}
+	// A step after the session that refused the fix, such as the token scan or the check of .git,
+	// isn't the session failing.
+	after := fixGuard(t, map[string]string{"FIXED": "failure", "SESSION": "success"}, plain, false)
+	after.mustPass()
+	if after.outputs["reason"] != "unkept" {
+		t.Errorf("a fix job that failed after its session ended %q, want unkept", after.outputs["reason"])
+	}
+	giveup, _ := readFactoryWorkflow(t, "fix.yml").Jobs["write"].step(t, "giveup")
+	if !strings.Contains(giveup.Run, `unkept) why="The fix job failed before the fix was kept. The run says why."`) {
+		t.Error("giving up doesn't say a fix that wasn't kept failed after the session")
 	}
 }
 
