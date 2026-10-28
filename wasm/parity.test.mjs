@@ -428,6 +428,15 @@ lines:
   for (const { file, source } of located) await writeFile(`${temporary}/${file}`, source);
   assert.equal(api.checksJSON(located) + "\n", runNative(["check", "--json", ...located.map(({ file }) => file)], 1, temporary), "checks JSON of files named from one folder");
   assert.deepEqual(api.checks(located).checks.find((check) => check.id === "refs.known").mistakes.map(({ file }) => file), ["family/plan.yaml", "work/shop.yaml"]);
+  // A published ref that two files given could be is a mistake on the file that refers, either way round.
+  await mkdir(`${temporary}/old/family`, { recursive: true });
+  await writeFile(`${temporary}/old/family/plan.yaml`, located[0].source);
+  for (const order of [["old/family/plan.yaml", "family/plan.yaml"], ["family/plan.yaml", "old/family/plan.yaml"]]) {
+    const either = [...order.map((file) => ({ file, source: located[0].source })), located[1]];
+    assert.equal(api.checksJSON(either) + "\n", runNative(["check", "--json", ...either.map(({ file }) => file)], 1, temporary), "checks JSON of a ref two files could be");
+    assert.match(api.checks(either).checks.find((check) => check.id === "refs.known").mistakes.find(({ file }) => file === "work/shop.yaml").message,
+      /family\/plan\.yaml and old\/family\/plan\.yaml are each at a path ending family\/plan\.yaml/);
+  }
   const broken = [handOff[0], { file: handOff[1].file, source: shop.replace("plan.yaml#list", "plan.yaml#lists") }];
   await writeFile(broken[1].file, broken[1].source);
   assert.equal(api.checksJSON(broken) + "\n", runNative(["check", "--json", ...handOffPaths], 1), "checks JSON together, with a ref to a part that isn't there");

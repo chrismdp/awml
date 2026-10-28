@@ -210,7 +210,7 @@ When the registry publishes a workflow, it rewrites each path to a workflow of t
 
 **Giving several files.** `awml check`, `awml draw`, `awml summary` and `awml fit` take any number of files, and a folder stands for every `.yaml` file directly inside it. A file named twice, as by its folder and by itself, is read once. Wildcards are the shell's, as in `awml check shopping/*.yaml`. A file with `platform` is a platform description, and any other is a workflow.
 
-`awml` never reaches the network. A path is followed from the folder of the file that refers. `owner/slug#id` is followed when a file given is at a path ending `owner/slug.yaml`, where `awml pull owner/slug -o owner` puts it. A reference to a workflow that isn't given is left alone, as it is when the file is checked on its own.
+`awml` never reaches the network. A path is followed from the folder of the file that refers. `owner/slug#id` is followed when a file given is at a path ending `owner/slug.yaml`, where `awml pull owner/slug -o owner` puts it. Where more than one file given is at such a path, the reference is a mistake that names each, since it could be any of them. A reference to a workflow that isn't given is left alone, as it is when the file is checked on its own.
 
 Given more than one workflow:
 
