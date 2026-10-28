@@ -367,7 +367,7 @@ func TestABuildOpensItsPullRequestOnlyIfNoneIsOpen(t *testing.T) {
 		r.write("pictures-left-out.txt", "")
 		listed := "[]"
 		if isOpen {
-			listed = `[{"number": 7}]`
+			listed = `[{"number": 7, "head": {"repo": {"full_name": "owner/repo"}}, "user": {"login": "awml-factory[bot]", "type": "Bot"}}]`
 		}
 		env := map[string]string{"ISSUE": "120", "BRANCH": "build/issue-120", "CHANGE_DIR": filepath.Join(r.temp, "change"),
 			"PICTURES": filepath.Join(r.temp, "pictures.txt"), "PICTURES_LEFT_OUT": filepath.Join(r.temp, "pictures-left-out.txt")}
@@ -546,6 +546,35 @@ func TestTheKeptChangeHoldsOnlyWhatThePatchStepPutThere(t *testing.T) {
 			if !r.failed || r.outputs["digest"] != "" {
 				t.Errorf("%s's %s pack kept a change with %s", at.file, at.job, name)
 			}
+		}
+	}
+}
+
+// A stranger may open a pull request of their own from the issue's branch. The build gives a title
+// and description only to the app's own, and opens its own when only a stranger's is open.
+func TestTheBuildDescribesOnlyItsOwnPullRequest(t *testing.T) {
+	describe, _ := readBuildWorkflow(t)["open"].step(t, "describe")
+	describe.Run = strings.ReplaceAll(describe.Run, `"$RUNNER_TEMP/pull-request-body.sh"`, `bash "$RUNNER_TEMP/pull-request-body.sh"`)
+	for _, ours := range []bool{true, false} {
+		r := newRehearsal(t)
+		r.write("pull-request-body.sh", readText(t, ".github/pull-request-body.sh"))
+		r.write("change/message.md", "Add scones\n")
+		r.write("pictures.txt", "")
+		r.write("pictures-left-out.txt", "")
+		app := ""
+		if ours {
+			app = `, {"number": 7, "head": {"repo": {"full_name": "owner/repo"}}, "user": {"login": "awml-factory[bot]", "type": "Bot"}}`
+		}
+		r.run(describe, map[string]string{"ISSUE": "120", "BRANCH": "build/issue-120", "CHANGE_DIR": filepath.Join(r.temp, "change"),
+			"PICTURES": filepath.Join(r.temp, "pictures.txt"), "PICTURES_LEFT_OUT": filepath.Join(r.temp, "pictures-left-out.txt")}, `
+  "api repos/owner/repo/pulls?head=owner:build/issue-120&base=main&state=open"*) answer <<< '[
+    {"number": 99, "head": {"repo": {"full_name": "owner/repo"}}, "user": {"login": "a-stranger", "type": "User"}},
+    {"number": 98, "head": {"repo": {"full_name": "a-stranger/repo"}}, "user": {"login": "awml-factory[bot]", "type": "Bot"}}`+app+`]' ;;
+  "pr edit 7 "*) ;;`)
+		r.mustPass()
+		want := map[bool]string{true: "7", false: ""}[ours]
+		if r.outputs["number"] != want || strings.Contains(r.calls, "pr edit 99") || strings.Contains(r.calls, "pr edit 98") {
+			t.Errorf("with the app's own open %v, the build took %q:\n%s", ours, r.outputs["number"], r.calls)
 		}
 	}
 }

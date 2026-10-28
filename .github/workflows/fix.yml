@@ -100,11 +100,11 @@ jobs:
 
           pull="$(gh api "repos/$GITHUB_REPOSITORY/pulls?head=$GITHUB_REPOSITORY_OWNER:$branch&base=main&state=open" |
             jq -c --arg repository "$GITHUB_REPOSITORY" --arg branch "$branch" \
-              '[.[] | select(.base.ref == "main" and .head.ref == $branch and .head.repo.full_name == $repository)] | first // empty')"
-          [ -n "$pull" ] || leave "No open pull request into main from this repository is on $branch."
-          jq -e '(.author_association | IN("OWNER", "MEMBER", "COLLABORATOR")) or .user.login == "awml-factory[bot]"' \
-              <<< "$pull" > /dev/null ||
-            leave "The pull request wasn't opened by someone with write access or by the app, so CI doesn't review it."
+              '[.[] | select(.base.ref == "main" and .head.ref == $branch and .head.repo.full_name == $repository and
+                ((.author_association | IN("OWNER", "MEMBER", "COLLABORATOR")) or
+                 (.user.login == "awml-factory[bot]" and .user.type == "Bot")))] | first // empty')"
+          [ -n "$pull" ] ||
+            leave "No open pull request into main on $branch was opened by someone with write access or by the app, so CI reviews none."
           pr="$(jq -r .number <<< "$pull")"
           case "$pr" in ''|*[!0-9]*) echo "The pull request's number isn't a number: $pr"; exit 1 ;; esac
           [ "$(jq -r .head.sha <<< "$pull")" = "$head_sha" ] ||

@@ -575,8 +575,11 @@ jobs:
           export MEDIA_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/raw/factory-media/issue-$ISSUE/run-$GITHUB_RUN_ID"
           "$RUNNER_TEMP/pull-request-body.sh" > "$RUNNER_TEMP/pull-request.md"
           "$RUNNER_TEMP/pull-request-body.sh" title > "$RUNNER_TEMP/title.txt"
-          number="$(gh api "repos/$GITHUB_REPOSITORY/pulls?head=$GITHUB_REPOSITORY_OWNER:$BRANCH&base=main&state=open" \
-            --jq '[.[] | .number] | first // empty')"
+          # Only the app's own pull request from this repository counts: anyone may open one of their
+          # own from the branch, which the build leaves alone.
+          number="$(gh api "repos/$GITHUB_REPOSITORY/pulls?head=$GITHUB_REPOSITORY_OWNER:$BRANCH&base=main&state=open" |
+            jq -r --arg repository "$GITHUB_REPOSITORY" '[.[] | select(.user.login == "awml-factory[bot]" and .user.type == "Bot" and
+              .head.repo.full_name == $repository) | .number] | first // empty')"
           case "$number" in *[!0-9]*) echo "The open pull request's number isn't a number: $number"; exit 1 ;; esac
           if [ -n "$number" ]; then
             gh pr edit "$number" --repo "$GITHUB_REPOSITORY" --title "$(cat "$RUNNER_TEMP/title.txt")" \

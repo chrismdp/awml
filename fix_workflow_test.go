@@ -15,7 +15,7 @@ func fixAnswers(tests, review, pullUser, pullSha string, fixCommits int, annotat
 			association = "OWNER"
 		}
 		pulls = `[{"number": 8, "base": {"ref": "main"}, "head": {"ref": "scones", "sha": "` + pullSha +
-			`", "repo": {"full_name": "owner/repo"}}, "user": {"login": "` + pullUser + `"}, "author_association": "` + association + `"}]`
+			`", "repo": {"full_name": "owner/repo"}}, "user": {"login": "` + pullUser + `", "type": "` + map[bool]string{true: "Bot", false: "User"}[strings.HasSuffix(pullUser, "[bot]")] + `"}, "author_association": "` + association + `"}]`
 	}
 	commits := []string{`{"sha": "1", "commit": {"message": "Add scones"}}`}
 	for i := 0; i < fixCommits; i++ {
@@ -54,6 +54,12 @@ func TestFixActsOnlyWhenTheTestsPassedAndAReviewFailed(t *testing.T) {
 		{"a moved head", fixAnswers("success", "failure", "the-maintainer", strings.Repeat("cd", 20), 0, important), "none", ""},
 		{"a stranger's pull request", fixAnswers("success", "failure", "a-stranger", head, 0, important), "none", ""},
 		{"no open pull request", fixAnswers("success", "failure", "", head, 0, important), "none", ""},
+		{"a stranger's newer pull request", strangersFirst(fixAnswers("success", "failure", "the-maintainer", head, 0, important), "scones", head), "fix", ""},
+		{"a collaborator's newer pull request from a fork", strings.Replace(strings.Replace(
+			strangersFirst(fixAnswers("success", "failure", "the-maintainer", head, 0, important), "scones", head),
+			`"repo": {"full_name": "owner/repo"}}, "user": {"login": "a-stranger", "type": "User"}, "author_association": "NONE"`,
+			`"repo": {"full_name": "a-collaborator/repo"}}, "user": {"login": "a-collaborator", "type": "User"}, "author_association": "COLLABORATOR"`, 1),
+			`"number": 99`, `"number": 99, "fork": true`, 1), "fix", ""},
 		{"a fork's run", fromAFork(fixAnswers("success", "failure", "the-maintainer", head, 0, important)), "none", ""},
 		{"two fix commits", fixAnswers("success", "failure", "the-maintainer", head, 2, important), "giveup", "tried"},
 		{"no Important finding", fixAnswers("success", "failure", "the-maintainer", head, 0, "[]"), "giveup", "unread"},

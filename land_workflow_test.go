@@ -56,7 +56,7 @@ func landPulls(user, sha string) string {
 	pulls := "[]"
 	if user != "" {
 		pulls = `[{"number": 8, "base": {"ref": "main"}, "head": {"ref": "build/issue-120", "sha": "` + sha +
-			`", "repo": {"full_name": "owner/repo"}}, "user": {"login": "` + user + `"}}]`
+			`", "repo": {"full_name": "owner/repo"}}, "user": {"login": "` + user + `", "type": "Bot"}}]`
 	}
 	return `
   "api repos/owner/repo/pulls?head=owner:build/issue-120&base=main&state=open"*) answer <<< '` + pulls + `' ;;
@@ -369,5 +369,35 @@ func TestLandAsksWhenTheBranchsCIIsntMains(t *testing.T) {
 	}, commits, "[]", ship)
 	if moved.outputs["outcome"] != "ask" || !strings.Contains(moved.outputs["reasons"], "This branch's CI is older than main's, so its checks may not be main's.") {
 		t.Errorf("a branch whose ci.yml is older than main's judged %s for %s, want ask", moved.outputs["outcome"], moved.outputs["reasons"])
+	}
+}
+
+// strangersFirst puts a stranger's newer pull request from the same branch, at the same head, first
+// in an answer's list of the branch's open pull requests, as anyone may open one from a branch here.
+func strangersFirst(answers, branch, sha string) string {
+	stranger := `{"number": 99, "base": {"ref": "main"}, "head": {"ref": "` + branch + `", "sha": "` + sha +
+		`", "repo": {"full_name": "owner/repo"}}, "user": {"login": "a-stranger", "type": "User"}, "author_association": "NONE"}`
+	at := strings.Index(answers, "&state=open")
+	open := strings.Index(answers[at:], "<<< '[") + at + len("<<< '[")
+	if strings.HasPrefix(answers[open:], "]") {
+		return answers[:open] + stranger + answers[open:]
+	}
+	return answers[:open] + stranger + ", " + answers[open:]
+}
+
+// A stranger may open a pull request of their own from a factory branch. Land takes only the app's,
+// so a stranger's newer one on the branch changes nothing.
+func TestLandIgnoresAStrangersPullRequestOnTheBranch(t *testing.T) {
+	ready, _ := readFactoryWorkflow(t, "land.yml").Jobs["find"].step(t, "ready")
+	head := strings.Repeat("ab", 20)
+	passed := landJobs(landJob("test (1.22)", "completed", "success"), landJob("test (stable)", "completed", "success"),
+		landJob("Bug review", "completed", "success"), landJob("Security review", "completed", "success"),
+		landJob("Classify", "completed", "success"))
+	r := newRehearsal(t)
+	r.run(ready, map[string]string{"CI_RUN": "77"}, landRun("pull_request", "build/issue-120")+passed+
+		strangersFirst(landPulls("awml-factory[bot]", head), "build/issue-120", head))
+	r.mustPass()
+	if r.outputs["ready"] != "true" || r.outputs["pr"] != "8" {
+		t.Errorf("with a stranger's newer pull request on the branch, land read %v, want the app's #8", r.outputs)
 	}
 }
