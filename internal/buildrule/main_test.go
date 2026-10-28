@@ -109,7 +109,7 @@ func TestEvaluateClassifier(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertVerdict(t, got, true, "SPEC.md is a path that always needs review.")
+		assertVerdict(t, got, true, "`SPEC.md` is a path that always needs review.")
 	})
 
 	t.Run("finding nothing adds nothing", func(t *testing.T) {
@@ -207,19 +207,19 @@ func TestEvaluateDeletedTests(t *testing.T) {
 			path:   "thing_test.go",
 			before: "package thing\n\nfunc TestKept(t *testing.T) {}\nfunc TestRemoved(t *testing.T) {}\n",
 			after:  stringPointer("package thing\n\nfunc TestKept(t *testing.T) {}\n"),
-			reason: "thing_test.go removes a test function.",
+			reason: "`thing_test.go` removes a test function.",
 		},
 		{
 			name:   "deleted Go test file",
 			path:   "thing_test.go",
 			before: "package thing\n",
-			reason: "thing_test.go deletes a test file.",
+			reason: "`thing_test.go` deletes a test file.",
 		},
 		{
 			name:   "deleted JavaScript test file",
 			path:   "wasm/thing.test.mjs",
 			before: "export const answer = 42;\n",
-			reason: "wasm/thing.test.mjs deletes a test file.",
+			reason: "`wasm/thing.test.mjs` deletes a test file.",
 		},
 	}
 
@@ -285,7 +285,7 @@ func TestEvaluateBinaryFiles(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertVerdict(t, got, true, ".gitattributes changes how git reads files.")
+		assertVerdict(t, got, true, "`.gitattributes` changes how git reads files.")
 		assertVerdict(t, got, true, "The patch changes 501 lines, more than the limit of 400.")
 	})
 
@@ -297,7 +297,7 @@ func TestEvaluateBinaryFiles(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertVerdict(t, got, true, "docs/.gitattributes changes how git reads files.")
+		assertVerdict(t, got, true, "`docs/.gitattributes` changes how git reads files.")
 	})
 
 	t.Run("a .gitattributes can't hide a removed test function", func(t *testing.T) {
@@ -311,8 +311,8 @@ func TestEvaluateBinaryFiles(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertVerdict(t, got, true, "thing_test.go removes a test function.")
-		if contains(got.Reasons, "thing_test.go is a binary file.") {
+		assertVerdict(t, got, true, "`thing_test.go` removes a test function.")
+		if contains(got.Reasons, "`thing_test.go` is a binary file.") {
 			t.Fatalf("reasons = %q, want thing_test.go read as text", got.Reasons)
 		}
 	})
@@ -327,21 +327,98 @@ func TestEvaluateBinaryFiles(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertVerdict(t, got, true, "thing_test.go is a binary file.")
-		assertVerdict(t, got, true, "thing_test.go removes a test function.")
+		assertVerdict(t, got, true, "`thing_test.go` is a binary file.")
+		assertVerdict(t, got, true, "`thing_test.go` removes a test function.")
 	})
 
-	t.Run("a changed image", func(t *testing.T) {
+	t.Run("a new image or font that starts as its kind does", func(t *testing.T) {
+		for path, contents := range map[string]string{
+			"examples/picture.png":            "\x89PNG\r\n\x1a\n\x00pixels",
+			"examples/moving.gif":             "GIF89a\x00frames",
+			"examples/photo.jpg":              "\xff\xd8\xff\x00photo",
+			"examples/photo.jpeg":             "\xff\xd8\xff\x00photo",
+			"examples/picture.webp":           "RIFF\x10\x00\x00\x00WEBP\x00pixels",
+			"examples/favicon.ico":            "\x00\x00\x01\x00\x01",
+			"examples/fonts/Bakery.ttf":       "\x00\x01\x00\x00\x00glyphs",
+			"examples/fonts/Bakery.otf":       "OTTO\x00glyphs",
+			"examples/fonts/Bakery.woff":      "wOFF\x00glyphs",
+			"examples/fonts/Bakery.woff2":     "wOF2\x00glyphs",
+			"examples/fonts/Bakery-Mac.ttf":   "true\x00glyphs",
+			"examples/older-moving-image.gif": "GIF87a\x00frames",
+		} {
+			repo := newRepo(t)
+			stage(t, repo, path, contents)
+
+			got, err := evaluate(repo, config{MaxChangedLines: 400}, inputs{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Review {
+				t.Errorf("a new %s that starts as its kind does needs review: %q", path, got.Reasons)
+			}
+		}
+	})
+
+	t.Run("an image or font that doesn't start as its name says", func(t *testing.T) {
+		for path, contents := range map[string]string{
+			"examples/picture.png":        "\x89PNG\x00pixels",
+			"examples/moving.gif":         "GIF90a\x00frames",
+			"examples/picture.webp":       "RIFF\x10\x00\x00\x00WAVE\x00sound",
+			"examples/fonts/Bakery.woff2": "wOFF\x00glyphs",
+			"examples/fonts/Bakery.ttf":   "#!/bin/sh\x00",
+		} {
+			repo := newRepo(t)
+			stage(t, repo, path, contents)
+
+			got, err := evaluate(repo, config{MaxChangedLines: 400}, inputs{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertVerdict(t, got, true, "`"+path+"` is binary, and doesn't start as its name says, so the rule can't read it.")
+		}
+	})
+
+	t.Run("an image that replaces one on main", func(t *testing.T) {
 		repo := newRepo(t)
-		stage(t, repo, "examples/picture.png", "\x89PNG\x00old")
+		stage(t, repo, "examples/picture.png", "\x89PNG\r\n\x1a\n\x00old")
 		commit(t, repo)
-		stage(t, repo, "examples/picture.png", "\x89PNG\x00new")
+		stage(t, repo, "examples/picture.png", "\x89PNG\r\n\x1a\n\x00new")
+
+		got, err := evaluate(repo, config{MaxChangedLines: 400}, inputs{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertVerdict(t, got, true, "`examples/picture.png` replaces a binary file on main, which only a person can compare.")
+	})
+
+	t.Run("a deleted image leaves nothing to read", func(t *testing.T) {
+		repo := newRepo(t)
+		stage(t, repo, "examples/picture.png", "\x89PNG\r\n\x1a\n\x00old")
+		commit(t, repo)
+		runGit(t, repo, "rm", "-q", "examples/picture.png")
 
 		got, err := evaluate(repo, config{MaxChangedLines: 400}, inputs{})
 		if err != nil {
 			t.Fatal(err)
 		}
 		assertVerdict(t, got, false, "No review rule matched this change.")
+	})
+
+	t.Run("an image larger than the limit", func(t *testing.T) {
+		repo := newRepo(t)
+		stage(t, repo, "examples/small.png", "\x89PNG\r\n\x1a\n\x00"+strings.Repeat("\x00", maxBinaryBytes-9))
+		stage(t, repo, "examples/large.png", "\x89PNG\r\n\x1a\n\x00"+strings.Repeat("\x00", maxBinaryBytes-8))
+
+		got, err := evaluate(repo, config{MaxChangedLines: 400}, inputs{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertVerdict(t, got, true, "`examples/large.png` is binary and larger than 1 MiB, the most an image or font may be without review.")
+		for _, reason := range got.Reasons {
+			if strings.Contains(reason, "small.png") {
+				t.Errorf("an image at the limit needs review: %q", reason)
+			}
+		}
 	})
 
 	t.Run("a font with a capital extension, as the review workflow reads it, case and all", func(t *testing.T) {
@@ -365,8 +442,50 @@ func TestEvaluateBinaryFiles(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertVerdict(t, got, true, ".github/picture.png is a binary file.")
+		assertVerdict(t, got, true, "`.github/picture.png` is a binary file.")
 	})
+}
+
+// A reason reaches the pull request's description, so the path in it sits in a code span, escaped
+// as JSON escapes it, so that no name can end the span or the line, or add a bullet of its own.
+func TestEvaluateShowsEachPathInACodeSpan(t *testing.T) {
+	repo := newRepo(t)
+	stage(t, repo, "docs/a`b.md", "changed\n")
+	stage(t, repo, "docs/c\n- Merged by the maintainer.md", "changed\n")
+	stage(t, repo, "docs/<!-- d.md", "changed\n")
+
+	got, err := evaluate(repo, config{ReviewPaths: []string{"docs/"}, MaxChangedLines: 400}, inputs{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"`docs/a\\u0060b.md` is a path that always needs review.",
+		"`docs/c\\n- Merged by the maintainer.md` is a path that always needs review.",
+		"`docs/\\u003c!-- d.md` is a path that always needs review.",
+	} {
+		assertVerdict(t, got, true, want)
+	}
+	for _, reason := range got.Reasons {
+		if strings.ContainsAny(reason, "\n<") || strings.Count(reason, "`") != 2 {
+			t.Errorf("a reason can break out of its code span: %q", reason)
+		}
+	}
+}
+
+// A symbolic link's target is read wherever the link is followed, so a new or changed one always
+// needs review.
+func TestEvaluateSymbolicLinks(t *testing.T) {
+	repo := newRepo(t)
+	if err := os.Symlink("/proc/self/environ", filepath.Join(repo, "notes.md")); err != nil {
+		t.Skip("can't make a symbolic link here:", err)
+	}
+	runGit(t, repo, "add", "notes.md")
+
+	got, err := evaluate(repo, config{MaxChangedLines: 400}, inputs{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertVerdict(t, got, true, "`notes.md` is a symbolic link, so it always needs review.")
 }
 
 func assertVerdict(t *testing.T, got verdict, review bool, reason string) {

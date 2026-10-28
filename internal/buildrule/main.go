@@ -20,6 +20,31 @@ const generatedReferences = "plugins/awml/skills/awml/references/"
 
 var removedGoTest = regexp.MustCompile(`(?m)^-[[:space:]]*func[[:space:]]+Test`)
 
+// The most an image or font may be and still merge by itself, 1 MiB. The drawings' own font,
+// examples/fonts/Inter-Regular.ttf, is a fifteenth of that.
+const maxBinaryBytes = 1 << 20
+
+// A symbolic link's mode in git, and the mode git gives a path the change deletes.
+const (
+	symbolicLink = "120000"
+	noFile       = "000000"
+)
+
+// The signatures the images and fonts the rule lets through must start with, by extension, matched
+// case and all as allowedBinary matches them. The PNG one is the one the build's open job checks
+// its pictures by.
+var signatures = map[string][]string{
+	".png":   {"\x89PNG\r\n\x1a\n"},
+	".gif":   {"GIF87a", "GIF89a"},
+	".jpg":   {"\xff\xd8\xff"},
+	".jpeg":  {"\xff\xd8\xff"},
+	".ico":   {"\x00\x00\x01\x00"},
+	".ttf":   {"\x00\x01\x00\x00", "true"},
+	".otf":   {"OTTO"},
+	".woff":  {"wOFF"},
+	".woff2": {"wOF2"},
+}
+
 type config struct {
 	ReviewPaths     []string `yaml:"review_paths"`
 	MaxChangedLines int      `yaml:"max_changed_lines"`
@@ -128,14 +153,14 @@ func evaluate(repoDir string, cfg config, in inputs) (verdict, error) {
 	for _, path := range paths {
 		for _, protected := range cfg.ReviewPaths {
 			if path == protected || (strings.HasSuffix(protected, "/") && strings.HasPrefix(path, protected)) {
-				reasons = append(reasons, fmt.Sprintf("%s is a path that always needs review.", path))
+				reasons = append(reasons, fmt.Sprintf("%s is a path that always needs review.", shown(path)))
 				break
 			}
 		}
 	}
 	for _, path := range paths {
 		if path == ".gitattributes" || strings.HasSuffix(path, "/.gitattributes") {
-			reasons = append(reasons, fmt.Sprintf("%s changes how git reads files.", path))
+			reasons = append(reasons, fmt.Sprintf("%s changes how git reads files.", shown(path)))
 		}
 	}
 
@@ -145,7 +170,7 @@ func evaluate(repoDir string, cfg config, in inputs) (verdict, error) {
 	}
 	for _, path := range deleted {
 		if strings.HasSuffix(path, "_test.go") || strings.HasSuffix(path, ".test.mjs") {
-			reasons = append(reasons, fmt.Sprintf("%s deletes a test file.", path))
+			reasons = append(reasons, fmt.Sprintf("%s deletes a test file.", shown(path)))
 		}
 	}
 
@@ -159,17 +184,50 @@ func evaluate(repoDir string, cfg config, in inputs) (verdict, error) {
 			return verdict{}, err
 		}
 		if removedGoTest.Match(diff) {
-			reasons = append(reasons, fmt.Sprintf("%s removes a test function.", path))
+			reasons = append(reasons, fmt.Sprintf("%s removes a test function.", shown(path)))
 		}
 	}
 
+	// A symbolic link's target is read wherever the link is followed, so a new or changed one
+	// always needs review.
+	modes, err := changedModes(repo)
+	if err != nil {
+		return verdict{}, err
+	}
+	for _, path := range paths {
+		if modes[path].after == symbolicLink {
+			reasons = append(reasons, fmt.Sprintf("%s is a symbolic link, so it always needs review.", shown(path)))
+		}
+	}
+
+	// A binary file can't be counted or read, so it needs review, unless it's a new image or font,
+	// no larger than the limit, that starts as its kind does. One that replaces a file on main could
+	// change what a page shows, and no diff shows how. A deleted one leaves nothing to read.
 	changedLines, binary, err := countChangedLines(repo)
 	if err != nil {
 		return verdict{}, err
 	}
 	for _, path := range binary {
 		if !allowedBinary(path) {
-			reasons = append(reasons, fmt.Sprintf("%s is a binary file.", path))
+			reasons = append(reasons, fmt.Sprintf("%s is a binary file.", shown(path)))
+			continue
+		}
+		mode := modes[path]
+		if mode.after == noFile {
+			continue
+		}
+		start, size, err := staged(repo, path)
+		if err != nil {
+			return verdict{}, err
+		}
+		if !startsAsNamed(path, start) {
+			reasons = append(reasons, fmt.Sprintf("%s is binary, and doesn't start as its name says, so the rule can't read it.", shown(path)))
+		}
+		if mode.before != noFile {
+			reasons = append(reasons, fmt.Sprintf("%s replaces a binary file on main, which only a person can compare.", shown(path)))
+		}
+		if size > maxBinaryBytes {
+			reasons = append(reasons, fmt.Sprintf("%s is binary and larger than 1 MiB, the most an image or font may be without review.", shown(path)))
 		}
 	}
 	if changedLines > cfg.MaxChangedLines {
@@ -242,6 +300,72 @@ func allowedBinary(path string) bool {
 		return true
 	}
 	return false
+}
+
+// startsAsNamed says whether a file starts with a signature its extension implies. A WebP image is
+// a RIFF file whose form, at its ninth byte, is WEBP.
+func startsAsNamed(path string, start []byte) bool {
+	extension := filepath.Ext(path)
+	if extension == ".webp" {
+		return len(start) >= 12 && string(start[:4]) == "RIFF" && string(start[8:12]) == "WEBP"
+	}
+	for _, signature := range signatures[extension] {
+		if bytes.HasPrefix(start, []byte(signature)) {
+			return true
+		}
+	}
+	return false
+}
+
+// staged reads the first bytes of a path as the change stages it, and its size.
+func staged(repo repository, path string) ([]byte, int, error) {
+	output, err := repo.git("cat-file", "-s", ":0:"+path)
+	if err != nil {
+		return nil, 0, err
+	}
+	size, err := strconv.Atoi(strings.TrimSpace(string(output)))
+	if err != nil {
+		return nil, 0, fmt.Errorf("unexpected size %q of %s", output, path)
+	}
+	contents, err := repo.git("cat-file", "blob", ":0:"+path)
+	if err != nil {
+		return nil, 0, err
+	}
+	if len(contents) > 16 {
+		contents = contents[:16]
+	}
+	return contents, size, nil
+}
+
+type modeChange struct{ before, after string }
+
+// changedModes gives each changed path's mode on main and once the change is applied, "000000"
+// where there's no file, from git's raw records: ":<old mode> <new mode> <old id> <new id>
+// <status>", then the path.
+func changedModes(repo repository) (map[string]modeChange, error) {
+	output, err := repo.git("diff", "--cached", "--raw", "--no-renames", "-z", "--")
+	if err != nil {
+		return nil, err
+	}
+	fields := nulFields(output)
+	modes := map[string]modeChange{}
+	for at := 0; at+1 < len(fields); at += 2 {
+		parts := strings.Fields(strings.TrimPrefix(fields[at], ":"))
+		if len(parts) < 2 || len(parts[0]) != 6 || len(parts[1]) != 6 {
+			return nil, fmt.Errorf("unexpected raw record %q", fields[at])
+		}
+		modes[fields[at+1]] = modeChange{before: parts[0], after: parts[1]}
+	}
+	return modes, nil
+}
+
+// shown puts a path in a code span for a reason, escaped as JSON escapes it, with a backtick
+// escaped too, since the reasons reach the pull request's description: no name can end the span
+// or the line there.
+func shown(path string) string {
+	quoted, _ := json.Marshal(path)
+	inner := strings.ReplaceAll(string(quoted[1:len(quoted)-1]), "`", `\u0060`)
+	return "`" + inner + "`"
 }
 
 func changedPaths(repo repository) ([]string, error) {
