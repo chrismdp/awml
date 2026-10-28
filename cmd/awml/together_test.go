@@ -246,7 +246,7 @@ func TestOneFileGivenTwiceIsOneWorkflow(t *testing.T) {
 		{"draw", "--implementation", "home", plan},
 		{"fit", "--implementation", "home", plan, laptop},
 	} {
-		twice := append(append([]string{}, args...), filepath.Join(dir, ".", "plan.yaml"))
+		twice := append(append([]string{}, args...), dir+"/./plan.yaml")
 		if got, want := awmlRun(twice...), awmlRun(args...); got != want {
 			t.Errorf("%q gave %+v\nwant %+v", twice, got, want)
 		}
