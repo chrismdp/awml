@@ -46,7 +46,7 @@ options:
 `
 
 var commands = map[string]struct{ usage, help string }{
-	"draw": {"usage: awml draw [-h] [--implementation ID | --untrusted] files [files ...]\n", `
+	"draw": {"usage: awml draw [-h] [--implementation ID] files [files ...]\n", `
 Draw a workflow's security view, or the map of several workflows drawn together.
 
 positional arguments:
@@ -55,9 +55,8 @@ positional arguments:
 options:
   -h, --help  show this help message and exit
   --implementation ID  draw one implementation of one workflow
-  --untrusted  draw where untrusted text reaches in one workflow
 `},
-	"graph": {"usage: awml graph [-h] [--implementation ID | --untrusted] files [files ...]\n", `
+	"graph": {"usage: awml graph [-h] [--implementation ID] files [files ...]\n", `
 Print what awml draw would draw, as JSON with nothing laid out: its groups, parts, lines, comments
 and places.
 
@@ -67,7 +66,6 @@ positional arguments:
 options:
   -h, --help  show this help message and exit
   --implementation ID  give one implementation of one workflow
-  --untrusted  give where untrusted text reaches in one workflow
 `},
 	"convert": {"usage: awml convert [-h] [--implementation ID] file [PLATFORM]\n", `
 Upgrade a file of an older version into one 0.8 file, or join a legacy security view and platform
@@ -154,7 +152,6 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	var out *string
 	implementation := ""
 	jsonOutput := false
-	untrusted := false
 	private := false
 	var registryFlag *string
 	flags := true
@@ -210,8 +207,6 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			out = &v
 		case flags && (command == "summary" || command == "fit" || command == "check") && a == "--json":
 			jsonOutput = true
-		case flags && drawing() && a == "--untrusted":
-			untrusted = true
 		case flags && command == "push" && a == "--private":
 			private = true
 		case flags && strings.HasPrefix(a, "-") && a != "-":
@@ -250,13 +245,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if command == "convert" && len(files) == 1 && implementation != "" {
 		return fail(commands[command].usage, "awml convert", "argument --implementation: only a legacy pair has an implementation to name")
 	}
-	if drawing() && untrusted && implementation != "" {
-		return fail(commands[command].usage, "awml "+command, "argument --untrusted: not allowed with argument --implementation")
-	}
 	several := map[string]string{"draw": "draws", "graph": "takes"}[command] + " one workflow, not several"
-	if drawing() && len(files) > 1 && untrusted {
-		return fail(commands[command].usage, "awml "+command, "argument --untrusted: "+several)
-	}
 	if drawing() && len(files) > 1 && implementation != "" {
 		return fail(commands[command].usage, "awml "+command, "argument --implementation: "+several)
 	}
@@ -349,9 +338,6 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			graph = awml.GraphMap(given)
 		} else {
 			view, err := awml.View(docs[0], implementation)
-			if untrusted {
-				view, err = awml.UntrustedView(docs[0])
-			}
 			if err != nil {
 				fmt.Fprintln(stderr, err)
 				return 1
@@ -602,6 +588,15 @@ func printSummary(out io.Writer, s awml.Summary, together bool) {
 				fmt.Fprintf(out, "      %s\n", name)
 			}
 		}
+		if len(u.RisksAccepted) == 0 {
+			fmt.Fprintf(out, "    risks accepted: none\n")
+			continue
+		}
+		// Each risk accepted is the action, then the standing approval that accepts it.
+		fmt.Fprintf(out, "    risks accepted:\n")
+		for _, risk := range u.RisksAccepted {
+			fmt.Fprintf(out, "      %s\n        under %s\n", risk.OutsideAction, risk.Approval)
+		}
 	}
 	if !together {
 		return
@@ -636,9 +631,9 @@ func readWith(path string, find func(any) []string) (*awml.Map, []string) {
 // then those following each ref between the workflows given finds. A command that draws or counts
 // red lines takes a file whose only mistakes are lines that break a rule.
 func sound(paths []string, stderr io.Writer, drawn bool) ([]*awml.Map, bool) {
-	find := awml.Check
+	find, together := awml.Check, awml.TogetherMistakes
 	if drawn {
-		find = awml.Unsound
+		find, together = awml.Unsound, awml.TogetherUnsound
 	}
 	docs := make([]*awml.Map, len(paths))
 	errs := make([][]string, len(paths))
@@ -651,7 +646,7 @@ func sound(paths []string, stderr io.Writer, drawn bool) ([]*awml.Map, bool) {
 			at = append(at, i)
 		}
 	}
-	for n, mistakes := range awml.TogetherMistakes(given) {
+	for n, mistakes := range together(given) {
 		errs[at[n]] = append(errs[at[n]], mistakes...)
 	}
 	ok := true

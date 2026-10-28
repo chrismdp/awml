@@ -1,0 +1,50 @@
+---
+config:
+  theme: default
+  fontFamily: Inter, sans-serif
+  flowchart:
+    useMaxWidth: false
+    subGraphTitleMargin:
+      top: 6
+      bottom: 30
+---
+flowchart TB
+  subgraph bakery["bakery#58; Ana#44; Ben"]
+    direction TB
+    evening(["Every day 20#58;00"])
+    reviews{{"The bakery#39;s review page"}}
+    draft("<small style='color:rgb(61,67,79)'>🤖 ✏️ draft</small><br>Draft a short thank#45;you to each new review")
+    post("<small style='color:rgb(61,67,79)'>⚙️ 🛠️ do</small><br>Post each thank#45;you")
+    approval("<small style='color:rgb(61,67,79)'>👤 📜 standing approval</small><br>Ana#39;s standing approval#58; thank#45;yous only#44; up to twenty a day#44; risk accepted by Ana on a month of drafted thanks")
+    reply>"Post the thank#45;you under the review#58; Ask"]
+    list@{ shape: win-pane, label: "Ana#39;s list" }
+  end
+
+  evening --> draft
+  reviews -.->|"today#39;s reviews"| draft
+  draft --> post
+  post --> approval
+  approval -->|"#91;within limits#93;"| reply
+  approval -.->|"each thank#45;you#44; as posted"| list
+  classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
+  classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
+  classDef con fill:#eceef2,stroke:#5d6472,color:#16171b
+  classDef surf fill:#ffffff,stroke:#2a2d35,stroke-width:1.5px,color:#16171b
+  classDef out fill:#fde4dc,stroke:#b5532f,color:#16171b
+  classDef ai fill:#cdd3fb,stroke:#3b4bb0,color:#16171b
+  classDef code fill:#c4e3d1,stroke:#2b7a4f,color:#16171b
+  classDef person fill:#f7d79a,stroke:#9a6100,color:#16171b
+  classDef uml fill:#16171b,stroke:#16171b,color:#16171b
+  classDef gap fill:#ffffff,stroke:#8a93a3,stroke-dasharray:4 3,color:#6b7280
+  classDef untrusted stroke:#d97a00,stroke-width:3px
+  classDef unstopped stroke:#d0342c,stroke-width:3px
+  class evening trig
+  class reviews con
+  class list surf
+  class reply out
+  class draft ai
+  class post code
+  class approval person
+  class reviews untrusted
+  style bakery fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
+  linkStyle 1,2,3,4,5 stroke:#d97a00,stroke-width:2.5px

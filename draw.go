@@ -69,9 +69,13 @@ var pastel = []string{"fill:#e3ebfa,stroke:#b9c8e8", "fill:#fbe9df,stroke:#ecc7b
 
 const red = "stroke:#d0342c,stroke-width:2.5px,color:#b0271f"
 
-// In the untrusted view, a part untrusted text reaches is tinted violet, and an outside action it
-// reaches is drawn in the red of a red line.
-const taint, taintOut = "fill:#ead9f5,stroke:#7b3fa0,color:#16171b", "fill:#f9cdc7,stroke:#d0342c,stroke-width:2.5px,color:#16171b"
+// A line untrusted text goes along is thick orange, and the line out of what stopped it thick
+// green, as thick as a red line. Each reads apart from the red, from the other and from the parts'
+// fills, and is darker than white by at least three to one. A part marked untrusted keeps its fill
+// and takes a thick orange outline, or a red one where its text reaches an outside action that
+// nothing stops and nobody accepted.
+const orange, green = "stroke:#d97a00,stroke-width:2.5px", "stroke:#109a74,stroke-width:2.5px"
+const untrustedOutline, unstoppedOutline = "stroke:#d97a00,stroke-width:3px", "stroke:#d0342c,stroke-width:3px"
 
 // A tie is grey, the colour of a comment's border. Mermaid has no thick dotted arrow, so a dotted
 // publish line is a thick one given dashes.

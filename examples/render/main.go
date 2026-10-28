@@ -67,14 +67,6 @@ func drawExample(path string) ([]string, error) {
 		}
 		drawings = append(drawings, stem+".mmd")
 	}
-	// No implementation id has a hyphen, so this name is never an implementation's.
-	if view, err := awml.UntrustedView(doc); err == nil {
-		stem := strings.TrimSuffix(path, ".yaml") + "-untrusted-view"
-		if err := os.WriteFile(stem+".mmd", []byte(awml.Draw(view)+"\n"), 0644); err != nil {
-			return nil, err
-		}
-		drawings = append(drawings, stem+".mmd")
-	}
 	return drawings, nil
 }
 

@@ -275,6 +275,7 @@ func checkView(file *Map, projected bool) (mistakeList, bool) {
 	errors = append(errors, operations(parts, lines)...)
 	if file.get("view") == "security" {
 		errors = append(errors, tiers(parts, lines)...)
+		errors = append(errors, untrustedOutside(parts, lines)...)
 		errors = append(errors, nestedProcessing(groups)...)
 	}
 	return errors, false

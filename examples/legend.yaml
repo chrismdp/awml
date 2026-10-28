@@ -1,7 +1,8 @@
 awml: "0.8"
 title: The parts of a drawing
 description: |
-  Every kind of part, as a key to reading the drawings. The hidden lines only lay it out as a grid.
+  Every kind of part, as a key to reading the drawings, with where untrusted text goes. The hidden
+  lines only lay it out as a grid.
 parts:
   - { id: trigger, kind: trigger, label: "A trigger: a time or an event" }
   - { id: ai, kind: ai, label: "A step decided by AI" }
@@ -11,13 +12,15 @@ parts:
   - { id: approval, kind: approval, label: "A standing approval: a person's yes, given once" }
   - { id: context, kind: context, label: "A context: the notes in a folder" }
   - { id: connector, kind: connector, label: "A connector: someone's access to a service" }
+  - { id: strangers, kind: connector, label: "Text anyone can write, marked untrusted: a thick orange outline", untrusted: true }
   - { id: fork, kind: fork }
   - { id: surface, kind: surface, label: "A surface: where people meet the work" }
   - { id: outside, kind: outside, label: "An outside action, with its tier: Ask" }
   - { id: comment, kind: comment, label: "A comment, tied to what it explains: the black bar is a fork, where work splits" }
 lines:
   - { from: trigger, to: review, kind: hidden }
-  - { from: review, to: approval, kind: hidden }
+  - { from: strangers, to: review, kind: data, label: "orange where untrusted text goes" }
+  - { from: review, to: approval, kind: start, label: "[yes], green past what stops it" }
   - { from: approval, to: surface, kind: data, label: "lists each action it covers" }
   - { from: ai, to: context, kind: hidden }
   - { from: context, to: outside, kind: hidden }

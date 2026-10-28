@@ -9,7 +9,7 @@ import (
 // A Graph is what a drawing shows, with nothing laid out: its boxes, its lines and its comments,
 // each named by the id its Mermaid gives it. awml graph prints it as JSON, for a tool that lays the
 // drawing out itself, and Draw and DrawMap draw their Mermaid from it, so the two can't disagree.
-// View is security, untrusted, platform or map.
+// View is security, platform or map.
 type Graph struct {
 	View     string         `json:"view"`
 	Groups   []GraphGroup   `json:"groups"`
@@ -32,8 +32,8 @@ type GraphGroup struct {
 
 // A GraphPart is a part other than a comment, with the box it's drawn in. Decider is who decides
 // a step, a review or a standing approval: ai, code or person. Tier is an outside action's tier.
-// Untrusted is whether the part is marked untrusted, which every view marks. In the untrusted view,
-// Reached is whether untrusted text reaches it, and Stops whether it stops the text.
+// Untrusted is whether the part is marked untrusted, and Unstopped whether its text reaches an
+// outside action with nothing to stop it or accept the risk.
 type GraphPart struct {
 	ID        string `json:"id"`
 	Kind      string `json:"kind"`
@@ -43,14 +43,16 @@ type GraphPart struct {
 	Op        string `json:"op,omitempty"`
 	Tier      string `json:"tier,omitempty"`
 	Untrusted bool   `json:"untrusted,omitempty"`
-	Reached   bool   `json:"reached,omitempty"`
-	Stops     bool   `json:"stops,omitempty"`
+	Unstopped bool   `json:"unstopped,omitempty"`
 }
 
 // A GraphLine is a line from one part or box to another. A publish is a data line that Publishes,
 // and Widens says what it adds or loosens. Points is which way its arrow points: to its to, both
 // ways, or none, as a tie or a hidden line does. Breaks holds the words for each rule a red line
-// breaks. On a map, Joins holds the parts inside the workflow that a line to its box joins.
+// breaks. Untrusted says how the line is drawn for untrusted text: carries where the text goes
+// along it, stopped where it leaves what stopped the text, and unstopped where it's on the text's
+// way to an outside action that nothing stops and nobody accepted. On a map, Joins holds the parts
+// inside the workflow that a line to its box joins.
 type GraphLine struct {
 	From      string   `json:"from"`
 	To        string   `json:"to"`
@@ -60,6 +62,7 @@ type GraphLine struct {
 	Publishes bool     `json:"publishes,omitempty"`
 	Widens    []string `json:"widens,omitempty"`
 	Breaks    []string `json:"breaks,omitempty"`
+	Untrusted string   `json:"untrusted,omitempty"`
 	Joins     []string `json:"joins,omitempty"`
 }
 
@@ -83,8 +86,8 @@ type GraphPlace struct {
 // gapLabel starts the label of a comment that marks a gap.
 const gapLabel = "Missing from the design"
 
-// GraphOf gives what a workflow's view draws, as View or UntrustedView projects it. A workflow is
-// taken as its security view. It must have no mistakes but lines that break a rule.
+// GraphOf gives what a workflow's view draws, as View projects it. A workflow is taken as its
+// security view. It must have no mistakes but lines that break a rule.
 func GraphOf(doc *Map) Graph {
 	if IsCanonical(doc) {
 		doc, _ = View(doc, "")
@@ -92,10 +95,6 @@ func GraphOf(doc *Map) Graph {
 	groups, parts, lines := items(doc, "groups"), items(doc, "parts"), items(doc, "lines")
 	where := placed(parts, lines)
 	g := emptyGraph(str(doc, "view"))
-	tinted, stopper := map[string]string{}, map[string]bool{}
-	if g.View == "untrusted" {
-		tinted, stopper = untrustedLooks(parts, lines)
-	}
 	for _, p := range parts {
 		id := str(p, "id")
 		if str(p, "kind") == "comment" {
@@ -104,7 +103,7 @@ func GraphOf(doc *Map) Graph {
 			continue
 		}
 		part := graphPart(p, id)
-		part.In, part.Reached, part.Stops = where[id], tinted[id] != "", stopper[id]
+		part.In, part.Unstopped = where[id], p.get("unstopped") == true
 		g.Parts = append(g.Parts, part)
 	}
 	for i, group := range groups {
@@ -115,7 +114,7 @@ func GraphOf(doc *Map) Graph {
 		}
 	}
 	for _, l := range lines {
-		line := GraphLine{From: str(l, "from"), To: str(l, "to"), Kind: str(l, "kind"), Label: str(l, "label"), Points: "to"}
+		line := GraphLine{From: str(l, "from"), To: str(l, "to"), Kind: str(l, "kind"), Label: str(l, "label"), Points: "to", Untrusted: str(l, "untrusted")}
 		if line.Kind == "tie" || line.Kind == "hidden" {
 			line.Points = "none"
 		}
@@ -151,6 +150,7 @@ func GraphMap(workflows []Workflow) Graph {
 		ends[h.action.part], ends[h.trigger.part] = true, true
 	}
 	published := publishedNames(workflows)
+	unstopped := l.unstopped()
 	var starts []GraphLine
 	for w, workflow := range workflows {
 		box := fmt.Sprintf("w%d", w+1)
@@ -162,6 +162,7 @@ func GraphMap(workflows []Workflow) Graph {
 			}
 			node[p] = box + "_" + str(p, "id")
 			part := graphPart(p, node[p])
+			part.Unstopped = unstopped[p]
 			if trigger {
 				g.Parts = append(g.Parts, part)
 				starts = append(starts, GraphLine{From: node[p], To: box, Kind: "start", Points: "to", Joins: joins(box, workflow.Doc, []partAt{{w, p}})})
@@ -174,7 +175,9 @@ func GraphMap(workflows []Workflow) Graph {
 		g.Parts = append(g.Parts, inside...)
 	}
 	for n, copies := range l.shared {
-		g.Parts = append(g.Parts, graphPart(l.sharedPart(copies[0]), fmt.Sprintf("s%d", n+1)))
+		part := graphPart(l.sharedPart(copies[0]), fmt.Sprintf("s%d", n+1))
+		part.Unstopped = unstopped[copies[0].part]
+		g.Parts = append(g.Parts, part)
 	}
 	g.Lines = append(g.Lines, starts...)
 	for n, copies := range l.shared {
@@ -374,29 +377,23 @@ func (g Graph) Mermaid() string {
 		out = append(out, fmt.Sprintf("  %s %s%s %s", from, arrow, mid, to))
 	}
 	out = append(out, defs)
-	if g.View == "untrusted" {
-		out = append(out, "  classDef taint "+taint, "  classDef taintout "+taintOut)
-	}
-	// In the untrusted view, a part untrusted text reaches is tinted.
-	tint := map[string]string{}
+	// A part marked untrusted keeps its own class, and takes a second for its outline: orange, or
+	// red where its text reaches an outside action unstopped.
+	outline := map[string]string{}
 	for _, p := range g.Parts {
-		if p.Reached && p.Kind == "outside" {
-			tint[p.ID] = "taintout"
-		} else if p.Reached {
-			tint[p.ID] = "taint"
+		if p.Unstopped {
+			outline[p.ID] = "unstopped"
+		} else if p.Untrusted {
+			outline[p.ID] = "untrusted"
 		}
 	}
-	for _, cls := range []string{"trig", "ctx", "con", "surf", "out", "ai", "code", "person", "uml", "gap", "taint", "taintout"} {
+	if len(outline) > 0 {
+		out = append(out, "  classDef untrusted "+untrustedOutline, "  classDef unstopped "+unstoppedOutline)
+	}
+	for _, cls := range []string{"trig", "ctx", "con", "surf", "out", "ai", "code", "person", "uml", "gap", "untrusted", "unstopped"} {
 		var ids []string
 		for _, n := range nodes {
-			if n.group >= 0 {
-				continue
-			}
-			own := classes[kinds[n.id]]
-			if tint[n.id] != "" {
-				own = tint[n.id]
-			}
-			if own == cls {
+			if n.group < 0 && (classes[kinds[n.id]] == cls || outline[n.id] == cls) {
 				ids = append(ids, n.id)
 			}
 		}
@@ -425,8 +422,12 @@ func (g Graph) Mermaid() string {
 	for i, l := range g.Lines {
 		var look []string
 		switch {
-		case len(l.Breaks) > 0:
+		case len(l.Breaks) > 0 || l.Untrusted == "unstopped":
 			look = append(look, red)
+		case l.Untrusted == "carries":
+			look = append(look, orange)
+		case l.Untrusted == "stopped":
+			look = append(look, green)
 		case l.Kind == "tie":
 			look = append(look, grey)
 		}
@@ -448,20 +449,13 @@ func (g Graph) Mermaid() string {
 	return strings.Join(out, "\n")
 }
 
-// mermaidLabel is a part's label as Mermaid reads it, with its marks: ⚠️ for a part marked
-// untrusted, and 🛡️ for one that stops untrusted text. A step's, a review's or a standing
+// mermaidLabel is a part's label as Mermaid reads it. A step's, a review's or a standing
 // approval's sits under its own line.
 func (p GraphPart) mermaidLabel() string {
-	words := []string{text(p.Label)}
-	if p.Untrusted {
-		words = append(words, "⚠️")
-	}
-	if p.Stops {
-		words = append(words, "🛡️")
-	}
+	label := text(p.Label)
 	who := deciders[p.Kind]
 	if who == "" {
-		return strings.Join(words, " ")
+		return label
 	}
 	if p.Kind == "review" {
 		who += " ✅ review"
@@ -470,7 +464,7 @@ func (p GraphPart) mermaidLabel() string {
 	} else if p.Op != "" {
 		who += " " + ops[p.Op] + " " + p.Op
 	}
-	return fmt.Sprintf(operation, who) + strings.Join(words, " ")
+	return fmt.Sprintf(operation, who) + label
 }
 
 // nonEmpty gives a list of the text, or none when it's empty.

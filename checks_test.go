@@ -60,9 +60,9 @@ func TestTheChecksKeepTheirIDsAndTheSpecsOrder(t *testing.T) {
 		"values.text", "references.known", "nesting.acyclic", "comments.tie-only",
 		"ties.comment", "triggers.no-line-in", "ops.known", "operations.only-do-acts", "operations.answer-check-read-only",
 		"tiers.written", "tiers.shape", "approvals.listed", "processing.written", "processing.nested",
-		"platform.blocks-only", "wait.duration", "at.path", "untrusted.parts", "cleans.code-only", "refs.written", "refs.parts", "placement.once", "placement.complete",
+		"platform.blocks-only", "wait.duration", "at.path", "untrusted.parts", "cleans.code-only", "untrusted.outside", "refs.written", "refs.parts", "placement.once", "placement.complete",
 		"refs.known", "refs.agree", "refs.starts", "refs.owner",
-		"warn.do-by-code", "warn.one-change", "warn.untrusted-outside",
+		"warn.do-by-code", "warn.one-change",
 		"warn.several-workflows", "warn.unlinked-part", "warn.untied-comment", "warn.unstarted-step", "warn.shared-writers", "warn.shared-readers",
 		"description.values", "description.ids",
 	}

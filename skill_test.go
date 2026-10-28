@@ -131,7 +131,7 @@ func TestTheGuideToDrawingByHandMatchesDraw(t *testing.T) {
 	for _, arrow := range dottedArrows {
 		want = append(want, "`"+arrow+"`")
 	}
-	want = append(want, "  classDef taint "+taint, "  classDef taintout "+taintOut, "⚠️", "🛡️", "`taint`", "`taintout`")
+	want = append(want, "  classDef untrusted "+untrustedOutline, "  classDef unstopped "+unstoppedOutline, "`untrusted`", "`unstopped`", "`"+orange+"`", "`"+green+"`")
 	want = append(want, pastel...)
 	for op, emoji := range ops {
 		want = append(want, fmt.Sprintf("| %s | `%s` |", emoji, op))
@@ -145,6 +145,12 @@ func TestTheGuideToDrawingByHandMatchesDraw(t *testing.T) {
 		}
 	}
 	// Every line is written from its from to its to, so none is drawn backwards and loses a head.
+	// The security view shows where untrusted text goes, with no marks and no view of its own.
+	for _, never := range []string{"⚠️", "🛡️", "taint", "untrusted view"} {
+		if strings.Contains(guide, never) {
+			t.Errorf("%s still draws the untrusted view: %q", path, never)
+		}
+	}
 	for _, never := range []string{"marker-end", "<-->", "x--x", "ackwards"} {
 		if strings.Contains(guide, never) {
 			t.Errorf("%s still draws a line backwards: %q", path, never)

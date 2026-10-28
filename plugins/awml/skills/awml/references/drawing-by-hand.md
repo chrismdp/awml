@@ -4,7 +4,7 @@ Use this only where `awml draw` can't run, as in a chat with no shell. It gives 
 
 Read `examples/dinners.yaml` beside `examples/dinners.mmd` for its security view and `examples/dinners-home.mmd` for its home implementation. Copy their form exactly.
 
-For the security view, use `scopes` as groups and each part's `in` as its group. The untrusted view, for a file that marks a part `untrusted: true`, uses the same groups, and section 5 gives what it adds. For a platform view, use the chosen implementation's blocks as groups. Replace each part's scope with the block whose `parts` lists it, leaving unplaced triggers and design comments without a group. Keep the design's part and line order. Append implementation comments as comment parts in their blocks, then append their `tie` lines in comment and target order. The steps below work on these groups, parts and lines.
+For the security view, use `scopes` as groups and each part's `in` as its group. For a platform view, use the chosen implementation's blocks as groups. Replace each part's scope with the block whose `parts` lists it, leaving unplaced triggers and design comments without a group. Keep the design's part and line order. Append implementation comments as comment parts in their blocks, then append their `tie` lines in comment and target order. The steps below work on these groups, parts and lines.
 
 ## 1. The header
 
@@ -51,7 +51,7 @@ In every label, of a part, a group or a line, write each run of line breaks, wit
 
 The label of a step, a review or a standing approval starts with a line of its own saying who decides it, `<small style='color:rgb(61,67,79)'>WHO</small><br>`, and then the label. `WHO` is 🤖 for `ai`, ⚙️ for `code` and 👤 for `person`. For a step with an `op`, add its emoji and its name, so an AI draft is `<small style='color:rgb(61,67,79)'>🤖 ✏️ draft</small><br>`. For a review, `WHO` is `👤 ✅ review`, and for a standing approval, `👤 📜 standing approval`.
 
-In every view, a part with `untrusted: true` has a space and ⚠️ after its label, so an order form is `form(["An order on the website#39;s form ⚠️"])`.
+A part with `untrusted: true` is written like any other, and section 5 gives its outline.
 
 | Emoji | `op` |
 |---|---|
@@ -90,7 +90,7 @@ After the parts and groups, leave one empty line, then write each line in the fi
 
 A dotted `publish` line keeps its thick arrow and takes its dots from its style, below.
 
-A line is **red** when it breaks a rule: each line that rule 18, 19 or 21 of [checking by hand](checking-by-hand.md) finds. For 18, that's the lines from the step that isn't a `do` step on its way to the action; for 19, the line into the context; for 21, the lines from each part that breaks the rule on its way to the action. A red line's label adds, for each rule it breaks, `<br>` and the words `awml check` reports for it, up to the colon before its advice, in the order the rules come. For example, `part "write" leads to outside action "send", but its op is draft`. Write the label's own words first, if it has any, and write the punctuation in the added words as entities too, but not the `<br>`.
+A line is **red** when it breaks a rule: each line that rule 18, 19, 21 or 23 of [checking by hand](checking-by-hand.md) finds. For 18, that's the lines from the step that isn't a `do` step on its way to the action; for 19, the line into the context; for 21, the lines from each part that breaks the rule on its way to the action; for 23, each line that brings the text into the action. A red line's label adds, for each rule it breaks, `<br>` and the words `awml check` reports for it, up to the colon before its advice, in the order the rules come. For example, `part "write" leads to outside action "send", but its op is draft`. Write the label's own words first, if it has any, and write the punctuation in the added words as entities too, but not the `<br>`.
 
 ## 4. The colours
 
@@ -109,7 +109,9 @@ Then write these lines, unchanged:
   classDef gap fill:#ffffff,stroke:#8a93a3,stroke-dasharray:4 3,color:#6b7280
 ```
 
-Then one line for each class that any part has, in the order `trig`, `ctx`, `con`, `surf`, `out`, `ai`, `code`, `person`, `uml`, `gap`, naming its parts in the file's order: `  class plan ai`, or `  class approve,edit person`.
+Where any part has `untrusted: true`, add the two lines of section 5 here.
+
+Then one line for each class that any part has, in the order `trig`, `ctx`, `con`, `surf`, `out`, `ai`, `code`, `person`, `uml`, `gap`, `untrusted`, `unstopped`, naming its parts in the file's order: `  class plan ai`, or `  class approve,edit person`. A part is in the class of its kind, and a part with `untrusted: true` is in `untrusted` or `unstopped` too, as section 5 says.
 
 Then one line for each group, in the file's order: `  style id STYLE`. In the security view, every group's `STYLE` is:
 
@@ -129,23 +131,28 @@ In the platform view, the first group takes the first of these, the second group
 
 Last, style the lines. Count every line from 0 in the file's order, hidden lines included. A line's style is made of these parts, in this order, joined with commas:
 
-1. For a red line, the red style `stroke:#d0342c,stroke-width:2.5px,color:#b0271f`. Otherwise, for a `tie` line, the grey `stroke:#8a93a3`.
+1. For a red line, or a line section 5 makes red, the red style `stroke:#d0342c,stroke-width:2.5px,color:#b0271f`. Otherwise, for a line section 5 makes orange, `stroke:#d97a00,stroke-width:2.5px`; for one it makes green, `stroke:#109a74,stroke-width:2.5px`; and for a `tie` line, the grey `stroke:#8a93a3`.
 2. For a dotted `publish` line, `stroke-dasharray:3`.
 
 A line with neither has no style. Lines with the same style share one line, `  linkStyle 4,7 STYLE` with their numbers, and these lines come in the order of the first line each one styles. So a red dotted `publish` line and a red line are `  linkStyle 4 stroke:#d0342c,stroke-width:2.5px,color:#b0271f,stroke-dasharray:3` and then `  linkStyle 7 stroke:#d0342c,stroke-width:2.5px,color:#b0271f`.
 
-## 5. The untrusted view
+## 5. Untrusted text
 
-The untrusted view is the security view, with three changes. First find where the text of each part marked `untrusted: true` reaches. It reaches that part, and from any part it reaches it goes along each `start` or `data` line to the part at the other end, red lines included. A `review`, a `person` step or a `code` step with `cleans: true` stops it: the text goes no further than that part, and the part keeps its own class.
+Every view of a file that marks a part `untrusted: true` shows where that part's text goes, in its lines and the part's outline. Follow the text of each such part. From any part it has reached, it goes along each `start` or `data` line to the part at the other end, red lines included. A `review`, a `person` step or a `code` step with `cleans: true` stops it: the text reaches that part, but goes no further. Where the text goes into an `outside` part straight from an `approval`, or from one through forks alone, the standing approval accepts the risk. Any other line that brings the text into an `outside` part breaks rule 23 of [checking by hand](checking-by-hand.md).
 
-1. Each part that stops the text has a space and 🛡️ after its label, after any ⚠️.
-2. After the ten `classDef` lines, add these two, unchanged:
+1. Each line the text goes along is orange.
+2. Each `start` or `data` line out of a part that stopped the text is green.
+3. Each line that breaks rule 23 is red, and so is each line the text goes along on its way there from the part marked untrusted. Where the text is stopped on one branch but goes on to break rule 23 on another, the lines the branches share are red.
+4. A line that is red for one part's text, or for one way, and orange or green for another, is red. Any other line is drawn as usual.
+5. After the ten `classDef` lines, add these two, unchanged:
 
    ```
-     classDef taint fill:#ead9f5,stroke:#7b3fa0,color:#16171b
-     classDef taintout fill:#f9cdc7,stroke:#d0342c,stroke-width:2.5px,color:#16171b
+     classDef untrusted stroke:#d97a00,stroke-width:3px
+     classDef unstopped stroke:#d0342c,stroke-width:3px
    ```
 
-3. A reached `outside` part takes the class `taintout`, and any other reached part the class `taint`, in place of its own. Write the class lines in the order `trig`, `ctx`, `con`, `surf`, `out`, `ai`, `code`, `person`, `uml`, `gap`, `taint`, `taintout`.
+6. A part marked `untrusted: true` keeps the class of its kind, and is in `unstopped` too where its text breaks rule 23, or in `untrusted` otherwise. That gives it a thick red or orange outline over its own fill.
 
-Every group keeps the security view's style.
+So an order form whose text reaches a printed label with nothing between has `  class form trig`, then later `  class form unstopped`.
+
+On a map of several workflows, a part marked untrusted in any workflow's copy takes `untrusted` or `unstopped` the same way, following the text through the parts they share and from each outside action into the trigger it starts, and no line is coloured.

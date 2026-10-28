@@ -1,0 +1,27 @@
+awml: "0.8"
+title: Sorting the bakery's enquiries
+description: |
+  A red line from untrusted text. Anyone can write to the bakery through the enquiry form on its
+  website. An AI step sorts each enquiry, and a code step labels it in the shared inbox with the
+  kind the AI step chose, so the enquiry's text can steer the label, with nothing to stop it and
+  nobody accepting the risk. A reply goes out only once Ana says yes to it, so on that way the text
+  stops. The bakery and its people are fictional.
+scopes:
+  - { id: bakery, label: "bakery: Ana, Ben" }
+parts:
+  - { id: form, kind: trigger, label: "An enquiry on the website's form", untrusted: true }
+  - { id: sort, kind: ai, op: sort, label: "Sort the enquiry", in: bakery }
+  - { id: file, kind: code, op: do, label: "Label it with its kind", in: bakery }
+  - { id: label, kind: outside, label: "Label it in the shared inbox: Allow", in: bakery }
+  - { id: draft, kind: ai, op: draft, label: "Draft a reply", in: bakery }
+  - { id: ask, kind: code, op: do, label: "Ask to send the reply", in: bakery }
+  - { id: approve, kind: review, label: "Ana's yes to the exact reply", in: bakery }
+  - { id: send, kind: outside, label: "Send the reply: Ask", in: bakery }
+lines:
+  - { from: form, to: sort, kind: start }
+  - { from: sort, to: file, kind: start }
+  - { from: file, to: label, kind: start }
+  - { from: sort, to: draft, kind: start }
+  - { from: draft, to: ask, kind: start }
+  - { from: ask, to: approve, kind: start }
+  - { from: approve, to: send, kind: data, label: "[yes]" }

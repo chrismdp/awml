@@ -125,14 +125,6 @@ async function start(source) {
       if (output.startsWith("{")) throw new Error(JSON.parse(output).error);
       return output;
     },
-    // drawUntrusted draws where untrusted text reaches, as awml draw --untrusted does.
-    drawUntrusted(sourceText) {
-      const errors = this.unsound(sourceText);
-      if (errors.length) throw new Error(errors.join("\n"));
-      const output = globalThis.__awmlDrawUntrusted(sourceText);
-      if (output.startsWith("{")) throw new Error(JSON.parse(output).error);
-      return output;
-    },
     // graph gives what draw draws, with nothing laid out, as awml graph does: one workflow's view,
     // or the map of several workflows given together. It takes what draw takes, and throws what draw
     // throws. Every label is given exactly as the file wrote it, and no text in it is escaped, so a
@@ -151,16 +143,6 @@ async function start(source) {
     },
     graph(sourceText, implementation = "") {
       return JSON.parse(this.graphJSON(sourceText, implementation));
-    },
-    // graphUntrusted gives what drawUntrusted draws, as awml graph --untrusted does, with its text
-    // unescaped as graph gives it.
-    graphUntrustedJSON(sourceText) {
-      const errors = this.unsound(sourceText);
-      if (errors.length) throw new Error(errors.join("\n"));
-      return graphOutput(globalThis.__awmlGraphUntrusted(sourceText));
-    },
-    graphUntrusted(sourceText) {
-      return JSON.parse(this.graphUntrustedJSON(sourceText));
     },
   };
 }

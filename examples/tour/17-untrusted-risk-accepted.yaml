@@ -1,0 +1,26 @@
+awml: "0.8"
+title: Thanking reviewers on the bakery's page
+description: |
+  Untrusted text whose risk is accepted. Each evening, the bakery thanks the customers who left a
+  review on its page that day. Anyone can write a review, and the AI step that drafts each
+  thank-you reads it, so nothing stops the review's text on its way to the thank-you. Ana read a
+  month of drafted thanks and accepted the risk, so each thank-you goes under her standing
+  approval, within its limits, and is listed for her as posted. The bakery and its people are
+  fictional.
+scopes:
+  - { id: bakery, label: "bakery: Ana, Ben" }
+parts:
+  - { id: evening, kind: trigger, label: "Every day 20:00" }
+  - { id: reviews, kind: connector, label: "The bakery's review page", in: bakery, untrusted: true }
+  - { id: draft, kind: ai, op: draft, label: "Draft a short thank-you to each new review", in: bakery }
+  - { id: post, kind: code, op: do, label: "Post each thank-you", in: bakery }
+  - { id: approval, kind: approval, label: "Ana's standing approval: thank-yous only, up to twenty a day, risk accepted by Ana on a month of drafted thanks", in: bakery }
+  - { id: reply, kind: outside, label: "Post the thank-you under the review: Ask", in: bakery }
+  - { id: list, kind: surface, label: "Ana's list", in: bakery }
+lines:
+  - { from: evening, to: draft, kind: start }
+  - { from: reviews, to: draft, kind: data, label: "today's reviews" }
+  - { from: draft, to: post, kind: start }
+  - { from: post, to: approval, kind: start }
+  - { from: approval, to: reply, kind: data, label: "[within limits]" }
+  - { from: approval, to: list, kind: data, label: "each thank-you, as posted" }

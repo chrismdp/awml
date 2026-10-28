@@ -17,13 +17,15 @@ flowchart TB
   approval("<small style='color:rgb(61,67,79)'>👤 📜 standing approval</small><br>A standing approval#58; a person#39;s yes#44; given once")
   context[("A context#58; the notes in a folder")]
   connector{{"A connector#58; someone#39;s access to a service"}}
+  strangers{{"Text anyone can write#44; marked untrusted#58; a thick orange outline"}}
   fork@{ shape: fork, label: "" }
   surface@{ shape: win-pane, label: "A surface#58; where people meet the work" }
   outside>"An outside action#44; with its tier#58; Ask"]
   comment@{ shape: notch-rect, label: "A comment#44; tied to what it explains#58; the black bar is a fork#44; where work splits" }
 
   trigger ~~~ review
-  review ~~~ approval
+  strangers -.->|"orange where untrusted text goes"| review
+  review -->|"#91;yes#93;#44; green past what stops it"| approval
   approval -.->|"lists each action it covers"| surface
   ai ~~~ context
   context ~~~ outside
@@ -40,9 +42,11 @@ flowchart TB
   classDef person fill:#f7d79a,stroke:#9a6100,color:#16171b
   classDef uml fill:#16171b,stroke:#16171b,color:#16171b
   classDef gap fill:#ffffff,stroke:#8a93a3,stroke-dasharray:4 3,color:#6b7280
+  classDef untrusted stroke:#d97a00,stroke-width:3px
+  classDef unstopped stroke:#d0342c,stroke-width:3px
   class trigger trig
   class context ctx
-  class connector con
+  class connector,strangers con
   class surface surf
   class outside out
   class ai ai
@@ -50,4 +54,7 @@ flowchart TB
   class person,review,approval person
   class fork uml
   class comment gap
-  linkStyle 7 stroke:#8a93a3
+  class strangers untrusted
+  linkStyle 1 stroke:#d97a00,stroke-width:2.5px
+  linkStyle 2 stroke:#109a74,stroke-width:2.5px
+  linkStyle 8 stroke:#8a93a3
