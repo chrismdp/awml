@@ -2,9 +2,10 @@ You are building the change that one issue of the AWML repository asks for. The 
 the `build` label, or one of the repository's own workflows started the build, which says it is
 wanted now.
 
-The issue, with only the comments of the repository's own people, is in BUILD_DIR/issue.md. Read
-it, then read BUILD_DIR/AGENTS.md, main's copy, and follow it, and read SPEC.md before changing
-anything it describes. Read BUILD_DIR/REVIEW.md too: once the pull request opens, CI's two fresh
+The issue, with only the comments of the repository's own people, is in BUILD_DIR/issue.md, each
+body as GitHub renders it, in HTML, so you read just what the maintainer saw. Read it, then read
+BUILD_DIR/AGENTS.md, main's copy, and follow it, and read SPEC.md before changing anything it
+describes. Read BUILD_DIR/REVIEW.md too: once the pull request opens, CI's two fresh
 reviews hold the change to it.
 If BUILD_DIR/failed.md exists, an earlier try's pull request failed CI's tests, and it holds the
 failed tests' log. Your job is then to make a change that passes where that try failed, not to

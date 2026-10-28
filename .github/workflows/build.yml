@@ -139,10 +139,12 @@ jobs:
       # The label approves the issue as it reads then. Its author, who may be anyone, can edit it
       # later, so the issue's title and body are read, with GraphQL's lastEditedAt in the same
       # answer, and kept only if it hasn't been edited since the label's last labelled event.
-      # Removing and adding the label again approves the text as it reads now (awml #120). Anyone
-      # can comment, but only the comments of the owner, members and collaborators are passed on, so
-      # strangers' text never reaches the draft step (awml #5). Main's AGENTS.md and REVIEW.md are
-      # kept with them before Claude starts, so a session that edits them still follows main's.
+      # Removing and adding the label again approves the text as it reads now (awml #120). The
+      # label approves what the page shows, so the issue and its comments are read as GitHub renders
+      # them, bodyHTML, never the Markdown behind them, whose HTML comments the page hides (#150).
+      # Anyone can comment, but only the comments of the owner, members and collaborators are passed
+      # on, so strangers' text never reaches the draft step (awml #5). Main's AGENTS.md and REVIEW.md
+      # are kept with them before Claude starts, so a session that edits them still follows main's.
       - name: Keep the issue's text, unedited since the label, and the comments of the repository's own people
         id: keep
         env:
@@ -158,7 +160,7 @@ jobs:
           issue="$(gh api graphql -F owner="$owner" -F name="$name" -F number="$ISSUE" -f query='
             query($owner: String!, $name: String!, $number: Int!) {
               repository(owner: $owner, name: $name) {
-                issue(number: $number) { number title body lastEditedAt labels(first: 100) { nodes { name } } }
+                issue(number: $number) { number title bodyHTML lastEditedAt labels(first: 100) { nodes { name } } }
               }
             }' --jq .data.repository.issue)"
           labelled="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$ISSUE/events?per_page=100" \
@@ -173,10 +175,19 @@ jobs:
             exit 1
           fi
           {
-            jq -r '"# #\(.number): \(.title)\n\nLabels: \([.labels.nodes[].name] | join(", "))\n\n\(.body // "")\n"' <<< "$issue"
-            gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$ISSUE/comments" \
-              --jq '.[] | select(.author_association == "OWNER" or .author_association == "MEMBER" or .author_association == "COLLABORATOR")
-                    | "## Comment by \(.user.login), \(.created_at)\n\n\(.body)\n"'
+            jq -r '"# #\(.number): \(.title)\n\nLabels: \([.labels.nodes[].name] | join(", "))\n\n\(.bodyHTML // "")\n"' <<< "$issue"
+            gh api graphql --paginate -F owner="$owner" -F name="$name" -F number="$ISSUE" -f query='
+              query($owner: String!, $name: String!, $number: Int!, $endCursor: String) {
+                repository(owner: $owner, name: $name) {
+                  issue(number: $number) {
+                    comments(first: 100, after: $endCursor) {
+                      nodes { authorAssociation author { login } createdAt bodyHTML }
+                      pageInfo { hasNextPage endCursor }
+                    }
+                  }
+                }
+              }' --jq '.data.repository.issue.comments.nodes[] | select(.authorAssociation | IN("OWNER", "MEMBER", "COLLABORATOR"))
+                | "## Comment by \(.author.login // "ghost"), \(.createdAt)\n\n\(.bodyHTML)\n"'
           } > "$build/issue.md"
 
       # Why the last try failed: the failed tests' log of CI's latest pull_request run on the issue's
