@@ -15,9 +15,12 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+      # No Go cache: a run of a change's code could have written one, and these binaries are what
+      # people download (#159).
       - uses: actions/setup-go@v5
         with:
           go-version: stable
+          cache: false
       - uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
