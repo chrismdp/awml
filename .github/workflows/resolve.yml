@@ -373,6 +373,20 @@ jobs:
           fi
           # The sandbox's placeholders in the workspace's .git go before git reads it.
           bash "$HOST_DIR/scrub-placeholders.sh" after "$GITHUB_WORKSPACE" "$HOST_DIR/baseline/absent"
+          # The session made the rebase's commits, so they must be one straight line from main, each
+          # with the one before it as its only parent, ending at the bundle's head, and as many as
+          # the branch's own since BASE, its merge-base with main, leaving out merges, which a
+          # plain rebase drops: no merge with a parent of the session's making, and no commit more.
+          straight() {
+            local expect="$MAIN_SHA" count=0 commit parent extra
+            while read -r commit parent extra; do
+              if [ -n "$extra" ] || [ "$parent" != "$expect" ]; then return 1; fi
+              expect="$commit"
+              count=$((count + 1))
+            done < <(git -C "$fresh" rev-list --reverse --topo-order --parents "$MAIN_SHA..refs/rebased")
+            [ "$expect" = "$(git -C "$fresh" rev-parse refs/rebased)" ] &&
+              [ "$count" = "$(git -C "$fresh" rev-list --count --no-merges "$1..$head_sha")" ]
+          }
           resolved="$HOST_DIR/resolved"
           mkdir -p "$resolved"
           digests='{}'
@@ -400,7 +414,9 @@ jobs:
               git -C "$fresh" merge-base --is-ancestor "$MAIN_SHA" refs/rebased &&
               ! git -C "$fresh" grep -qE '^(<<<<<<<|>>>>>>>)( |$)' refs/rebased --; then
               base="$(git -C "$fresh" merge-base "$head_sha" "$MAIN_SHA")"
-              if comm -23 <(git -C "$fresh" diff --no-ext-diff --no-textconv "$MAIN_SHA" refs/rebased | LC_ALL=C grep -a '^+' | LC_ALL=C sort -u) \
+              if ! straight "$base"; then
+                echo "The rebase of #$number isn't one straight line of the branch's own commits on main, so it isn't kept."
+              elif comm -23 <(git -C "$fresh" diff --no-ext-diff --no-textconv "$MAIN_SHA" refs/rebased | LC_ALL=C grep -a '^+' | LC_ALL=C sort -u) \
                   <(git -C "$fresh" diff --no-ext-diff --no-textconv "$base" "$head_sha" | LC_ALL=C grep -a '^+' | LC_ALL=C sort -u) |
                   looks_like_token; then
                 echo "The resolution of #$number adds what looks like a login token, so it isn't kept."

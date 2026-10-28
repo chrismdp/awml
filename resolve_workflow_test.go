@@ -439,3 +439,80 @@ func TestTheCheckReadsEachBranchByItsCommit(t *testing.T) {
 		t.Error("the check step reads a branch from the workspace by a ref a session could have moved")
 	}
 }
+
+// A rebase's session makes the commits in its bundle, so the check step keeps a bundle only if its
+// commits since main form one straight line from main, each with the one before it as its only
+// parent, as many as the branch's own since it left main. A merge with a parent of the session's
+// making, or a commit the branch never had, is refused.
+func TestTheCheckKeepsOnlyAStraightRebase(t *testing.T) {
+	check, _ := readFactoryWorkflow(t, "resolve.yml").Jobs["draft"].step(t, "check")
+	commit := func(repo, file, text, message string) string {
+		if err := os.WriteFile(filepath.Join(repo, file), []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		gitIn(t, repo, "add", "-A")
+		gitIn(t, repo, "-c", "user.name=x", "-c", "user.email=x@example.invalid", "commit", "-qm", message)
+		return gitIn(t, repo, "rev-parse", "HEAD")
+	}
+	for _, shape := range []string{"straight", "merged main in", "a merge", "a merge onto main's history", "an extra commit"} {
+		r := newRehearsal(t)
+		workspace := keptWorkspace(t, r)
+		base := gitIn(t, workspace, "rev-parse", "HEAD")
+		gitIn(t, workspace, "switch", "-q", "-c", "scones")
+		commit(workspace, "scones.md", "Scones\n", "Scones")
+		if shape == "merged main in" {
+			// main merged into the branch, as GitHub's Update branch does: a plain rebase drops
+			// the merge, so the branch's own commits are counted without it.
+			gitIn(t, workspace, "switch", "-q", "main")
+			commit(workspace, "flour.md", "Flour\n", "Flour")
+			gitIn(t, workspace, "switch", "-q", "scones")
+			gitIn(t, workspace, "-c", "user.name=x", "-c", "user.email=x@example.invalid", "merge", "-q", "--no-edit", "main")
+		}
+		head := commit(workspace, "scones.md", "Scones\nJam\n", "Jam")
+		gitIn(t, workspace, "switch", "-q", "-")
+		main := commit(workspace, "bread.md", "Rye\n", "Rye")
+
+		clone := filepath.Join(r.root, "clone")
+		gitIn(t, r.root, "clone", "-q", workspace, clone)
+		gitIn(t, clone, "switch", "-q", "--detach", head)
+		gitIn(t, clone, "-c", "user.name=x", "-c", "user.email=x@example.invalid", "rebase", "-q", main)
+		switch shape {
+		case "a merge":
+			// The tip given an extra parent, a commit the session wrote.
+			side := commit(clone, "other.md", "Other\n", "Other")
+			gitIn(t, clone, "reset", "-q", "--hard", "HEAD~1")
+			tree := gitIn(t, clone, "rev-parse", "HEAD^{tree}")
+			merged := gitIn(t, clone, "-c", "user.name=x", "-c", "user.email=x@example.invalid", "commit-tree", tree,
+				"-p", "HEAD~1", "-p", side, "-m", "Jam")
+			gitIn(t, clone, "reset", "-q", "--hard", merged)
+		case "a merge onto main's history":
+			// An extra parent already in main's history: as many commits as the branch's, so only
+			// the one-parent rule refuses it.
+			tree := gitIn(t, clone, "rev-parse", "HEAD^{tree}")
+			merged := gitIn(t, clone, "-c", "user.name=x", "-c", "user.email=x@example.invalid", "commit-tree", tree,
+				"-p", "HEAD~1", "-p", base, "-m", "Jam")
+			gitIn(t, clone, "reset", "-q", "--hard", merged)
+		case "an extra commit":
+			commit(clone, "cream.md", "Cream\n", "Cream")
+		}
+		out := filepath.Join(r.temp, "host", "pr-5", "out")
+		if err := os.MkdirAll(out, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		gitIn(t, clone, "bundle", "create", "-q", filepath.Join(out, "rebased.bundle"), main+"..HEAD")
+		r.write("host/pulls.tsv", "5\t"+head+"\n")
+		r.dir = workspace
+		r.run(check, map[string]string{"MAIN_SHA": main, "GITHUB_WORKSPACE": workspace}, "")
+		r.mustPass()
+		_, kept := os.Stat(filepath.Join(r.temp, "host", "resolved", "5.bundle"))
+		if shape == "straight" || shape == "merged main in" {
+			if kept != nil {
+				t.Errorf("with %s, a straight rebase wasn't kept:\n%s", shape, r.printed)
+			}
+			continue
+		}
+		if kept == nil || !strings.Contains(r.printed, "isn't one straight line") {
+			t.Errorf("with %s, the check kept the rebase or didn't say why:\n%s", shape, r.printed)
+		}
+	}
+}
