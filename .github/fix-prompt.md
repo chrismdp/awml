@@ -33,6 +33,8 @@ request to it again.
   alters into the working tree. Leave the SVGs as it wrote them; its pictures aren't used.
 - Don't commit, push or open anything. Leave the fix in the working tree. A later job adds it to
   the pull request's branch as one more commit, and CI judges it.
+- Every untracked file left in the tree goes into the pull request, so delete any scratch file you
+  made before you finish.
 
 Write OUT_DIR/message.md: a first line under 70 characters saying what the fix changed, a blank
 line, then plainly what changed and why, naming each finding it fixes and any it leaves, as a
