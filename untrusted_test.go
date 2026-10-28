@@ -289,6 +289,96 @@ func TestEveryViewDrawsAnUntrustedPartsOutlineAndItsLines(t *testing.T) {
 	}
 }
 
+// The words awml check warns with where untrusted text from a part reaches a surface, and the advice
+// after them.
+const (
+	surfaceFix  = `people reading it see text a stranger could have written, and a review, a person's own step or a code step marked cleans on the way would stop it`
+	surfaceRule = "warn.untrusted-surface"
+)
+
+func shownOn(from, surface string) string {
+	return `untrusted text from ` + from + ` reaches surface "` + surface + `": ` + surfaceFix
+}
+
+// surfaceWarnings gives the warnings of untrusted text on a surface alone, among a file's warnings.
+func surfaceWarnings(doc any) []string {
+	var found []string
+	for _, w := range warningList(doc) {
+		if w.check == surfaceRule {
+			found = append(found, w.message)
+		}
+	}
+	return found
+}
+
+// onChat adds the customers' chat to the box labels, with a line into it from the part named.
+func onChat(src, from string) string {
+	src = strings.Replace(src, "lines:\n", "  - { id: chat, kind: surface, label: \"The customers' chat\", in: bakery }\nlines:\n", 1)
+	return src + "  - { from: " + from + ", to: chat, kind: data }\n"
+}
+
+// Untrusted text that reaches a surface with nothing on the way to stop it is a warning, naming the
+// part it came from. It leaves the check passing and draws nothing new: the line is already orange.
+func TestUntrustedTextThatReachesASurfaceUnstoppedIsAWarning(t *testing.T) {
+	src := onChat(between("kind: code, op: bring-in, label: Keep the order number, cleans: true"), "read")
+	doc := parsed(t, src)
+	mistakes(t, doc)
+	if got, want := surfaceWarnings(doc), []string{shownOn(`part "form"`, "chat")}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Warnings gave %q\nwant %q", got, want)
+	}
+	if got := untrustedLines(t, GraphOf(doc)); got["read>chat"] != "carries" {
+		t.Errorf("lines are %q", got)
+	}
+	report := CheckSources("dev", []Source{source("labels.yaml", src)})
+	want := []FileMistake{{File: "labels.yaml", Message: shownOn(`part "form"`, "chat")}}
+	if got := checkResult(t, report, surfaceRule); got.Result != "warn" || !reflect.DeepEqual(got.Mistakes, want) {
+		t.Errorf("%s gave %s with %+v", surfaceRule, got.Result, got.Mistakes)
+	}
+	if got := checkResult(t, report, untrustedRule); got.Result != "pass" {
+		t.Errorf("%s gave %s", untrustedRule, got.Result)
+	}
+	// Text from several parts is one warning, naming each.
+	two := strings.Replace(src, "  - { id: chat,", "  - { id: mail, kind: connector, label: The shop's inbox, in: bakery, untrusted: true }\n  - { id: chat,", 1)
+	two += "  - { from: mail, to: chat, kind: data }\n"
+	if got, want := surfaceWarnings(parsed(t, two)), []string{shownOn(`parts "form" and "mail"`, "chat")}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Warnings gave %q\nwant %q", got, want)
+	}
+}
+
+// A review, a person's own step or a code step marked cleans on the way stops the text, so the
+// surface after it isn't warned of.
+func TestWhatStopsUntrustedTextKeepsItOffASurface(t *testing.T) {
+	for _, part := range []string{
+		"kind: code, op: bring-in, label: Keep the order number, cleans: true",
+		"kind: review, label: \"Ana's yes to the order\"",
+		"kind: person, op: check, label: Ana checks the order",
+	} {
+		t.Run(part, func(t *testing.T) {
+			doc := parsed(t, onChat(between(part), "tag"))
+			if got := surfaceWarnings(doc); got != nil {
+				t.Errorf("Warnings gave %q", got)
+			}
+		})
+	}
+}
+
+// A standing approval's line to the surface where it lists what went out is that line's job, so it
+// never warns, though another line into the same surface does.
+func TestAStandingApprovalsListNeverWarns(t *testing.T) {
+	src := strings.Replace(labelForm, "Print the label: Allow", "Print the label: Ask", 1)
+	src = strings.Replace(src, "  - { id: box,", "  - { id: yes, kind: approval, label: \"Ana's standing approval: labels only, risk accepted by Ana on last month's orders\", in: bakery }\n  - { id: list, kind: surface, label: \"Ana's list\", in: bakery }\n  - { id: box,", 1)
+	src = strings.Replace(src, "  - { from: tag, to: box, kind: start }", "  - { from: tag, to: yes, kind: start }\n  - { from: yes, to: box, kind: start }\n  - { from: yes, to: list, kind: data }", 1)
+	doc := parsed(t, src)
+	mistakes(t, doc)
+	if got := surfaceWarnings(doc); got != nil {
+		t.Errorf("Warnings gave %q", got)
+	}
+	src += "  - { from: read, to: list, kind: data }\n"
+	if got, want := surfaceWarnings(parsed(t, src)), []string{shownOn(`part "form"`, "list")}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Warnings gave %q\nwant %q", got, want)
+	}
+}
+
 func TestCheckNoLongerWarnsOfUntrustedText(t *testing.T) {
 	for _, warning := range Warnings(parsed(t, labelForm)) {
 		t.Errorf("Warnings gave %q", warning)

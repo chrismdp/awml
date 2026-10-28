@@ -521,20 +521,23 @@ func (l linked) sharedPart(root partAt) *Map {
 	return p
 }
 
-// reportedAlone is whether a workflow's own check reports that a part's text reaches one of its
-// outside actions unstopped: whether its own copy of the part is marked untrusted, and its text
-// reaches the action that way within it.
-func (l linked) reportedAlone(source, action partAt) bool {
-	doc := l.workflows[action.workflow].Doc
-	parts := items(doc, "parts")
-	byID := partsOf(parts)
-	for _, c := range l.copiesOf(source) {
-		if c.workflow != action.workflow || c.part.get("untrusted") != true {
-			continue
-		}
-		for _, line := range follow(c.part, parts, items(doc, "lines")).breaches {
-			if byID[keyOf(line.get("to"))] == action.part {
-				return true
+// reportedAlone is whether some workflow's own check reports that a part's text reaches its copy of
+// another part, along the lines along picks from the text's trail: whether its own copy of the first
+// part is marked untrusted, and its text reaches the other that way within it. An outside action has
+// one copy, and a shared surface may have several.
+func (l linked) reportedAlone(source, target partAt, along func(trail) []*Map) bool {
+	for _, t := range l.copiesOf(target) {
+		doc := l.workflows[t.workflow].Doc
+		parts := items(doc, "parts")
+		byID := partsOf(parts)
+		for _, c := range l.copiesOf(source) {
+			if c.workflow != t.workflow || c.part.get("untrusted") != true {
+				continue
+			}
+			for _, line := range along(follow(c.part, parts, items(doc, "lines"))) {
+				if byID[keyOf(line.get("to"))] == t.part {
+					return true
+				}
 			}
 		}
 	}
@@ -576,7 +579,8 @@ func workflowNames(workflows []Workflow) []string {
 // shared with another workflow, or through an outside action into the workflow it starts, which no
 // workflow's own check sees. It names the part the text comes from by the first copy marked
 // untrusted. Each is a line that breaks a rule, though the line is in the workflows together, so it
-// doesn't stop a drawing.
+// doesn't stop a drawing. In the same way it warns of each surface that untrusted text reaches
+// unstopped, in the workflow that owns it, where no workflow's own check warns of it.
 func (l *linked) reportUntrusted() {
 	if len(l.shared) == 0 && len(l.starts) == 0 {
 		return
@@ -584,29 +588,42 @@ func (l *linked) reportUntrusted() {
 	j := l.join()
 	lines := j.carrying()
 	byID := partsOf(j.parts)
+	breaches := func(tr trail) []*Map { return tr.breaches }
+	shown := func(tr trail) []*Map { return tr.shown }
 	from := map[*Map][]partAt{}
+	on := map[*Map][]partAt{}
 	for _, source := range untrustedParts(j.parts) {
 		root := j.from[str(source, "id")]
 		named, _ := l.marked(root)
-		for _, line := range follow(source, j.parts, lines).breaches {
-			action := j.from[str(byID[keyOf(line.get("to"))], "id")]
-			if !l.reportedAlone(root, action) && !slices.Contains(from[action.part], named) {
-				from[action.part] = append(from[action.part], named)
+		tr := follow(source, j.parts, lines)
+		for _, found := range []struct {
+			along func(trail) []*Map
+			into  map[*Map][]partAt
+		}{{breaches, from}, {shown, on}} {
+			for _, line := range found.along(tr) {
+				target := j.from[str(byID[keyOf(line.get("to"))], "id")]
+				if !l.reportedAlone(root, target, found.along) && !slices.Contains(found.into[target.part], named) {
+					found.into[target.part] = append(found.into[target.part], named)
+				}
 			}
 		}
 	}
-	for _, p := range j.parts {
-		action := j.from[str(p, "id")]
-		sources := from[action.part]
-		if sources == nil {
-			continue
-		}
+	names := func(sources []partAt) []string {
 		var named []string
 		for _, s := range sources {
 			named = append(named, fmt.Sprintf(`"%s" in %s`, str(s.part, "id"), l.workflows[s.workflow].File))
 		}
-		breach := untrustedBreach(named, str(action.part, "id"))
-		l.found[action.workflow] = append(l.found[action.workflow], mistake{check: "untrusted.outside", message: breach + ": " + untrustedAdvice, breach: breach})
+		return named
+	}
+	for _, p := range j.parts {
+		target := j.from[str(p, "id")]
+		if sources := from[target.part]; sources != nil {
+			breach := untrustedBreach(names(sources), str(target.part, "id"))
+			l.found[target.workflow] = append(l.found[target.workflow], mistake{check: "untrusted.outside", message: breach + ": " + untrustedAdvice, breach: breach})
+		}
+		if sources := on[target.part]; sources != nil {
+			l.found[target.workflow].add("warn.untrusted-surface", untrustedShown(names(sources), str(target.part, "id")))
+		}
 	}
 }
 

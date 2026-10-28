@@ -60,7 +60,7 @@ func TestTheChecksKeepTheirIDsAndTheSpecsOrder(t *testing.T) {
 		"values.text", "references.known", "nesting.acyclic", "comments.tie-only",
 		"ties.comment", "triggers.no-line-in", "contexts.written-by-steps", "ops.known", "operations.only-do-acts", "operations.answer-check-read-only",
 		"tiers.written", "tiers.shape", "approvals.listed", "processing.written", "processing.nested",
-		"platform.blocks-only", "wait.duration", "at.path", "untrusted.parts", "cleans.code-only", "untrusted.outside", "refs.written", "refs.parts", "placement.once", "placement.complete",
+		"platform.blocks-only", "wait.duration", "at.path", "untrusted.parts", "cleans.code-only", "untrusted.outside", "warn.untrusted-surface", "refs.written", "refs.parts", "placement.once", "placement.complete",
 		"refs.known", "refs.agree", "refs.starts", "refs.owner",
 		"warn.do-by-code", "warn.one-change",
 		"warn.several-workflows", "warn.unlinked-part", "warn.untied-comment", "warn.unstarted-step", "warn.shared-writers", "warn.shared-readers",
@@ -332,10 +332,12 @@ parts:
   - { id: keep, kind: code, label: Keep, cleans: "yes" }
   - { id: d, kind: code, op: do, label: D }
   - { id: a, kind: outside, label: "A: Allow" }
+  - { id: s, kind: surface, label: S }
 lines:
   - { from: form, to: read, kind: start }
   - { from: read, to: d, kind: start }
   - { from: d, to: a, kind: start }
+  - { from: read, to: s, kind: data }
 `,
 		"canonical lists":           "awml: \"0.9\"\ntitle: x\nparts: [3]\nimplementations: 3\n",
 		"canonical implementations": "awml: \"0.9\"\ntitle: x\nparts: []\nimplementations: 3\n",

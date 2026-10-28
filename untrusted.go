@@ -43,12 +43,13 @@ func stops(p *Map) bool {
 // and the parts that stop it, which it reaches but goes no further than. carries holds each line
 // it goes along, and cleared each line out of a part that stopped it. unstopped holds each line on
 // its way to an outside action that nothing stops and nobody accepted, and breaches each line that
-// brings it into such an action. accepted holds each outside action it reaches under a standing
-// approval, which accepts the risk, with that approval.
+// brings it into such an action. shown holds each line that brings it onto a surface, but a standing
+// approval's, which shows what went out. accepted holds each outside action it reaches under a
+// standing approval, which accepts the risk, with that approval.
 type trail struct {
 	reached, stopped            map[*Map]bool
 	carries, cleared, unstopped map[*Map]bool
-	breaches                    []*Map
+	breaches, shown             []*Map
 	accepted                    map[[2]*Map]bool
 }
 
@@ -85,6 +86,9 @@ func follow(source *Map, parts, lines []*Map) trail {
 					breached[l] = true
 					tr.breaches = append(tr.breaches, l)
 				}
+			}
+			if to.get("kind") == "surface" && at.get("kind") != "approval" {
+				tr.shown = append(tr.shown, l)
 			}
 			if stops(to) {
 				tr.stopped[to] = true
@@ -150,21 +154,7 @@ func untrustedBreach(sources []string, action string) string {
 // to stop it or accept the risk, with each line that brings it there, naming the parts the text
 // comes from. Such a line breaks a rule, so it's drawn red.
 func untrustedOutside(parts, lines []*Map) mistakeList {
-	byID := partsOf(parts)
-	from := map[*Map][]string{}
-	into := map[*Map]map[*Map]bool{}
-	for _, source := range untrustedParts(parts) {
-		for _, l := range follow(source, parts, lines).breaches {
-			action := byID[keyOf(l.get("to"))]
-			if into[action] == nil {
-				into[action] = map[*Map]bool{}
-			}
-			if name := fmt.Sprintf(`"%s"`, show(source.get("id"))); !isOneOf(name, from[action]...) {
-				from[action] = append(from[action], name)
-			}
-			into[action][l] = true
-		}
-	}
+	from, into := untrustedInto(parts, lines, func(tr trail) []*Map { return tr.breaches })
 	var errors mistakeList
 	for _, p := range parts {
 		if from[p] == nil {
@@ -179,6 +169,52 @@ func untrustedOutside(parts, lines []*Map) mistakeList {
 		errors.addBreach("untrusted.outside", untrustedBreach(from[p], show(p.get("id"))), untrustedAdvice, breaching...)
 	}
 	return errors
+}
+
+// untrustedInto gives each part that untrusted text comes into along the lines along picks from its
+// trail, with the parts it comes from, named in quotes in the file's order, and those lines.
+func untrustedInto(parts, lines []*Map, along func(trail) []*Map) (from map[*Map][]string, into map[*Map]map[*Map]bool) {
+	byID := partsOf(parts)
+	from, into = map[*Map][]string{}, map[*Map]map[*Map]bool{}
+	for _, source := range untrustedParts(parts) {
+		for _, l := range along(follow(source, parts, lines)) {
+			to := byID[keyOf(l.get("to"))]
+			if into[to] == nil {
+				into[to] = map[*Map]bool{}
+			}
+			if name := fmt.Sprintf(`"%s"`, show(source.get("id"))); !isOneOf(name, from[to]...) {
+				from[to] = append(from[to], name)
+			}
+			into[to][l] = true
+		}
+	}
+	return from, into
+}
+
+// The words awml check adds after a warning that untrusted text reaches a surface.
+const surfaceAdvice = "people reading it see text a stranger could have written, and a review, a person's own step or a code step marked cleans on the way would stop it"
+
+// untrustedShown gives the words for untrusted text from the parts named that reaches a surface.
+func untrustedShown(sources []string, surface string) string {
+	what := "part"
+	if len(sources) > 1 {
+		what = "parts"
+	}
+	return fmt.Sprintf(`untrusted text from %s %s reaches surface "%s": %s`, what, naturalList(sources), surface, surfaceAdvice)
+}
+
+// untrustedSurfaces warns of each surface that untrusted text reaches with nothing on the way to stop
+// it, naming the parts the text comes from. A standing approval's line to the surface that lists
+// what went out never warns, since showing that is the line's job.
+func untrustedSurfaces(parts, lines []*Map) mistakeList {
+	from, _ := untrustedInto(parts, lines, func(tr trail) []*Map { return tr.shown })
+	var warnings mistakeList
+	for _, p := range parts {
+		if from[p] != nil {
+			warnings.add("warn.untrusted-surface", untrustedShown(from[p], show(p.get("id"))))
+		}
+	}
+	return warnings
 }
 
 // partsOf indexes parts by id.

@@ -49,6 +49,7 @@ These are warnings, which `awml check` prints without failing. Tell the person o
 25. **Every part is linked to a trigger.** From the triggers, follow every line either way, through any part, leaving out comments and their ties. Each part you never reach has no line linking it to a trigger: connect it or remove it.
 26. **Every comment is tied to a part.** Each `comment` has a `tie` to a part. Tie it to what it explains, or remove it.
 27. **Every step is started by a trigger.** Each `ai`, `code` or `person` step, `review` and `approval` is in some trigger's run, whether item 25 found it or not. For one that isn't, add the start line it's missing, or split its work into a workflow of its own that an outside action starts.
+28. **No untrusted text reaches a surface unstopped.** Follow the text from each part with `untrusted: true` as item 23 does. Each `surface` you reach is a warning, unless every line you followed into it comes straight from an `approval`, whose line lists what went out. Say which part the text came from, that people reading the surface see text a stranger could have written, and that a review, a person's own step or a `cleans` step on the way would stop it.
 
 ## Placement and fit fields
 

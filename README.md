@@ -141,11 +141,11 @@ The operating model has little to do with AI: it's how work is organised, whoeve
 - A **standing approval** is an amber rounded box too, with `👤 📜 standing approval` above its label: a person's yes given once, in advance, to each action of named kinds that a scheduled task takes, within limits.
 - A **context** is a pale blue cylinder: the notes a step may read or write, kept as one folder.
 - A **connector** is a grey hexagon: someone's access to an outside service, such as a calendar, a mailbox or a bank account.
-- A **surface** is a white window box: where people meet the system's work, such as a chat, a list on their phone or a screen on a wall.
+- A **surface** is a white window box: where the design's own people meet its work, such as a chat, a list on their phone or a screen on a wall.
 - An **outside action** is a coral flag: something that changes the world outside the system, such as sending an email or paying a bill. Its label gives its [tier](#tiers-and-yeses) after its last colon, such as `Send the reply: Ask`.
 - A **comment** is a dashed box with a cut corner. It points out a gap, or gives an example of what a part could carry, and is tied to what it explains, below or beside it.
 
-Posting on a shared surface to the people it serves is delivery, not an outside action, so a family chat needs no flag and no review.
+Posting on a shared surface to the people it serves is delivery, not an outside action, so a family chat needs no flag and no review. Where people outside every scope of the design see the result, as in a customer chat or a public page, posting it is an outside action, public and so Ask, carried out through the connector.
 
 ### Who decides each step
 
@@ -345,7 +345,7 @@ Here Sam approved the morning renewals once, for renewals only and up to six a w
 
 Text that anyone can write, such as a web form or a public inbox, can try to steer the AI step that reads it. Mark the trigger, connector or context it comes in through with `untrusted: true`, and it's drawn with a thick orange outline. The text goes wherever the lines lead on, until a person's review, a person's own step or a code step marked `cleans: true` stops it. A `cleans` step promises to pass on only what's safe, such as an order number and a quantity, and its label says how. Only code can promise that, since strangers' text can steer AI however it's instructed. A standing approval never sees the text, so it doesn't stop it, but one in front of an outside action accepts the risk of the text reaching it, and its label says who accepted it and on what evidence.
 
-The security view shows where the text goes. Each line it goes along is thick orange, up to and including the line into what stops it, and the line out of that is thick green. A line that brings the text into an outside action with nothing to stop it or accept the risk breaks a rule, so `awml check` reports it, and `awml draw` draws it and every line on the text's way there thick red, with the source's outline red too. `awml summary` lists what each untrusted part's text reaches, what stops it and the risks accepted.
+The security view shows where the text goes. Each line it goes along is thick orange, up to and including the line into what stops it, and the line out of that is thick green. A line that brings the text into an outside action with nothing to stop it or accept the risk breaks a rule, so `awml check` reports it, and `awml draw` draws it and every line on the text's way there thick red, with the source's outline red too. `awml check` also warns of a surface the text reaches with nothing to stop it, since the people reading it see text a stranger could have written, but not of a standing approval's line to the surface that lists what went out. `awml summary` lists what each untrusted part's text reaches, what stops it and the risks accepted.
 
 ![A cake order from the website, showing where its text goes](examples/tour/14-untrusted-text.svg)
 
@@ -592,7 +592,7 @@ Every id, label, kind and reference to an id is text. `awml` reads YAML 1.2, whi
 
 ### What `awml check` reports
 
-`awml check` reports structural mistakes, invalid operations, tiers that disagree with the drawing, and untrusted text that reaches an outside action with nothing to stop it or accept the risk. It reports a line from an outside action into a context, since an outside action changes only what's outside the system: a sign-off a later run reads back is a review whose `[yes]` leads to a code `do` step that writes it. It also checks each implementation's block references, nesting and placement, and its comments' ties, and how each `ref` is written. It warns when AI decides a `do` step, when one `do` step leads to more than one change, when the file's triggers start more than one workflow, when no line links a part to a trigger, when a comment is tied to nothing, and when no trigger's run reaches a step, review or standing approval. Warnings leave the exit status alone. A line that breaks a rule, such as one into a Block action, is still a mistake, but `awml draw` draws it red rather than refusing the file. [`SPEC.md`](SPEC.md) gives the exact rules.
+`awml check` reports structural mistakes, invalid operations, tiers that disagree with the drawing, and untrusted text that reaches an outside action with nothing to stop it or accept the risk. It reports a line from an outside action into a context, since an outside action changes only what's outside the system: a sign-off a later run reads back is a review whose `[yes]` leads to a code `do` step that writes it. It also checks each implementation's block references, nesting and placement, and its comments' ties, and how each `ref` is written. It warns when AI decides a `do` step, when one `do` step leads to more than one change, when the file's triggers start more than one workflow, when no line links a part to a trigger, when a comment is tied to nothing, when no trigger's run reaches a step, review or standing approval, and when untrusted text reaches a surface with nothing to stop it. Warnings leave the exit status alone. A line that breaks a rule, such as one into a Block action, is still a mistake, but `awml draw` draws it red rather than refusing the file. [`SPEC.md`](SPEC.md) gives the exact rules.
 
 ### Examples to start from
 
