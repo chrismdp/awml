@@ -735,3 +735,116 @@ func (r *rehearsal) newRepo(name string, files map[string]string) (string, strin
 	gitIn(r.t, repo, "commit", "-q", "-m", "The bakery's main")
 	return repo, gitIn(r.t, repo, "rev-parse", "HEAD")
 }
+
+var sessionHome = regexp.MustCompile(`HOME="([^"]+)" claude -p`)
+var sandboxSettings = regexp.MustCompile(`bash "\$RUNNER_TEMP/sandbox-settings\.sh" "([^"]+)" "([^"]+)" (builds|reads)\n`)
+
+// Every Claude session runs its commands in Claude Code's own sandbox, set in the user settings of
+// a home of its own, the only settings --setting-sources user loads (#131). The drafting sessions,
+// the draft, the fix and the rebase, may reach only the Go module proxy, its checksum database and
+// npm's registry; the review and Classify sessions run no commands and reach nothing. Main's script
+// writes the settings, copied out of the tree before the session starts. Under
+// CLAUDE_CODE_SUBPROCESS_ENV_SCRUB the permission mode is always default, so each session says so.
+func TestEverySessionRunsInItsOwnSandbox(t *testing.T) {
+	kinds := map[string]string{"ci.yml review": "reads", "ci.yml classify": "reads", "build.yml draft": "builds",
+		"fix.yml fix": "builds", "resolve.yml draft": "builds"}
+	sessions := 0
+	eachJob(t, func(file, name string, job workflowJob) {
+		at := job.session()
+		if at < 0 {
+			return
+		}
+		sessions++
+		step := job.Steps[at]
+		where := fmt.Sprintf("%s's %s step %q", file, name, step.Name)
+		home := sessionHome.FindStringSubmatch(step.Run)
+		settings := sandboxSettings.FindStringSubmatch(step.Run)
+		if home == nil || settings == nil {
+			t.Errorf("%s doesn't start Claude in a home of its own with main's sandbox settings", where)
+			return
+		}
+		if settings[1] != home[1] {
+			t.Errorf("%s writes the sandbox settings into %s but starts Claude in %s", where, settings[1], home[1])
+		}
+		if strings.Index(step.Run, settings[0]) > strings.Index(step.Run, home[0]) {
+			t.Errorf("%s writes the sandbox settings after Claude starts", where)
+		}
+		if want := kinds[file+" "+name]; settings[3] != want {
+			t.Errorf("%s gives its session the %s sandbox, want %s", where, settings[3], want)
+		}
+		if !strings.Contains(step.Run, "--permission-mode default") || strings.Contains(step.Run, "acceptEdits") {
+			t.Errorf("%s doesn't say its permission mode is default, which the scrub forces", where)
+		}
+		copied := false
+		for _, before := range job.Steps[:at+1] {
+			if regexp.MustCompile(`cp [^\n]*\.github/sandbox-settings\.sh[^\n]* "\$RUNNER_TEMP/"\n`).MatchString(before.Run) {
+				copied = true
+			}
+		}
+		if !copied {
+			t.Errorf("%s's %s doesn't copy main's sandbox-settings.sh out before its session", file, name)
+		}
+	})
+	if sessions != len(kinds) {
+		t.Errorf("found %d sessions, want %d", sessions, len(kinds))
+	}
+}
+
+// The settings turn the sandbox on, fail rather than run a command without it, refuse every
+// unsandboxed retry, deny writes to .git and to the runner's own files, and allow only the hosts a
+// session's commands need, refusing every other without a prompt.
+func TestTheSandboxSettingsAreExplicit(t *testing.T) {
+	for kind, domains := range map[string]string{"builds": `["proxy.golang.org","sum.golang.org","registry.npmjs.org"]`, "reads": `[]`} {
+		r := newRehearsal(t)
+		r.write("sandbox-settings.sh", readText(t, ".github/sandbox-settings.sh"))
+		tree := filepath.Join(r.root, "tree")
+		workspace := filepath.Join(r.root, "workspace")
+		for _, dir := range []string{tree + "/.git", workspace + "/.git", r.root + "/runners/2.0/bin"} {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		home := filepath.Join(r.temp, "session", "home")
+		r.run(workflowStep{Run: `bash "$RUNNER_TEMP/sandbox-settings.sh" "$SESSION" "$TREE" ` + kind + "\n"},
+			map[string]string{"SESSION": home, "TREE": tree, "GITHUB_WORKSPACE": workspace}, "")
+		r.mustPass()
+		var settings struct {
+			Sandbox struct {
+				Enabled                  *bool `json:"enabled"`
+				FailIfUnavailable        *bool `json:"failIfUnavailable"`
+				AllowUnsandboxedCommands *bool `json:"allowUnsandboxedCommands"`
+				Filesystem               struct {
+					DenyWrite []string `json:"denyWrite"`
+					DenyRead  []string `json:"denyRead"`
+				} `json:"filesystem"`
+				Network struct {
+					AllowedDomains  []string `json:"allowedDomains"`
+					StrictAllowlist *bool    `json:"strictAllowlist"`
+				} `json:"network"`
+			} `json:"sandbox"`
+		}
+		data, err := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
+		if err != nil {
+			t.Fatalf("%s: no settings file in the session's home: %v", kind, err)
+		}
+		if err := json.Unmarshal(data, &settings); err != nil {
+			t.Fatal(err)
+		}
+		box := settings.Sandbox
+		if box.Enabled == nil || !*box.Enabled || box.FailIfUnavailable == nil || !*box.FailIfUnavailable ||
+			box.AllowUnsandboxedCommands == nil || *box.AllowUnsandboxedCommands || box.Network.StrictAllowlist == nil || !*box.Network.StrictAllowlist {
+			t.Errorf("%s: the sandbox isn't on, strict and required:\n%s", kind, data)
+		}
+		if got, _ := json.Marshal(box.Network.AllowedDomains); string(got) != domains {
+			t.Errorf("%s: the sandbox allows %s, want %s", kind, got, domains)
+		}
+		for _, denied := range []string{tree + "/.git", workspace + "/.git", r.root + "/runners"} {
+			if !contains(box.Filesystem.DenyWrite, denied) {
+				t.Errorf("%s: the sandbox lets commands write %s: %v", kind, denied, box.Filesystem.DenyWrite)
+			}
+		}
+		if !contains(box.Filesystem.DenyRead, r.root+"/runners") {
+			t.Errorf("%s: the sandbox lets commands read the runner's own files: %v", kind, box.Filesystem.DenyRead)
+		}
+	}
+}

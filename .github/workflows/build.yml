@@ -154,7 +154,7 @@ jobs:
           build="$RUNNER_TEMP/build"
           mkdir -p "$build"
           cp AGENTS.md REVIEW.md "$build/"
-          cp .github/build-prompt.md "$RUNNER_TEMP/build-prompt.md"
+          cp .github/build-prompt.md .github/sandbox-settings.sh "$RUNNER_TEMP/"
           owner="${GITHUB_REPOSITORY%%/*}"
           name="${GITHUB_REPOSITORY#*/}"
           issue="$(gh api graphql -F owner="$owner" -F name="$name" -F number="$ISSUE" -f query='
@@ -233,6 +233,12 @@ jobs:
       # Code picks up a settings file or a .mcp.json that appears in its tree while it runs. It reads
       # only the working tree and its own folder, never /proc, and can't change .git. Its log is
       # shown with workflow commands stopped.
+      # Its commands run in Claude Code's sandbox, set in the user settings of a home of its own by
+      # main's .github/sandbox-settings.sh: each in a PID namespace of its own, where it can't read
+      # Claude Code's environment through /proc, with no route out but to the Go module proxy, its
+      # checksum database and npm's registry, and no write to .git or the runner's files (#131). The
+      # scrub forces the permission mode to default, so every tool the session needs is allowed by
+      # name.
       - name: Draft the change
         id: draft
         env:
@@ -240,10 +246,12 @@ jobs:
           CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
           BUILD_DIR: ${{ runner.temp }}/build
           PUPPETEER_EXECUTABLE_PATH: /usr/bin/google-chrome
+          PUPPETEER_SKIP_DOWNLOAD: "true"
         run: |
+          bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/session/home" "$GITHUB_WORKSPACE" builds
           prompt="$(sed "s|BUILD_DIR|$BUILD_DIR|g" "$RUNNER_TEMP/build-prompt.md")"
           status=0
-          claude -p "$prompt" --model opus --max-turns 200 --permission-mode acceptEdits \
+          HOME="$RUNNER_TEMP/session/home" claude -p "$prompt" --model opus --max-turns 200 --permission-mode default \
             --setting-sources user --strict-mcp-config --add-dir "$BUILD_DIR" \
             --disallowedTools "Read(//proc/**)" "Edit(./.git/**)" "Write(./.git/**)" \
             --allowedTools "Read(./**)" "Read(/$BUILD_DIR/**)" "Edit(./**)" "Edit(/$BUILD_DIR/**)" "Glob" "Grep" \

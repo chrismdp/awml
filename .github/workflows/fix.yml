@@ -59,7 +59,7 @@ jobs:
       - name: Keep main's script, prompt, AGENTS.md and REVIEW.md
         run: |
           mkdir -p "$RUNNER_TEMP/fix/in" "$RUNNER_TEMP/fix/out"
-          cp .github/read-findings.sh .github/fix-prompt.md "$RUNNER_TEMP/"
+          cp .github/read-findings.sh .github/fix-prompt.md .github/sandbox-settings.sh "$RUNNER_TEMP/"
           cp AGENTS.md REVIEW.md "$RUNNER_TEMP/fix/in/"
 
       # Only a pull request CI reviews is fixed: one into main from a branch of this repository,
@@ -185,6 +185,12 @@ jobs:
       # run only in its sandbox (awml #121). It loads only the user's settings and no MCP servers,
       # reads only the working tree and its own folders, never /proc, and can't change .git. Its log
       # is shown with workflow commands stopped.
+      # Its commands run in Claude Code's sandbox, set in the user settings of a home of its own by
+      # main's .github/sandbox-settings.sh: each in a PID namespace of its own, where it can't read
+      # Claude Code's environment through /proc, with no route out but to the Go module proxy, its
+      # checksum database and npm's registry, and no write to .git or the runner's files (#131). The
+      # scrub forces the permission mode to default, so every tool the session needs is allowed by
+      # name.
       - name: Fix every finding of both reviews, Important ones and Nits, test first
         id: session
         if: steps.tries.outputs.decision == 'fix'
@@ -194,10 +200,12 @@ jobs:
           FIX_DIR: ${{ runner.temp }}/fix/in
           OUT_DIR: ${{ runner.temp }}/fix/out
           PUPPETEER_EXECUTABLE_PATH: /usr/bin/google-chrome
+          PUPPETEER_SKIP_DOWNLOAD: "true"
         run: |
+          bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/session/home" "$GITHUB_WORKSPACE" builds
           prompt="$(sed -e "s|FIX_DIR|$FIX_DIR|g" -e "s|OUT_DIR|$OUT_DIR|g" "$RUNNER_TEMP/fix-prompt.md")"
           status=0
-          claude -p "$prompt" --model opus --max-turns 200 --permission-mode acceptEdits \
+          HOME="$RUNNER_TEMP/session/home" claude -p "$prompt" --model opus --max-turns 200 --permission-mode default \
             --setting-sources user --strict-mcp-config --add-dir "$FIX_DIR" --add-dir "$OUT_DIR" \
             --disallowedTools "Read(//proc/**)" "Edit(./.git/**)" "Write(./.git/**)" \
             --allowedTools "Read(./**)" "Read(/$FIX_DIR/**)" "Read(/$OUT_DIR/**)" "Edit(./**)" "Edit(/$OUT_DIR/**)" "Glob" "Grep" \

@@ -121,7 +121,7 @@ func TestTheDraftReadsOnlyTheIssueAsApproved(t *testing.T) {
      "body": "A stranger says that", "bodyHTML": "<p>A stranger says that</p>"}]}}}}}' ;;`
 	for _, edited := range []string{"2026-10-27T09:30:00Z", "2026-10-27T10:30:00Z"} {
 		r := newRehearsal(t)
-		repo, _ := r.newRepo("repo", map[string]string{"AGENTS.md": "How to work.\n", "REVIEW.md": "What fails.\n", ".github/build-prompt.md": "Build it.\n"})
+		repo, _ := r.newRepo("repo", map[string]string{"AGENTS.md": "How to work.\n", "REVIEW.md": "What fails.\n", ".github/build-prompt.md": "Build it.\n", ".github/sandbox-settings.sh": "echo settings\n"})
 		r.dir = repo
 		r.run(keep, map[string]string{"ISSUE": "120"}, comments+issueAnswer(edited, "build", "tool")+labelEvents)
 		issue := r.read("build/issue.md")

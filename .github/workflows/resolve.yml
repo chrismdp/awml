@@ -161,10 +161,11 @@ jobs:
         with:
           node-version: 22
 
-      - name: Keep main's prompt and AGENTS.md
+      - name: Keep main's prompt, AGENTS.md and sandbox settings
         run: |
           mkdir -p "$RUNNER_TEMP/main"
           cp .github/resolve-prompt.md AGENTS.md "$RUNNER_TEMP/main/"
+          cp .github/sandbox-settings.sh "$RUNNER_TEMP/"
 
       # Claude Code runs its commands in a sandbox, bubblewrap with socat for its network, so that it
       # can scrub its login token from them, and they can't start without both. Ubuntu's runners
@@ -186,6 +187,12 @@ jobs:
       # session that leaves a conflict marker in a file it was given has given up, and the rebase is
       # abandoned. Everything each session changed is scanned for anything like the login token
       # before it's kept.
+      # Its commands run in Claude Code's sandbox, set in the user settings of a home of its own by
+      # main's .github/sandbox-settings.sh: each in a PID namespace of its own, where it can't read
+      # Claude Code's environment through /proc, with no route out but to the Go module proxy, its
+      # checksum database and npm's registry, and no write to .git or the runner's files (#131). The
+      # scrub forces the permission mode to default, so every tool the session needs is allowed by
+      # name.
       - name: Resolve the conflicts
         id: resolve
         env:
@@ -195,6 +202,7 @@ jobs:
           CONFLICTS: ${{ needs.find.outputs.conflicts }}
           MAIN_SHA: ${{ needs.find.outputs.main_sha }}
           PUPPETEER_EXECUTABLE_PATH: /usr/bin/google-chrome
+          PUPPETEER_SKIP_DOWNLOAD: "true"
         run: |
           if ! [[ "$MAIN_SHA" =~ ^[0-9a-f]{40}$ ]]; then
             echo "Main's commit isn't a commit id: $MAIN_SHA"
@@ -238,9 +246,10 @@ jobs:
                 break
               fi
               chmod -R a-w "$dir"
+              bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/home/$number" "$work" builds
               prompt="$(sed -e "s|RESOLVE_DIR|$dir|g" -e "s|OUT_DIR|$out|g" "$RUNNER_TEMP/main/resolve-prompt.md")"
               status=0
-              (cd "$work" && claude -p "$prompt" --model opus --max-turns 200 --permission-mode acceptEdits \
+              (cd "$work" && HOME="$RUNNER_TEMP/home/$number" claude -p "$prompt" --model opus --max-turns 200 --permission-mode default \
                 --setting-sources user --strict-mcp-config --add-dir "$dir" --add-dir "$out" \
                 --disallowedTools "Read(//proc/**)" "Edit(./.git/**)" "Write(./.git/**)" \
                 --allowedTools "Read(./**)" "Read(/$dir/**)" "Read(/$out/**)" "Edit(./**)" "Edit(/$out/**)" "Glob" "Grep" \

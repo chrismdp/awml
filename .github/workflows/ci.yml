@@ -107,7 +107,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          cp .github/bring-patch.sh "$RUNNER_TEMP/bring-patch.sh"
+          cp .github/bring-patch.sh .github/sandbox-settings.sh "$RUNNER_TEMP/"
           bash "$RUNNER_TEMP/bring-patch.sh"
 
       # Claude Code runs its commands in a sandbox, bubblewrap with socat for its network, so that it
@@ -131,6 +131,8 @@ jobs:
       # Write rule for one path, so the Edit rule, which covers writing a file too, is the one that
       # holds. Its log is shown with workflow commands stopped, so nothing it says can make an
       # annotation of its own.
+      # The session's home holds main's sandbox settings, from .github/sandbox-settings.sh, with no
+      # host allowed, though the session runs no commands (#131).
       - name: Review the patch
         id: session
         env:
@@ -143,6 +145,7 @@ jobs:
           session="$RUNNER_TEMP/session"
           chmod -R a-w "$REVIEW_DIR"
           mkdir -p "$session/home" "$session/out"
+          bash "$RUNNER_TEMP/sandbox-settings.sh" "$session/home" "$GITHUB_WORKSPACE" reads
           prompt="$(sed -e "s|REVIEW_DIR|$REVIEW_DIR|g" -e "s|OUT_DIR|$session/out|g" "$RUNNER_TEMP/prompts/$PROMPT")"
           status=0
           HOME="$session/home" claude -p "$prompt" --model opus --max-turns 100 --permission-mode default \
@@ -253,7 +256,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          cp .github/bring-patch.sh .github/read-findings.sh "$RUNNER_TEMP/"
+          cp .github/bring-patch.sh .github/read-findings.sh .github/sandbox-settings.sh "$RUNNER_TEMP/"
           bash "$RUNNER_TEMP/bring-patch.sh"
           bash "$RUNNER_TEMP/read-findings.sh" "$GITHUB_RUN_ID" "$RUNNER_TEMP/checks"
           cp "$RUNNER_TEMP/checks/findings.json" "$RUNNER_TEMP/review/findings.json"
@@ -271,6 +274,8 @@ jobs:
 
       # The session starts as each review's does: in an empty home of its own, reading inputs it
       # can't change, editing only its verdict, in a folder of its own, and running nothing.
+      # The session's home holds main's sandbox settings, from .github/sandbox-settings.sh, with no
+      # host allowed, though the session runs no commands (#131).
       - name: Sort the change by risk
         id: session
         if: steps.install.outcome == 'success'
@@ -283,6 +288,7 @@ jobs:
           session="$RUNNER_TEMP/session"
           chmod -R a-w "$REVIEW_DIR"
           mkdir -p "$session/home" "$session/out"
+          bash "$RUNNER_TEMP/sandbox-settings.sh" "$session/home" "$GITHUB_WORKSPACE" reads
           prompt="$(sed -e "s|REVIEW_DIR|$REVIEW_DIR|g" -e "s|OUT_DIR|$session/out|g" "$RUNNER_TEMP/prompts/classify-prompt.md")"
           status=0
           HOME="$session/home" claude -p "$prompt" --model opus --max-turns 100 --permission-mode default \
