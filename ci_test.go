@@ -584,8 +584,8 @@ func TestEveryTrustIsTheSameExactPermissionCheck(t *testing.T) {
 			copies = append(copies, strings.TrimPrefix(found, "\n"))
 		}
 	}
-	if len(copies) != 6 {
-		t.Fatalf("found %d copies of may_write, want 6", len(copies))
+	if len(copies) != 7 {
+		t.Fatalf("found %d copies of may_write, want 7", len(copies))
 	}
 	for _, other := range copies[1:] {
 		if other != copies[0] {

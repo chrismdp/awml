@@ -67,7 +67,8 @@ func landPulls(user, sha string) string {
   "api repos/owner/repo/pulls?head=owner:build/issue-120&base=main&state=open"*) answer <<< '` + pulls + `' ;;
   "api --paginate repos/owner/repo/issues/120/events"*) answer <<< '[
     {"event": "labeled", "label": {"name": "build"}, "actor": {"login": "the-maintainer", "type": "User"}},
-    {"event": "labeled", "label": {"name": "build"}, "actor": {"login": "awml-factory[bot]", "type": "Bot"}}]' ;;`
+    {"event": "labeled", "label": {"name": "build"}, "actor": {"login": "awml-factory[bot]", "type": "Bot"}}]' ;;
+  "api graphql"*) answer <<< '{"data": {"repository": {"issue": {"labels": {"nodes": [{"name": "tool"}, {"name": "build"}]}}}}}' ;;` + permissions
 }
 
 // land.yml exits quietly unless CI's run is a pull_request run on a factory branch of this
@@ -181,7 +182,11 @@ func rehearseJudgeWith(t *testing.T, files map[string]string, branchChanges, mai
 	if len(classifyPassed) > 0 {
 		passed = classifyPassed[0]
 	}
-	r.run(step, map[string]string{"CI_RUN": "77", "HEAD_SHA": head, "CLASSIFY_PASSED": passed}, `
+	labelled := "true"
+	if len(classifyPassed) > 1 {
+		labelled = classifyPassed[1]
+	}
+	r.run(step, map[string]string{"CI_RUN": "77", "HEAD_SHA": head, "CLASSIFY_PASSED": passed, "LABELLED": labelled}, `
   "api --paginate repos/owner/repo/actions/runs/77/jobs"*) answer <<< '{"jobs": [
     {"name": "Bug review", "check_run_url": "https://api.github.com/repos/owner/repo/check-runs/2"},
     {"name": "Security review", "check_run_url": "https://api.github.com/repos/owner/repo/check-runs/3"},
@@ -445,7 +450,8 @@ func TestLandAddsNoRuleOfItsOwnForCI(t *testing.T) {
 }
 
 // land tells or asks whoever added the build label last, by the same labelled event the build
-// checks, or the owner when that was the app's bot.
+// checks, if they can write, or the owner when that was the app's bot or someone who can't, such as
+// a triager who added it again.
 func TestLandTellsWhoeverLastAddedTheLabel(t *testing.T) {
 	ready, _ := readFactoryWorkflow(t, "land.yml").Jobs["find"].step(t, "ready")
 	head := strings.Repeat("ab", 20)
@@ -454,12 +460,51 @@ func TestLandTellsWhoeverLastAddedTheLabel(t *testing.T) {
 		landJob("Classify", "completed", "success"))
 	pulls := landPulls("awml-factory[bot]", head)
 	byPerson := strings.Replace(pulls, `"actor": {"login": "awml-factory[bot]", "type": "Bot"}}]`, `"actor": {"login": "a-writer", "type": "User"}}]`, 1)
-	for want, answers := range map[string]string{"owner": pulls, "a-writer": byPerson} {
+	byTriager := strings.Replace(pulls, `"actor": {"login": "awml-factory[bot]", "type": "Bot"}}]`, `"actor": {"login": "a-member", "type": "User"}}]`, 1)
+	for want, answers := range map[string]string{"owner": pulls, "a-writer": byPerson, "owner ": byTriager} {
+		want = strings.TrimSpace(want)
 		r := newRehearsal(t)
 		r.run(ready, map[string]string{"CI_RUN": "77"}, landRun("pull_request", "build/issue-120")+passed+answers)
 		r.mustPass()
 		if r.outputs["labeller"] != want {
 			t.Errorf("land's labeller is %q, want %q", r.outputs["labeller"], want)
 		}
+	}
+}
+
+// A build label taken off the issue means a person has stepped in, so land never ships or shows the
+// pull request: it asks, with a fixed reason. It reads the issue's labels from GitHub, as retry does.
+func TestLandAsksOnceTheBuildLabelIsTakenOff(t *testing.T) {
+	ready, _ := readFactoryWorkflow(t, "land.yml").Jobs["find"].step(t, "ready")
+	head := strings.Repeat("ab", 20)
+	passed := landJobs(landJob("test (1.22)", "completed", "success"), landJob("test (stable)", "completed", "success"),
+		landJob("Bug review", "completed", "success"), landJob("Security review", "completed", "success"),
+		landJob("Classify", "completed", "success"))
+	pulls := landPulls("awml-factory[bot]", head)
+	for want, answers := range map[string]string{"true": pulls,
+		"false": strings.Replace(pulls, `[{"name": "tool"}, {"name": "build"}]`, `[{"name": "tool"}]`, 1)} {
+		r := newRehearsal(t)
+		r.run(ready, map[string]string{"CI_RUN": "77"}, landRun("pull_request", "build/issue-120")+passed+answers)
+		r.mustPass()
+		if r.outputs["ready"] != "true" || r.outputs["labelled"] != want {
+			t.Errorf("land read the issue as labelled %q, want %q: %v", r.outputs["labelled"], want, r.outputs)
+		}
+	}
+
+	const app = "41+awml-factory[bot]@users.noreply.github.com"
+	shipped := rehearseJudge(t, []struct{ author, message string }{{app, "Add scones"}}, "[]",
+		`{"annotation_level": "notice", "title": "Verdict", "message": "ship"}`, "true", "true")
+	if shipped.outputs["outcome"] != "ship" {
+		t.Fatalf("with the label on, land judged %s, want ship", shipped.outputs["outcome"])
+	}
+	for _, verdict := range []string{"ship", "show", "ask"} {
+		r := rehearseJudge(t, []struct{ author, message string }{{app, "Add scones"}}, "[]",
+			`{"annotation_level": "notice", "title": "Verdict", "message": "`+verdict+`"}`, "true", "false")
+		if r.outputs["outcome"] != "ask" || !strings.Contains(r.outputs["reasons"], "The build label was taken off the issue, so a person decides.") {
+			t.Errorf("with Classify saying %s and the label off, land judged %s for %s, want ask", verdict, r.outputs["outcome"], r.outputs["reasons"])
+		}
+	}
+	if !strings.Contains(readText(t, ".github/drawings/land-a-pull-request.yaml"), "the build label was taken off the issue") {
+		t.Error("land's drawing doesn't say a label taken off asks")
 	}
 }

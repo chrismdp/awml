@@ -51,9 +51,9 @@ jobs:
       # is read back from the API. A required check that failed or hasn't finished, a pull request
       # that isn't the app's or isn't open, or a head that moved, means it exits quietly: a failed
       # check is retry-a-build's or the fixer's, and a newer CI result decides a moved head. The
-      # person who last added the issue's build label is the one to tell or ask, or the owner if the
-      # app added it. Classify isn't required: once every job has finished, one that didn't pass is
-      # read as giving no verdict.
+      # person who last added the issue's build label is the one to tell or ask, if they can write
+      # here, or else the owner, and a label taken off since means the rule asks. Classify isn't
+      # required: once every job has finished, one that didn't pass is read as giving no verdict.
       - name: "Sort by GitHub's record: is the pull request open at CI's commit, with every check passed?"
         id: ready
         env:
@@ -112,12 +112,31 @@ jobs:
           pr="$(jq -r .number <<< "$pull")"
           case "$pr" in ''|*[!0-9]*) echo "The pull request's number isn't a number: $pr"; exit 1 ;; esac
 
-          # The last build label's adder, by the same labelled event the build checks: the owner when
-          # that was the app's bot.
+          # The last build label's adder, by the same labelled event the build checks, if they can
+          # write here: the owner when that was the app's bot, or someone who can't, such as a
+          # triager who added it again.
+          may_write() {
+            [[ "$1" =~ ^[A-Za-z0-9-]{1,39}$ ]] || return 1
+            [ "$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$1/permission" \
+              --jq '(.permission | IN("admin", "write")) or (.role_name | IN("admin", "maintain", "write"))' 2> /dev/null)" = true ]
+          }
           labeller="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$issue/events?per_page=100" \
             --jq '.[] | select(.event == "labeled" and .label.name == "build") | .actor' |
             jq -rs 'last // {} | if .type == "User" then .login // "" else "" end')"
-          [[ "$labeller" =~ ^[A-Za-z0-9-]{1,39}$ ]] || labeller="$GITHUB_REPOSITORY_OWNER"
+          may_write "$labeller" || labeller="$GITHUB_REPOSITORY_OWNER"
+          # A build label taken off the issue means a person has stepped in, so the rule asks. The
+          # labels are read from GitHub, as retry reads them.
+          state="$(gh api graphql -F owner="${GITHUB_REPOSITORY%%/*}" -F name="${GITHUB_REPOSITORY#*/}" -F number="$issue" -f query='
+            query($owner: String!, $name: String!, $number: Int!) {
+              repository(owner: $owner, name: $name) {
+                issue(number: $number) { labels(first: 100) { nodes { name } } }
+              }
+            }' --jq .data.repository.issue)"
+          if jq -e '[.labels.nodes[].name] | index("build")' <<< "$state" > /dev/null; then
+            labelled=true
+          else
+            labelled=false
+          fi
           {
             echo "ready=true"
             echo "pr=$pr"
@@ -125,6 +144,7 @@ jobs:
             echo "labeller=$labeller"
             echo "classify=$classify"
             echo "classify_passed=$classify_passed"
+            echo "labelled=$labelled"
           } | tee -a "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -163,6 +183,7 @@ jobs:
           CI_RUN: ${{ github.event.workflow_run.id }}
           HEAD_SHA: ${{ steps.ready.outputs.head_sha }}
           CLASSIFY_PASSED: ${{ steps.ready.outputs.classify_passed }}
+          LABELLED: ${{ steps.ready.outputs.labelled }}
         run: |
           if ! [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
             echo "The commit to judge isn't a commit id: $HEAD_SHA"
@@ -185,8 +206,20 @@ jobs:
             ship|show|ask) ;;
             *) echo "The build rule gave an unknown outcome: $outcome"; exit 1 ;;
           esac
+          reasons="$(tail -n +2 "$RUNNER_TEMP/rule.txt" | jq -Rsc 'split("\n") | map(select(. != ""))')"
+          # With the build label taken off, a person decides: ship or show becomes ask, for that reason
+          # alone, and an ask gives it too.
+          if [ "$LABELLED" != true ]; then
+            off="The build label was taken off the issue, so a person decides."
+            if [ "$outcome" = ask ]; then
+              reasons="$(jq -c --arg off "$off" '[$off] + .' <<< "$reasons")"
+            else
+              reasons="$(jq -nc --arg off "$off" '[$off]')"
+            fi
+            outcome=ask
+          fi
           echo "outcome=$outcome" >> "$GITHUB_OUTPUT"
-          echo "reasons=$(tail -n +2 "$RUNNER_TEMP/rule.txt" | jq -Rsc 'split("\n") | map(select(. != ""))')" >> "$GITHUB_OUTPUT"
+          echo "reasons=$reasons" >> "$GITHUB_OUTPUT"
 
   # Ships, shows or asks. It checks out nothing and runs only gh. The merge names the commit judged,
   # so GitHub refuses it if anyone pushed since. Comments are new ones, for the person who added

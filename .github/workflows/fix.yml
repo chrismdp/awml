@@ -132,6 +132,17 @@ jobs:
           fi
           [ "$(jq -r .head.sha <<< "$pull")" = "$head_sha" ] ||
             leave "Someone has pushed to #$pr since the reviews read $head_sha."
+          # A re-run of a run an earlier attempt of which passed its tests and failed a review, on
+          # this same head: the fixer acted on that attempt, so it doesn't comment again or start
+          # another session.
+          attempt="$(jq -r '.run_attempt // 1' <<< "$run")"
+          [[ "$attempt" =~ ^[0-9]+$ ]] || leave "CI's run attempt isn't a number."
+          for ((earlier = 1; earlier < attempt; earlier++)); do
+            gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN/attempts/$earlier/jobs?per_page=100" --jq '.jobs[]' |
+              jq -se '([.[] | select((.name | IN("test (1.22)", "test (stable)")) and .conclusion == "success")] | length == 2) and
+                ([.[] | select((.name | IN("Bug review", "Security review")) and .conclusion == "failure")] | length > 0)' > /dev/null &&
+              leave "Attempt $earlier of this run failed a review on $head_sha, and the fixer acted on it then."
+          done
           {
             echo "pr=$pr"
             echo "branch=$branch"

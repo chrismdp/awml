@@ -20,7 +20,7 @@ parts:
   - { id: checks, kind: context, label: "The head commit's checks: test (1.22), test (stable), Bug review, Security review and Classify", in: public, ref: ci-a-commit.yaml#checks, untrusted: true }
   - { id: commits, kind: context, label: "The pull request's head commit and the branch's commits since main, from git", in: public, untrusted: true }
   - { id: rules, kind: context, label: "The build rule, from main: what moves a verdict towards ask", in: public }
-  - { id: ready, kind: code, op: sort, label: "Sort by GitHub's record: is the pull request open, its head still the commit CI ran on, and has every required check on it finished and passed, with both reviews done? Find who last added the issue's build label", in: public }
+  - { id: ready, kind: code, op: sort, label: "Sort by GitHub's record: is the pull request open, its head still the commit CI ran on, and has every required check on it finished and passed, with both reviews done? Find who last added the issue's build label, and whether it's still on", in: public }
   - { id: judge, kind: code, op: sort, cleans: true, label: "Sort by rule, passing on only the commit's sha, the outcome, the labeller's login and the rule's own reasons from fixed text: Classify's verdict, ship, show or ask, moved towards ask by the rule's tests, a commit that isn't the factory's, a fix commit or Nits left unfixed", in: public }
   - { id: ship, kind: code, op: do, label: "Merge now, pinned with --match-head-commit to the commit judged, saying in its message that it shipped", in: public }
   - { id: showmerge, kind: code, op: do, label: "Merge now, pinned with --match-head-commit to the commit judged, saying in its message that it's shown", in: public }
@@ -42,6 +42,7 @@ parts:
   - { id: pinned, kind: comment, label: "The merge names the commit it judged, so GitHub refuses it if anyone pushed since. No auto-merge anywhere in the factory, so nothing set for an older commit can carry over to a new one (#153, #160)" }
   - { id: terms, kind: comment, label: "Allow, because a merge is undone with git revert, everything in it is already public on its branch, and the maintainer would not be surprised by a change the rule ships or shows. One the rule asks about is where they would be, so that merge is Ask" }
   - { id: notice, kind: comment, label: "A new comment, since a person must act, with any text escaped: < escaped, mentions broken, length capped (#160 rule 5)" }
+  - { id: labeloff, kind: comment, label: "If the build label was taken off the issue since, by GitHub's record of its labels, a person has stepped in: the rule never ships or shows, and asks, saying the build label was taken off the issue, so a person decides. Who is asked is whoever last added the label, if they can write, otherwise the owner" }
   - { id: noskip, kind: comment, label: "Main's rule holds every merge, the app's and the maintainer's, until CI passes. Only the maintainer may skip it, to push a release; the app may not" }
 lines:
   - { from: cidone, to: ready, kind: start, label: "CI's run and its commit" }
@@ -70,6 +71,7 @@ lines:
   - { from: factoryonly, to: cidone, kind: tie }
   - { from: wait, to: ready, kind: tie }
   - { from: towards, to: judge, kind: tie }
+  - { from: labeloff, to: judge, kind: tie }
   - { from: nobody, to: judge, kind: tie }
   - { from: derived, to: rules, kind: tie }
   - { from: stop, to: commits, kind: tie }

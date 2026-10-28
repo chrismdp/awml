@@ -34,6 +34,14 @@ func fixAnswers(tests, review, pullUser, pullSha string, fixCommits int, annotat
   "api --paginate repos/owner/repo/check-runs/3/annotations"*) answer <<< '[]' ;;`
 }
 
+// fixReRun makes CI's run its second attempt, its first with the test and review results given.
+func fixReRun(answers, test, review string) string {
+	return strings.Replace(answers, `"status": "completed",`, `"status": "completed", "run_attempt": 2,`, 1) + `
+  "api --paginate repos/owner/repo/actions/runs/77/attempts/1/jobs"*) answer <<< '{"jobs": [
+    {"name": "test (1.22)", "conclusion": "` + test + `"}, {"name": "test (stable)", "conclusion": "success"},
+    {"name": "Bug review", "conclusion": "` + review + `"}, {"name": "Security review", "conclusion": "success"}]}' ;;`
+}
+
 // The fixer acts only on a pull request CI reviews, still open at the reviewed commit, when both
 // test jobs passed and a review failed with an Important finding: a failed test is retry-a-build's.
 // It counts its tries from the fix commits on the branch, and gives up at two. Someone's push since
@@ -69,6 +77,11 @@ func TestFixActsOnlyWhenTheTestsPassedAndAReviewFailed(t *testing.T) {
 		{"a fork's run", fromAFork(fixAnswers("success", "failure", "the-maintainer", head, 0, important)), "none", ""},
 		{"two fix commits", fixAnswers("success", "failure", "the-maintainer", head, 2, important), "giveup", "tried"},
 		{"no Important finding", fixAnswers("success", "failure", "the-maintainer", head, 0, "[]"), "giveup", "unread"},
+		// A re-run of a run whose earlier attempt passed its tests and failed a review was acted on
+		// then, so it neither comments again nor starts another session.
+		{"a re-run of a failed review", fixReRun(fixAnswers("success", "failure", "the-maintainer", head, 0, important), "success", "failure"), "none", ""},
+		{"a re-run after a failed test", fixReRun(fixAnswers("success", "failure", "the-maintainer", head, 0, important), "failure", "failure"), "fix", ""},
+		{"a re-run of a fix's last try", fixReRun(fixAnswers("success", "failure", "the-maintainer", head, 2, important), "success", "failure"), "none", ""},
 	}
 	for _, tt := range tests {
 		r := newRehearsal(t)
