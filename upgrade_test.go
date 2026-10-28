@@ -534,6 +534,13 @@ parts:
 	if err != nil || string(data) != "awml: \"0.8\"\ntitle: Dinners\ndescription: |\n  Plans the dinners.\n\n    - The family is fictional.\n   Bread too.\nparts: []\n" {
 		t.Errorf("convert gave %v\n%s", err, data)
 	}
+	// A first line indented more than the rest loses its indent, since a literal block can't start
+	// with a space.
+	deeper := "#   - Plans the dinners.\n# Bread too.\nawml: \"0.5\"\ntitle: Dinners\nparts: []\n"
+	data, _, _, err = ConvertSources([]Source{{Text: []byte(deeper)}}, "")
+	if err != nil || string(data) != "awml: \"0.8\"\ntitle: Dinners\ndescription: |\n  - Plans the dinners.\n  Bread too.\nparts: []\n" {
+		t.Errorf("convert gave %v\n%s", err, data)
+	}
 	// A file that starts with its fields, not a comment, has no description to take.
 	late := "awml: \"0.5\"\n# Dinners.\ntitle: Dinners\nparts: []\n"
 	data, _, _, err = ConvertSources([]Source{{Text: []byte(late)}}, "")

@@ -522,8 +522,8 @@ func ConvertSources(sources []Source, implementation string) (file []byte, notes
 }
 
 // describe gives the comment block a file starts with as a description: each line without its #,
-// its tabs as spaces, and without the indent the lines share, ending in one newline so it's written
-// as a literal block.
+// its tabs as spaces, and without the indent the lines share, the first line without any, ending in
+// one newline, so it's written as a literal block.
 func describe(comment string) string {
 	lines := strings.Split(comment, "\n")
 	shared := -1
@@ -535,9 +535,13 @@ func describe(comment string) string {
 		}
 	}
 	var out strings.Builder
+	first := true
 	for _, line := range lines {
 		if line != "" {
 			line = line[shared:]
+			if first {
+				line, first = strings.TrimLeft(line, " "), false
+			}
 		}
 		out.WriteString(line + "\n")
 	}
