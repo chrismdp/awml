@@ -326,9 +326,11 @@ jobs:
       # shown with workflow commands stopped.
       # Its commands run in Claude Code's sandbox, set in the user settings of a home of its own by
       # main's .github/sandbox-settings.sh: each in a PID namespace of its own, where it can't read
-      # Claude Code's environment through /proc, offline, and unable to write .git, the runner's files
-      # or the baseline the tree is checked against after the session (#131). The scrub forces the
-      # permission mode to default, so every tool the session needs is allowed by name.
+      # Claude Code's environment through /proc, offline, and unable to write the runner's files or
+      # the baseline the tree is checked against after the session (#131). The scrub itself keeps
+      # .git's hooks and config from the commands, and host git runs on the tree only once its
+      # config is the one it started with. The scrub forces the permission mode to default, so every
+      # tool the session needs is allowed by name.
       # Everything the host reads once the session is done is in a folder the sandbox denies: the
       # session's log goes to the host's own folder, opened before the session, and the session's
       # output folder is read only once it holds nothing but plain files and folders.
@@ -355,12 +357,13 @@ jobs:
             mkdir -p "$HOST_DIR/baseline"
             cp .git/config "$HOST_DIR/baseline/git-config"
             stat -c %d:%i "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.git" > "$HOST_DIR/baseline/folders"
+            git -c core.hooksPath=/dev/null -c core.fsmonitor=false rev-parse HEAD > "$HOST_DIR/baseline/head"
             bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/session/home" "$GITHUB_WORKSPACE" workspace "$HOST_DIR" "$0"
             prompt="$(sed "s|BUILD_DIR|$BUILD_DIR|g" "$RUNNER_TEMP/build-prompt.md")"
             status=0
             HOME="$RUNNER_TEMP/session/home" claude -p "$prompt" --model opus --max-turns 200 --permission-mode default \
               --setting-sources user --strict-mcp-config --add-dir "$BUILD_DIR" \
-              --disallowedTools "Read(//proc/**)" "Edit(./.git/**)" "Write(./.git/**)" \
+              --disallowedTools "Read(//proc/**)" "Edit(./.git/**)" \
               --allowedTools "Read(./**)" "Read(/$BUILD_DIR/**)" "Edit(./**)" "Edit(/$BUILD_DIR/**)" "Glob" "Grep" \
                 "Bash(go:*)" "Bash(gofmt:*)" "Bash(make:*)" "Bash(node:*)" \
                 "Bash(.github/picture-drawings.sh:*)" \
@@ -377,9 +380,21 @@ jobs:
       - name: Make the patch
         id: patch
         run: |
+          stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+          echo "::stop-commands::$stop"
+          trap 'echo "::$stop::"' EXIT
           git() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 command git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c diff.external= "$@"; }
-          if ! cmp -s .git/config "$HOST_DIR/baseline/git-config" || [ -e .git/config.worktree ]; then
-            echo "The session's tree has a .git config other than the one it started with, so git isn't run on it."
+          # Which part changed is said, each config key's name JSON-escaped, so a run shows what
+          # touched it and no name can be a workflow command.
+          if [ -e .git/config.worktree ]; then
+            echo "The session's tree has a .git/config.worktree it didn't start with, so git isn't run on it."
+            exit 1
+          fi
+          if ! cmp -s .git/config "$HOST_DIR/baseline/git-config"; then
+            echo "The session's tree has a .git config other than the one it started with, so git isn't run on it. The keys that differ:"
+            diff <(GIT_CONFIG_NOSYSTEM=1 command git config --file "$HOST_DIR/baseline/git-config" --no-includes --list --name-only | LC_ALL=C sort) \
+              <(GIT_CONFIG_NOSYSTEM=1 command git config --file .git/config --no-includes --list --name-only | LC_ALL=C sort) |
+              sed -n 's/^[<>] //p' | LC_ALL=C sort -u | jq -R . || true
             exit 1
           fi
           if [ "$(stat -c %d:%i "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.git")" != "$(cat "$HOST_DIR/baseline/folders")" ]; then
@@ -402,7 +417,10 @@ jobs:
           rm -rf "$change"
           mkdir "$change"
           git add -A
-          git diff --cached --binary --no-ext-diff --no-textconv > "$change/change.patch"
+          # Against the commit the session started from, since a session may move the tree's refs.
+          base="$(cat "$HOST_DIR/baseline/head")"
+          [[ "$base" =~ ^[0-9a-f]{40}$ ]] || { echo "The commit the session started from isn't a commit id."; exit 1; }
+          git diff --cached --binary --no-ext-diff --no-textconv "$base" > "$change/change.patch"
           for file in message.md pull-request.md; do
             if [ -f "$out/$file" ]; then cp "$out/$file" "$change/"; fi
           done

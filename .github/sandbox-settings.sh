@@ -3,19 +3,23 @@
 # nothing in the tree can change, so the commands the session runs do so in Claude Code's sandbox
 # (#131). The workflows run main's copy, copied out of the tree before the session starts.
 #
-# Usage: sandbox-settings.sh HOME TREE KIND [PATH...], run before HOME is changed for the session,
-# where HOME is the session's own home, TREE the working tree it runs in, KIND either workspace, for
-# a session whose tree's .git host git reads after it, or clone, for the rebase's session, which runs
-# git itself in a clone of its own that host git never touches again, and each PATH one more that no
-# command may write, such as another session's folder.
+# Usage: sandbox-settings.sh HOME [TREE KIND] [PATH...], run before HOME is changed for the session,
+# where HOME is the session's own home and each PATH one more that no command may write, such as
+# another session's folder or the host's own. TREE and KIND, the working tree and workspace or
+# clone, are read and ignored.
 #
 # The sandbox is on, Claude Code refuses to start without it, and no command may retry outside it.
 # CLAUDE_CODE_SUBPROCESS_ENV_SCRUB, which every session sets, runs each command in a PID namespace
 # of its own, so it can't read Claude Code's environment through /proc, and adds its own list of
 # paths no command may write, beside writes allowed anywhere under /home, /tmp, /opt and the like,
-# which no setting can narrow. So on top of the scrub's list, no command may write the workspace's
-# .git, nor the tree's for KIND workspace, the runner's file commands and event, its own files, its
-# actions, its tool cache, where
+# which no setting can narrow. That list holds the hooks, config, config.lock, config.worktree,
+# commondir, worktrees, modules and info/exclude of the .git of the tree the session runs in and of
+# the workspace, and their .gitmodules, each mounted over with /dev/null, which bubblewrap must make
+# a mount point for where none is. So these settings deny no .git, nor any folder that holds a path
+# the scrub protects: bubblewrap can't make a mount point inside a folder already denied, and every
+# command would fail. Host git trusts a .git after a session only once its config is the one it
+# started with and the folders are the very ones they were. On top of the scrub's list, no command
+# may write the runner's file commands and event, its own files, its actions, its tool cache, where
 # Claude Code itself is installed, any folder on PATH or Go's bin, or the git and shell settings of
 # the runner's own home, and none may read the runner's files or the Docker socket: the scrub keys
 # its own list to HOME, which is the session's here. No host is allowed, and no prompt is given for
@@ -25,36 +29,42 @@
 set -euo pipefail
 
 home="$1"
-tree="$2"
-kind="$3"
-shift 3
-case "$kind" in
-  workspace) deny_write=("$tree/.git") ;;
-  clone) deny_write=() ;;
-  *) echo "The kind must be workspace or clone: $kind" >&2; exit 1 ;;
-esac
+shift
+# The old form's TREE and KIND are kept so callers on main still work.
+if [ "$#" -ge 2 ] && [ -d "$1" ] && { [ "$2" = workspace ] || [ "$2" = clone ]; }; then shift 2; fi
 extra=("$@")
-if [ -n "${GITHUB_WORKSPACE:-}" ] && [ "$GITHUB_WORKSPACE" != "$tree" ]; then
-  deny_write+=("$GITHUB_WORKSPACE/.git")
-fi
-if [ -n "${RUNNER_TOOL_CACHE:-}" ]; then deny_write+=("$RUNNER_TOOL_CACHE"); fi
+deny_write=()
+# A path inside a folder denied already is denied with it, and listing it again would only give
+# bubblewrap a mount point to make inside a folder it can't write.
+covered() {
+  local folder
+  for folder in "${deny_write[@]}"; do
+    case "$1" in "$folder"|"$folder"/*) return 0 ;; esac
+  done
+  return 1
+}
+deny() { covered "$1" || deny_write+=("$1"); }
+if [ -n "${RUNNER_TOOL_CACHE:-}" ]; then deny "$RUNNER_TOOL_CACHE"; fi
 if [ -n "${RUNNER_TEMP:-}" ]; then
   for dir in "$(dirname "$RUNNER_TEMP")/_actions" "$(dirname "$RUNNER_TEMP")/_tool"; do
-    if [ -d "$dir" ]; then deny_write+=("$dir"); fi
+    if [ -d "$dir" ]; then deny "$dir"; fi
   done
 fi
 # A path the sandbox protects must exist, or bubblewrap may refuse to start every command, and a
 # path left unprotected because it was missing is one a command could create for a later step to
 # find. So each is made, empty, before it's denied; one this user can't make, a command can't either.
+# Nothing is made inside a folder denied already: a stray file there, such as a .git/config.lock,
+# could break what reads the folder.
 deny_made() {
   local kind="$1" path="$2"
+  covered "$path" && return 0
   if [ "$kind" = dir ]; then mkdir -p "$path" 2> /dev/null || true; else
     [ -e "$path" ] || { mkdir -p "$(dirname "$path")" 2> /dev/null && : > "$path"; } 2> /dev/null || true
   fi
-  if [ -e "$path" ]; then deny_write+=("$path"); fi
+  if [ -e "$path" ]; then deny "$path"; fi
 }
 for path in "${extra[@]}"; do
-  if [ -e "$path" ]; then deny_write+=("$path"); else deny_made dir "$path"; fi
+  if [ -e "$path" ]; then deny "$path"; else deny_made dir "$path"; fi
 done
 # The runner's file commands and the event: a command that appended to GITHUB_ENV or GITHUB_PATH
 # would set what every later step of the job runs with, outside the sandbox, so their folders are
@@ -99,7 +109,11 @@ done
 read=("${runner[@]}")
 if [ -e /var/run/docker.sock ]; then read+=(/var/run/docker.sock); fi
 
-list() { jq -nc '$ARGS.positional | unique' --args "$@"; }
+# Each list keeps only its outermost paths, so none holds another, whatever order they came in.
+list() {
+  jq -nc '$ARGS.positional | unique | . as $all
+    | map(select(. as $path | any($all[]; . != $path and ($path | startswith(. + "/"))) | not))' --args "$@"
+}
 mkdir -p "$home/.claude"
 jq -n --argjson write "$(list "${deny_write[@]}" "${runner[@]}")" --argjson read "$(list "${read[@]}")" '
   {sandbox: {

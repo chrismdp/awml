@@ -63,8 +63,11 @@ jobs:
       matrix:
         go: ["1.22", stable]
     steps:
+      # With main's history too, so a test can rehearse each call of a script the workflows copy
+      # from main against main's own copy.
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
@@ -222,7 +225,7 @@ jobs:
             status=0
             HOME="$session/home" claude -p "$prompt" --model opus --max-turns 100 --permission-mode default \
               --setting-sources user --strict-mcp-config --add-dir "$REVIEW_DIR" --add-dir "$session/out" \
-              --disallowedTools "Read(//proc/**)" "Bash" "Edit(./.git/**)" "Write(./.git/**)" \
+              --disallowedTools "Read(//proc/**)" "Bash" "Edit(./.git/**)" \
               --allowedTools "Read(./**)" "Read(/$REVIEW_DIR/**)" "Edit(/$session/out/$KIND.json)" \
               > "$host/session.log" 2>&1 || status=$?
             cat "$host/session.log"
@@ -407,7 +410,7 @@ jobs:
             status=0
             HOME="$session/home" claude -p "$prompt" --model opus --max-turns 100 --permission-mode default \
               --setting-sources user --strict-mcp-config --add-dir "$REVIEW_DIR" --add-dir "$session/out" \
-              --disallowedTools "Read(//proc/**)" "Bash" "Edit(./.git/**)" "Write(./.git/**)" \
+              --disallowedTools "Read(//proc/**)" "Bash" "Edit(./.git/**)" \
               --allowedTools "Read(./**)" "Read(/$REVIEW_DIR/**)" "Edit(/$session/out/classification.json)" \
               > "$host/session.log" 2>&1 || status=$?
             cat "$host/session.log"

@@ -326,7 +326,7 @@ func TestEverySessionIsSandboxedAndBounded(t *testing.T) {
 				t.Errorf("%s gives Claude its token without scrubbing it from Claude's commands", where)
 			}
 			for _, want := range []string{"--setting-sources user ", "--strict-mcp-config", `"Read(//proc/**)"`,
-				`"Edit(./.git/**)"`, `"Write(./.git/**)"`, `"Read(./**)"`, "::stop-commands::"} {
+				`"Edit(./.git/**)"`, `"Read(./**)"`, "::stop-commands::"} {
 				if !strings.Contains(step.Run, want) {
 					t.Errorf("%s doesn't have %s", where, want)
 				}
@@ -791,7 +791,7 @@ func (r *rehearsal) newRepo(name string, files map[string]string) (string, strin
 }
 
 var sessionHome = regexp.MustCompile(`HOME="([^"]+)" claude -p`)
-var sandboxSettings = regexp.MustCompile(`bash "\$(?:RUNNER_TEMP|HOST_DIR)/sandbox-settings\.sh" "([^"]+)" "([^"]+)" (workspace|clone)[^\n]*\n`)
+var sandboxSettings = regexp.MustCompile(`bash "\$(?:RUNNER_TEMP|HOST_DIR)/sandbox-settings\.sh" "([^"]+)"[^\n]*\n`)
 
 // Every Claude session runs its commands in Claude Code's own sandbox, set in the user settings of
 // a home of its own, the only settings --setting-sources user loads (#131). Every session's tree
@@ -800,8 +800,7 @@ var sandboxSettings = regexp.MustCompile(`bash "\$(?:RUNNER_TEMP|HOST_DIR)/sandb
 // the session starts. Under
 // CLAUDE_CODE_SUBPROCESS_ENV_SCRUB the permission mode is always default, so each session says so.
 func TestEverySessionRunsInItsOwnSandbox(t *testing.T) {
-	kinds := map[string]string{"ci.yml review": "workspace", "ci.yml classify": "workspace", "build.yml draft": "workspace",
-		"fix.yml fix": "workspace", "resolve.yml draft": "clone"}
+	kinds := map[string]bool{"ci.yml review": true, "ci.yml classify": true, "build.yml draft": true, "fix.yml fix": true, "resolve.yml draft": true}
 	sessions := 0
 	eachJob(t, func(file, name string, job workflowJob) {
 		at := job.session()
@@ -823,8 +822,8 @@ func TestEverySessionRunsInItsOwnSandbox(t *testing.T) {
 		if strings.Index(step.Run, settings[0]) > strings.Index(step.Run, home[0]) {
 			t.Errorf("%s writes the sandbox settings after Claude starts", where)
 		}
-		if want := kinds[file+" "+name]; settings[3] != want {
-			t.Errorf("%s gives its session the %s sandbox, want %s", where, settings[3], want)
+		if !kinds[file+" "+name] {
+			t.Errorf("%s runs a session no test expects", where)
 		}
 		if !strings.Contains(step.Run, "--permission-mode default") || strings.Contains(step.Run, "acceptEdits") {
 			t.Errorf("%s doesn't say its permission mode is default, which the scrub forces", where)
@@ -845,90 +844,115 @@ func TestEverySessionRunsInItsOwnSandbox(t *testing.T) {
 }
 
 // The settings turn the sandbox on, fail rather than run a command without it, refuse every
-// unsandboxed retry, and allow no host at all: the Go modules and the renderer's packages are
-// fetched before the session, so nothing the session runs can carry data out through a proxy. No
-// command may write .git, except in the rebase's own clone, or the runner's files, its actions, its
-// tool cache or the git and shell settings of the runner's own home, or anything a caller names.
+// unsandboxed retry, and allow no host at all. No command may write the runner's files, its actions,
+// its tool cache, its file commands or event, any folder on PATH or Go's bin, the git and shell
+// settings of the runner's own home, or anything a caller names, and none may read the runner's
+// files or the Docker socket. They deny no .git: Claude Code's scrub protects a .git's hooks, config
+// and the rest, in the tree and the workspace, mounting /dev/null over each, which bubblewrap can't
+// do inside a folder already denied. So no path is denied that holds one the scrub protects, nor
+// one that holds another denied path, and nothing is made inside a denied folder.
 func TestTheSandboxSettingsAreExplicit(t *testing.T) {
-	for _, kind := range []string{"workspace", "clone"} {
-		r := newRehearsal(t)
-		r.write("sandbox-settings.sh", readText(t, ".github/sandbox-settings.sh"))
-		tree := filepath.Join(r.root, "tree")
-		workspace := filepath.Join(r.root, "workspace")
-		tools := filepath.Join(r.root, "toolcache")
-		other := filepath.Join(r.root, "other")
-		for _, dir := range []string{tree + "/.git", workspace + "/.git", r.root + "/runners/2.0/bin", tools, r.root + "/.config"} {
-			if err := os.MkdirAll(dir, 0o755); err != nil {
-				t.Fatal(err)
-			}
-		}
-		home := filepath.Join(r.temp, "session", "home")
-		onPath := filepath.Join(r.root, "tools", "bin")
-		gopath := filepath.Join(r.root, "gopath")
-		commands := filepath.Join(r.root, "runner-temp", "_runner_file_commands")
-		summaries := filepath.Join(r.root, "runner-temp", "_step_summaries")
-		event := filepath.Join(r.root, "workflow", "event.json")
-		for _, file := range []string{commands + "/set_env_1", commands + "/add_path_1", commands + "/set_output_1", summaries + "/step_summary_1", event} {
-			r.write(file, "")
-		}
-		r.run(workflowStep{Run: `bash "$RUNNER_TEMP/sandbox-settings.sh" "$SESSION" "$TREE" ` + kind + ` "$OTHER"` + "\n"},
-			map[string]string{"SESSION": home, "TREE": tree, "GITHUB_WORKSPACE": workspace, "RUNNER_TOOL_CACHE": tools, "OTHER": other,
-				"PATH": onPath + ":" + os.Getenv("PATH"), "GOPATH": gopath,
-				"GITHUB_ENV": commands + "/set_env_1", "GITHUB_PATH": commands + "/add_path_1", "GITHUB_OUTPUT": commands + "/set_output_1",
-				"GITHUB_STEP_SUMMARY": summaries + "/step_summary_1", "GITHUB_EVENT_PATH": event}, "")
-		r.mustPass()
-		var settings struct {
-			Sandbox struct {
-				Enabled                  *bool `json:"enabled"`
-				FailIfUnavailable        *bool `json:"failIfUnavailable"`
-				AllowUnsandboxedCommands *bool `json:"allowUnsandboxedCommands"`
-				Filesystem               struct {
-					DenyWrite []string `json:"denyWrite"`
-					DenyRead  []string `json:"denyRead"`
-				} `json:"filesystem"`
-				Network struct {
-					AllowedDomains  []string `json:"allowedDomains"`
-					StrictAllowlist *bool    `json:"strictAllowlist"`
-				} `json:"network"`
-			} `json:"sandbox"`
-		}
-		data, err := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
-		if err != nil {
-			t.Fatalf("%s: no settings file in the session's home: %v", kind, err)
-		}
-		if err := json.Unmarshal(data, &settings); err != nil {
+	r := newRehearsal(t)
+	r.write("sandbox-settings.sh", readText(t, ".github/sandbox-settings.sh"))
+	tree := filepath.Join(r.root, "tree")
+	workspace := filepath.Join(r.root, "workspace")
+	tools := filepath.Join(r.root, "toolcache")
+	other := filepath.Join(r.root, "other")
+	for _, dir := range []string{tree + "/.git", workspace + "/.git", r.root + "/runners/2.0/bin", tools, r.root + "/.config", r.root + "/.local/bin"} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		box := settings.Sandbox
-		if box.Enabled == nil || !*box.Enabled || box.FailIfUnavailable == nil || !*box.FailIfUnavailable ||
-			box.AllowUnsandboxedCommands == nil || *box.AllowUnsandboxedCommands || box.Network.StrictAllowlist == nil || !*box.Network.StrictAllowlist {
-			t.Errorf("%s: the sandbox isn't on, strict and required:\n%s", kind, data)
+	}
+	home := filepath.Join(r.temp, "session", "home")
+	onPath := filepath.Join(r.root, "tools", "bin")
+	// Folders on PATH inside a folder denied as a whole: one that's there and one that isn't, which
+	// mustn't be made.
+	localBin, missing := filepath.Join(r.root, ".local", "bin"), filepath.Join(r.root, ".local", "nothing", "bin")
+	gopath := filepath.Join(r.root, "gopath")
+	commands := filepath.Join(r.root, "runner-temp", "_runner_file_commands")
+	summaries := filepath.Join(r.root, "runner-temp", "_step_summaries")
+	event := filepath.Join(r.root, "workflow", "event.json")
+	for _, file := range []string{commands + "/set_env_1", commands + "/add_path_1", commands + "/set_output_1", summaries + "/step_summary_1", event} {
+		r.write(file, "")
+	}
+	r.dir = tree
+	r.run(workflowStep{Run: `bash "$RUNNER_TEMP/sandbox-settings.sh" "$SESSION" "$OTHER"` + "\n"},
+		map[string]string{"SESSION": home, "GITHUB_WORKSPACE": workspace, "RUNNER_TOOL_CACHE": tools, "OTHER": other,
+			"PATH": onPath + ":" + localBin + ":" + missing + ":" + os.Getenv("PATH"), "GOPATH": gopath,
+			"GITHUB_ENV": commands + "/set_env_1", "GITHUB_PATH": commands + "/add_path_1", "GITHUB_OUTPUT": commands + "/set_output_1",
+			"GITHUB_STEP_SUMMARY": summaries + "/step_summary_1", "GITHUB_EVENT_PATH": event}, "")
+	r.mustPass()
+	var settings struct {
+		Sandbox struct {
+			Enabled                  *bool `json:"enabled"`
+			FailIfUnavailable        *bool `json:"failIfUnavailable"`
+			AllowUnsandboxedCommands *bool `json:"allowUnsandboxedCommands"`
+			Filesystem               struct {
+				DenyWrite []string `json:"denyWrite"`
+				DenyRead  []string `json:"denyRead"`
+			} `json:"filesystem"`
+			Network struct {
+				AllowedDomains  []string `json:"allowedDomains"`
+				StrictAllowlist *bool    `json:"strictAllowlist"`
+			} `json:"network"`
+		} `json:"sandbox"`
+	}
+	data, err := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
+	if err != nil {
+		t.Fatalf("no settings file in the session's home: %v", err)
+	}
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatal(err)
+	}
+	box := settings.Sandbox
+	if box.Enabled == nil || !*box.Enabled || box.FailIfUnavailable == nil || !*box.FailIfUnavailable ||
+		box.AllowUnsandboxedCommands == nil || *box.AllowUnsandboxedCommands || box.Network.StrictAllowlist == nil || !*box.Network.StrictAllowlist {
+		t.Errorf("the sandbox isn't on, strict and required:\n%s", data)
+	}
+	if box.Network.AllowedDomains == nil || len(box.Network.AllowedDomains) != 0 {
+		t.Errorf("the sandbox allows hosts %v, want none", box.Network.AllowedDomains)
+	}
+	for _, denied := range []string{r.root + "/runners", tools, r.root + "/.gitconfig", r.root + "/.config", r.root + "/.local", other,
+		onPath, gopath + "/bin", commands, summaries, event} {
+		if !contains(box.Filesystem.DenyWrite, denied) {
+			t.Errorf("the sandbox lets commands write %s: %v", denied, box.Filesystem.DenyWrite)
 		}
-		if box.Network.AllowedDomains == nil || len(box.Network.AllowedDomains) != 0 {
-			t.Errorf("%s: the sandbox allows hosts %v, want none", kind, box.Network.AllowedDomains)
+	}
+	// Bubblewrap may refuse to protect a path that doesn't exist, and a missing one is one a command
+	// could create, so every path the settings deny is there before the session.
+	for _, denied := range box.Filesystem.DenyWrite {
+		if _, err := os.Stat(denied); err != nil {
+			t.Errorf("the sandbox denies %s, which doesn't exist: %v", denied, err)
 		}
-		for _, denied := range []string{workspace + "/.git", r.root + "/runners", tools, r.root + "/.gitconfig", r.root + "/.config", other,
-			onPath, gopath + "/bin", commands, summaries, event} {
-			if !contains(box.Filesystem.DenyWrite, denied) {
-				t.Errorf("%s: the sandbox lets commands write %s: %v", kind, denied, box.Filesystem.DenyWrite)
+	}
+	under := func(path, folder string) bool { return path == folder || strings.HasPrefix(path, folder+"/") }
+	for _, list := range [][]string{box.Filesystem.DenyWrite, box.Filesystem.DenyRead} {
+		for _, a := range list {
+			for _, b := range list {
+				if a != b && under(b, a) {
+					t.Errorf("the sandbox denies %s and %s, which is inside it", a, b)
+				}
 			}
 		}
-		// Bubblewrap may refuse to protect a path that doesn't exist, and a missing one is one a
-		// command could create, so every path the settings deny is there before the session.
-		for _, denied := range box.Filesystem.DenyWrite {
-			if _, err := os.Stat(denied); err != nil {
-				t.Errorf("%s: the sandbox denies %s, which doesn't exist: %v", kind, denied, err)
+	}
+	if _, err := os.Stat(missing); err == nil {
+		t.Errorf("the settings made %s, inside a folder they deny", missing)
+	}
+	for _, git := range []string{tree, workspace} {
+		for _, scrubbed := range []string{".git", ".git/hooks", ".git/config", ".git/config.lock", ".git/config.worktree", ".git/config.worktree.lock",
+			".git/commondir", ".git/worktrees", ".git/modules", ".git/info/exclude", ".gitmodules"} {
+			for _, denied := range box.Filesystem.DenyWrite {
+				if under(filepath.Join(git, scrubbed), denied) {
+					t.Errorf("the sandbox denies %s, which holds %s, a path Claude Code's scrub protects itself", denied, filepath.Join(git, scrubbed))
+				}
 			}
 		}
-		if got := contains(box.Filesystem.DenyWrite, tree+"/.git"); got != (kind == "workspace") {
-			t.Errorf("%s: the sandbox denies the tree's .git is %v", kind, got)
-		}
-		if !contains(box.Filesystem.DenyRead, r.root+"/runners") {
-			t.Errorf("%s: the sandbox lets commands read the runner's own files: %v", kind, box.Filesystem.DenyRead)
-		}
-		if _, err := os.Stat("/var/run/docker.sock"); err == nil && !contains(box.Filesystem.DenyRead, "/var/run/docker.sock") {
-			t.Errorf("%s: the sandbox lets commands reach the Docker socket: %v", kind, box.Filesystem.DenyRead)
-		}
+	}
+	if !contains(box.Filesystem.DenyRead, r.root+"/runners") {
+		t.Errorf("the sandbox lets commands read the runner's own files: %v", box.Filesystem.DenyRead)
+	}
+	if _, err := os.Stat("/var/run/docker.sock"); err == nil && !contains(box.Filesystem.DenyRead, "/var/run/docker.sock") {
+		t.Errorf("the sandbox lets commands reach the Docker socket: %v", box.Filesystem.DenyRead)
 	}
 }
 
@@ -1045,7 +1069,7 @@ func TestGitAfterASessionCannotBePoisoned(t *testing.T) {
 	}
 
 	patch, _ := readFactoryWorkflow(t, "build.yml").Jobs["draft"].step(t, "patch")
-	for _, poison := range []string{"", "config", "moved .git", "nested .git", "nested .git in node_modules"} {
+	for _, poison := range []string{"", "moved HEAD", "config", "moved .git", "nested .git", "nested .git in node_modules"} {
 		r := newRehearsal(t)
 		repo, _ := r.newRepo("repo", map[string]string{"recipes.md": "Bread\n", ".gitattributes": "*.md diff=bake filter=bake\n"})
 		r.write("host/baseline/git-config", readText(t, filepath.Join(repo, ".git/config")))
@@ -1054,10 +1078,16 @@ func TestGitAfterASessionCannotBePoisoned(t *testing.T) {
 			t.Fatal(err)
 		}
 		r.write("host/baseline/folders", string(folders))
+		r.write("host/baseline/head", gitIn(t, repo, "rev-parse", "HEAD")+"\n")
 		r.write("build/issue.md", "# Bake scones\n")
 		r.write(filepath.Join(repo, "recipes.md"), "Bread\nScones\n")
 		pwned := filepath.Join(r.root, "pwned")
 		switch poison {
+		case "moved HEAD":
+			// A session may write .git's refs, so it may commit its change: the patch is still made
+			// against the commit the session started from.
+			gitIn(t, repo, "add", "-A")
+			gitIn(t, repo, "-c", "user.name=x", "-c", "user.email=x@example.invalid", "commit", "-qm", "Moved")
 		case "config":
 			gitIn(t, repo, "config", "diff.external", "touch "+pwned+";")
 			gitIn(t, repo, "config", "filter.bake.clean", "touch "+pwned+"; cat")
@@ -1083,10 +1113,10 @@ func TestGitAfterASessionCannotBePoisoned(t *testing.T) {
 		if _, err := os.Stat(pwned); err == nil {
 			t.Error("git after the session ran a command a session left in .git/config")
 		}
-		if poison != "" && (!r.failed || r.read("host/change/change.patch") != "") {
+		if poison != "" && poison != "moved HEAD" && (!r.failed || r.read("host/change/change.patch") != "") {
 			t.Errorf("git ran on a tree a session changed by %s:\n%s", poison, r.printed)
 		}
-		if poison == "" {
+		if poison == "" || poison == "moved HEAD" {
 			r.mustPass()
 			if !strings.Contains(r.read("host/change/change.patch"), "+Scones") {
 				t.Errorf("the patch doesn't hold the change:\n%s", r.read("host/change/change.patch"))
@@ -1434,5 +1464,119 @@ func TestTheTokenScanFindsAnEarlyTokenInALongInput(t *testing.T) {
 	}
 	if scans != 5 {
 		t.Errorf("found %d token scans, want 5: two in ci.yml, and one each in build.yml, fix.yml and resolve.yml", scans)
+	}
+}
+
+// Claude Code matches only Edit rules against what its file tools write, and says a Write rule is
+// matched by nothing, so every session denies with Edit, which covers writing a file too.
+func TestEverySessionDeniesWritesWithEditRules(t *testing.T) {
+	eachJob(t, func(file, name string, job workflowJob) {
+		for _, step := range job.Steps {
+			if strings.Contains(step.Run, "claude -p") && regexp.MustCompile(`"Write\(`).MatchString(step.Run) {
+				t.Errorf("%s's %s step %q names a Write rule, which Claude Code matches against nothing", file, name, step.Name)
+			}
+		}
+	})
+}
+
+// When the tree's git config isn't the one the session started with, the patch step says which
+// part changed, a config.worktree that wasn't there or the names of the keys that differ, each name
+// JSON-escaped, so the next run shows what touched it and no name can be a workflow command.
+func TestThePatchStepSaysHowTheGitConfigChanged(t *testing.T) {
+	patch, _ := readFactoryWorkflow(t, "build.yml").Jobs["draft"].step(t, "patch")
+	for _, change := range []string{"worktree", "key"} {
+		r := newRehearsal(t)
+		repo, _ := r.newRepo("repo", map[string]string{"recipes.md": "Bread\n"})
+		r.write("host/baseline/git-config", readText(t, filepath.Join(repo, ".git/config")))
+		folders, err := exec.Command("stat", "-c", "%d:%i", repo, filepath.Join(repo, ".git")).Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		r.write("host/baseline/folders", string(folders))
+		r.write("host/baseline/head", gitIn(t, repo, "rev-parse", "HEAD")+"\n")
+		r.write("build/issue.md", "# Bake scones\n")
+		switch change {
+		case "worktree":
+			r.write(filepath.Join(repo, ".git/config.worktree"), "")
+		case "key":
+			gitIn(t, repo, "config", "core.sshCommand", "::error::forged")
+		}
+		r.dir = repo
+		r.run(patch, map[string]string{"GITHUB_WORKSPACE": repo}, "")
+		if !r.failed || r.read("host/change/change.patch") != "" {
+			t.Errorf("with a changed %s, git ran on the tree:\n%s", change, r.printed)
+		}
+		want := map[string]string{"worktree": ".git/config.worktree", "key": `"core.sshcommand"`}[change]
+		if !strings.Contains(r.printed, want) || strings.Contains(r.printed, "\n::error::") {
+			t.Errorf("with a changed %s, the step said:\n%s\nwant it to name %s, escaped", change, r.printed, want)
+		}
+	}
+}
+
+// The workflows copy sandbox-settings.sh from main, and a pull request's own workflows run main's
+// copy until the change is merged, so every call this branch's workflows make must be one main's
+// version accepts, as well as this branch's. Each call is rehearsed against both, with the folders
+// it names made.
+func TestEverySettingsCallWorksWithMainsScriptToo(t *testing.T) {
+	mains, err := exec.Command("git", "show", "origin/main:.github/sandbox-settings.sh").Output()
+	if err != nil {
+		t.Skip("origin/main isn't here to rehearse against")
+	}
+	call := regexp.MustCompile(`bash "\$(?:RUNNER_TEMP|HOST_DIR)/sandbox-settings\.sh"(?:[^\n]*\\\n)*[^\n]*\n`)
+	calls := 0
+	eachJob(t, func(file, name string, job workflowJob) {
+		for _, step := range job.Steps {
+			for _, found := range call.FindAllString(step.Run, -1) {
+				calls++
+				for version, script := range map[string]string{"main's": string(mains), "this branch's": readText(t, ".github/sandbox-settings.sh")} {
+					r := newRehearsal(t)
+					r.write("sandbox-settings.sh", script)
+					r.write("host/sandbox-settings.sh", script)
+					workspace := filepath.Join(r.root, "workspace")
+					for _, dir := range []string{workspace + "/.git", r.temp + "/host/pr-5/work", r.temp + "/session/home"} {
+						if err := os.MkdirAll(dir, 0o755); err != nil {
+							t.Fatal(err)
+						}
+					}
+					r.run(workflowStep{Run: `session="$RUNNER_TEMP/session"
+host="$HOST_DIR"
+number=5
+root="$HOST_DIR/pr-5"
+others=()
+` + found}, map[string]string{"GITHUB_WORKSPACE": workspace}, "")
+					if r.failed {
+						t.Errorf("%s's %s calls %s sandbox-settings.sh in a form it refuses:\n%s\n%s", file, name, version, strings.TrimSpace(found), r.printed)
+						continue
+					}
+					// This branch's script reads the old form's tree and kind, and ignores them: it
+					// denies nothing in the workspace, and makes no folder of the kind's name.
+					homes, _ := filepath.Glob(filepath.Join(r.temp, "*", "home", ".claude", "settings.json"))
+					more, _ := filepath.Glob(filepath.Join(r.temp, "host", "pr-5", "home", ".claude", "settings.json"))
+					if len(homes)+len(more) != 1 {
+						t.Errorf("%s's %s call left %d settings files, want 1", file, name, len(homes)+len(more))
+					}
+					for _, settings := range append(homes, more...) {
+						text := readText(t, settings)
+						_, made := os.Stat(filepath.Join(r.root, "workspace", "workspace"))
+						_, madeToo := os.Stat(filepath.Join(r.root, "clone"))
+						if version == "this branch's" && (strings.Contains(text, workspace) || strings.Contains(text, "/pr-5/work") || made == nil || madeToo == nil) {
+							t.Errorf("%s's %s call has this branch's script deny the tree it was given: %s", file, name, text)
+						}
+					}
+				}
+			}
+		}
+	})
+	if calls != 5 {
+		t.Errorf("found %d calls of sandbox-settings.sh, want 5", calls)
+	}
+}
+
+// A script the workflows copy from main is called by a pull request's own workflows, so AGENTS.md
+// says a change to its arguments or output keeps the old form working until it's on main.
+func TestAgentsSaysMainsScriptsKeepTheirOldForm(t *testing.T) {
+	if !strings.Contains(strings.Join(strings.Fields(readText(t, "AGENTS.md")), " "),
+		"A script the workflows copy from main is called by the pull request's own workflows, so a change to its arguments or output must keep the old form working until the change is on main.") {
+		t.Error("AGENTS.md doesn't say a script copied from main keeps its old form until the change is on main")
 	}
 }

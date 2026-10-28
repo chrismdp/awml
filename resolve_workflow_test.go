@@ -427,3 +427,13 @@ func TestResolvePushesNoCommitThatTouchesGithub(t *testing.T) {
 		t.Error("the push job pushed a branch one of whose commits touches .github/")
 	}
 }
+
+// A rebase's session may write the workspace's .git, its refs among them, so the check step reads
+// each branch from the workspace by the commit the find job saw, never by a ref a session could
+// have moved.
+func TestTheCheckReadsEachBranchByItsCommit(t *testing.T) {
+	check, _ := readFactoryWorkflow(t, "resolve.yml").Jobs["draft"].step(t, "check")
+	if strings.Contains(check.Run, "refs/heads/factory-rebase-") || !strings.Contains(check.Run, `"$GITHUB_WORKSPACE" "$MAIN_SHA" "$head_sha"`) {
+		t.Error("the check step reads a branch from the workspace by a ref a session could have moved")
+	}
+}
