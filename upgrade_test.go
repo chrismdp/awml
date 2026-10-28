@@ -353,7 +353,7 @@ lines:
 
 func TestUpgradeMovesAPlatformDescriptionToTheCurrentVersion(t *testing.T) {
 	for _, version := range []string{"0.3", "0.4", "0.5", "0.6", "0.7"} {
-		source := strings.Replace(description08,`awml: "0.8"`, `awml: "`+version+`"`, 1)
+		source := strings.Replace(description08, `awml: "0.8"`, `awml: "`+version+`"`, 1)
 		want := `awml: "0.8"
 platform: { id: scripts, label: "Scripts on a server" }
 off_for_up_to: PT0S

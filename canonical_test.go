@@ -151,7 +151,7 @@ lines:
 	if strings.Count(page, "<section>") != 2 || !strings.Contains(page, "At home") {
 		t.Fatal("page lacks implementation")
 	}
-	if str(doc, "awml") != "0.8" ||str(items(doc, "parts")[1], "in") != "bakery" {
+	if str(doc, "awml") != "0.8" || str(items(doc, "parts")[1], "in") != "bakery" {
 		t.Fatal("projection mutated input")
 	}
 	description := parseCanonical(t, `awml: "0.8"
