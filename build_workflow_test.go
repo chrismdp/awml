@@ -267,11 +267,13 @@ func TestOpenRunsNothingFromTheChange(t *testing.T) {
 
 // The change's code runs in the draft and check jobs, so they don't save Go's module cache, which
 // land's find job would otherwise restore before it builds the rule. The find job saves none
-// either.
+// either. A release builds the binaries people download, so it restores no cache that a run of
+// a change's code could have written (#159).
 func TestTheGoCacheIsNeverShared(t *testing.T) {
 	for file, jobs := range map[string]map[string]workflowJob{
-		"build.yml": readBuildWorkflow(t),
-		"land.yml":  readFactoryWorkflow(t, "land.yml").Jobs,
+		"build.yml":   readBuildWorkflow(t),
+		"land.yml":    readFactoryWorkflow(t, "land.yml").Jobs,
+		"release.yml": readFactoryWorkflow(t, "release.yml").Jobs,
 	} {
 		for name, job := range jobs {
 			for _, step := range job.Steps {
