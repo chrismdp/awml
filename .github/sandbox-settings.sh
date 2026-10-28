@@ -33,7 +33,7 @@ case "$kind" in
   clone) deny_write=() ;;
   *) echo "The kind must be workspace or clone: $kind" >&2; exit 1 ;;
 esac
-deny_write+=("$@")
+extra=("$@")
 if [ -n "${GITHUB_WORKSPACE:-}" ] && [ "$GITHUB_WORKSPACE" != "$tree" ]; then
   deny_write+=("$GITHUB_WORKSPACE/.git")
 fi
@@ -43,20 +43,32 @@ if [ -n "${RUNNER_TEMP:-}" ]; then
     if [ -d "$dir" ]; then deny_write+=("$dir"); fi
   done
 fi
-for file in .gitconfig .config .bashrc .bash_profile .profile .local .npmrc .ssh; do
-  deny_write+=("$HOME/$file")
+# A path the sandbox protects must exist, or bubblewrap may refuse to start every command, and a
+# path left unprotected because it was missing is one a command could create for a later step to
+# find. So each is made, empty, before it's denied; one this user can't make, a command can't either.
+deny_made() {
+  local kind="$1" path="$2"
+  if [ "$kind" = dir ]; then mkdir -p "$path" 2> /dev/null || true; else
+    [ -e "$path" ] || { mkdir -p "$(dirname "$path")" 2> /dev/null && : > "$path"; } 2> /dev/null || true
+  fi
+  if [ -e "$path" ]; then deny_write+=("$path"); fi
+}
+for path in "${extra[@]}"; do
+  if [ -e "$path" ]; then deny_write+=("$path"); else deny_made dir "$path"; fi
 done
+for file in .gitconfig .bashrc .bash_profile .profile .npmrc; do deny_made file "$HOME/$file"; done
+for dir in .config .local .ssh; do deny_made dir "$HOME/$dir"; done
 # Every folder on PATH, and Go's own bin, so a command can't put a program where a later step would
 # find it, whatever list of its own the scrub keeps.
 IFS=: read -r -a path_dirs <<< "${PATH:-}"
 for dir in "${path_dirs[@]}"; do
-  case "$dir" in /*) deny_write+=("${dir%/}") ;; esac
+  case "$dir" in /*) deny_made dir "${dir%/}" ;; esac
 done
 if command -v go > /dev/null; then
   gopath="$(go env GOPATH 2> /dev/null || true)"
   IFS=: read -r -a gopaths <<< "$gopath"
   for dir in "${gopaths[@]}"; do
-    case "$dir" in /*) deny_write+=("$dir/bin") ;; esac
+    case "$dir" in /*) deny_made dir "$dir/bin" ;; esac
   done
 fi
 

@@ -875,6 +875,13 @@ func TestTheSandboxSettingsAreExplicit(t *testing.T) {
 				t.Errorf("%s: the sandbox lets commands write %s: %v", kind, denied, box.Filesystem.DenyWrite)
 			}
 		}
+		// Bubblewrap may refuse to protect a path that doesn't exist, and a missing one is one a
+		// command could create, so every path the settings deny is there before the session.
+		for _, denied := range box.Filesystem.DenyWrite {
+			if _, err := os.Stat(denied); err != nil {
+				t.Errorf("%s: the sandbox denies %s, which doesn't exist: %v", kind, denied, err)
+			}
+		}
 		if got := contains(box.Filesystem.DenyWrite, tree+"/.git"); got != (kind == "workspace") {
 			t.Errorf("%s: the sandbox denies the tree's .git is %v", kind, got)
 		}
