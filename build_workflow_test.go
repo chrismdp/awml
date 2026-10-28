@@ -1219,3 +1219,30 @@ func TestARehearsalRunsAStepUnderPipefail(t *testing.T) {
 		t.Errorf("a step whose pipe's first command failed went on: %q", r.printed)
 	}
 }
+
+// A workflow woken by another's run takes turns per branch of the repository the run came from, so a
+// fork's branch of the same name never queues behind, nor cancels, the real run. And no workflow
+// trusts a person by how GitHub associates them with the repository, only by their permission.
+func TestEachRunTakesTurnsByItsOwnRepositorysBranch(t *testing.T) {
+	branch := "${{ github.event.workflow_run.head_branch }}"
+	for file, group := range map[string]string{
+		"fix.yml":   "group: fix-${{ github.event.workflow_run.head_repository.full_name }}-" + branch,
+		"retry.yml": "group: retry-${{ github.event.workflow_run.head_repository.full_name }}-" + branch,
+		"land.yml":  "group: land-${{ github.event.workflow_run.event }}-${{ github.event.workflow_run.head_repository.full_name }}-" + branch,
+	} {
+		if !strings.Contains(readText(t, ".github/workflows/"+file), group) {
+			t.Errorf("%s doesn't take turns as %s", file, group)
+		}
+	}
+	for _, file := range factoryFiles {
+		for at, line := range strings.Split(readText(t, ".github/workflows/"+file), "\n") {
+			if strings.Contains(line, "group:") && strings.Contains(line, "workflow_run.head_branch") &&
+				!strings.Contains(line, "workflow_run.head_repository.full_name") {
+				t.Errorf("%s:%d takes turns by a branch name alone: %s", file, at+1, strings.TrimSpace(line))
+			}
+			if strings.Contains(line, "authorAssociation") || strings.Contains(line, "author_association") {
+				t.Errorf("%s:%d trusts how GitHub associates a person: %s", file, at+1, strings.TrimSpace(line))
+			}
+		}
+	}
+}

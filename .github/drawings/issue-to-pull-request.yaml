@@ -25,7 +25,7 @@ parts:
   - { id: app, kind: connector, label: "The repository, through its own GitHub App", in: public }
   - { id: started, kind: code, op: do, label: "Post a new comment on the issue that the build has started, linking the run", in: public }
   - { id: startnote, kind: outside, label: "Comment on the issue: Allow", in: public }
-  - { id: keep, kind: code, op: sort, cleans: true, label: "Keep only the issue's text, unedited since the label was last added, and the comments of the owner, members and collaborators, by GitHub's record of who wrote each", in: public }
+  - { id: keep, kind: code, op: sort, cleans: true, label: "Keep only the issue's text, unedited since the label was last added, and the comments of people with admin, maintain or write permission on the repository, by each author's collaborator permission", in: public }
   - { id: bring, kind: code, op: bring-in, label: "Bring in the approved text and comments, and the failed tests' log of CI's latest pull_request run on the issue's branch, if it has one", in: public }
   - { id: asked, kind: context, label: "The issue's text, unedited since the label was last added, and its people's comments", in: public }
   - { id: failed, kind: context, label: "Why the last try failed: the failed tests' log of CI's latest run on the branch", in: public, untrusted: true }
@@ -42,7 +42,7 @@ parts:
   - { id: standingpr, kind: approval, label: "The maintainer's standing approval: one open pull request an issue, from its own branch, accepted by the maintainer in #160, under rule 4", in: public }
   - { id: pr, kind: outside, label: "Open the pull request: Ask", in: public }
   - { id: listed, kind: surface, label: "The repository's branches and pull requests, where each push is listed with its commit", in: public }
-  - { id: strangers, kind: comment, label: "Anyone can open an issue or comment. The issue reaches Claude only as the text a person with write access approved by adding the label, and only the comments of the owner, members and collaborators are passed on" }
+  - { id: strangers, kind: comment, label: "Anyone can open an issue or comment. The issue reaches Claude only as the text a person with write access approved by adding the label, and only the comments of people who can write to the repository are passed on, never those of a member who can only read" }
   - { id: label, kind: comment, label: "Only people with write access and the repository's app can add a label, and GitHub holds that, not a prompt, so a stranger's comment starts nothing. The draft step's token can only read, so it can't push (awml #26)" }
   - { id: noinputs, kind: comment, label: "A retry's dispatch carries the issue's number and nothing the build trusts. The build checks the label and the issue's last edit itself, and reads CI's failed log from GitHub (#160 rule 2)" }
   - { id: pinned, kind: comment, label: "Decided in #160's follow-up: a try drafts from the issue's text as it reads now, only if it hasn't been edited since the build label was last added, by comparing the issue's last edit with the label event. An edited issue waits for a person to add the label again (awml #120)" }

@@ -113,7 +113,7 @@ jobs:
           gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/started.md"
 
   # Claude works here with a read-only token, sees only the issue's text if it's unedited since the
-  # label was last added, the comments of the repository's own people, and why the last try failed,
+  # label was last added, the comments of people who can write to it, and why the last try failed,
   # and hands back a patch. Once its checks pass, it redraws the examples its change alters with
   # .github/picture-drawings.sh, which puts the redrawn SVGs into the change and pictures, before
   # and after, those that look different. The job runs nothing of its own beside the login token:
@@ -149,10 +149,11 @@ jobs:
       # Removing and adding the label again approves the text as it reads now (awml #120). The
       # label approves what the page shows, so the issue and its comments are read as GitHub renders
       # them, bodyHTML, never the Markdown behind them, whose HTML comments the page hides (#150).
-      # Anyone can comment, but only the comments of the owner, members and collaborators are passed
-      # on, so strangers' text never reaches the draft step (awml #5). Main's AGENTS.md and REVIEW.md
+      # Anyone can comment, but only the comments of people with admin, maintain or write permission
+      # are passed on, so the text of strangers, and of members who can only read, never reaches the
+      # draft step (awml #5). Main's AGENTS.md and REVIEW.md
       # are kept with them before Claude starts, so a session that edits them still follows main's.
-      - name: Keep the issue's text, unedited since the label, and the comments of the repository's own people
+      - name: Keep the issue's text, unedited since the label, and the comments of people who can write to it
         id: keep
         env:
           GH_TOKEN: ${{ github.token }}
@@ -185,20 +186,33 @@ jobs:
             echo "The issue was edited or renamed at $edited, after the build label was last added at $labelled, so it isn't drafted from."
             exit 1
           fi
-          {
-            jq -r '"# #\(.number): \(.title)\n\nLabels: \([.labels.nodes[].name] | join(", "))\n\n\(.bodyHTML // "")\n"' <<< "$issue"
-            gh api graphql --paginate -F owner="$owner" -F name="$name" -F number="$ISSUE" -f query='
-              query($owner: String!, $name: String!, $number: Int!, $endCursor: String) {
-                repository(owner: $owner, name: $name) {
-                  issue(number: $number) {
-                    comments(first: 100, after: $endCursor) {
-                      nodes { authorAssociation author { login } createdAt bodyHTML }
-                      pageInfo { hasNextPage endCursor }
-                    }
+          gh api graphql --paginate -F owner="$owner" -F name="$name" -F number="$ISSUE" -f query='
+            query($owner: String!, $name: String!, $number: Int!, $endCursor: String) {
+              repository(owner: $owner, name: $name) {
+                issue(number: $number) {
+                  comments(first: 100, after: $endCursor) {
+                    nodes { author { login } createdAt bodyHTML }
+                    pageInfo { hasNextPage endCursor }
                   }
                 }
-              }' --jq '.data.repository.issue.comments.nodes[] | select(.authorAssociation | IN("OWNER", "MEMBER", "COLLABORATOR"))
-                | "## Comment by \(.author.login // "ghost"), \(.createdAt)\n\n\(.bodyHTML)\n"'
+              }
+            }' --jq '.data.repository.issue.comments.nodes[]' | jq -s . > "$RUNNER_TEMP/remarks.json"
+          # A comment is kept only if its author can write to the repository, by the same
+          # collaborator permission as every other trust in the factory. A deleted author has none.
+          may_write() {
+            [[ "$1" =~ ^[A-Za-z0-9-]{1,39}$ ]] || return 1
+            gh api "repos/$GITHUB_REPOSITORY/collaborators/$1/permission" --jq '"\(.permission) \(.role_name // "")"' 2> /dev/null |
+              grep -wE 'admin|maintain|write' > /dev/null
+          }
+          writers=()
+          while read -r login; do
+            if may_write "$login"; then writers+=("$login"); fi
+          done < <(jq -r '[.[].author.login // empty] | unique[]' "$RUNNER_TEMP/remarks.json")
+          {
+            jq -r '"# #\(.number): \(.title)\n\nLabels: \([.labels.nodes[].name] | join(", "))\n\n\(.bodyHTML // "")\n"' <<< "$issue"
+            jq -r --argjson writers "$(jq -nc '$ARGS.positional' --args "${writers[@]}")" \
+              '.[] | select(.author.login != null and (.author.login | IN($writers[])))
+                | "## Comment by \(.author.login), \(.createdAt)\n\n\(.bodyHTML)\n"' "$RUNNER_TEMP/remarks.json"
           } > "$build/issue.md"
 
       # Why the last try failed: the failed tests' log of CI's latest pull_request run on the issue's
