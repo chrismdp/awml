@@ -480,7 +480,7 @@ jobs:
             git diff --cached --name-only --no-renames -z | grep -zE "^\.github/|$claudes" | tr '\0' '\n' | jq -R . || true
             git diff --cached --raw --no-renames | awk '$2 == "120000" { print "a symbolic link" }' | sort -u
             {
-              printf '**The draft changes `.github/`, Claude Code'"'"'s own files** (`.claude/`, `.mcp.json` or a `CLAUDE.md`) **or npm'"'"'s** (`.npmrc`, `.yarnrc` or `node_modules/`), or makes a symbolic link,, which the app never pushes, so the build stops here. [The run](%s)\n' "$run_url"
+              printf '**The draft changes `.github/`, Claude Code'"'"'s own files** (`.claude/`, `.mcp.json` or a `CLAUDE.md`) **or npm'"'"'s** (`.npmrc`, `.yarnrc` or `node_modules/`), or makes a symbolic link, which the app never pushes, so the build stops here. [The run](%s)\n' "$run_url"
               echo
               echo "To look at it and apply it, in a checkout of \`main\` at $GITHUB_SHA, the commit it was drafted on:"
               echo

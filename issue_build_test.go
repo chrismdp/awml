@@ -612,3 +612,13 @@ func TestTheDocsSayAForksChecksCanLie(t *testing.T) {
 		}
 	}
 }
+
+// The build's and the fixer's offers name the same files the app never pushes, in the same words.
+func TestTheOffersNameTheSameFiles(t *testing.T) {
+	tail := regexp.MustCompile("changes `.github/`, Claude Code'\"'\"'s own files\\*\\* .*?, which the app never pushes")
+	build := tail.FindString(readText(t, ".github/workflows/build.yml"))
+	fix := tail.FindString(readText(t, ".github/workflows/fix.yml"))
+	if build == "" || build != fix || strings.Contains(build, ",,") {
+		t.Errorf("the offers differ, or have a doubled comma:\n%s\n%s", build, fix)
+	}
+}

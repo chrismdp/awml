@@ -21,7 +21,8 @@ func fixAnswers(tests, review, pullUser, pullSha string, fixCommits int, annotat
 	}
 	return permissions + `
   "api repos/owner/repo/actions/runs/77"*) answer <<< '{"path": ".github/workflows/ci.yml", "event": "pull_request", "status": "completed",
-    "head_sha": "` + head + `", "head_branch": "scones", "head_repository": {"full_name": "owner/repo"}, "pull_requests": [{"number": 8}]}' ;;
+    "head_sha": "` + head + `", "head_branch": "scones", "head_repository": {"full_name": "owner/repo"}, "pull_requests": [{"number": 8}],
+    "triggering_actor": {"login": "the-maintainer", "type": "User"}}' ;;
   "api --paginate repos/owner/repo/actions/runs/77/jobs"*) answer <<< '{"jobs": [
     {"name": "test (1.22)", "conclusion": "` + tests + `"}, {"name": "test (stable)", "conclusion": "success"},
     {"name": "Bug review", "conclusion": "` + review + `", "check_run_url": "https://api.github.com/repos/owner/repo/check-runs/2"},
@@ -52,6 +53,10 @@ func TestFixActsOnlyWhenTheTestsPassedAndAReviewFailed(t *testing.T) {
 		{"a moved head", fixAnswers("success", "failure", "the-maintainer", strings.Repeat("cd", 20), 0, important), "none", ""},
 		{"a stranger's pull request", fixAnswers("success", "failure", "a-stranger", head, 0, important), "none", ""},
 		{"no open pull request", fixAnswers("success", "failure", "", head, 0, important), "none", ""},
+		{"a run a stranger started", strings.Replace(fixAnswers("success", "failure", "the-maintainer", head, 0, important),
+			`"triggering_actor": {"login": "the-maintainer", "type": "User"}`, `"triggering_actor": {"login": "a-stranger", "type": "User"}`, 1), "none", ""},
+		{"a run the app started", strings.Replace(fixAnswers("success", "failure", "the-maintainer", head, 0, important),
+			`"triggering_actor": {"login": "the-maintainer", "type": "User"}`, `"triggering_actor": {"login": "awml-factory[bot]", "type": "Bot"}`, 1), "fix", ""},
 		{"a run for a stranger's pull request from the branch", strings.Replace(fixAnswers("success", "failure", "the-maintainer", head, 0, important),
 			`"pull_requests": [{"number": 8}]`, `"pull_requests": [{"number": 99}]`, 1), "none", ""},
 		{"a stranger's newer pull request", strangersFirst(fixAnswers("success", "failure", "the-maintainer", head, 0, important), "scones", head), "fix", ""},

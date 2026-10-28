@@ -152,14 +152,14 @@ func TestEveryPullRequestIsReviewedOrFailsAtTheGate(t *testing.T) {
 	}
 }
 
-// Classify runs only on a factory branch, once both reviews have ended however they ended, and its
-// check always passes, so its verdict never wakes the fixer.
+// Classify runs only on a factory branch, once both reviews have passed, since land reads it only
+// then, and its check always passes, so its verdict never wakes the fixer.
 func TestClassifyRunsOnFactoryBranchesAfterBothReviewsAndAlwaysPasses(t *testing.T) {
 	classify := readFactoryWorkflow(t, "ci.yml").Jobs["classify"]
 	if got := classify.needs(); len(got) != 1 || got[0] != "review" {
 		t.Errorf("Classify needs %v, want the reviews", got)
 	}
-	for _, want := range []string{"!cancelled()", "needs.review.result != 'skipped'", "startsWith(github.head_ref, 'build/issue-')"} {
+	for _, want := range []string{"!cancelled()", "needs.review.result == 'success'", "startsWith(github.head_ref, 'build/issue-')"} {
 		if !strings.Contains(classify.If, want) {
 			t.Errorf("Classify runs if %q, which lacks %s", classify.If, want)
 		}

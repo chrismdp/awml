@@ -123,6 +123,13 @@ jobs:
           # for this one, by the run's own list of pull requests.
           jq -e --argjson pr "$pr" '[.pull_requests[]?.number] | index($pr) != null' <<< "$run" > /dev/null ||
             leave "CI's run isn't for #$pr, so it's left alone."
+          # The run's list of pull requests holds the app's even when a stranger's pull request from
+          # the same branch started it, so the person who started the run must be trusted too.
+          actor="$(jq -r '.triggering_actor.login // ""' <<< "$run")"
+          if ! { [ "$actor" = "awml-factory[bot]" ] && [ "$(jq -r '.triggering_actor.type // ""' <<< "$run")" = Bot ]; } &&
+            ! may_write "$actor"; then
+            leave "CI's run was started by someone who may not write here, so it's left alone."
+          fi
           [ "$(jq -r .head.sha <<< "$pull")" = "$head_sha" ] ||
             leave "Someone has pushed to #$pr since the reviews read $head_sha."
           {
@@ -475,7 +482,7 @@ jobs:
         run: |
           run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           {
-            printf '**The fix for the reviews'"'"' findings changes `.github/`, Claude Code'"'"'s own files** (`.claude/`, `.mcp.json` or a `CLAUDE.md`) **or npm'"'"'s** (`.npmrc`, `.yarnrc` or `node_modules/`), or makes a symbolic link,, which the app never pushes, so it'"'"'s here for a person to apply. [The run](%s)\n' "$run_url"
+            printf '**The fix for the reviews'"'"' findings changes `.github/`, Claude Code'"'"'s own files** (`.claude/`, `.mcp.json` or a `CLAUDE.md`) **or npm'"'"'s** (`.npmrc`, `.yarnrc` or `node_modules/`), or makes a symbolic link, which the app never pushes, so it'"'"'s here for a person to apply. [The run](%s)\n' "$run_url"
             echo
             echo "To look at it and apply it, in a checkout of this branch at $HEAD_SHA, the commit the reviews read:"
             echo

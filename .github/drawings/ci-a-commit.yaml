@@ -3,7 +3,7 @@
 # repository, opened by its own people or the app, is also reviewed, as jobs of the same run. The tests run on the
 # oldest Go that go.mod allows and on the newest. Beside them, three fresh Claude sessions read the
 # pull request's patch against main, one reviewing it for bugs and one for security. On a factory
-# branch, once both reviews have ended, a third session classifies the change: ship, show or ask.
+# branch, once both reviews have passed, a third session classifies the change: ship, show or ask.
 # None of them runs any of the change's code. Each job's result is its check on the commit, so the
 # commit as pushed has one judge, and every other workflow reads that judge's verdict from GitHub.
 # A fork's pull request, or one a stranger opened, gets no review: its review jobs fail at a gate
@@ -61,7 +61,7 @@ lines:
   - { from: review, to: post, kind: start, label: "its findings" }
   - { from: secreview, to: post, kind: start, label: "its findings" }
   - { from: post, to: checks, kind: data }
-  - { from: post, to: classify, kind: start, label: "[both reviews ended, on a factory branch]" }
+  - { from: post, to: classify, kind: start, label: "[both reviews passed, on a factory branch]" }
   - { from: patch, to: classify, kind: data }
   - { from: repo, to: classify, kind: data }
   - { from: checks, to: classify, kind: data, label: "both reviews' findings" }

@@ -3,7 +3,7 @@
 # on the oldest Go that go.mod allows and on the newest. A pull request from a branch of this
 # repository, opened by its own people or the app, is also reviewed, as jobs of the same run: two
 # fresh Claude sessions read its patch against main, one for bugs and one for security, and on a
-# factory branch, once both have ended, a third classifies the change: ship, show or ask. None of
+# factory branch, once both have passed, a third classifies the change: ship, show or ask. None of
 # them runs any of the change's code. Each job's result is its own check on the commit, so the
 # commit as pushed has one judge, and land.yml, fix.yml and retry.yml read its verdict from GitHub.
 # A fork's pull request, or one a stranger opened, gets no review: its review jobs fail at a gate
@@ -270,7 +270,7 @@ jobs:
             exit 1
           fi
 
-  # On a factory branch, once both reviews have ended, however they ended, a third fresh Claude session
+  # On a factory branch, once both reviews have passed, a third fresh Claude session
   # reads the patch and both reviews' findings, from their checks, and sorts the change by risk:
   # ship, show or ask. Its verdict and reasons are annotations on its own check, which always
   # passes, so the verdict never wakes the fixer; land.yml reads it from there. A check that gave no
@@ -279,7 +279,7 @@ jobs:
     name: Classify
     needs: review
     if: >-
-      !cancelled() && needs.review.result != 'skipped' && startsWith(github.head_ref, 'build/issue-') &&
+      !cancelled() && needs.review.result == 'success' && startsWith(github.head_ref, 'build/issue-') &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 60

@@ -70,6 +70,18 @@ jobs:
           esac
           jq -e --argjson pr "$pr" '[.pull_requests[]?.number] | index($pr) != null' <<< "$run" > /dev/null ||
             leave "CI's run isn't for the app's #$pr, so it's left alone."
+          may_write() {
+            [[ "$1" =~ ^[A-Za-z0-9-]{1,39}$ ]] || return 1
+            gh api "repos/$GITHUB_REPOSITORY/collaborators/$1/permission" --jq '"\(.permission) \(.role_name // "")"' 2> /dev/null |
+              grep -wE 'admin|maintain|write' > /dev/null
+          }
+          # The run's list of pull requests holds the app's even when a stranger's pull request from
+          # the same branch started it, so the person who started the run must be trusted too.
+          actor="$(jq -r '.triggering_actor.login // ""' <<< "$run")"
+          if ! { [ "$actor" = "awml-factory[bot]" ] && [ "$(jq -r '.triggering_actor.type // ""' <<< "$run")" = Bot ]; } &&
+            ! may_write "$actor"; then
+            leave "CI's run was started by someone who may not write here, so it's left alone."
+          fi
 
           gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN/jobs?per_page=100" --jq '.jobs[]' |
             jq -s . > "$RUNNER_TEMP/jobs.json"
@@ -99,6 +111,30 @@ jobs:
           if [ -n "$edited" ] && ! [[ "$edited" < "$labelled" ]]; then
             echo "Issue #$issue was edited or renamed at $edited, after the label was added at $labelled."
             echo "decision=edited" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # A commit since main that isn't the factory's, by the same author and committer test as the
+          # build rule's, means a person has taken the branch over: the build is never started over
+          # it. Said once, when the head is the branch's first such commit.
+          factory() { [[ "$1" =~ ^([0-9]+\+)?awml-factory\[bot\]@users\.noreply\.github\.com$ ]]; }
+          gh api --paginate "repos/$GITHUB_REPOSITORY/compare/main...$head_sha" \
+            --jq '.commits[] | [.commit.author.email, .commit.committer.email] | @tsv' > "$RUNNER_TEMP/commits.tsv"
+          total=0
+          first=0
+          while IFS=$'\t' read -r author committer; do
+            total=$((total + 1))
+            if [ "$first" = 0 ] && { ! factory "$author" || ! factory "$committer"; }; then
+              first="$total"
+            fi
+          done < "$RUNNER_TEMP/commits.tsv"
+          if [ "$first" != 0 ]; then
+            if [ "$first" = "$total" ]; then
+              echo "decision=takenover" >> "$GITHUB_OUTPUT"
+            else
+              echo "A person took $branch over before this commit, and was told then."
+              echo "decision=none" >> "$GITHUB_OUTPUT"
+            fi
             exit 0
           fi
 
@@ -157,7 +193,7 @@ jobs:
       # New comments, from fixed text, since a person must act.
       - name: Say in a new comment that a person must act
         id: report
-        if: steps.tries.outputs.decision == 'report' || steps.tries.outputs.decision == 'edited'
+        if: contains(fromJSON('["report", "edited", "takenover"]'), steps.tries.outputs.decision)
         env:
           GH_TOKEN: ${{ github.token }}
           ISSUE: ${{ steps.tries.outputs.issue }}
@@ -166,7 +202,10 @@ jobs:
         run: |
           case "$ISSUE" in ''|*[!0-9]*) echo "The issue must be a number: $ISSUE"; exit 1 ;; esac
           [[ "$CI_URL" =~ ^https://github\.com/[A-Za-z0-9._/-]+$ ]] || CI_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions"
-          if [ "$DECISION" = report ]; then
+          if [ "$DECISION" = takenover ]; then
+            printf '**A person has taken this build'"'"'s branch over**, with a commit that isn'"'"'t the factory'"'"'s, so the build won'"'"'t try again over it. To build it afresh, remove the build label and add it again. [CI'"'"'s run](%s)\n' \
+              "$CI_URL" > "$RUNNER_TEMP/comment.md"
+          elif [ "$DECISION" = report ]; then
             printf '**The build failed three times and needs a person.** CI'"'"'s tests failed on its pull request again. To try again, remove the build label and add it again. [CI'"'"'s run](%s)\n' \
               "$CI_URL" > "$RUNNER_TEMP/comment.md"
           else

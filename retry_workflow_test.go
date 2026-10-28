@@ -10,6 +10,15 @@ func retryAnswers(test, review, branchSha, edited string, labels []string, build
 	return retryAnswersOn(1, "", test, review, branchSha, edited, labels, builds, renamed...)
 }
 
+// factoryCommit and personsCommit are commits as GitHub's compare lists them.
+const factoryCommit = `{"commit": {"author": {"email": "41+awml-factory[bot]@users.noreply.github.com"}, "committer": {"email": "41+awml-factory[bot]@users.noreply.github.com"}}}`
+const personsCommit = `{"commit": {"author": {"email": "someone@example.com"}, "committer": {"email": "someone@example.com"}}}`
+
+// onTheBranch answers the compare of the branch with main with the commits given, oldest first.
+func onTheBranch(answers string, commits ...string) string {
+	return strings.Replace(answers, `"commits": [`+factoryCommit+`]`, `"commits": [`+strings.Join(commits, ", ")+`]`, 1)
+}
+
 // retryAnswersOn answers as retryAnswers does, for the attempt of CI's run given, with CI's earlier
 // runs on the branch given as a list of runs and the case arms for their jobs.
 func retryAnswersOn(attempt int, earlier, test, review, branchSha, edited string, labels []string, builds int, renamed ...string) string {
@@ -28,7 +37,9 @@ func retryAnswersOn(attempt int, earlier, test, review, branchSha, edited string
 	return `
   "api repos/owner/repo/actions/runs/77"*) answer <<< '{"path": ".github/workflows/ci.yml", "event": "pull_request", "status": "completed",
     "head_sha": "` + head + `", "head_branch": "build/issue-120", "head_repository": {"full_name": "owner/repo"},
-    "id": 77, "run_attempt": ` + fmt.Sprint(attempt) + `, "created_at": "2026-10-27T13:30:00Z", "pull_requests": [{"number": 8}]}' ;;
+    "id": 77, "run_attempt": ` + fmt.Sprint(attempt) + `, "created_at": "2026-10-27T13:30:00Z", "pull_requests": [{"number": 8}],
+    "triggering_actor": {"login": "awml-factory[bot]", "type": "Bot"}}' ;;
+  "api --paginate repos/owner/repo/compare/main...` + head + `"*) answer <<< '{"commits": [` + factoryCommit + `]}' ;;
   "api repos/owner/repo/pulls?head=owner:build/issue-120&base=main&state=open"*) answer <<< '[
     {"number": 99, "head": {"repo": {"full_name": "owner/repo"}}, "user": {"login": "a-stranger", "type": "User"}},
     {"number": 8, "head": {"repo": {"full_name": "owner/repo"}}, "user": {"login": "awml-factory[bot]", "type": "Bot"}}]' ;;
@@ -40,7 +51,7 @@ func retryAnswersOn(attempt int, earlier, test, review, branchSha, edited string
     {"name": "Bug review", "conclusion": "` + review + `"}]}' ;;
   "api repos/owner/repo/branches/build/issue-120"*) answer <<< '{"commit": {"sha": "` + branchSha + `"}}' ;;
   "api --paginate repos/owner/repo/actions/workflows/build.yml/runs"*) answer <<< '{"workflow_runs": [` + strings.Join(runs, ", ") + `]}' ;;` +
-		issueAnswer(edited, labels...) + labelEventsRenamed(strings.Join(renamed, ""))
+		issueAnswer(edited, labels...) + labelEventsRenamed(strings.Join(renamed, "")) + permissions
 }
 
 // retry.yml wakes when CI's tests fail on a factory branch's pull request, whatever else failed. It
@@ -64,6 +75,19 @@ func TestRetryActsWhenTheTestsFailAndCountsTheBuilds(t *testing.T) {
 		{"a moved branch", retryAnswers("failure", "success", strings.Repeat("cd", 20), "", []string{"build"}, 1), "none"},
 		{"the label taken off", retryAnswers("failure", "success", head, "", []string{"tool"}, 1), "none"},
 		{"a fork's run", fromAFork(retryAnswers("failure", "success", head, "", []string{"build"}, 1)), "none"},
+		{"a run a stranger started", strings.Replace(retryAnswers("failure", "success", head, "", []string{"build"}, 1),
+			`"triggering_actor": {"login": "awml-factory[bot]", "type": "Bot"}`, `"triggering_actor": {"login": "a-stranger", "type": "User"}`, 1), "none"},
+		{"a run a writer started", strings.Replace(retryAnswers("failure", "success", head, "", []string{"build"}, 1),
+			`"triggering_actor": {"login": "awml-factory[bot]", "type": "Bot"}`, `"triggering_actor": {"login": "a-writer", "type": "User"}`, 1), "again"},
+		// A person's commit on the branch means they've taken it over: the first time, a comment says
+		// so, and the build is never started over it.
+		{"a person's commit at the head", onTheBranch(retryAnswers("failure", "success", head, "", []string{"build"}, 1), factoryCommit, personsCommit), "takenover"},
+		{"a person's commit before the head", onTheBranch(retryAnswers("failure", "success", head, "", []string{"build"}, 1), factoryCommit, personsCommit, factoryCommit), "none"},
+		{"a second commit of the person's", onTheBranch(retryAnswers("failure", "success", head, "", []string{"build"}, 1), factoryCommit, personsCommit, personsCommit), "none"},
+		{"a person's commit the app rebased", onTheBranch(retryAnswers("failure", "success", head, "", []string{"build"}, 1), factoryCommit,
+			`{"commit": {"author": {"email": "someone@example.com"}, "committer": {"email": "41+awml-factory[bot]@users.noreply.github.com"}}}`), "takenover"},
+		{"the app's commit a person amended", onTheBranch(retryAnswers("failure", "success", head, "", []string{"build"}, 1), factoryCommit,
+			`{"commit": {"author": {"email": "41+awml-factory[bot]@users.noreply.github.com"}, "committer": {"email": "someone@example.com"}}}`), "takenover"},
 		{"a run for a stranger's pull request from the branch", strings.Replace(retryAnswers("failure", "success", head, "", []string{"build"}, 1),
 			`"pull_requests": [{"number": 8}]`, `"pull_requests": [{"number": 99}]`, 1), "none"},
 		// After three builds, a person is told once: on the first run since the last build started
@@ -107,7 +131,8 @@ func TestRetryActsWhenTheTestsFailAndCountsTheBuilds(t *testing.T) {
 	}
 
 	report, _ := job.step(t, "report")
-	for decision, want := range map[string]string{"report": "failed three times", "edited": "edited or renamed since the build label"} {
+	for decision, want := range map[string]string{"report": "failed three times", "edited": "edited or renamed since the build label",
+		"takenover": "A person has taken this build's branch over"} {
 		c := newRehearsal(t)
 		c.run(report, map[string]string{"ISSUE": "120", "DECISION": decision, "CI_URL": "https://github.com/owner/repo/actions/runs/77"},
 			`  "issue comment 120"*) ;;`)
