@@ -6,6 +6,8 @@ Read `examples/dinners.yaml` beside `examples/dinners.mmd` for its security view
 
 For the security view, use `scopes` as groups and each part's `in` as its group. For a platform view, use the chosen implementation's blocks as groups. Replace each part's scope with the block whose `parts` lists it, leaving unplaced triggers and design comments without a group. Keep the design's part and line order. Append implementation comments as comment parts in their blocks, then append their `tie` lines in comment and target order. The steps below work on these groups, parts and lines.
 
+Several workflows given together are drawn as their map, which section 6 describes. Check them together first, since `awml draw` refuses them when following their refs finds a mistake.
+
 ## 1. The header
 
 Start with these lines, unchanged:
@@ -154,3 +156,25 @@ Every view of a file that marks a part `untrusted: true` shows where that part's
 So an order form whose text reaches a printed label with nothing between has `  class form trig`, then later `  class form unstopped`.
 
 On a map of several workflows, a part marked untrusted in any workflow's copy takes `untrusted` or `unstopped` the same way, following the text through the parts they share and from each outside action into the trigger it starts, and no line is coloured.
+
+## 6. A map of several workflows
+
+A map draws one box for each workflow and only what links them. Number the workflows in the order they're given. The first one's box is `w1`, the second's `w2`, and so on, and a part drawn for a workflow is named by its box and its id, as `w1_thu`.
+
+A part is shared when a context, connector or surface in one workflow has a `ref` naming a part of another workflow given. Follow the refs to the copy that has none. That copy owns the part, and its label is the one drawn. Number the shared parts `s1`, `s2` and so on, in the order of the first copy of each, taking the workflows in the order given and each one's parts in its file's order. An outside action whose `ref` names the trigger of a workflow given starts that workflow, and is a hand-off. The map draws no other part.
+
+After the header of section 1, write at the top level, indented two spaces, each workflow's triggers, taking the workflows in the order given and each one's triggers in its file's order, then each shared part in its order, each with its node from section 2. Then write each workflow's box: `subgraph w1["title"]`, with the workflow's `title` as its label, then `direction TB`, then each of its hand-offs in its file's order, indented two more spaces, then `end`. Write every label as section 2 says.
+
+Leave one empty line, then write the lines, indented two spaces. None has a label.
+
+1. For each workflow in the order given, a line from each of its triggers into its box, as `w1_thu --> w1`.
+2. For each shared part in its order, a line for each workflow with a copy of it, in the order given. Read that workflow's own `start`, `data` and `publish` lines to and from its copy. Where some lead into the copy and none out of it, write `w1 -.-> s1`. Where some lead out and none in, write `s1 -.-> w1`. Where some lead each way, write `s1 <-.-> w1`, and where none do, `w1 -.- s1`. A shared part is a context, a connector or a surface, so each of these lines is dotted.
+3. For each hand-off, in the order of the workflows and their parts, a line from the action to the trigger it starts, as `w1_start --> w2_low`.
+
+Then write the `classDef` lines of section 4, and the two of section 5 where any part is marked untrusted as section 5 says for a map. Then the `class` lines, as section 4 says, naming the triggers and hand-offs in the order of their workflows and then the shared parts in their order, as `  class w1_close,w2_low trig`. Last, write one line for each box, in the order given. A box is a workflow, not a scope, so it's solid:
+
+```
+  style w1 fill:#f6f7f9,stroke:#5d6472,color:#16171b
+```
+
+No line on a map is styled, so a map has no `linkStyle`.
