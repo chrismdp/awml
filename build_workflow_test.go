@@ -1512,3 +1512,71 @@ func TestThePatchStepSaysHowTheGitConfigChanged(t *testing.T) {
 		}
 	}
 }
+
+// The workflows copy sandbox-settings.sh from main, and a pull request's own workflows run main's
+// copy until the change is merged, so every call this branch's workflows make must be one main's
+// version accepts, as well as this branch's. Each call is rehearsed against both, with the folders
+// it names made.
+func TestEverySettingsCallWorksWithMainsScriptToo(t *testing.T) {
+	mains, err := exec.Command("git", "show", "origin/main:.github/sandbox-settings.sh").Output()
+	if err != nil {
+		t.Skip("origin/main isn't here to rehearse against")
+	}
+	call := regexp.MustCompile(`bash "\$(?:RUNNER_TEMP|HOST_DIR)/sandbox-settings\.sh"(?:[^\n]*\\\n)*[^\n]*\n`)
+	calls := 0
+	eachJob(t, func(file, name string, job workflowJob) {
+		for _, step := range job.Steps {
+			for _, found := range call.FindAllString(step.Run, -1) {
+				calls++
+				for version, script := range map[string]string{"main's": string(mains), "this branch's": readText(t, ".github/sandbox-settings.sh")} {
+					r := newRehearsal(t)
+					r.write("sandbox-settings.sh", script)
+					r.write("host/sandbox-settings.sh", script)
+					workspace := filepath.Join(r.root, "workspace")
+					for _, dir := range []string{workspace + "/.git", r.temp + "/host/pr-5/work", r.temp + "/session/home"} {
+						if err := os.MkdirAll(dir, 0o755); err != nil {
+							t.Fatal(err)
+						}
+					}
+					r.run(workflowStep{Run: `session="$RUNNER_TEMP/session"
+host="$HOST_DIR"
+number=5
+root="$HOST_DIR/pr-5"
+others=()
+` + found}, map[string]string{"GITHUB_WORKSPACE": workspace}, "")
+					if r.failed {
+						t.Errorf("%s's %s calls %s sandbox-settings.sh in a form it refuses:\n%s\n%s", file, name, version, strings.TrimSpace(found), r.printed)
+						continue
+					}
+					// This branch's script reads the old form's tree and kind, and ignores them: it
+					// denies nothing in the workspace, and makes no folder of the kind's name.
+					homes, _ := filepath.Glob(filepath.Join(r.temp, "*", "home", ".claude", "settings.json"))
+					more, _ := filepath.Glob(filepath.Join(r.temp, "host", "pr-5", "home", ".claude", "settings.json"))
+					if len(homes)+len(more) != 1 {
+						t.Errorf("%s's %s call left %d settings files, want 1", file, name, len(homes)+len(more))
+					}
+					for _, settings := range append(homes, more...) {
+						text := readText(t, settings)
+						_, made := os.Stat(filepath.Join(r.root, "workspace", "workspace"))
+						_, madeToo := os.Stat(filepath.Join(r.root, "clone"))
+						if version == "this branch's" && (strings.Contains(text, workspace) || strings.Contains(text, "/pr-5/work") || made == nil || madeToo == nil) {
+							t.Errorf("%s's %s call has this branch's script deny the tree it was given: %s", file, name, text)
+						}
+					}
+				}
+			}
+		}
+	})
+	if calls != 5 {
+		t.Errorf("found %d calls of sandbox-settings.sh, want 5", calls)
+	}
+}
+
+// A script the workflows copy from main is called by a pull request's own workflows, so AGENTS.md
+// says a change to its arguments or output keeps the old form working until it's on main.
+func TestAgentsSaysMainsScriptsKeepTheirOldForm(t *testing.T) {
+	if !strings.Contains(strings.Join(strings.Fields(readText(t, "AGENTS.md")), " "),
+		"A script the workflows copy from main is called by the pull request's own workflows, so a change to its arguments or output must keep the old form working until the change is on main.") {
+		t.Error("AGENTS.md doesn't say a script copied from main keeps its old form until the change is on main")
+	}
+}

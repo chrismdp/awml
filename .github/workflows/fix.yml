@@ -319,7 +319,7 @@ jobs:
             mkdir -p "$HOST_DIR/baseline"
             cp .git/config "$HOST_DIR/baseline/git-config"
             stat -c %d:%i "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.git" > "$HOST_DIR/baseline/folders"
-            bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/session/home" "$HOST_DIR" "$0"
+            bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/session/home" "$GITHUB_WORKSPACE" workspace "$HOST_DIR" "$0"
             prompt="$(sed -e "s|FIX_DIR|$FIX_DIR|g" -e "s|OUT_DIR|$OUT_DIR|g" "$RUNNER_TEMP/fix-prompt.md")"
             status=0
             HOME="$RUNNER_TEMP/session/home" claude -p "$prompt" --model opus --max-turns 200 --permission-mode default \

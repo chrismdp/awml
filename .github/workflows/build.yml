@@ -358,7 +358,7 @@ jobs:
             cp .git/config "$HOST_DIR/baseline/git-config"
             stat -c %d:%i "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.git" > "$HOST_DIR/baseline/folders"
             git -c core.hooksPath=/dev/null -c core.fsmonitor=false rev-parse HEAD > "$HOST_DIR/baseline/head"
-            bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/session/home" "$HOST_DIR" "$0"
+            bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/session/home" "$GITHUB_WORKSPACE" workspace "$HOST_DIR" "$0"
             prompt="$(sed "s|BUILD_DIR|$BUILD_DIR|g" "$RUNNER_TEMP/build-prompt.md")"
             status=0
             HOME="$RUNNER_TEMP/session/home" claude -p "$prompt" --model opus --max-turns 200 --permission-mode default \
