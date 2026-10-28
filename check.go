@@ -412,8 +412,8 @@ func lineLeads(line *Map) bool {
 }
 
 // operations holds each step to what its op must not do, wherever the drawing shows it. Only a do
-// step leads to an outside action, directly or through a review, a standing approval or a fork,
-// and an answer or check step never writes to a context.
+// step leads to an outside action, directly or through a review or a standing approval, and an
+// answer or check step never writes to a context.
 func operations(parts, lines []*Map) mistakeList {
 	byID := map[any]*Map{}
 	for _, p := range parts {
@@ -445,7 +445,7 @@ func operations(parts, lines []*Map) mistakeList {
 				if !lineLeads(l) || from == nil || byID[keyOf(l.get("to"))] != to {
 					continue
 				}
-				if k := from.get("kind"); k == "review" || k == "approval" || k == "fork" {
+				if k := from.get("kind"); k == "review" || k == "approval" {
 					if !seen[from] {
 						back(from)
 					}
@@ -477,8 +477,8 @@ func operations(parts, lines []*Map) mistakeList {
 }
 
 // tiers holds each outside action's tier to the shape in front of it. A way into an action is a
-// line that leads to it, followed back through forks. A review, a standing approval or a person's
-// own step puts a person on that way. An Ask action has a person on every way in, an Allow action
+// line that leads to it. A review, a standing approval or a person's own step puts a person on that
+// way. An Ask action has a person on every way in, an Allow action
 // has no yes in front of it, and nothing leads to a Block action but a red line. A standing approval
 // also lists what it covers on a surface.
 func tiers(parts, lines []*Map) mistakeList {
@@ -504,26 +504,18 @@ func tiers(parts, lines []*Map) mistakeList {
 		}
 		var ways []*way
 		found := map[*Map]*way{}
-		seen := map[*Map]bool{out: true}
-		var back func(to *Map)
-		back = func(to *Map) {
-			for _, l := range lines {
-				from := byID[keyOf(l.get("from"))]
-				if !lineLeads(l) || from == nil || byID[keyOf(l.get("to"))] != to || seen[from] {
-					continue
-				}
-				if from.get("kind") == "fork" {
-					seen[from] = true
-					back(from)
-				} else if w := found[from]; w != nil {
-					w.lines = append(w.lines, l)
-				} else {
-					found[from] = &way{from, []*Map{l}}
-					ways = append(ways, found[from])
-				}
+		for _, l := range lines {
+			from := byID[keyOf(l.get("from"))]
+			if !lineLeads(l) || from == nil || from == out || byID[keyOf(l.get("to"))] != out {
+				continue
+			}
+			if w := found[from]; w != nil {
+				w.lines = append(w.lines, l)
+			} else {
+				found[from] = &way{from, []*Map{l}}
+				ways = append(ways, found[from])
 			}
 		}
-		back(out)
 		for _, w := range ways {
 			kind, id := w.from.get("kind"), show(w.from.get("id"))
 			var breach, advice string
@@ -576,11 +568,6 @@ var id = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`)
 // fields reports what an item lacks, what it has that it shouldn't, and what YAML didn't read as text.
 func fields(what, name string, item *Map, errors *mistakeList) {
 	need, may := setOf(fieldSets[what][0]), setOf(fieldSets[what][1])
-	// A fork is a bare bar, so it needs no label.
-	if what == "part" && item.get("kind") == "fork" {
-		delete(need, "label")
-		may["label"] = true
-	}
 	var missing []string
 	for f := range need {
 		if !item.has(f) {

@@ -18,12 +18,12 @@ parts:
   - { id: thu, kind: trigger, label: "Thursday 19:00" }
   - { id: plan, kind: ai, label: "Plan next week's dinners", in: family }
   - { id: mealplan, kind: context, label: Meal plan, in: family }
-  - { id: split, kind: fork, in: family }
+  - { id: screen, kind: surface, label: Kitchen screen, in: family }
   - { id: note, kind: comment, label: "For example: scored" }
 lines:
   - { from: thu, to: plan, kind: start }
   - { from: plan, to: mealplan, kind: data, label: posted }
-  - { from: mealplan, to: split, kind: data }
+  - { from: mealplan, to: screen, kind: data }
   - { from: note, to: plan, kind: tie }
   - { from: note, to: thu, kind: hidden }
 `
@@ -127,6 +127,12 @@ func TestAWorkflowHasNoView(t *testing.T) {
 func TestTheOldNamesForKindsAreUnknown(t *testing.T) {
 	mistakes(t, changed(t, "parts.1.kind", "rule"), `part "plan" has unknown kind "rule"`)
 	mistakes(t, changed(t, "parts.1.kind", "human"), `part "plan" has unknown kind "human"`)
+}
+
+// Several start lines out of one part already show work side by side, so 0.8 has no fork.
+func TestAForkIsAnUnknownKind(t *testing.T) {
+	mistakes(t, changed(t, "parts.3.kind", "fork"), `part "screen" has unknown kind "fork"`)
+	mistakes(t, changed(t, "parts.3.kind", "fork", "parts.3.label", gone), `part "screen" has no label`, `part "screen" has unknown kind "fork"`)
 }
 
 func TestAnUnknownVersion(t *testing.T) {
@@ -258,7 +264,6 @@ parts:
   - { id: write, kind: ai, op: draft, label: Draft the reply }
   - { id: drafts, kind: context, label: Drafts }
   - { id: ask, kind: code, op: do, label: Ask for the send }
-  - { id: split, kind: fork }
   - { id: approve, kind: review, label: Yes to the exact reply }
   - { id: send, kind: outside, label: "Send the reply: Ask" }
   - { id: file, kind: outside, label: "File the reply: Allow" }
@@ -310,8 +315,6 @@ func TestOnlyADoStepLeadsToAnOutsideAction(t *testing.T) {
 	ask := `outside action "send" is Ask, but part "write" leads to it with no person in between: put a review or a standing approval in front of it, or have a person's own do step take it`
 	mistakes(t, withLines(t, "{ from: write, to: send, kind: data }"), want, ask)
 	mistakes(t, withLines(t, "{ from: write, to: approve, kind: data }"), want)
-	mistakes(t, withLines(t, "{ from: write, to: split, kind: data }", "{ from: split, to: send, kind: data }"), want, ask)
-	mistakes(t, withLines(t, "{ from: write, to: split, kind: start }", "{ from: split, to: approve, kind: data }"), want)
 }
 
 func TestAStepIsReportedOnceForEachOutsideActionItLeadsTo(t *testing.T) {

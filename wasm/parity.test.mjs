@@ -200,14 +200,35 @@ lines:
   - {from: tell, to: ready, kind: start}
 `,
     "description-0.7.yaml": description("0.7"),
-    // A 0.7 file changes only its version.
+    // A 0.7 file with no fork changes only its version.
     "bread-0.7.yaml": canonicalSource.replace('awml: "0.8"', 'awml: "0.7"'),
+    // A fork goes, and each line into it joins each line out of it.
+    "newsletter-0.7.yaml": `awml: "0.7"
+title: The school newsletter
+parts:
+  - {id: arrives, kind: trigger, label: The newsletter arrives}
+  - {id: split, kind: fork}
+  - {id: learn, kind: ai, label: Take the term dates}
+  - {id: due, kind: ai, label: Look for anything due}
+  - {id: why, kind: comment, label: Both at once}
+lines:
+  - {from: arrives, to: split, kind: start}
+  - {from: split, to: learn, kind: start}
+  - {from: split, to: due, kind: start, label: the newsletter}
+  - {from: why, to: split, kind: tie}
+implementations:
+  home:
+    label: At home
+    blocks:
+      - {id: server, label: Server, parts: [split, learn, due]}
+`,
   };
   for (const [name, source] of Object.entries(upgrades)) {
     await writeFile(`${temporary}/${name}`, source);
     assert.equal(api.convert(source), runNative(["convert", `${temporary}/${name}`]), `convert ${name}`);
     conversions++;
   }
+  assert.doesNotMatch(api.convert(upgrades["newsletter-0.7.yaml"]), /fork|split/, "convert of a file with a fork");
 
   // A file already at 0.8 comes back unchanged.
   const current = api.convert(upgrades["bread-0.4.yaml"]);

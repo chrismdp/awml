@@ -13,10 +13,9 @@ parts:
   - { id: context, kind: context, label: "A context: the notes in a folder" }
   - { id: connector, kind: connector, label: "A connector: someone's access to a service" }
   - { id: strangers, kind: connector, label: "Text anyone can write, marked untrusted: a thick orange outline", untrusted: true }
-  - { id: fork, kind: fork }
   - { id: surface, kind: surface, label: "A surface: where people meet the work" }
   - { id: outside, kind: outside, label: "An outside action, with its tier: Ask" }
-  - { id: comment, kind: comment, label: "A comment, tied to what it explains: the black bar is a fork, where work splits" }
+  - { id: comment, kind: comment, label: "A comment, tied to what it explains" }
 lines:
   - { from: trigger, to: review, kind: hidden }
   - { from: strangers, to: review, kind: data, label: "orange where untrusted text goes" }
@@ -25,5 +24,4 @@ lines:
   - { from: ai, to: context, kind: hidden }
   - { from: context, to: outside, kind: hidden }
   - { from: code, to: connector, kind: hidden }
-  - { from: person, to: fork, kind: hidden }
-  - { from: fork, to: comment, kind: tie }
+  - { from: person, to: comment, kind: tie }

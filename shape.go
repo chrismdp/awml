@@ -9,8 +9,8 @@ import (
 // from it along start lines, whatever kind of part each is. Triggers whose runs share a part are
 // one workflow, so triggers that fall into more than one group mean the file holds several. It
 // also warns of each part no line links to a trigger, following lines either way and leaving out
-// comments and their ties, of each comment tied to nothing, and of each step, review, standing
-// approval or fork that is in no trigger's run.
+// comments and their ties, of each comment tied to nothing, and of each step, review or standing
+// approval that is in no trigger's run.
 func shapeWarnings(parts, lines []*Map) mistakeList {
 	byID := map[any]*Map{}
 	for _, part := range parts {
@@ -111,7 +111,7 @@ func shapeWarnings(parts, lines []*Map) mistakeList {
 		}
 	}
 
-	runs := map[any]string{"ai": "step", "code": "step", "person": "step", "review": "review", "approval": "standing approval", "fork": "fork"}
+	runs := map[any]string{"ai": "step", "code": "step", "person": "step", "review": "review", "approval": "standing approval"}
 	for _, part := range parts {
 		id := show(part.get("id"))
 		kind := part.get("kind")

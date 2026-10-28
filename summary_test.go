@@ -22,7 +22,7 @@ func TestSummariseEveryExample(t *testing.T) {
 		"examples/legend.yaml":                    {Steps: StepCounts{AI: 1, Code: 1, Person: 1}, OutsideActions: TierCounts{Ask: 1}, Triggers: 1, Reviews: 1, Contexts: 1, Connectors: 2, Surfaces: 1, Untrusted: untrustedLegend},
 		"examples/question.yaml":                  {Steps: StepCounts{AI: 1, Code: 1}, Operations: map[string]int{"answer": 2}, Triggers: 1, Contexts: 3, Surfaces: 1, Scopes: 3, RefusedReads: 1},
 		"examples/tour/01-draft-and-send.yaml":    {Steps: StepCounts{AI: 1, Code: 1}, Operations: map[string]int{"draft": 1, "do": 1}, OutsideActions: TierCounts{Ask: 1}, Triggers: 1, Reviews: 1, Scopes: 1},
-		"examples/tour/02-fork.yaml":              {Steps: StepCounts{AI: 2}, Operations: map[string]int{"learn": 1, "check": 1}, Triggers: 1, Contexts: 1, Surfaces: 1, Scopes: 1},
+		"examples/tour/02-two-start-lines.yaml":   {Steps: StepCounts{AI: 2}, Operations: map[string]int{"learn": 1, "check": 1}, Triggers: 1, Contexts: 1, Surfaces: 1, Scopes: 1},
 		"examples/tour/03-refused-read.yaml":      {Steps: StepCounts{AI: 1}, Operations: map[string]int{"answer": 1}, Triggers: 1, Contexts: 2, Surfaces: 1, Scopes: 2, RefusedReads: 1},
 		"examples/tour/04-publishing.yaml":        {Steps: StepCounts{Code: 1}, Operations: map[string]int{"bring-in": 1}, Triggers: 1, Contexts: 1, Connectors: 1, Surfaces: 1, Scopes: 2, PublishingLines: pubGrandma},
 		"examples/tour/05-side-by-side.yaml":      {Steps: StepCounts{AI: 2}, Operations: map[string]int{"draft": 2}, Triggers: 1, Contexts: 3, Scopes: 2, PublishingLines: pubChecklist},

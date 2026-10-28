@@ -40,14 +40,13 @@ A part is its id followed straight away by its node, with the label in place of 
 | `person` | `person` | `("label")` |
 | `review` | `person` | `("label")` |
 | `approval` | `person` | `("label")` |
-| `fork` | `uml` | `@{ shape: fork, label: "" }` |
 | `context` | `ctx` | `[("label")]` |
 | `connector` | `con` | `{{"label"}}` |
 | `surface` | `surf` | `@{ shape: win-pane, label: "label" }` |
 | `outside` | `out` | `>"label"]` |
 | `comment` | `gap` | `@{ shape: notch-rect, label: "label" }` |
 
-In every label, of a part, a group or a line, write each run of line breaks, with the whitespace around it, as one space, and trim the label's ends, so each node stays on one row. Then write each ASCII punctuation mark as its decimal Mermaid entity: `@` as `#64;`, `.` as `#46;`, `"` as `#34;`, and so on. Leave letters, numbers, spaces and non-ASCII characters as written. This stops Mermaid reading email addresses, web addresses, lists or other Markdown instead of literal label text. A fork shows no label.
+In every label, of a part, a group or a line, write each run of line breaks, with the whitespace around it, as one space, and trim the label's ends, so each node stays on one row. Then write each ASCII punctuation mark as its decimal Mermaid entity: `@` as `#64;`, `.` as `#46;`, `"` as `#34;`, and so on. Leave letters, numbers, spaces and non-ASCII characters as written. This stops Mermaid reading email addresses, web addresses, lists or other Markdown instead of literal label text.
 
 The label of a step, a review or a standing approval starts with a line of its own saying who decides it, `<small style='color:rgb(61,67,79)'>WHO</small><br>`, and then the label. `WHO` is 🤖 for `ai`, ⚙️ for `code` and 👤 for `person`. For a step with an `op`, add its emoji and its name, so an AI draft is `<small style='color:rgb(61,67,79)'>🤖 ✏️ draft</small><br>`. For a review, `WHO` is `👤 ✅ review`, and for a standing approval, `👤 📜 standing approval`.
 
@@ -105,13 +104,12 @@ Then write these lines, unchanged:
   classDef ai fill:#cdd3fb,stroke:#3b4bb0,color:#16171b
   classDef code fill:#c4e3d1,stroke:#2b7a4f,color:#16171b
   classDef person fill:#f7d79a,stroke:#9a6100,color:#16171b
-  classDef uml fill:#16171b,stroke:#16171b,color:#16171b
   classDef gap fill:#ffffff,stroke:#8a93a3,stroke-dasharray:4 3,color:#6b7280
 ```
 
 Where any part has `untrusted: true`, add the two lines of section 5 here.
 
-Then one line for each class that any part has, in the order `trig`, `ctx`, `con`, `surf`, `out`, `ai`, `code`, `person`, `uml`, `gap`, `untrusted`, `unstopped`, naming its parts in the file's order: `  class plan ai`, or `  class approve,edit person`. A part is in the class of its kind, and a part with `untrusted: true` is in `untrusted` or `unstopped` too, as section 5 says.
+Then one line for each class that any part has, in the order `trig`, `ctx`, `con`, `surf`, `out`, `ai`, `code`, `person`, `gap`, `untrusted`, `unstopped`, naming its parts in the file's order: `  class plan ai`, or `  class approve,edit person`. A part is in the class of its kind, and a part with `untrusted: true` is in `untrusted` or `unstopped` too, as section 5 says.
 
 Then one line for each group, in the file's order: `  style id STYLE`. In the security view, every group's `STYLE` is:
 
@@ -138,7 +136,7 @@ A line with neither has no style. Lines with the same style share one line, `  l
 
 ## 5. Untrusted text
 
-Every view of a file that marks a part `untrusted: true` shows where that part's text goes, in its lines and the part's outline. Follow the text of each such part. From any part it has reached, it goes along each `start` or `data` line to the part at the other end, red lines included. A `review`, a `person` step or a `code` step with `cleans: true` stops it: the text reaches that part, but goes no further. Where the text goes into an `outside` part straight from an `approval`, or from one through forks alone, the standing approval accepts the risk. Any other line that brings the text into an `outside` part breaks rule 23 of [checking by hand](checking-by-hand.md).
+Every view of a file that marks a part `untrusted: true` shows where that part's text goes, in its lines and the part's outline. Follow the text of each such part. From any part it has reached, it goes along each `start` or `data` line to the part at the other end, red lines included. A `review`, a `person` step or a `code` step with `cleans: true` stops it: the text reaches that part, but goes no further. Where the text goes into an `outside` part straight from an `approval`, the standing approval accepts the risk. Any other line that brings the text into an `outside` part breaks rule 23 of [checking by hand](checking-by-hand.md).
 
 1. Each line the text goes along is orange.
 2. Each `start` or `data` line out of a part that stopped the text is green.

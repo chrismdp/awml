@@ -1,9 +1,11 @@
 package awml
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The canonical workflow as a 0.4 file, which differs only in its version.
@@ -118,10 +120,10 @@ implementations:
       - {id: runner, label: Runner, platform: acme/platforms/ops-runner, parts: [renew, standing, library, phone, board]}
 `
 
-// 0.8 changed only rules, what a standing approval may cover and that untrusted text reaching an
-// action unchecked is a mistake, so a 0.7 file changes only its version, even
-// one that still has a line from a do step into a trigger with a ref, which converting a 0.6 file
-// would turn into an outside action.
+// Apart from dropping forks, 0.8 changed only rules, what a standing approval may cover and that
+// untrusted text reaching an action unchecked is a mistake, so a 0.7 file with no fork changes only
+// its version, even one that still has a line from a do step into a trigger with a ref, which
+// converting a 0.6 file would turn into an outside action.
 func TestUpgradeFrom07ChangesOnlyTheVersion(t *testing.T) {
 	if got, want := upgraded(t, strings.Replace(canonical, `awml: "0.8"`, `awml: "0.7"`, 1)), upgraded(t, canonical); got != want {
 		t.Fatalf("Upgrade gave\n%s\nwant\n%s", got, want)
@@ -132,6 +134,211 @@ func TestUpgradeFrom07ChangesOnlyTheVersion(t *testing.T) {
 	}
 	if _, notes, _, err := ConvertSources([]Source{{Text: []byte(strings.Replace(source, "wait: PT1H, ref:", "wait: PT1H, untrusted: true, ref:", 1))}}, ""); err != nil || notes != nil {
 		t.Errorf("convert of a 0.7 file notes %q, %v", notes, err)
+	}
+}
+
+// The school newsletter as 0.7 drew it, with a fork splitting the work between two steps.
+const newsletter07 = `awml: "0.7"
+title: The school newsletter
+scopes:
+  - {id: family, label: "family: Mia, Dev"}
+parts:
+  - {id: arrives, kind: trigger, label: The newsletter arrives}
+  - {id: split, kind: fork, in: family}
+  - {id: learn, kind: ai, op: learn, label: Take the term dates, in: family}
+  - {id: due, kind: ai, op: check, label: Look for anything due, in: family}
+  - {id: chat, kind: surface, label: Family chat, in: family}
+lines:
+  - {from: arrives, to: split, kind: start}
+  - {from: split, to: learn, kind: start}
+  - {from: split, to: due, kind: start, label: the newsletter}
+  - {from: due, to: chat, kind: data}
+implementations:
+  home:
+    label: At home
+    blocks:
+      - {id: server, label: Server, parts: [split, learn, due, chat]}
+`
+
+// The same work drawn without a fork: two start lines out of the trigger.
+const newsletter08 = `awml: "0.8"
+title: The school newsletter
+scopes:
+  - {id: family, label: "family: Mia, Dev"}
+parts:
+  - {id: arrives, kind: trigger, label: The newsletter arrives}
+  - {id: learn, kind: ai, op: learn, label: Take the term dates, in: family}
+  - {id: due, kind: ai, op: check, label: Look for anything due, in: family}
+  - {id: chat, kind: surface, label: Family chat, in: family}
+lines:
+  - {from: arrives, to: learn, kind: start}
+  - {from: arrives, to: due, kind: start, label: the newsletter}
+  - {from: due, to: chat, kind: data}
+implementations:
+  home:
+    label: At home
+    blocks:
+      - {id: server, label: Server, parts: [learn, due, chat]}
+`
+
+// 0.8 has no fork, since several start lines out of one part already show work side by side. So
+// converting drops each fork, and joins each line into it to each line out of it, with the line
+// out's kind and label. The file checks and draws as the same work drawn without one.
+func TestConvertDropsAForkAndJoinsTheLinesThroughIt(t *testing.T) {
+	got, want := upgraded(t, newsletter07), upgraded(t, newsletter08)
+	if got != want {
+		t.Fatalf("Upgrade gave\n%s\nwant\n%s", got, want)
+	}
+	converted, without := parseCanonical(t, got), parseCanonical(t, newsletter08)
+	if !reflect.DeepEqual(Check(converted), Check(without)) || Draw(converted) != Draw(without) {
+		t.Errorf("the converted file checks as %q and draws as\n%s", Check(converted), Draw(converted))
+	}
+	for _, version := range []string{"0.4", "0.5", "0.6"} {
+		if got := upgraded(t, strings.Replace(newsletter07, `awml: "0.7"`, `awml: "`+version+`"`, 1)); got != want {
+			t.Errorf("Upgrade from %s gave\n%s\nwant\n%s", version, got, want)
+		}
+	}
+}
+
+// Each line into a fork joins each line out of it, through forks in a row, and a joined line the
+// file already has isn't drawn twice. A comment tied to a fork is tied instead to the parts the work
+// split from, a hidden line at a fork goes, and so does the fork's place in each implementation.
+func TestConvertJoinsEveryLineThroughForksInARow(t *testing.T) {
+	source := `awml: "0.7"
+title: Bread
+parts:
+  - {id: morning, kind: trigger, label: Morning}
+  - {id: order, kind: trigger, label: An order}
+  - {id: first, kind: fork}
+  - {id: second, kind: fork}
+  - {id: bake, kind: code, label: Bake}
+  - {id: pack, kind: code, label: Pack}
+  - {id: why, kind: comment, label: Both at once}
+lines:
+  - {from: morning, to: first, kind: start}
+  - {from: order, to: first, kind: data}
+  - {from: first, to: second, kind: start}
+  - {from: second, to: bake, kind: start}
+  - {from: second, to: pack, kind: data, label: the order}
+  - {from: morning, to: bake, kind: start}
+  - {from: why, to: second, kind: tie}
+  - {from: pack, to: first, kind: hidden}
+implementations:
+  home:
+    label: At home
+    blocks:
+      - {id: kitchen, label: Kitchen, parts: [first, second, bake, pack]}
+    comments:
+      - {id: note, label: One oven, in: kitchen, ties: [first, bake]}
+`
+	want := `awml: "0.8"
+title: Bread
+parts:
+  - { id: morning, kind: trigger, label: "Morning" }
+  - { id: order, kind: trigger, label: "An order" }
+  - { id: bake, kind: code, label: "Bake" }
+  - { id: pack, kind: code, label: "Pack" }
+  - { id: why, kind: comment, label: "Both at once" }
+lines:
+  - { from: order, to: bake, kind: start }
+  - { from: morning, to: pack, kind: data, label: the order }
+  - { from: order, to: pack, kind: data, label: the order }
+  - { from: morning, to: bake, kind: start }
+  - { from: why, to: morning, kind: tie }
+  - { from: why, to: order, kind: tie }
+implementations:
+  home:
+    label: At home
+    blocks:
+      - { id: kitchen, label: "Kitchen", parts: [bake, pack] }
+    comments:
+      - { id: note, label: "One oven", in: kitchen, ties: [morning, order, bake] }
+`
+	if got := upgraded(t, source); got != want {
+		t.Fatalf("Upgrade gave\n%s\nwant\n%s", got, want)
+	}
+}
+
+// A line out of a fork with no label of its own keeps the label of the line into it, so a review's
+// "[yes]" stays on each line its work goes ahead by. A line out's own label wins.
+func TestConvertKeepsTheLabelOfTheLineIntoAFork(t *testing.T) {
+	source := `awml: "0.7"
+title: Post
+parts:
+  - {id: draft, kind: ai, label: Draft}
+  - {id: look, kind: review, label: Look it over}
+  - {id: split, kind: fork}
+  - {id: send, kind: code, label: Send}
+  - {id: file, kind: code, label: File}
+lines:
+  - {from: draft, to: look, kind: start}
+  - {from: look, to: split, kind: start, label: "[yes]"}
+  - {from: split, to: send, kind: start}
+  - {from: split, to: file, kind: start, label: the post}
+`
+	want := `awml: "0.8"
+title: Post
+parts:
+  - { id: draft, kind: ai, label: "Draft" }
+  - { id: look, kind: review, label: "Look it over" }
+  - { id: send, kind: code, label: "Send" }
+  - { id: file, kind: code, label: "File" }
+lines:
+  - { from: draft, to: look, kind: start }
+  - { from: look, to: send, kind: start, label: "[yes]" }
+  - { from: look, to: file, kind: start, label: the post }
+`
+	if got := upgraded(t, source); got != want {
+		t.Fatalf("Upgrade gave\n%s\nwant\n%s", got, want)
+	}
+}
+
+// Each fork's parts are worked out once, so forks in a row, each with two lines into the one before,
+// convert at once rather than in a time that doubles with each fork.
+func TestConvertWorksOutEachForkOnce(t *testing.T) {
+	var source strings.Builder
+	source.WriteString(`awml: "0.7"
+title: Many
+parts:
+  - {id: go, kind: trigger, label: Go}
+  - {id: work, kind: code, label: Work}
+`)
+	for n := 1; n <= 40; n++ {
+		fmt.Fprintf(&source, "  - {id: f%d, kind: fork}\n", n)
+	}
+	source.WriteString(`lines:
+  - {from: go, to: f40, kind: start}
+  - {from: f1, to: work, kind: start}
+`)
+	for n := 1; n < 40; n++ {
+		fmt.Fprintf(&source, "  - {from: f%d, to: f%d, kind: start}\n", n+1, n)
+		fmt.Fprintf(&source, "  - {from: f%d, to: f%d, kind: start}\n", n+1, n)
+	}
+	source.WriteString(`implementations:
+  home:
+    label: Home
+    blocks:
+      - {id: desk, label: Desk, parts: [work]}
+    comments:
+      - {id: note, label: Once, in: desk, ties: [f1]}
+`)
+	doc := parseCanonical(t, source.String())
+	done := make(chan *Map, 1)
+	go func() {
+		file, _ := Upgrade(doc)
+		done <- file
+	}()
+	select {
+	case file := <-done:
+		data, err := Marshal(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(data), "ties: [go]") {
+			t.Errorf("Upgrade gave\n%s\nwant the note tied to go", data)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Upgrade took more than five seconds over forty forks in a row")
 	}
 }
 

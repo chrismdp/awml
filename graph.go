@@ -229,8 +229,6 @@ func graphPart(p *Map, id string) GraphPart {
 		part.Decider = "person"
 	case "outside":
 		part.Tier = outsideTier(part.Label)
-	case "fork":
-		part.Label = ""
 	}
 	return part
 }
@@ -396,7 +394,7 @@ func (g Graph) Mermaid() string {
 	if len(outline) > 0 {
 		out = append(out, "  classDef untrusted "+untrustedOutline, "  classDef unstopped "+unstoppedOutline)
 	}
-	for _, cls := range []string{"trig", "ctx", "con", "surf", "out", "ai", "code", "person", "uml", "gap", "untrusted", "unstopped"} {
+	for _, cls := range []string{"trig", "ctx", "con", "surf", "out", "ai", "code", "person", "gap", "untrusted", "unstopped"} {
 		var ids []string
 		for _, n := range nodes {
 			if n.group < 0 && (classes[kinds[n.id]] == cls || outline[n.id] == cls) {

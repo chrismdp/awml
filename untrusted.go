@@ -52,9 +52,8 @@ type trail struct {
 	accepted                    map[[2]*Map]bool
 }
 
-// follow follows the text of one untrusted part along every line that leads on. It carries with it
-// the standing approval it last passed, if only forks have come since, since a way to an action is
-// followed back through any fork, and a standing approval on the way to an action accepts the risk.
+// follow follows the text of one untrusted part along every line that leads on. A standing approval
+// in front of an outside action accepts the risk of the text reaching it.
 func follow(source *Map, parts, lines []*Map) trail {
 	byID := partsOf(parts)
 	out := map[*Map][]*Map{}
@@ -65,33 +64,23 @@ func follow(source *Map, parts, lines []*Map) trail {
 	}
 	tr := trail{reached: map[*Map]bool{source: true}, stopped: map[*Map]bool{}, carries: map[*Map]bool{},
 		cleared: map[*Map]bool{}, unstopped: map[*Map]bool{}, accepted: map[[2]*Map]bool{}}
-	// A state is a part the text has reached, with the standing approval that accepts its risk.
-	type state struct{ part, approval *Map }
 	type step struct {
-		from state
+		from *Map
 		line *Map
-		to   state
+		to   *Map
 	}
 	var steps []step
 	breached := map[*Map]bool{}
-	seen := map[state]bool{{source, nil}: true}
-	for queue := []state{{source, nil}}; len(queue) > 0; queue = queue[1:] {
+	seen := map[*Map]bool{source: true}
+	for queue := []*Map{source}; len(queue) > 0; queue = queue[1:] {
 		at := queue[0]
-		var approval *Map
-		switch at.part.get("kind") {
-		case "approval":
-			approval = at.part
-		case "fork":
-			approval = at.approval
-		}
-		for _, l := range out[at.part] {
+		for _, l := range out[at] {
 			to := byID[keyOf(l.get("to"))]
-			next := state{to, approval}
 			tr.carries[l] = true
-			steps = append(steps, step{at, l, next})
+			steps = append(steps, step{at, l, to})
 			if to.get("kind") == "outside" {
-				if approval != nil {
-					tr.accepted[[2]*Map{to, approval}] = true
+				if at.get("kind") == "approval" {
+					tr.accepted[[2]*Map{to, at}] = true
 				} else if !breached[l] {
 					breached[l] = true
 					tr.breaches = append(tr.breaches, l)
@@ -102,9 +91,9 @@ func follow(source *Map, parts, lines []*Map) trail {
 				continue
 			}
 			tr.reached[to] = true
-			if !seen[next] {
-				seen[next] = true
-				queue = append(queue, next)
+			if !seen[to] {
+				seen[to] = true
+				queue = append(queue, to)
 			}
 		}
 	}
@@ -114,8 +103,8 @@ func follow(source *Map, parts, lines []*Map) trail {
 		}
 	}
 	// Each step that leads on to a breach is on the text's way to it, back to the source.
-	breach := func(s step) bool { return s.to.approval == nil && s.to.part.get("kind") == "outside" }
-	bad := map[state]bool{}
+	breach := func(s step) bool { return s.from.get("kind") != "approval" && s.to.get("kind") == "outside" }
+	bad := map[*Map]bool{}
 	for changed := true; changed; {
 		changed = false
 		for _, s := range steps {
