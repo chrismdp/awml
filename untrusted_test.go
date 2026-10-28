@@ -19,7 +19,6 @@ parts:
   - { id: read, kind: ai, op: bring-in, label: "Read the order", in: bakery }
   - { id: orders, kind: context, label: Orders, in: bakery }
   - { id: plan, kind: ai, op: prepare, label: "Plan the baking", in: bakery }
-  - { id: split, kind: fork, in: bakery }
   - { id: note, kind: code, op: do, label: "Note the plan", in: bakery }
   - { id: board, kind: outside, label: "Pin the plan to the board: Allow", in: bakery }
   - { id: keep, kind: code, op: bring-in, label: "Keep only the order number and quantity", in: bakery, cleans: true }
@@ -29,8 +28,7 @@ lines:
   - { from: form, to: read, kind: start }
   - { from: read, to: orders, kind: data }
   - { from: orders, to: plan, kind: data }
-  - { from: plan, to: split, kind: start }
-  - { from: split, to: note, kind: start }
+  - { from: plan, to: note, kind: start }
   - { from: note, to: board, kind: start }
   - { from: form, to: keep, kind: start }
   - { from: keep, to: tag, kind: start }
@@ -254,16 +252,6 @@ func TestAStandingApprovalInFrontOfTheActionAcceptsTheRisk(t *testing.T) {
 	if lines := untrustedLines(t, GraphOf(doc)); lines["yes>box"] != "carries" || lines["read>box"] != "unstopped" || lines["form>read"] != "unstopped" || lines["read>tag"] != "carries" {
 		t.Errorf("lines are %q", lines)
 	}
-}
-
-// A standing approval accepts the risk through a fork too, since a way to an action is followed
-// back through any fork.
-func TestAStandingApprovalAcceptsTheRiskThroughAFork(t *testing.T) {
-	src := strings.Replace(labelForm, "Print the label: Allow", "Print the label: Ask", 1)
-	src = strings.Replace(src, "  - { id: box,", "  - { id: yes, kind: approval, label: \"Ana's standing approval, risk accepted by Ana\", in: bakery }\n  - { id: both, kind: fork, in: bakery }\n  - { id: box,", 1)
-	src = strings.Replace(src, "  - { id: box, kind: outside, label: \"Print the label: Ask\", in: bakery }", "  - { id: box, kind: outside, label: \"Print the label: Ask\", in: bakery }\n  - { id: list, kind: surface, label: \"Ana's list\", in: bakery }", 1)
-	src = strings.Replace(src, "  - { from: tag, to: box, kind: start }", "  - { from: tag, to: yes, kind: start }\n  - { from: yes, to: both, kind: start }\n  - { from: both, to: box, kind: start }\n  - { from: yes, to: list, kind: data }", 1)
-	mistakes(t, parsed(t, src))
 }
 
 // Where the text is stopped on one branch but reaches an action on another, red wins for the source

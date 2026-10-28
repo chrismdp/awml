@@ -60,7 +60,6 @@ parts:
   - { id: draft, kind: ai, op: draft, label: Draft }
   - { id: check, kind: review, label: Check it }
   - { id: ok, kind: approval, label: "Standing approval: up to three a day" }
-  - { id: split, kind: fork }
   - { id: list, kind: surface, label: List }
   - { id: out, kind: outside, label: "` + outside + `" }
 lines:
@@ -77,13 +76,12 @@ func TestAnAskActionNeedsAPersonInFrontOfIt(t *testing.T) {
 		{"{ from: act, to: check, kind: data }", "{ from: check, to: out, kind: data, label: \"[yes]\" }"},
 		{"{ from: me, to: out, kind: data }"},
 		{"{ from: act, to: ok, kind: data }", "{ from: ok, to: out, kind: data }"},
-		{"{ from: act, to: check, kind: data }", "{ from: check, to: split, kind: data }", "{ from: split, to: out, kind: data }"},
 	} {
 		mistakes(t, tiered(t, "Send it: Ask", way...))
 	}
 	mistakes(t, tiered(t, "Send it: Ask", "{ from: act, to: out, kind: data }"),
 		`outside action "out" is Ask, but part "act" leads to it with no person in between: put a review or a standing approval in front of it, or have a person's own do step take it`)
-	mistakes(t, tiered(t, "Send it: Ask", "{ from: act, to: split, kind: start }", "{ from: split, to: out, kind: data }",
+	mistakes(t, tiered(t, "Send it: Ask", "{ from: act, to: out, kind: start }",
 		"{ from: me, to: out, kind: data }"),
 		`outside action "out" is Ask, but part "act" leads to it with no person in between: put a review or a standing approval in front of it, or have a person's own do step take it`)
 }
@@ -92,7 +90,6 @@ func TestAnAllowActionHasNoYesInFrontOfIt(t *testing.T) {
 	for _, way := range [][]string{
 		{"{ from: act, to: out, kind: data }"},
 		{"{ from: me, to: out, kind: data }"},
-		{"{ from: act, to: split, kind: data }", "{ from: split, to: out, kind: data }"},
 	} {
 		mistakes(t, tiered(t, "File it: Allow under £20", way...))
 	}

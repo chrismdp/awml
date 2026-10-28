@@ -257,7 +257,7 @@ parts:
   - { id: o, kind: outside, label: "O: Ask", op: do }
   - { id: n, kind: context, label: N, in: c }
   - { id: m, kind: comment, label: M }
-  - { id: f, kind: fork, op: fly }
+  - { id: f, kind: surface, label: F, op: fly }
   - { id: r, kind: ai, label: R, ref: x.yaml#y }
   - { id: q, kind: context, label: Q, ref: nope }
 lines:

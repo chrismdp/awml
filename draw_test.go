@@ -32,7 +32,6 @@ func TestEachPartKindHasItsShapeAndColour(t *testing.T) {
 		{"code", `p("<small style='color:rgb(61,67,79)'>⚙️</small><br>Label")`, "code"},
 		{"person", `p("<small style='color:rgb(61,67,79)'>👤</small><br>Label")`, "person"},
 		{"review", `p("<small style='color:rgb(61,67,79)'>👤 ✅ review</small><br>Label")`, "person"},
-		{"fork", `p@{ shape: fork, label: "" }`, "uml"},
 		{"context", `p[("Label")]`, "ctx"},
 		{"connector", `p{{"Label"}}`, "con"},
 		{"surface", `p@{ shape: win-pane, label: "Label" }`, "surf"},
@@ -45,10 +44,6 @@ func TestEachPartKindHasItsShapeAndColour(t *testing.T) {
 			has(t, out, "\n  class p "+c.class+"\n")
 		})
 	}
-}
-
-func TestAForkNeedsNoLabel(t *testing.T) {
-	has(t, drawing(t, "security", "parts: [{id: f, kind: fork}]"), "\n  f@{ shape: fork, label: \"\" }\n")
 }
 
 func TestEachLineKindHasItsArrow(t *testing.T) {
@@ -70,7 +65,7 @@ parts:
   - {id: t, kind: trigger, label: T}
   - {id: a, kind: ai, label: A}
   - {id: r, kind: review, label: R}
-  - {id: f, kind: fork}
+  - {id: f, kind: approval, label: F}
   - {id: o, kind: outside, label: O}
 lines:
   - {from: t, to: a, kind: start}
@@ -596,7 +591,6 @@ flowchart TB
   classDef ai fill:#cdd3fb,stroke:#3b4bb0,color:#16171b
   classDef code fill:#c4e3d1,stroke:#2b7a4f,color:#16171b
   classDef person fill:#f7d79a,stroke:#9a6100,color:#16171b
-  classDef uml fill:#16171b,stroke:#16171b,color:#16171b
   classDef gap fill:#ffffff,stroke:#8a93a3,stroke-dasharray:4 3,color:#6b7280
   class tAsk trig
   class cCar,cFam,cNadia ctx

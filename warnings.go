@@ -64,7 +64,7 @@ func warningList(doc any) mistakeList {
 					continue
 				}
 				switch to.get("kind") {
-				case "review", "approval", "fork":
+				case "review", "approval":
 					if !seen[to] {
 						seen[to] = true
 						follow(to)
