@@ -153,7 +153,7 @@ bash "$RUNNER_TEMP/scrub-placeholders.sh" before "$TREE" "$RUNNER_TEMP/absent" s
 // patch of its own change alone; one that leaves something in a placeholder stops git.
 func TestTheBuildsPatchHoldsNoPlaceholder(t *testing.T) {
 	patch, _ := readFactoryWorkflow(t, "build.yml").Jobs["draft"].step(t, "patch")
-	for _, leaves := range []string{"empty placeholders", "a placeholder with something in it"} {
+	for _, leaves := range []string{"empty placeholders", "a placeholder with something in it", "a .claude link"} {
 		r := newRehearsal(t)
 		repo, _ := r.newRepo("repo", map[string]string{"recipes.md": "Bread\n"})
 		r.write("host/scrub-placeholders.sh", readText(t, ".github/scrub-placeholders.sh"))
@@ -169,19 +169,38 @@ func TestTheBuildsPatchHoldsNoPlaceholder(t *testing.T) {
 		r.write("host/baseline/head", gitIn(t, repo, "rev-parse", "HEAD")+"\n")
 		r.write("build/issue.md", "# Bake scones\n")
 		r.write(filepath.Join(repo, "recipes.md"), "Bread\nScones\n")
-		for _, file := range []string{".git/config.worktree", ".git/config.lock", ".env", ".claude", "package-lock.json"} {
+		// The scrub's placeholders, sandbox-runtime's own at the tree's top, and a .claude folder
+		// holding its placeholders and what Claude Code keeps there.
+		for _, file := range []string{".git/config.worktree", ".git/config.lock", ".env", "package-lock.json", ".mcp.json", ".vscode", ".idea",
+			".bashrc", ".bash_profile", ".profile", ".zshrc", ".zprofile", ".ripgreprc", ".gitconfig", ".claude/commands", ".claude/agents"} {
 			r.write(filepath.Join(repo, file), "")
 		}
-		if leaves == "a placeholder with something in it" {
+		r.write(filepath.Join(repo, ".claude/settings.local.json"), "{\"permissions\": {}}\n")
+		switch leaves {
+		case "a placeholder with something in it":
 			r.write(filepath.Join(repo, ".env"), "TOKEN=x\n")
+		case "a .claude link":
+			if err := os.RemoveAll(filepath.Join(repo, ".claude")); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(r.root, filepath.Join(repo, ".claude")); err != nil {
+				t.Fatal(err)
+			}
 		}
 		r.dir = repo
 		r.run(patch, map[string]string{"GITHUB_WORKSPACE": repo}, "")
 		made := r.read("host/change/change.patch")
 		if leaves == "empty placeholders" {
 			r.mustPass()
-			if !strings.Contains(made, "+Scones") || strings.Contains(made, "package.json") || strings.Contains(made, ".env") || strings.Contains(made, ".claude") {
+			if strings.Count(made, "diff --git") != 1 || !strings.Contains(made, "+Scones") {
 				t.Errorf("the patch isn't the change alone:\n%s", made)
+			}
+			// What was in .claude is said, each name escaped, before it goes.
+			if !strings.Contains(r.printed, `"settings.local.json 20"`) || !strings.Contains(r.printed, `"commands 0"`) {
+				t.Errorf("the step didn't say what was in .claude:\n%s", r.printed)
+			}
+			if _, err := os.Lstat(filepath.Join(repo, ".claude")); err == nil {
+				t.Error("the .claude folder the session left is still there")
 			}
 			continue
 		}
