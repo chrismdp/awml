@@ -33,6 +33,12 @@ func earlierFailure(id int, sha string) string {
   "api --paginate repos/owner/repo/actions/runs/%d/jobs"*) answer <<< '{"jobs": [{"name": "test (1.22)", "conclusion": "failure"}]}' ;;`, id, sha, id)
 }
 
+// earlierPassed makes the earlier attempt of a re-run one whose tests passed.
+func earlierPassed(answers string) string {
+	return strings.Replace(answers, `attempts/1/jobs"*) answer <<< '{"jobs": [{"name": "test (1.22)", "conclusion": "failure"}]}'`,
+		`attempts/1/jobs"*) answer <<< '{"jobs": [{"name": "test (1.22)", "conclusion": "success"}, {"name": "Bug review", "conclusion": "failure"}]}'`, 1)
+}
+
 // retryAnswersOn answers as retryAnswers does, for the attempt of CI's run given, with CI's earlier
 // runs on the branch given as a list of runs and the case arms for their jobs.
 func retryAnswersOn(attempt int, earlier, test, review, branchSha, edited string, labels []string, builds int, renamed ...string) string {
@@ -48,7 +54,13 @@ func retryAnswersOn(attempt int, earlier, test, review, branchSha, edited string
 	for i := 0; i < builds; i++ {
 		runs = append(runs, `{"display_title": "Build of issue 120", "head_branch": "main", "event": "workflow_dispatch", "created_at": "2026-10-27T1`+string(rune('1'+i))+`:00:00Z"}`)
 	}
-	return `
+	// An earlier attempt of the run, on a re-run, whose tests failed; earlierPassed makes them pass.
+	attempts := ""
+	if attempt > 1 {
+		attempts = `
+  "api --paginate repos/owner/repo/actions/runs/77/attempts/1/jobs"*) answer <<< '{"jobs": [{"name": "test (1.22)", "conclusion": "failure"}]}' ;;`
+	}
+	return attempts + `
   "api repos/owner/repo/actions/runs/77"*) answer <<< '{"path": ".github/workflows/ci.yml", "event": "pull_request", "status": "completed",
     "head_sha": "` + head + `", "head_branch": "build/issue-120", "head_repository": {"full_name": "owner/repo"},
     "id": 77, "run_attempt": ` + fmt.Sprint(attempt) + `, "created_at": "2026-10-27T13:30:00Z", "pull_requests": [{"number": 8}],
@@ -131,6 +143,10 @@ func TestRetryActsWhenTheTestsFailAndCountsTheBuilds(t *testing.T) {
 		{"a re-run of the third build's failure", retryAnswersOn(2, "", "failure", "success", head, "", []string{"build"}, 3), "none"},
 		// A re-run of a run that started a build started it already.
 		{"a re-run of a failure that started a build", retryAnswersOn(2, "", "failure", "success", head, "", []string{"build"}, 1), "none"},
+		// A re-run whose earlier attempt passed its tests is the first failure of the run's tests:
+		// nothing was started or said for it, so it acts as a first attempt would.
+		{"a re-run whose first attempt passed its tests", earlierPassed(retryAnswersOn(2, "", "failure", "success", head, "", []string{"build"}, 1)), "again"},
+		{"a re-run of the third build whose first attempt passed its tests", earlierPassed(retryAnswersOn(2, "", "failure", "success", head, "", []string{"build"}, 3)), "report"},
 		// An edit since the label is said once too: unless an earlier run since the edit failed its
 		// tests, or this is a re-run. A takeover is checked first, since no edit brings the build back.
 		{"an issue edited since, after a failure since the edit", retryAnswersOn(1, earlierFailure(75, shaOf(9)), "failure", "success", head, "2026-10-27T10:30:00Z", []string{"build"}, 1), "none"},

@@ -5,7 +5,8 @@
 # CI itself. Once a commit on the branch isn't the factory's, a person has taken the branch over:
 # it's never built over again, and a new comment on the issue says so. Otherwise, after three builds,
 # or if the issue was edited since the label went on, a new comment on the issue says a person must
-# act. Each is said once, on the first failure of CI's tests since it came to hold, never a re-run.
+# act. Each is said once, on the first failure of CI's tests since it came to hold. A re-run acts
+# only if no earlier attempt of the run failed its tests.
 # Drawn in .github/drawings/retry-a-build.yaml
 name: Retry a build
 
@@ -114,16 +115,28 @@ jobs:
             leave "Issue #$issue no longer carries the build label, so whoever took it off decides."
           echo "issue=$issue" >> "$GITHUB_OUTPUT"
 
-          # Each outcome that needs a person is said once. told_already SINCE [SHA...] holds if this
-          # is a re-run, the same run again, or if an earlier CI run of this repository's on the
-          # branch, created since SINCE and before this one, and on one of the commits given if any
-          # are, failed its tests, when retry said so already.
+          # A re-run acted already if an earlier attempt of the run failed a test job, since retry
+          # acts only on a run whose tests failed. One whose earlier attempts' tests all passed is
+          # this run's first failure of its tests, and acts as a first attempt would.
           attempt="$(jq -r '.run_attempt // 1' <<< "$run")"
+          [[ "$attempt" =~ ^[0-9]+$ ]] || leave "CI's run attempt isn't a number."
+          acted=false
+          for ((earlier = 1; earlier < attempt; earlier++)); do
+            if gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN/attempts/$earlier/jobs?per_page=100" --jq '.jobs[]' |
+              jq -se '[.[] | select((.name | startswith("test (")) and .conclusion == "failure")] | length > 0' > /dev/null; then
+              acted=true
+            fi
+          done
+
+          # Each outcome that needs a person is said once. told_already SINCE [SHA...] holds if an
+          # earlier attempt of this run acted already, or if an earlier CI run of this repository's
+          # on the branch, created since SINCE and before this one, and on one of the commits given
+          # if any are, failed its tests, when retry said so already.
           created="$(jq -r .created_at <<< "$run")"
           told_already() {
             local since="$1" heads earlier
             shift
-            [ "$attempt" = 1 ] || return 0
+            [ "$acted" = false ] || return 0
             heads="$(jq -nc '$ARGS.positional' --args "$@")"
             while read -r earlier; do
               case "$earlier" in ''|*[!0-9]*) continue ;; esac
@@ -184,8 +197,8 @@ jobs:
           builds="$(jq length "$RUNNER_TEMP/builds.json")"
           echo "Issue #$issue has had $builds builds since the label was added at $labelled."
           if [ "$builds" -lt 3 ]; then
-            # A re-run is the same run again, which started the build already.
-            if [ "$attempt" != 1 ]; then
+            # A re-run of a run whose tests failed before started the build already.
+            if [ "$acted" = true ]; then
               echo "This is a re-run of a run that started the build already."
               echo "decision=none" >> "$GITHUB_OUTPUT"
             else

@@ -5,7 +5,8 @@
 # CI itself. Once a commit on the branch isn't the factory's, a person has taken the branch over:
 # it's never built over again, and a new comment on the issue says so. Otherwise, after three builds,
 # or if the issue was edited since the label went on, a new comment on the issue says a person must
-# act. Each is said once, on the first failure of CI's tests since it came to hold, never a re-run.
+# act. Each is said once, on the first failure of CI's tests since it came to hold. A re-run acts
+# only if no earlier attempt of the run failed its tests.
 awml: "0.8"
 title: A failed build tries again
 description: |
