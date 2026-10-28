@@ -81,7 +81,10 @@ refuse() {
   grep -zE "$claudes" | jq -Rs 'split("\u0000")[] | select(. != "")'
   exit 1
 }
-if [ "${#paths[@]}" -gt 0 ] && printf '%s\0' "${paths[@]}" | grep -zE "$claudes" > /dev/null; then
+# The names go to a file and are searched there, so no grep stops early in a pipe.
+names="$(mktemp)"
+printf '%s\0' "${paths[@]}" > "$names"
+if [ "${#paths[@]}" -gt 0 ] && grep -qzE "$claudes" "$names"; then
   printf '%s\0' "${paths[@]}" | refuse
 fi
 # GitHub's diff names a binary file without its contents, so git can't apply it, and the
@@ -109,7 +112,8 @@ awk 'function flush() { if (section != "" && !binary) printf "%s", section; sect
 if [ -s "$review/text.patch" ]; then
   git apply --index "$review/text.patch"
 fi
-if git diff --cached --name-only --no-renames -z | grep -zE "$claudes" > /dev/null; then
+git diff --cached --name-only --no-renames -z > "$names"
+if grep -qzE "$claudes" "$names"; then
   git diff --cached --name-only --no-renames -z | refuse
 fi
 staged="$(git diff --cached --name-only --no-renames -z | tr '\0' '\n')"

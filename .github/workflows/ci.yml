@@ -253,9 +253,14 @@ jobs:
             exit 1
           fi
           file="$out/$KIND.json"
+          # The long runs go to a file of their own, read whole, and are searched there: no grep
+          # stops early in a pipe, so nothing feeding it dies of SIGPIPE and reads as no token.
           looks_like_token() {
+            local runs
+            runs="$(mktemp)"
             LC_ALL=C sed -E 's#base64,[A-Za-z0-9+/]+=*##g; s#data-points="[A-Za-z0-9+/]+=*"##g' |
-              LC_ALL=C grep -aoiE 'sk-ant-|[A-Za-z0-9_-]{80,}' | grep -iE 'sk-ant-|[0-9]' > /dev/null
+              LC_ALL=C grep -aoiE 'sk-ant-|[A-Za-z0-9_-]{80,}' > "$runs" || true
+            LC_ALL=C grep -qiE 'sk-ant-|[0-9]' "$runs"
           }
           if ! [[ "$UNREAD" =~ ^[0-9]{1,4}$ ]]; then
             echo "The patch left no readable count of the binary files the review couldn't read."
@@ -431,9 +436,14 @@ jobs:
             exit 0
           fi
           file="$out/classification.json"
+          # The long runs go to a file of their own, read whole, and are searched there: no grep
+          # stops early in a pipe, so nothing feeding it dies of SIGPIPE and reads as no token.
           looks_like_token() {
+            local runs
+            runs="$(mktemp)"
             LC_ALL=C sed -E 's#base64,[A-Za-z0-9+/]+=*##g; s#data-points="[A-Za-z0-9+/]+=*"##g' |
-              LC_ALL=C grep -aoiE 'sk-ant-|[A-Za-z0-9_-]{80,}' | grep -iE 'sk-ant-|[0-9]' > /dev/null
+              LC_ALL=C grep -aoiE 'sk-ant-|[A-Za-z0-9_-]{80,}' > "$runs" || true
+            LC_ALL=C grep -qiE 'sk-ant-|[0-9]' "$runs"
           }
           if ! jq -e '(.verdict | IN("ship", "show", "ask")) and
               (.reasons | type == "array" and length >= 1 and length <= 5 and all(.[]; type == "string"))' \

@@ -426,9 +426,14 @@ jobs:
             echo "The kept change holds a symbolic link or something else that isn't a plain file, so it isn't kept."
             exit 1
           fi
+          # The long runs go to a file of their own, read whole, and are searched there: no grep
+          # stops early in a pipe, so nothing feeding it dies of SIGPIPE and reads as no token.
           looks_like_token() {
+            local runs
+            runs="$(mktemp)"
             LC_ALL=C sed -E 's#base64,[A-Za-z0-9+/]+=*##g; s#data-points="[A-Za-z0-9+/]+=*"##g' |
-              LC_ALL=C grep -aoiE 'sk-ant-|[A-Za-z0-9_-]{80,}' | grep -iE 'sk-ant-|[0-9]' > /dev/null
+              LC_ALL=C grep -aoiE 'sk-ant-|[A-Za-z0-9_-]{80,}' > "$runs" || true
+            LC_ALL=C grep -qiE 'sk-ant-|[0-9]' "$runs"
           }
           while IFS= read -r -d '' file; do
             if [ "$file" = "$change/change.patch" ]; then
@@ -547,10 +552,13 @@ jobs:
             say stale
           fi
           claudes='(^|/)\.claude(/|$)|(^|/)\.mcp\.json$|(^|/)CLAUDE(\.local)?\.md$|(^|/)\.npmrc$|(^|/)\.yarnrc(\.yml)?$|(^|/)node_modules(/|$)'
-          if git diff --cached --name-only --no-renames -z | grep -zE "^\.github/|$claudes" > /dev/null ||
+          # The names go to a file and are searched there, so no grep stops early in a pipe.
+          names="$(mktemp)"
+          git diff --cached --name-only --no-renames -z > "$names"
+          if grep -qzE "^\.github/|$claudes" "$names" ||
             git diff --cached --raw --no-renames | awk '$2 == "120000" { found = 1 } END { exit !found }'; then
             echo "The draft changes files the app never pushes, or makes a symbolic link:"
-            git diff --cached --name-only --no-renames -z | grep -zE "^\.github/|$claudes" | tr '\0' '\n' | jq -R . || true
+            grep -zE "^\.github/|$claudes" "$names" | tr '\0' '\n' | jq -R . || true
             git diff --cached --raw --no-renames | awk '$2 == "120000" { print "a symbolic link" }' | sort -u
             {
               printf '**The draft changes `.github/`, Claude Code'"'"'s own files** (`.claude/`, `.mcp.json` or a `CLAUDE.md`) **or npm'"'"'s** (`.npmrc`, `.yarnrc` or `node_modules/`), or makes a symbolic link, which the app never pushes, so the build stops here. [The run](%s)\n' "$run_url"
