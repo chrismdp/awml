@@ -56,10 +56,7 @@ type trail struct {
 // the standing approval it last passed, if only forks have come since, since a way to an action is
 // followed back through any fork, and a standing approval on the way to an action accepts the risk.
 func follow(source *Map, parts, lines []*Map) trail {
-	byID := map[any]*Map{}
-	for _, p := range parts {
-		byID[keyOf(p.get("id"))] = p
-	}
+	byID := partsOf(parts)
 	out := map[*Map][]*Map{}
 	for _, l := range lines {
 		if from := byID[keyOf(l.get("from"))]; from != nil && lineLeads(l) && byID[keyOf(l.get("to"))] != nil {

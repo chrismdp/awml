@@ -13,7 +13,8 @@ func Draw(doc *Map) string {
 	return GraphOf(doc).Mermaid()
 }
 
-// drawnRed is whether a view draws a line red: one that View found breaking a rule.
+// drawnRed is whether a line breaks a rule, as View found. Lines on untrusted text's way to an
+// action it reaches unchecked are drawn red too, but only the line that breaks the rule counts.
 func drawnRed(l *Map) bool {
 	breaches, _ := l.get("breaks").([]any)
 	return len(breaches) > 0
