@@ -410,6 +410,43 @@ func TestAPartIsUntrustedIfAnyCopyIsMarked(t *testing.T) {
 	togetherFinds(t, workflows, nil, []string{breachOf(`"mail" in sorter.yaml`, "send")})
 }
 
+// Given together, untrusted text is followed onto a surface of another workflow, which warns of it.
+// A surface whose own workflow already warns of the same text isn't warned of again.
+func TestUntrustedTextIsFollowedOntoASurfaceAcrossWorkflows(t *testing.T) {
+	shown := func(workflows []Workflow) [][]string {
+		return link(workflows).list(func(m mistake) bool { return m.check == surfaceRule })
+	}
+	sorter := strings.Replace(sorterWorkflow, "  - { id: tag,", "  - { id: screen, kind: surface, label: The shop's screen, in: office }\n  - { id: tag,", 1)
+	sorter += "  - { from: sort, to: screen, kind: data }\n"
+	workflows := together(t, "sorter.yaml", sorter, "replier.yaml", replierWorkflow)
+	if got := surfaceWarnings(workflows[0].Doc); got != nil {
+		t.Errorf("the sorter alone warns %q", got)
+	}
+	want := [][]string{{shownOn(`part "mail" in replier.yaml`, "screen")}, nil}
+	if got := shown(workflows); !reflect.DeepEqual(got, want) {
+		t.Errorf("together they warn %q\nwant %q", got, want)
+	}
+	// The owner's copy marked too, its own check warns, and together says nothing more.
+	marked := strings.Replace(sorter, "label: The shop inbox, in: office }", "label: The shop inbox, in: office, untrusted: true }", 1)
+	workflows = together(t, "sorter.yaml", marked, "replier.yaml", replierWorkflow)
+	if got, want := surfaceWarnings(workflows[0].Doc), []string{shownOn(`part "mail"`, "screen")}; !reflect.DeepEqual(got, want) {
+		t.Errorf("the sorter alone warns %q", got)
+	}
+	if got := shown(workflows); !reflect.DeepEqual(got, [][]string{nil, nil}) {
+		t.Errorf("together they warn %q", got)
+	}
+	// A copy of the screen that the replier writes to warns in the replier, and not again in the sorter.
+	replier := strings.Replace(replierWorkflow, "  - { id: draft,", "  - { id: screen, kind: surface, label: The shop's screen, in: office, ref: sorter.yaml#screen }\n  - { id: draft,", 1)
+	replier += "  - { from: mail, to: draft, kind: data }\n  - { from: draft, to: screen, kind: data }\n"
+	workflows = together(t, "sorter.yaml", sorter, "replier.yaml", replier)
+	if got, want := surfaceWarnings(workflows[1].Doc), []string{shownOn(`part "mail"`, "screen")}; !reflect.DeepEqual(got, want) {
+		t.Errorf("the replier alone warns %q", got)
+	}
+	if got := shown(workflows); !reflect.DeepEqual(got, [][]string{nil, nil}) {
+		t.Errorf("together they warn %q", got)
+	}
+}
+
 // On a map, a part marked untrusted whose text reaches no action unstopped has the orange outline.
 func TestTheMapDrawsAnUntrustedPartsOutline(t *testing.T) {
 	shop := strings.Replace(shopWorkflow, "label: The shopping list is ready, wait: PT1H }", "label: The shopping list is ready, wait: PT1H, untrusted: true }", 1)

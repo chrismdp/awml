@@ -610,6 +610,20 @@ lines:
   assert.equal(api.summaryJSON(inbox) + "\n", runNative(["summary", "--json", ...inboxPaths]), "summary JSON of a part marked untrusted by a copy");
   assert.equal(api.draw(inbox) + "\n", runNative(["draw", ...inboxPaths]), "map of a part marked untrusted by a copy");
   assert.deepEqual(api.summary(inbox).untrusted.map(({ outsideActions }) => outsideActions), [["Send the reply: Allow"]]);
+  // Its text reaches the sorter's screen with nothing to stop it, which warns, alone where the
+  // sorter's copy is marked and together where only the replier's is, as awml warns.
+  const screened = sorter.replace("  - { id: queue,", "  - { id: screen, kind: surface, label: The shop's screen, in: office }\n  - { id: queue,") +
+    "  - { from: sort, to: screen, kind: data }\n";
+  const onScreen = [{ file: inbox[0].file, source: screened }, inbox[1]];
+  const alone = [{ file: inbox[0].file, source: screened.replace("label: The shop inbox, in: office }", "label: The shop inbox, in: office, untrusted: true }") }];
+  for (const [name, files, code] of [["together", onScreen, 1], ["alone", alone, 0]]) {
+    for (const { file, source } of files) await writeFile(file, source);
+    assert.equal(api.checksJSON(files) + "\n", runNative(["check", "--json", ...files.map(({ file }) => file)], code), `checks JSON of untrusted text on a surface ${name}`);
+    const warned = api.checks(files).checks.find((check) => check.id === "warn.untrusted-surface");
+    assert.equal(warned.result, "warn", `untrusted text on a surface ${name}`);
+    assert.match(warned.mistakes[0].message, /reaches surface "screen": people reading it see text a stranger could have written/);
+  }
+  for (const { file, source } of inbox) await writeFile(file, source);
 
   // A box holds an outside action only where it starts a workflow given, so not the plan's here.
   const starting = [handOff[0], inbox[0]];
