@@ -7,6 +7,11 @@
 # them runs any of the change's code. Each job's result is its own check on the commit, so the
 # commit as pushed has one judge, and land.yml, fix.yml and retry.yml read its verdict from GitHub.
 # A fork's pull request, or one a stranger opened, gets the tests only.
+#
+# On pull_request GitHub runs the pull request's own ci.yml, not main's, so a person with write
+# access could change how their own pull request is reviewed, or skip a review. That's accepted:
+# only people with write access can push a branch here, and they're trusted, the app never pushes
+# a change to .github/, and a fork's pull request is given no secrets.
 # Drawn in .github/drawings/ci-a-commit.yaml
 #
 # When a check fails on main, a last job reports it. If an issue labelled failing-main is already
@@ -69,7 +74,8 @@ jobs:
   # so the opener must be the owner, a member, a collaborator or the build's app.
   #
   # Each job checks out main, never the head, and brings in the patch as data with main's
-  # .github/bring-patch.sh, so the sessions follow main's prompts, AGENTS.md and REVIEW.md. The job's
+  # .github/bring-patch.sh, so the sessions follow main's prompts, AGENTS.md and REVIEW.md, which the
+  # patch can't change, though the pull request's own ci.yml, which runs here, could. The job's
   # own check is the review's result: it fails on an Important finding, and its annotations carry
   # every finding, ranked by level and title, for Classify, fix.yml and land.yml to read. Nothing
   # passes between jobs, so there's no artifact.

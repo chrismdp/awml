@@ -53,7 +53,7 @@ go run ./cmd/awml check examples/*.yaml examples/tour/*.yaml examples/platforms/
 make test-wasm
 ```
 
-CI runs them on every pull request into main and on every commit that lands on main. Main's ruleset requires `test (1.22)`, `test (stable)`, `Bug review` and `Security review` to pass on a pull request's head commit before it merges, so keep those job names. The reviews run only on a pull request from a branch of this repository, opened by its own people or the app, and read main's prompts, `AGENTS.md` and `REVIEW.md`, never the branch's. Check the factory's drawings with `go run ./cmd/awml check .github/drawings/*.yaml` too.
+CI runs them on every pull request into main and on every commit that lands on main. Main's ruleset requires `test (1.22)`, `test (stable)`, `Bug review` and `Security review` to pass on a pull request's head commit before it merges, so keep those job names. The reviews run only on a pull request from a branch of this repository, opened by its own people or the app, and read main's prompts, `AGENTS.md` and `REVIEW.md`, which the patch can't change. On a pull request GitHub runs the pull request's own ci.yml, not main's, so a person with write access could change how their own pull request is reviewed, or skip a review. That's accepted: they're trusted, the app never pushes a change to `.github/`, and a fork's pull request gets no secrets. Check the factory's drawings with `go run ./cmd/awml check .github/drawings/*.yaml` too.
 
 The build rule's tests need git 2.40 or later, for `--attr-source`; the git that comes with Xcode is older.
 

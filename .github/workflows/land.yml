@@ -52,7 +52,8 @@ jobs:
       # that isn't the app's or isn't open, or a head that moved, means it exits quietly: a failed
       # check is retry-a-build's or the fixer's, and a newer CI result decides a moved head. The
       # person who last added the issue's build label is the one to tell or ask, or the owner if the
-      # app added it.
+      # app added it. Classify isn't required: once every job has finished, one that didn't pass is
+      # read as giving no verdict.
       - name: "Sort by GitHub's record: is the pull request open at CI's commit, with every check passed?"
         id: ready
         env:
@@ -74,12 +75,20 @@ jobs:
 
           gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN/jobs?per_page=100" --jq '.jobs[]' |
             jq -s . > "$RUNNER_TEMP/jobs.json"
-          jq -e 'all(.[]; .status == "completed" and (.conclusion | IN("success", "skipped")))' "$RUNNER_TEMP/jobs.json" > /dev/null ||
-            leave "A check on $head_sha failed or hasn't finished, so it's left to retry-a-build or the fixer."
+          jq -e 'all(.[]; .status == "completed")' "$RUNNER_TEMP/jobs.json" > /dev/null ||
+            leave "A check on $head_sha hasn't finished, so a later run decides."
           for name in "test (1.22)" "test (stable)" "Bug review" "Security review"; do
             jq -e --arg name "$name" '[.[] | select(.name == $name and .conclusion == "success")] | length == 1' \
-              "$RUNNER_TEMP/jobs.json" > /dev/null || leave "$name didn't pass on $head_sha."
+              "$RUNNER_TEMP/jobs.json" > /dev/null || leave "$name didn't pass on $head_sha, so it's left to retry-a-build or the fixer."
           done
+          # A Classify job that failed or was cancelled as a whole, by a timeout or a lost runner, gave
+          # no verdict to trust, and its failure wakes neither the fixer nor retry, so it's read as no
+          # verdict, which asks.
+          if jq -e '[.[] | select(.name == "Classify" and .conclusion == "success")] | length == 1' "$RUNNER_TEMP/jobs.json" > /dev/null; then
+            classify_passed=true
+          else
+            classify_passed=false
+          fi
           classify="$(jq -r '[.[] | select(.name == "Classify")] | first | .html_url // ""' "$RUNNER_TEMP/jobs.json")"
           [[ "$classify" =~ ^https://github\.com/[A-Za-z0-9._/-]+$ ]] || classify="$(jq -r .html_url <<< "$run")"
 
@@ -103,6 +112,7 @@ jobs:
             echo "head_sha=$head_sha"
             echo "labeller=$labeller"
             echo "classify=$classify"
+            echo "classify_passed=$classify_passed"
           } | tee -a "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -140,6 +150,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           CI_RUN: ${{ github.event.workflow_run.id }}
           HEAD_SHA: ${{ steps.ready.outputs.head_sha }}
+          CLASSIFY_PASSED: ${{ steps.ready.outputs.classify_passed }}
         run: |
           if ! [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
             echo "The commit to judge isn't a commit id: $HEAD_SHA"
@@ -152,6 +163,7 @@ jobs:
           git -c core.hooksPath=/dev/null -c core.fsmonitor=false worktree add -q --detach "$RUNNER_TEMP/judged" "$base"
           git -C "$RUNNER_TEMP/judged" read-tree "$HEAD_SHA"
           bash "$RUNNER_TEMP/read-findings.sh" "$CI_RUN" "$RUNNER_TEMP/checks"
+          [ "$CLASSIFY_PASSED" = true ] || echo missing > "$RUNNER_TEMP/checks/verdict.txt"
           "$RUNNER_TEMP/build-rule" -repo "$RUNNER_TEMP/judged" -rules "$RUNNER_TEMP/build-rules.yml" \
             -findings "$RUNNER_TEMP/checks/findings.json" -classify "$(cat "$RUNNER_TEMP/checks/verdict.txt")" \
             -head "$HEAD_SHA" -factory "awml-factory[bot]" > "$RUNNER_TEMP/rule.txt"

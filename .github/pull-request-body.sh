@@ -37,6 +37,17 @@ if [ "${1:-}" = title ]; then
   exit 0
 fi
 
+# With the argument message, it writes the build's commit message: Claude's, cut to 5,000
+# characters and neutralised the same way, since a person's squash puts it in main's commit, then
+# the issue it closes.
+if [ "${1:-}" = message ]; then
+  message="$(cat "$CHANGE_DIR/message.md" 2> /dev/null || true)"
+  [ -n "$message" ] || message="Build #$ISSUE"
+  jq -Rrs '.[0:5000] | '"$neutralise" <<< "$message"
+  printf '\nCloses #%s\n' "$ISSUE"
+  exit 0
+fi
+
 if [ -s "$CHANGE_DIR/pull-request.md" ]; then
   escape < "$CHANGE_DIR/pull-request.md"
 else

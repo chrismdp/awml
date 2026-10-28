@@ -441,3 +441,45 @@ func TestTheTitleClosesNothing(t *testing.T) {
 		t.Error("the open job doesn't take the title from main's pull-request-body.sh")
 	}
 }
+
+// A person who squashes the pull request gets the branch's commit messages in main's, so the build's
+// commit message is neutralised as the title is: mentions and closing keywords broken, save the
+// build's own Closes #n, which it adds after. The fixer's commit message uses the same expression.
+func TestTheCommitMessagesCloseOnlyTheIssue(t *testing.T) {
+	r := newRehearsal(t)
+	r.write("pull-request-body.sh", readText(t, ".github/pull-request-body.sh"))
+	r.write("change/message.md", "Add scones\n\nCloses #7, fixes https://github.com/owner/repo/issues/8, thanks @someone.\n")
+	r.run(workflowStep{Run: `bash "$RUNNER_TEMP/pull-request-body.sh" message`}, map[string]string{"ISSUE": "120", "CHANGE_DIR": filepath.Join(r.temp, "change")}, "")
+	r.mustPass()
+	closing := regexp.MustCompile(`(?i)\b(close[sd]?|fix(e[sd])?|resolve[sd]?)\b[:\s]+((\S+/\S+)?#|https?://\S+/(issues|pull)/)[0-9]`)
+	if found := closing.FindAllString(r.printed, -1); len(found) != 1 || !strings.HasSuffix(strings.TrimSpace(r.printed), "Closes #120") ||
+		strings.Contains(r.printed, "@someone") || !strings.HasPrefix(r.printed, "Add scones") {
+		t.Errorf("the build's commit message closes %q:\n%s", found, r.printed)
+	}
+	push, _ := readBuildWorkflow(t)["open"].step(t, "push")
+	if !strings.Contains(push.Run, `"$RUNNER_TEMP/pull-request-body.sh" message > "$message"`) {
+		t.Error("the build's commit message isn't main's pull-request-body.sh's")
+	}
+	expression := regexp.MustCompile(`(?s)neutralise='(.*?)'\n`).FindStringSubmatch(readText(t, ".github/pull-request-body.sh"))
+	fix, _ := readFactoryWorkflow(t, "fix.yml").Jobs["write"].step(t, "push")
+	if expression == nil || !strings.Contains(fix.Run, strings.TrimSpace(strings.Split(expression[1], "\n")[1])) {
+		t.Error("the fix's commit message isn't neutralised with pull-request-body.sh's expression")
+	}
+}
+
+// Under pull_request GitHub runs the pull request's own ci.yml, so a person with write access could
+// change how their pull request is reviewed. That's accepted, since they're trusted and the app never
+// pushes .github/, and the files say so rather than claim a branch can't.
+func TestTheReviewsTrustBranchesSayingWhy(t *testing.T) {
+	for _, file := range []string{".github/workflows/ci.yml", ".github/bring-patch.sh", ".github/drawings/ci-a-commit.yaml", "AGENTS.md"} {
+		text := readText(t, file)
+		if strings.Contains(text, "branch can't rewrite") || strings.Contains(text, "never the branch's") {
+			t.Errorf("%s claims a branch can't change how it's reviewed", file)
+		}
+	}
+	for _, file := range []string{".github/workflows/ci.yml", "AGENTS.md"} {
+		if !strings.Contains(readText(t, file), "pull request's own ci.yml") {
+			t.Errorf("%s doesn't say a pull request runs its own ci.yml, and why that's accepted", file)
+		}
+	}
+}

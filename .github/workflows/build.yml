@@ -549,7 +549,9 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
 
-      # The commit is the app's, as its push is. Its message is Claude's, with the issue it closes.
+      # The commit is the app's, as its push is. Its message is Claude's, with mentions and closing
+      # keywords broken by main's pull-request-body.sh, since a person's squash keeps it, and then the
+      # issue it closes.
       # The branch is the issue's own, reused by every try, so a new try's push updates the open
       # pull request. The push takes a lease on the head the job read when it started.
       - name: Commit the change as the app's bot and push the branch
@@ -568,9 +570,7 @@ jobs:
           id="$(gh api "users/$APP_SLUG%5Bbot%5D" --jq .id)"
           case "$id" in ''|*[!0-9]*) echo "The app's bot has no user id: $id"; exit 1 ;; esac
           message="$RUNNER_TEMP/commit.md"
-          cat "$RUNNER_TEMP/change/message.md" > "$message" 2> /dev/null || true
-          [ -s "$message" ] || echo "Build #$ISSUE" > "$message"
-          printf '\n\nCloses #%s\n' "$ISSUE" >> "$message"
+          CHANGE_DIR="$RUNNER_TEMP/change" "$RUNNER_TEMP/pull-request-body.sh" message > "$message"
           git config user.name "$APP_SLUG[bot]"
           git config user.email "$id+$APP_SLUG[bot]@users.noreply.github.com"
           git switch -c "$BRANCH"

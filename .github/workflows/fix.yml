@@ -399,7 +399,8 @@ jobs:
           repositories: ${{ github.event.repository.name }}
 
       # The fix is one more commit, the app's, as its push is, on the reviewed commit. Its message is
-      # Claude's, with mentions broken, and ends with the fix line its tries are counted by. The push
+      # Claude's, with mentions and closing keywords broken, as pull-request-body.sh breaks them, since
+      # a person's squash keeps it, and ends with the fix line its tries are counted by. The push
       # names the reviewed commit, so GitHub refuses it if anyone pushed since.
       - name: Push the fix as one commit, with --force-with-lease at the reviewed commit
         id: push
@@ -415,7 +416,8 @@ jobs:
           id="$(gh api "users/$APP_SLUG%5Bbot%5D" --jq .id)"
           case "$id" in ''|*[!0-9]*) echo "The app's bot has no user id: $id"; exit 1 ;; esac
           message="$RUNNER_TEMP/commit.md"
-          jq -Rrs '.[0:5000] | gsub("@(?=[A-Za-z0-9])"; "@​")' "$RUNNER_TEMP/fix/message.md" > "$message" 2> /dev/null || true
+          jq -Rrs '.[0:5000] | gsub("@(?=[A-Za-z0-9])"; "@​")
+          | gsub("(?<keyword>\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\\b[:\\s]+(?:(?:[\\w.-]+/[\\w.-]+)?#|https?://[^\\s/]+/[\\w.-]+/[\\w.-]+/(?:issues|pull)/))(?=[0-9])"; "\(.keyword)​"; "i")' "$RUNNER_TEMP/fix/message.md" > "$message" 2> /dev/null || true
           [ -s "$message" ] || echo "Fix what the reviews found" > "$message"
           printf '\nFixes what the reviews found on %s.\n\nFixed-by: fix-review-findings\n' "$HEAD_SHA" >> "$message"
           git config user.name "$APP_SLUG[bot]"

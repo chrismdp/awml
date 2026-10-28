@@ -111,7 +111,7 @@ func TestLandExitsQuietlyUnlessEveryCheckPassedOnTheHead(t *testing.T) {
 // rehearseJudge rehearses land's judge step on a branch of the given commits, made on a bakery's main in an
 // origin of its own, with the reviews' checks and Classify's verdict as the stub answers them, and
 // main's rule built from this repository.
-func rehearseJudge(t *testing.T, commits []struct{ author, message string }, annotations, verdict string) *rehearsal {
+func rehearseJudge(t *testing.T, commits []struct{ author, message string }, annotations, verdict string, classifyPassed ...string) *rehearsal {
 	t.Helper()
 	find := readFactoryWorkflow(t, "land.yml").Jobs["find"]
 	step, _ := find.step(t, "judge")
@@ -134,7 +134,11 @@ func rehearseJudge(t *testing.T, commits []struct{ author, message string }, ann
 	work := filepath.Join(r.root, "work")
 	gitIn(t, r.root, "clone", "-q", "--branch", "main", origin, work)
 	r.dir = work
-	r.run(step, map[string]string{"CI_RUN": "77", "HEAD_SHA": head}, `
+	passed := "true"
+	if len(classifyPassed) > 0 {
+		passed = classifyPassed[0]
+	}
+	r.run(step, map[string]string{"CI_RUN": "77", "HEAD_SHA": head, "CLASSIFY_PASSED": passed}, `
   "api --paginate repos/owner/repo/actions/runs/77/jobs"*) answer <<< '{"jobs": [
     {"name": "Bug review", "check_run_url": "https://api.github.com/repos/owner/repo/check-runs/2"},
     {"name": "Security review", "check_run_url": "https://api.github.com/repos/owner/repo/check-runs/3"},
@@ -293,5 +297,39 @@ func TestTheBuildRuleAsksAboutNpmsOwnFiles(t *testing.T) {
 		if !contains(rules.ReviewPaths, path) {
 			t.Errorf("the build rule doesn't ask about %s", path)
 		}
+	}
+}
+
+// A Classify job that failed or was cancelled as a whole, by a timeout or a lost runner, gave no
+// verdict anyone can trust, and nothing else would act on the pull request: Classify's failure wakes
+// neither the fixer nor retry. So land goes on once every job has finished and the four required
+// checks have passed, and reads such a Classify as giving no verdict, which asks.
+func TestLandAsksWhenClassifyEndedBadly(t *testing.T) {
+	ready, _ := readFactoryWorkflow(t, "land.yml").Jobs["find"].step(t, "ready")
+	head := strings.Repeat("ab", 20)
+	required := []string{landJob("test (1.22)", "completed", "success"), landJob("test (stable)", "completed", "success"),
+		landJob("Bug review", "completed", "success"), landJob("Security review", "completed", "success")}
+	for conclusion, passed := range map[string]string{"success": "true", "failure": "false", "cancelled": "false", "timed_out": "false"} {
+		r := newRehearsal(t)
+		r.run(ready, map[string]string{"CI_RUN": "77"}, landRun("pull_request", "build/issue-120")+
+			landJobs(append(append([]string{}, required...), landJob("Classify", "completed", conclusion))...)+landPulls("awml-factory[bot]", head))
+		r.mustPass()
+		if r.outputs["ready"] != "true" || r.outputs["classify_passed"] != passed {
+			t.Errorf("with Classify %s, land read %v, want ready with classify_passed=%s", conclusion, r.outputs, passed)
+		}
+	}
+	r := newRehearsal(t)
+	r.run(ready, map[string]string{"CI_RUN": "77"}, landRun("pull_request", "build/issue-120")+
+		landJobs(append(append([]string{}, required...), landJob("Classify", "completed", "skipped"))...)+landPulls("awml-factory[bot]", head))
+	r.mustPass()
+	if r.outputs["classify_passed"] != "false" {
+		t.Errorf("with Classify skipped on a factory branch, land read %v, want no verdict", r.outputs)
+	}
+
+	const app = "41+awml-factory[bot]@users.noreply.github.com"
+	judged := rehearseJudge(t, []struct{ author, message string }{{app, "Add scones"}}, "[]",
+		`{"annotation_level": "notice", "title": "Verdict", "message": "ship"}`, "false")
+	if judged.outputs["outcome"] != "ask" || !strings.Contains(judged.outputs["reasons"], "Classify gave no verdict") {
+		t.Errorf("a Classify that didn't pass, with a ship notice, judged %s for %s, want ask", judged.outputs["outcome"], judged.outputs["reasons"])
 	}
 }

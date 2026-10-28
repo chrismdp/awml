@@ -4,7 +4,10 @@
 # as data and runs none of it.
 #
 # It keeps main's review prompts in RUNNER_TEMP/prompts, and main's REVIEW.md and AGENTS.md in
-# RUNNER_TEMP/review, before the patch is applied, so a branch can't rewrite what it's held to.
+# RUNNER_TEMP/review, before the patch is applied, so the patch can't rewrite what it's held to. The
+# pull request's own ci.yml, which GitHub runs on pull_request, could, and that's accepted: only
+# people with write access, who are trusted, can push a branch here, and the app never pushes
+# .github/.
 # The patch is GitHub's diff of HEAD_SHA, the pull request's head, against the commit of main the
 # branch started from, so it applies there, and the working tree then holds the change, all but
 # binary images and fonts, which are listed in RUNNER_TEMP/review/binary-files.md instead. A patch
