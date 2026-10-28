@@ -199,7 +199,7 @@ jobs:
           [ "$CLASSIFY_PASSED" = true ] || echo missing > "$RUNNER_TEMP/checks/verdict.txt"
           "$RUNNER_TEMP/build-rule" -repo "$RUNNER_TEMP/judged" -rules "$RUNNER_TEMP/build-rules.yml" \
             -findings "$RUNNER_TEMP/checks/findings.json" -classify "$(cat "$RUNNER_TEMP/checks/verdict.txt")" \
-            -head "$HEAD_SHA" -factory "awml-factory[bot]" > "$RUNNER_TEMP/rule.txt"
+            -head "$HEAD_SHA" > "$RUNNER_TEMP/rule.txt"
           cat "$RUNNER_TEMP/rule.txt"
           outcome="$(head -n 1 "$RUNNER_TEMP/rule.txt")"
           case "$outcome" in

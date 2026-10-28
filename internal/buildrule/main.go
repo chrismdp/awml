@@ -52,14 +52,13 @@ type config struct {
 }
 
 // What land.yml read from GitHub about the commit it judges: the reviews' findings, as a file of
-// their severities, Classify's verdict, and the commit with the factory app's login, whose own
-// commits since main the rule reads from git. Each may be left out, as the tests do; land.yml gives
+// their severities, Classify's verdict, and the commit, whose commits since main the rule reads from
+// git. Each may be left out, as the tests do; land.yml gives
 // them all, and "missing" for a Classify check that gave no verdict.
 type inputs struct {
 	Findings string
 	Classify string
 	Head     string
-	Factory  string
 }
 
 // The outcomes, from the one that merges with no person to the one that waits for a person. The
@@ -74,20 +73,22 @@ type verdict struct {
 // The line each fix commit's message carries, which fix.yml writes and counts its tries by.
 const fixLine = "Fixed-by: fix-review-findings"
 
+// The login of the factory's app, whose noreply address the factory's own commits carry.
+const factoryApp = "awml-factory[bot]"
+
 func main() {
 	repo := flag.String("repo", ".", "repository with the judged commit's tree in its index, at its base on main")
 	rules := flag.String("rules", ".github/build-rules.yml", "build rules file")
 	findings := flag.String("findings", "", "the reviews' findings, as JSON")
 	classify := flag.String("classify", "", "Classify's verdict: ship, show, ask or missing")
 	head := flag.String("head", "", "the commit judged, whose commits since the repository's HEAD are read")
-	factory := flag.String("factory", "", "the login of the factory's app, whose commits are the factory's")
 	flag.Parse()
 
 	cfg, err := loadConfig(*rules)
 	if err != nil {
 		fatal(err)
 	}
-	result, err := evaluate(*repo, cfg, inputs{Findings: *findings, Classify: *classify, Head: *head, Factory: *factory})
+	result, err := evaluate(*repo, cfg, inputs{Findings: *findings, Classify: *classify, Head: *head})
 	if err != nil {
 		fatal(err)
 	}
@@ -265,7 +266,7 @@ func evaluate(repoDir string, cfg config, in inputs) (verdict, error) {
 	}
 
 	if in.Head != "" {
-		branch, err := readBranch(repo, in.Head, in.Factory)
+		branch, err := readBranch(repo, in.Head)
 		if err != nil {
 			return verdict{}, err
 		}
@@ -311,7 +312,7 @@ type branch struct {
 // header. A commit is the factory's only if the app's login is in both its author's and its
 // committer's noreply address: a person's commit that the app rebased is still the person's. Anyone
 // with write access could forge the address, and they're trusted to, so the email is enough here.
-func readBranch(repo repository, head, factory string) (branch, error) {
+func readBranch(repo repository, head string) (branch, error) {
 	var result branch
 	if !regexp.MustCompile(`^[0-9a-f]{40}$`).MatchString(head) {
 		return result, fmt.Errorf("the head %q isn't a commit id", head)
@@ -341,7 +342,7 @@ func readBranch(repo repository, head, factory string) (branch, error) {
 		if parents != 1 {
 			result.merges++
 		}
-		if factory == "" || !byApp(author, factory) || !byApp(committer, factory) {
+		if !byApp(author) || !byApp(committer) {
 			result.others++
 		}
 		for _, line := range strings.Split(message, "\n") {
@@ -356,14 +357,14 @@ func readBranch(repo repository, head, factory string) (branch, error) {
 
 // byApp says whether an author or committer line names the app's noreply address, with or
 // without the bot's user id before it.
-func byApp(line, factory string) bool {
+func byApp(line string) bool {
 	start := strings.LastIndex(line, "<")
 	end := strings.LastIndex(line, ">")
 	if start < 0 || end < start {
 		return false
 	}
 	email := line[start+1 : end]
-	address := factory + "@users.noreply.github.com"
+	address := factoryApp + "@users.noreply.github.com"
 	if email == address {
 		return true
 	}

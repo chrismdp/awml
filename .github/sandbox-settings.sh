@@ -17,10 +17,9 @@
 # .git, nor the tree's for KIND workspace, the runner's file commands and event, its own files, its
 # actions, its tool cache, where
 # Claude Code itself is installed, any folder on PATH or Go's bin, or the git and shell settings of
-# the runner's own home, and none
-# may read the runner's files: the scrub keys its own list to HOME, which is the session's here. No
-# host is allowed, and no prompt is given for one: a session's Go modules and packages are fetched
-# before it starts.
+# the runner's own home, and none may read the runner's files or the Docker socket: the scrub keys
+# its own list to HOME, which is the session's here. No host is allowed, and no prompt is given for
+# one: a session's Go modules and packages are fetched before it starts.
 #
 # Needs jq.
 set -euo pipefail
@@ -95,10 +94,14 @@ done
 for dir in "$HOME/runners" "$HOME/actions-runner"; do
   if [ -d "$dir" ]; then runner+=("$dir"); fi
 done
+# The Docker socket, which a command could use to start a container outside the sandbox. The
+# workflows close it before the session, and it's denied here as well.
+read=("${runner[@]}")
+if [ -e /var/run/docker.sock ]; then read+=(/var/run/docker.sock); fi
 
 list() { jq -nc '$ARGS.positional | unique' --args "$@"; }
 mkdir -p "$home/.claude"
-jq -n --argjson write "$(list "${deny_write[@]}" "${runner[@]}")" --argjson read "$(list "${runner[@]}")" '
+jq -n --argjson write "$(list "${deny_write[@]}" "${runner[@]}")" --argjson read "$(list "${read[@]}")" '
   {sandbox: {
     enabled: true,
     failIfUnavailable: true,

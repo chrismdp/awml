@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -506,5 +507,12 @@ func TestLandAsksOnceTheBuildLabelIsTakenOff(t *testing.T) {
 	}
 	if !strings.Contains(readText(t, ".github/drawings/land-a-pull-request.yaml"), "the build label was taken off the issue") {
 		t.Error("land's drawing doesn't say a label taken off asks")
+	}
+}
+
+// The build rule knows the factory's app by a constant, so land passes no login for it.
+func TestLandNamesNoFactoryForTheRule(t *testing.T) {
+	if regexp.MustCompile(`\s-factory\b`).MatchString(readText(t, ".github/workflows/land.yml")) {
+		t.Error("land.yml passes the rule a -factory flag, but the rule knows the app itself")
 	}
 }

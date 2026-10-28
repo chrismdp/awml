@@ -251,6 +251,9 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y bubblewrap socat
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          # The Docker socket would let a command start a root container outside the sandbox. It's
+          # root's, so taking the group's access away leaves the runner user unable to reach it.
+          if [ -e /var/run/docker.sock ]; then sudo chmod 600 /var/run/docker.sock; fi
           bwrap --dev-bind / / --unshare-pid true
           npm install -g @anthropic-ai/claude-code@2.1.312
 

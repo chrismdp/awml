@@ -738,3 +738,10 @@ func TestTheBuildLabelCountsOnlyFromSomeoneWhoCanWrite(t *testing.T) {
 		}
 	}
 }
+
+// AGENTS.md counts the builds as retry.yml and its drawing do: up to three in all.
+func TestAgentsCountsTheBuildsAsRetryDoes(t *testing.T) {
+	if !strings.Contains(readText(t, "AGENTS.md"), "up to three builds in all") {
+		t.Error("AGENTS.md doesn't say a build runs up to three builds in all")
+	}
+}

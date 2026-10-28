@@ -901,6 +901,9 @@ func TestTheSandboxSettingsAreExplicit(t *testing.T) {
 		if !contains(box.Filesystem.DenyRead, r.root+"/runners") {
 			t.Errorf("%s: the sandbox lets commands read the runner's own files: %v", kind, box.Filesystem.DenyRead)
 		}
+		if _, err := os.Stat("/var/run/docker.sock"); err == nil && !contains(box.Filesystem.DenyRead, "/var/run/docker.sock") {
+			t.Errorf("%s: the sandbox lets commands reach the Docker socket: %v", kind, box.Filesystem.DenyRead)
+		}
 	}
 }
 
@@ -1244,5 +1247,33 @@ func TestEachRunTakesTurnsByItsOwnRepositorysBranch(t *testing.T) {
 				t.Errorf("%s:%d trusts how GitHub associates a person: %s", file, at+1, strings.TrimSpace(line))
 			}
 		}
+	}
+}
+
+// A command in a session could reach the Docker daemon through its socket and start a container as
+// root, outside the sandbox. So each job that runs a Claude session takes the runner user's access to
+// the socket away before the session starts, and the sandbox denies reading it too.
+func TestNoSessionCanReachDocker(t *testing.T) {
+	var jobs []string
+	eachJob(t, func(file, name string, job workflowJob) {
+		session, locked := -1, -1
+		for at, step := range job.Steps {
+			if locked < 0 && strings.Contains(step.Run, "if [ -e /var/run/docker.sock ]; then sudo chmod 600 /var/run/docker.sock; fi") {
+				locked = at
+			}
+			if session < 0 && strings.Contains(step.Run, "claude -p") {
+				session = at
+			}
+		}
+		if session < 0 {
+			return
+		}
+		jobs = append(jobs, file+" "+name)
+		if locked < 0 || locked >= session {
+			t.Errorf("%s's %s runs a Claude session without first closing the Docker socket", file, name)
+		}
+	})
+	if strings.Join(sortedStrings(jobs), ", ") != "build.yml draft, ci.yml classify, ci.yml review, fix.yml fix, resolve.yml draft" {
+		t.Errorf("the jobs that run a Claude session are %v", jobs)
 	}
 }

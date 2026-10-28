@@ -158,7 +158,6 @@ func TestEvaluateRejectsUnreadableRecords(t *testing.T) {
 // message carries, means at least show. A commit the factory's app didn't both write and commit,
 // or a merge, asks, since only a person can say what it brings.
 func TestEvaluateTheBranchsCommits(t *testing.T) {
-	const factory = "awml-factory[bot]"
 	const app = "Factory <41+awml-factory[bot]@users.noreply.github.com>"
 	const person = "A Person <person@example.invalid>"
 	type made struct {
@@ -221,7 +220,7 @@ func TestEvaluateTheBranchsCommits(t *testing.T) {
 			judgeAt(t, repo, base, head)
 
 			got, err := evaluate(repo, config{MaxChangedLines: 400},
-				inputs{Classify: "ship", Head: head, Factory: factory})
+				inputs{Classify: "ship", Head: head})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -246,7 +245,7 @@ func TestEvaluateTheBranchsCommits(t *testing.T) {
 		judgeAt(t, repo, base, head)
 
 		got, err := evaluate(repo, config{MaxChangedLines: 400},
-			inputs{Classify: "ship", Head: head, Factory: factory})
+			inputs{Classify: "ship", Head: head})
 		if err != nil {
 			t.Fatal(err)
 		}
