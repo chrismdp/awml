@@ -230,6 +230,12 @@ func TestNothingInTheFactoryUsesAutoMerge(t *testing.T) {
 	}
 }
 
+// Installing Claude Code, at an exact version, and filling a session's caches before it starts, by
+// fetching alone: go mod download runs no module's code, and npx with npm's scripts off runs only
+// true. Neither runs anything from the change.
+var claudeInstall = regexp.MustCompile(`npm install -g @anthropic-ai/claude-code@[0-9]+\.[0-9]+\.[0-9]+\n`)
+var moduleFetch = regexp.MustCompile(`(?m)^.*(go mod download|npm_config_ignore_scripts=true npx --yes (-p \S+ )+-- true)$`)
+
 // A command a script runs, at the start of a line or after ;, &&, || or a pipe.
 var commandWord = regexp.MustCompile(`(?m)(?:^|[;&|(]\s*|\$\(\s*)(go|make|node|npx|npm)\s`)
 
@@ -245,7 +251,8 @@ func TestNoJobWithClaudesTokenRunsCodeOutsideClaude(t *testing.T) {
 		}
 		jobs++
 		for _, step := range job.Steps {
-			script := strings.ReplaceAll(step.Run, "npm install -g @anthropic-ai/claude-code", "")
+			script := claudeInstall.ReplaceAllString(step.Run, "")
+			script = moduleFetch.ReplaceAllString(script, "")
 			for _, found := range commandWord.FindAllStringSubmatch(script, -1) {
 				t.Errorf("%s's %s step %q runs %s outside Claude's sandbox", file, name, step.Name, found[1])
 			}
@@ -341,6 +348,9 @@ func TestEveryJobThatRunsClaudeHasBubblewrap(t *testing.T) {
 				continue
 			}
 			installs = true
+			if !claudeInstall.MatchString(step.Run) {
+				t.Errorf("%s's %s installs Claude Code without pinning its exact version", file, name)
+			}
 			if !strings.Contains(step.Run, "apt-get install -y bubblewrap socat") || !strings.Contains(step.Run, "bwrap --") {
 				t.Errorf("%s's %s installs Claude Code without installing bubblewrap and socat and checking bubblewrap", file, name)
 			}
@@ -737,17 +747,17 @@ func (r *rehearsal) newRepo(name string, files map[string]string) (string, strin
 }
 
 var sessionHome = regexp.MustCompile(`HOME="([^"]+)" claude -p`)
-var sandboxSettings = regexp.MustCompile(`bash "\$RUNNER_TEMP/sandbox-settings\.sh" "([^"]+)" "([^"]+)" (builds|reads)\n`)
+var sandboxSettings = regexp.MustCompile(`bash "\$RUNNER_TEMP/sandbox-settings\.sh" "([^"]+)" "([^"]+)" (workspace|clone)[^\n]*\n`)
 
 // Every Claude session runs its commands in Claude Code's own sandbox, set in the user settings of
-// a home of its own, the only settings --setting-sources user loads (#131). The drafting sessions,
-// the draft, the fix and the rebase, may reach only the Go module proxy, its checksum database and
-// npm's registry; the review and Classify sessions run no commands and reach nothing. Main's script
-// writes the settings, copied out of the tree before the session starts. Under
+// a home of its own, the only settings --setting-sources user loads (#131). Every session's tree
+// keeps its .git out of the commands' reach, but the rebase's, which is a clone of its own that
+// host git never touches again. Main's script writes the settings, copied out of the tree before
+// the session starts. Under
 // CLAUDE_CODE_SUBPROCESS_ENV_SCRUB the permission mode is always default, so each session says so.
 func TestEverySessionRunsInItsOwnSandbox(t *testing.T) {
-	kinds := map[string]string{"ci.yml review": "reads", "ci.yml classify": "reads", "build.yml draft": "builds",
-		"fix.yml fix": "builds", "resolve.yml draft": "builds"}
+	kinds := map[string]string{"ci.yml review": "workspace", "ci.yml classify": "workspace", "build.yml draft": "workspace",
+		"fix.yml fix": "workspace", "resolve.yml draft": "clone"}
 	sessions := 0
 	eachJob(t, func(file, name string, job workflowJob) {
 		at := job.session()
@@ -791,22 +801,26 @@ func TestEverySessionRunsInItsOwnSandbox(t *testing.T) {
 }
 
 // The settings turn the sandbox on, fail rather than run a command without it, refuse every
-// unsandboxed retry, deny writes to .git and to the runner's own files, and allow only the hosts a
-// session's commands need, refusing every other without a prompt.
+// unsandboxed retry, and allow no host at all: the Go modules and the renderer's packages are
+// fetched before the session, so nothing the session runs can carry data out through a proxy. No
+// command may write .git, except in the rebase's own clone, or the runner's files, its actions, its
+// tool cache or the git and shell settings of the runner's own home, or anything a caller names.
 func TestTheSandboxSettingsAreExplicit(t *testing.T) {
-	for kind, domains := range map[string]string{"builds": `["proxy.golang.org","sum.golang.org","registry.npmjs.org"]`, "reads": `[]`} {
+	for _, kind := range []string{"workspace", "clone"} {
 		r := newRehearsal(t)
 		r.write("sandbox-settings.sh", readText(t, ".github/sandbox-settings.sh"))
 		tree := filepath.Join(r.root, "tree")
 		workspace := filepath.Join(r.root, "workspace")
-		for _, dir := range []string{tree + "/.git", workspace + "/.git", r.root + "/runners/2.0/bin"} {
+		tools := filepath.Join(r.root, "toolcache")
+		other := filepath.Join(r.root, "other")
+		for _, dir := range []string{tree + "/.git", workspace + "/.git", r.root + "/runners/2.0/bin", tools, r.root + "/.config"} {
 			if err := os.MkdirAll(dir, 0o755); err != nil {
 				t.Fatal(err)
 			}
 		}
 		home := filepath.Join(r.temp, "session", "home")
-		r.run(workflowStep{Run: `bash "$RUNNER_TEMP/sandbox-settings.sh" "$SESSION" "$TREE" ` + kind + "\n"},
-			map[string]string{"SESSION": home, "TREE": tree, "GITHUB_WORKSPACE": workspace}, "")
+		r.run(workflowStep{Run: `bash "$RUNNER_TEMP/sandbox-settings.sh" "$SESSION" "$TREE" ` + kind + ` "$OTHER"` + "\n"},
+			map[string]string{"SESSION": home, "TREE": tree, "GITHUB_WORKSPACE": workspace, "RUNNER_TOOL_CACHE": tools, "OTHER": other}, "")
 		r.mustPass()
 		var settings struct {
 			Sandbox struct {
@@ -835,13 +849,16 @@ func TestTheSandboxSettingsAreExplicit(t *testing.T) {
 			box.AllowUnsandboxedCommands == nil || *box.AllowUnsandboxedCommands || box.Network.StrictAllowlist == nil || !*box.Network.StrictAllowlist {
 			t.Errorf("%s: the sandbox isn't on, strict and required:\n%s", kind, data)
 		}
-		if got, _ := json.Marshal(box.Network.AllowedDomains); string(got) != domains {
-			t.Errorf("%s: the sandbox allows %s, want %s", kind, got, domains)
+		if box.Network.AllowedDomains == nil || len(box.Network.AllowedDomains) != 0 {
+			t.Errorf("%s: the sandbox allows hosts %v, want none", kind, box.Network.AllowedDomains)
 		}
-		for _, denied := range []string{tree + "/.git", workspace + "/.git", r.root + "/runners"} {
+		for _, denied := range []string{workspace + "/.git", r.root + "/runners", tools, r.root + "/.gitconfig", r.root + "/.config", other} {
 			if !contains(box.Filesystem.DenyWrite, denied) {
 				t.Errorf("%s: the sandbox lets commands write %s: %v", kind, denied, box.Filesystem.DenyWrite)
 			}
+		}
+		if got := contains(box.Filesystem.DenyWrite, tree+"/.git"); got != (kind == "workspace") {
+			t.Errorf("%s: the sandbox denies the tree's .git is %v", kind, got)
 		}
 		if !contains(box.Filesystem.DenyRead, r.root+"/runners") {
 			t.Errorf("%s: the sandbox lets commands read the runner's own files: %v", kind, box.Filesystem.DenyRead)
@@ -877,5 +894,137 @@ func TestUntrustedTextIsPrintedWithWorkflowCommandsStopped(t *testing.T) {
 	})
 	if steps < 8 {
 		t.Errorf("found %d steps that print untrusted text, fewer than the factory has", steps)
+	}
+}
+
+// The sessions that build, the draft, the fix and the rebase, run offline: their Go module cache is
+// filled before the session, by fetching alone, in the session's own home, and the session runs
+// with GOPROXY off, so a Go command can't carry data out through the module proxy. The renderer's
+// packages are put in npm's cache the same way, at the versions examples/render.sh asks for, with
+// their scripts off, and npm runs offline. A new dependency then fails, so the prompts say to ask.
+func TestTheBuildingSessionsRunOffline(t *testing.T) {
+	render := regexp.MustCompile(`npx -y ((-p \S+ )+)mmdc`).FindStringSubmatch(readText(t, "examples/render.sh"))
+	if render == nil {
+		t.Fatal("examples/render.sh runs no npx mmdc")
+	}
+	for _, at := range []struct {
+		file, job string
+		renders   bool
+	}{{"build.yml", "draft", true}, {"fix.yml", "fix", true}, {"resolve.yml", "draft", false}} {
+		job := readFactoryWorkflow(t, at.file).Jobs[at.job]
+		i := job.session()
+		session := job.Steps[i]
+		for key, want := range map[string]string{"GOPROXY": "off", "GOFLAGS": "-mod=mod", "GOTOOLCHAIN": "local", "GOSUMDB": "off", "npm_config_offline": "true"} {
+			if session.Env[key] != want {
+				t.Errorf("%s's %s session runs with %s=%q, want %q", at.file, at.job, key, session.Env[key], want)
+			}
+		}
+		fetched, rendered := false, false
+		for _, step := range job.Steps[:i] {
+			if _, holds := step.Env["CLAUDE_CODE_OAUTH_TOKEN"]; holds {
+				continue
+			}
+			if regexp.MustCompile(`HOME="[^"]+" GOTOOLCHAIN=local go mod download`).MatchString(step.Run) {
+				fetched = true
+			}
+			if strings.Contains(step.Run, "npm_config_ignore_scripts=true npx --yes "+render[1]+"-- true") {
+				rendered = true
+			}
+		}
+		if !fetched {
+			t.Errorf("%s's %s doesn't fill its session's Go module cache before the session", at.file, at.job)
+		}
+		if rendered != at.renders {
+			t.Errorf("%s's %s puts the renderer's packages in npm's cache is %v, want %v", at.file, at.job, rendered, at.renders)
+		}
+	}
+	for _, prompt := range []string{"build-prompt.md", "fix-prompt.md", "resolve-prompt.md"} {
+		if !strings.Contains(readText(t, ".github/"+prompt), "new dependency") {
+			t.Errorf("%s doesn't say a new dependency can't be fetched", prompt)
+		}
+	}
+}
+
+// After a session, git runs on its tree only if .git/config is byte for byte the copy taken before
+// the session, with no global or system config, no hooks, no fsmonitor, no external diff and no
+// textconv, in a step that doesn't hold Claude's token. So nothing a session's commands left in .git
+// can make the host's git run it.
+func TestGitAfterASessionCannotBePoisoned(t *testing.T) {
+	for _, at := range []struct{ file, job string }{{"build.yml", "draft"}, {"fix.yml", "fix"}} {
+		job := readFactoryWorkflow(t, at.file).Jobs[at.job]
+		i := job.session()
+		session := job.Steps[i].Run
+		if c := strings.Index(session, `cp .git/config "$RUNNER_TEMP/git-config"`); c < 0 || c > strings.Index(session, "claude -p") {
+			t.Errorf("%s's %s doesn't keep .git/config before its session", at.file, at.job)
+		}
+		patch, _ := job.step(t, "patch")
+		if _, holds := patch.Env["CLAUDE_CODE_OAUTH_TOKEN"]; holds {
+			t.Errorf("%s's %s makes the patch beside Claude's token", at.file, at.job)
+		}
+		for _, want := range []string{`cmp -s .git/config "$RUNNER_TEMP/git-config"`, "GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 command git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c diff.external=",
+			"--no-ext-diff --no-textconv"} {
+			if !strings.Contains(patch.Run, want) {
+				t.Errorf("%s's %s patch step lacks %s", at.file, at.job, want)
+			}
+		}
+	}
+
+	patch, _ := readFactoryWorkflow(t, "build.yml").Jobs["draft"].step(t, "patch")
+	for _, poisoned := range []bool{false, true} {
+		r := newRehearsal(t)
+		repo, _ := r.newRepo("repo", map[string]string{"recipes.md": "Bread\n", ".gitattributes": "*.md diff=bake filter=bake\n"})
+		r.write("git-config", readText(t, filepath.Join(repo, ".git/config")))
+		r.write(filepath.Join(repo, "recipes.md"), "Bread\nScones\n")
+		pwned := filepath.Join(r.root, "pwned")
+		if poisoned {
+			gitIn(t, repo, "config", "diff.external", "touch "+pwned+";")
+			gitIn(t, repo, "config", "filter.bake.clean", "touch "+pwned+"; cat")
+		}
+		r.dir = repo
+		r.run(patch, nil, "")
+		if _, err := os.Stat(pwned); err == nil {
+			t.Error("git after the session ran a command a session left in .git/config")
+		}
+		if poisoned && (!r.failed || r.read("change/change.patch") != "") {
+			t.Errorf("git ran on a tree whose .git/config the session changed:\n%s", r.printed)
+		}
+		if !poisoned {
+			r.mustPass()
+			if !strings.Contains(r.read("change/change.patch"), "+Scones") {
+				t.Errorf("the patch doesn't hold the change:\n%s", r.read("change/change.patch"))
+			}
+		}
+	}
+}
+
+// The rebase's session runs git itself, in a clone of its own, and hands back a bundle. No step that
+// holds Claude's token runs git, the GitHub token isn't in the session's environment, and the bundle
+// is read in a later step, into a fresh repository whose config no session ever touched.
+func TestResolveRunsNoGitBesideClaudesToken(t *testing.T) {
+	job := readFactoryWorkflow(t, "resolve.yml").Jobs["draft"]
+	i := job.session()
+	session := job.Steps[i]
+	if _, ok := session.Env["GH_TOKEN"]; ok {
+		t.Error("the rebase's session holds the GitHub token")
+	}
+	for _, line := range strings.Split(quotedRule.ReplaceAllString(session.Run, ""), "\n") {
+		if gitCommand.MatchString(line) {
+			t.Errorf("the step that holds Claude's token runs git: %s", strings.TrimSpace(line))
+		}
+	}
+	check, at := job.step(t, "check")
+	if at < i {
+		t.Error("the bundles are checked before the sessions")
+	}
+	if _, holds := check.Env["CLAUDE_CODE_OAUTH_TOKEN"]; holds {
+		t.Error("the bundles are checked beside Claude's token")
+	}
+	for _, want := range []string{"git init -q", "GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 command git"} {
+		if !strings.Contains(check.Run, want) {
+			t.Errorf("the check step lacks %s", want)
+		}
+	}
+	if strings.Contains(check.Run, `-C "$work"`) {
+		t.Error("the check step runs git in the session's clone")
 	}
 }

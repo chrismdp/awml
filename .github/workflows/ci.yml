@@ -124,7 +124,7 @@ jobs:
           sudo apt-get install -y bubblewrap socat
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           bwrap --dev-bind / / --unshare-pid true
-          npm install -g @anthropic-ai/claude-code
+          npm install -g @anthropic-ai/claude-code@2.1.312
 
       # The session keeps the login token from the commands it runs (awml #121), and loads only the
       # user's settings and no MCP servers, so nothing in the tree can set its hooks or where it sends
@@ -151,7 +151,7 @@ jobs:
           session="$RUNNER_TEMP/session"
           chmod -R a-w "$REVIEW_DIR"
           mkdir -p "$session/home" "$session/out"
-          bash "$RUNNER_TEMP/sandbox-settings.sh" "$session/home" "$GITHUB_WORKSPACE" reads
+          bash "$RUNNER_TEMP/sandbox-settings.sh" "$session/home" "$GITHUB_WORKSPACE" workspace
           prompt="$(sed -e "s|REVIEW_DIR|$REVIEW_DIR|g" -e "s|OUT_DIR|$session/out|g" "$RUNNER_TEMP/prompts/$PROMPT")"
           status=0
           HOME="$session/home" claude -p "$prompt" --model opus --max-turns 100 --permission-mode default \
@@ -276,7 +276,7 @@ jobs:
           sudo apt-get install -y bubblewrap socat
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           bwrap --dev-bind / / --unshare-pid true
-          npm install -g @anthropic-ai/claude-code
+          npm install -g @anthropic-ai/claude-code@2.1.312
 
       # The session starts as each review's does: in an empty home of its own, reading inputs it
       # can't change, editing only its verdict, in a folder of its own, and running nothing.
@@ -297,7 +297,7 @@ jobs:
           session="$RUNNER_TEMP/session"
           chmod -R a-w "$REVIEW_DIR"
           mkdir -p "$session/home" "$session/out"
-          bash "$RUNNER_TEMP/sandbox-settings.sh" "$session/home" "$GITHUB_WORKSPACE" reads
+          bash "$RUNNER_TEMP/sandbox-settings.sh" "$session/home" "$GITHUB_WORKSPACE" workspace
           prompt="$(sed -e "s|REVIEW_DIR|$REVIEW_DIR|g" -e "s|OUT_DIR|$session/out|g" "$RUNNER_TEMP/prompts/classify-prompt.md")"
           status=0
           HOME="$session/home" claude -p "$prompt" --model opus --max-turns 100 --permission-mode default \

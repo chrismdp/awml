@@ -143,11 +143,13 @@ jobs:
           name: rebased
           path: ${{ runner.temp }}/rebased
 
-  # Claude resolves each real conflict here, with a read-only token, one pull request after
-  # another, each in a tree of its own. The job rebases with git alone, hooks and fsmonitor off, and
-  # at each commit that stops with conflicts a fresh session resolves the files, editing nothing
-  # else; the job then stages them and continues. The job runs nothing of its own beside the login
-  # token: Claude runs its commands, the checks among them, in its sandbox.
+  # Claude resolves each real conflict here, with a read-only token, one pull request after another.
+  # Each gets a clone of its own, made before any session starts. Its session runs the whole rebase
+  # itself, git included, in that clone, and hands back a bundle. So no git runs beside the login
+  # token after a session, and the session's clone, whose .git its commands could change, is never
+  # touched by the host's git again: a later step reads each bundle as data into a fresh
+  # repository. The job runs nothing of its own beside the login token but fetching the sessions'
+  # Go modules.
   draft:
     needs: find
     if: needs.find.outputs.conflicts != '[]' && needs.find.outputs.conflicts != ''
@@ -157,7 +159,7 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      digests: ${{ steps.pack.outputs.digests }}
+      digests: ${{ steps.check.outputs.digests }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -178,6 +180,54 @@ jobs:
           cp .github/resolve-prompt.md AGENTS.md "$RUNNER_TEMP/main/"
           cp .github/sandbox-settings.sh "$RUNNER_TEMP/"
 
+      # Each pull request gets a folder of its own: a clone of the branch, its inputs, made
+      # read-only, its session's output and its session's home. The clone commits as the app's bot,
+      # with no hooks, and its rebase never waits for an editor. The session's Go module cache is
+      # filled here, before it starts, by fetching alone, for the branch and for main, since the
+      # session runs offline. Git runs here with hooks and fsmonitor off, before any session starts.
+      - name: Prepare a clone of each conflicting branch, before any session starts
+        id: prepare
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONFLICTS: ${{ needs.find.outputs.conflicts }}
+          MAIN_SHA: ${{ needs.find.outputs.main_sha }}
+        run: |
+          stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+          echo "::stop-commands::$stop"
+          trap 'echo "::$stop::"' EXIT
+          if ! [[ "$MAIN_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Main's commit isn't a commit id: $MAIN_SHA"
+            exit 1
+          fi
+          id="$(gh api "users/awml-factory%5Bbot%5D" --jq .id)"
+          case "$id" in ''|*[!0-9]*) echo "The app's bot has no user id: $id"; exit 1 ;; esac
+          git() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 command git -c core.hooksPath=/dev/null -c core.fsmonitor=false "$@"; }
+          : > "$RUNNER_TEMP/pulls.tsv"
+          mkdir -p "$RUNNER_TEMP/check" "$RUNNER_TEMP/resolved"
+          while IFS=$'\t' read -r number head_sha; do
+            case "$number" in ''|*[!0-9]*) continue ;; esac
+            [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]] || continue
+            root="$RUNNER_TEMP/pr/$number"
+            mkdir -p "$root/in" "$root/out" "$root/home"
+            git fetch -q --no-tags origin "$head_sha:refs/heads/factory-rebase-$number"
+            git clone -q --no-hardlinks --no-checkout "$GITHUB_WORKSPACE" "$root/work"
+            git -C "$root/work" checkout -q --detach "$head_sha"
+            git -C "$root/work" config user.name "awml-factory[bot]"
+            git -C "$root/work" config user.email "$id+awml-factory[bot]@users.noreply.github.com"
+            git -C "$root/work" config core.hooksPath /dev/null
+            git -C "$root/work" config core.fsmonitor false
+            git -C "$root/work" config core.editor true
+            base="$(git merge-base "$head_sha" "$MAIN_SHA")"
+            git log --oneline "$base..$head_sha" > "$root/in/branch-log.txt"
+            git log --oneline "$base..$MAIN_SHA" > "$root/in/main-log.txt"
+            cp "$RUNNER_TEMP/main/AGENTS.md" "$root/in/"
+            gh api "repos/$GITHUB_REPOSITORY/pulls/$number" --jq '"# " + .title + "\n\n" + (.body // "")' > "$root/in/pull-request.md"
+            chmod -R a-w "$root/in"
+            (cd "$root/work" && HOME="$root/home" GOTOOLCHAIN=local go mod download)
+            HOME="$root/home" GOTOOLCHAIN=local go mod download
+            printf '%s\t%s\n' "$number" "$head_sha" >> "$RUNNER_TEMP/pulls.tsv"
+          done < <(jq -r '.[] | [.number, .head_sha] | @tsv' <<< "$CONFLICTS")
+
       # Claude Code runs its commands in a sandbox, bubblewrap with socat for its network, so that it
       # can scrub its login token from them, and they can't start without both. Ubuntu's runners
       # restrict the user namespaces bubblewrap needs, so allow them on this throwaway machine, and
@@ -189,135 +239,120 @@ jobs:
           sudo apt-get install -y bubblewrap socat
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           bwrap --dev-bind / / --unshare-pid true
-          npm install -g @anthropic-ai/claude-code
+          npm install -g @anthropic-ai/claude-code@2.1.312
 
       # Each session loads only the user's settings and no MCP servers, so a settings file or a
       # .mcp.json on the branch can't set its hooks or where it sends the login token. It reads only
-      # its tree and its own folders, never /proc, and can't change .git. Its log is shown with
-      # workflow commands stopped. Git runs between sessions with hooks and fsmonitor off. A
-      # session that leaves a conflict marker in a file it was given has given up, and the rebase is
-      # abandoned. Everything each session changed is scanned for anything like the login token
-      # before it's kept.
-      # Its commands run in Claude Code's sandbox, set in the user settings of a home of its own by
-      # main's .github/sandbox-settings.sh: each in a PID namespace of its own, where it can't read
-      # Claude Code's environment through /proc, with no route out but to the Go module proxy, its
-      # checksum database and npm's registry, and no write to .git or the runner's files (#131). The
-      # scrub forces the permission mode to default, so every tool the session needs is allowed by
-      # name.
+      # its clone and its own folders, never /proc. Its commands run in Claude Code's sandbox, set in
+      # the user settings of its own home by main's .github/sandbox-settings.sh: each in a PID
+      # namespace of its own, offline, and unable to write another pull request's folder or the
+      # workspace's .git (#131). It runs the rebase, git included, in its own clone, and bundles the
+      # result. The scrub forces the permission mode to default, so every tool the session needs is
+      # allowed by name. This step runs no git, and holds no GitHub token.
       - name: Resolve the conflicts
         id: resolve
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
-          GH_TOKEN: ${{ github.token }}
-          CONFLICTS: ${{ needs.find.outputs.conflicts }}
           MAIN_SHA: ${{ needs.find.outputs.main_sha }}
-          PUPPETEER_EXECUTABLE_PATH: /usr/bin/google-chrome
-          PUPPETEER_SKIP_DOWNLOAD: "true"
+          GIT_EDITOR: "true"
+          GOPROXY: "off"
+          GOFLAGS: -mod=mod
+          GOTOOLCHAIN: local
+          GOSUMDB: "off"
+          npm_config_offline: "true"
         run: |
           stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
           echo "::stop-commands::$stop"
           trap 'echo "::$stop::"' EXIT
-          if ! [[ "$MAIN_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "Main's commit isn't a commit id: $MAIN_SHA"
-            exit 1
-          fi
-          id="$(gh api "users/awml-factory%5Bbot%5D" --jq .id)"
-          case "$id" in ''|*[!0-9]*) echo "The app's bot has no user id: $id"; exit 1 ;; esac
-          git() {
-            command git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c core.editor=true \
-              -c user.name="awml-factory[bot]" -c user.email="$id+awml-factory[bot]@users.noreply.github.com" "$@"
-          }
+          while IFS=$'\t' read -r number _; do
+            root="$RUNNER_TEMP/pr/$number"
+            others=()
+            for other in "$RUNNER_TEMP"/pr/*; do
+              if [ "$other" != "$root" ]; then others+=("$other"); fi
+            done
+            bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/pr/$number/home" "$root/work" clone \
+              "${others[@]}" "$RUNNER_TEMP/main" "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/pulls.tsv" \
+              "$RUNNER_TEMP/check" "$RUNNER_TEMP/resolved"
+            prompt="$(sed -e "s|RESOLVE_DIR|$root/in|g" -e "s|OUT_DIR|$root/out|g" -e "s|MAIN_SHA|$MAIN_SHA|g" \
+              "$RUNNER_TEMP/main/resolve-prompt.md")"
+            (cd "$root/work" && HOME="$RUNNER_TEMP/pr/$number/home" claude -p "$prompt" --model opus --max-turns 200 --permission-mode default \
+              --setting-sources user --strict-mcp-config --add-dir "$root/in" --add-dir "$root/out" \
+              --disallowedTools "Read(//proc/**)" "Edit(./.git/**)" "Write(./.git/**)" \
+              --allowedTools "Read(./**)" "Read(/$root/in/**)" "Read(/$root/out/**)" "Edit(./**)" "Edit(/$root/out/**)" "Glob" "Grep" \
+                "Bash(go:*)" "Bash(gofmt:*)" "Bash(make:*)" "Bash(node:*)" \
+                "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" "Bash(git show:*)" \
+                "Bash(git add:*)" "Bash(git rebase:*)" "Bash(git checkout:*)" "Bash(git bundle create:*)" \
+                "Bash(ls:*)" "Bash(cp:*)" "Bash(mkdir:*)" \
+              > "$root/session.log" 2>&1) || echo "The session on #$number ended with an error."
+            cat "$root/session.log"
+          done < "$RUNNER_TEMP/pulls.tsv"
+
+      # Each session's bundle is read as data into a fresh repository, whose config no session ever
+      # touched, with no global or system config, no hooks and no fsmonitor, beside no login token.
+      # It must sit on main and carry no conflict marker. The lines its resolution adds, beyond those
+      # the branch already added, and Claude's note, must carry nothing like the login token. Each
+      # bundle's and note's sha256 is the job's output, which the push job checks them against.
+      - name: Check each rebase, read into a fresh repository
+        id: check
+        if: ${{ !cancelled() }}
+        env:
+          CONFLICTS: ${{ needs.find.outputs.conflicts }}
+          MAIN_SHA: ${{ needs.find.outputs.main_sha }}
+        run: |
+          stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+          echo "::stop-commands::$stop"
+          trap 'echo "::$stop::"' EXIT
+          git() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 command git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c diff.external= "$@"; }
           looks_like_token() {
             LC_ALL=C sed -E 's#base64,[A-Za-z0-9+/]+=*##g; s#data-points="[A-Za-z0-9+/]+=*"##g' |
               LC_ALL=C grep -aoiE 'sk-ant-|[A-Za-z0-9_-]{80,}' | grep -iE 'sk-ant-|[0-9]' > /dev/null
           }
           resolved="$RUNNER_TEMP/resolved"
           mkdir -p "$resolved"
+          digests='{}'
           while IFS=$'\t' read -r number head_sha; do
             case "$number" in ''|*[!0-9]*) continue ;; esac
             [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]] || continue
-            work="$RUNNER_TEMP/work/$number"
-            dir="$RUNNER_TEMP/resolve/$number"
-            out="$RUNNER_TEMP/out/$number"
-            mkdir -p "$dir" "$out"
-            cp "$RUNNER_TEMP/main/AGENTS.md" "$dir/"
-            gh api "repos/$GITHUB_REPOSITORY/pulls/$number" --jq '"# " + .title + "\n\n" + (.body // "")' > "$dir/pull-request.md"
-            git fetch -q --no-tags origin "$head_sha"
-            git worktree add -q --detach "$work" "$head_sha"
-            base="$(git merge-base "$head_sha" "$MAIN_SHA")"
-            git log --oneline "$base..$head_sha" > "$dir/branch-log.txt"
-            git log --oneline "$base..$MAIN_SHA" > "$dir/main-log.txt"
-            outcome=resolved
-            git -C "$work" rebase -q "$MAIN_SHA" || outcome=stopped
-            stops=0
-            while [ "$outcome" = stopped ]; do
-              stops=$((stops + 1))
-              git -C "$work" diff --name-only --diff-filter=U > "$dir/conflicted-files.txt"
-              if [ ! -s "$dir/conflicted-files.txt" ] || [ "$stops" -gt 30 ]; then
-                outcome=failed
-                break
-              fi
-              chmod -R a-w "$dir"
-              bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/home/$number" "$work" builds
-              prompt="$(sed -e "s|RESOLVE_DIR|$dir|g" -e "s|OUT_DIR|$out|g" "$RUNNER_TEMP/main/resolve-prompt.md")"
-              status=0
-              (cd "$work" && HOME="$RUNNER_TEMP/home/$number" claude -p "$prompt" --model opus --max-turns 200 --permission-mode default \
-                --setting-sources user --strict-mcp-config --add-dir "$dir" --add-dir "$out" \
-                --disallowedTools "Read(//proc/**)" "Edit(./.git/**)" "Write(./.git/**)" \
-                --allowedTools "Read(./**)" "Read(/$dir/**)" "Read(/$out/**)" "Edit(./**)" "Edit(/$out/**)" "Glob" "Grep" \
-                  "Bash(go:*)" "Bash(gofmt:*)" "Bash(make:*)" "Bash(node:*)" \
-                  "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" "Bash(git show:*)" \
-                  "Bash(ls:*)" "Bash(cp:*)" "Bash(mkdir:*)" \
-                > "$out/session.log" 2>&1) || status=$?
-              chmod -R u+w "$dir"
-              cat "$out/session.log"
-              rm -f "$out/session.log"
-              if [ "$status" != 0 ] || (cd "$work" && tr '\n' '\0' < "$dir/conflicted-files.txt" |
-                  xargs -0 -r grep -lE '^(<<<<<<<|>>>>>>>)( |$)' -- > /dev/null 2>&1); then
-                outcome=failed
-                break
-              fi
-              if git -C "$work" diff | LC_ALL=C grep -a '^+' | looks_like_token; then
+            root="$RUNNER_TEMP/pr/$number"
+            fresh="$RUNNER_TEMP/check/$number"
+            bundle="$root/out/rebased.bundle"
+            mkdir -p "$fresh"
+            git init -q "$fresh"
+            git -C "$fresh" fetch -q --no-tags "$GITHUB_WORKSPACE" "$MAIN_SHA" "refs/heads/factory-rebase-$number"
+            if [ -f "$bundle" ] && [ ! -L "$bundle" ] &&
+              git -C "$fresh" bundle verify -q "$bundle" > /dev/null 2>&1 &&
+              git -C "$fresh" fetch -q "$bundle" "HEAD:refs/rebased" &&
+              git -C "$fresh" merge-base --is-ancestor "$MAIN_SHA" refs/rebased &&
+              ! git -C "$fresh" grep -qE '^(<<<<<<<|>>>>>>>)( |$)' refs/rebased --; then
+              base="$(git -C "$fresh" merge-base "$head_sha" "$MAIN_SHA")"
+              if comm -23 <(git -C "$fresh" diff --no-ext-diff --no-textconv "$MAIN_SHA" refs/rebased | LC_ALL=C grep -a '^+' | LC_ALL=C sort -u) \
+                  <(git -C "$fresh" diff --no-ext-diff --no-textconv "$base" "$head_sha" | LC_ALL=C grep -a '^+' | LC_ALL=C sort -u) |
+                  looks_like_token; then
                 echo "The resolution of #$number adds what looks like a login token, so it isn't kept."
-                outcome=failed
-                break
+              else
+                cp "$bundle" "$resolved/$number.bundle"
               fi
-              git -C "$work" add -A
-              if git -C "$work" rebase --continue; then
-                outcome=resolved
-              fi
-            done
-            if [ "$outcome" = resolved ] && git -C "$work" merge-base --is-ancestor "$MAIN_SHA" HEAD; then
-              git -C "$work" bundle create "$resolved/$number.bundle" "$MAIN_SHA..HEAD"
             else
-              git -C "$work" rebase --abort 2> /dev/null || true
+              echo "The session on #$number left no rebase that sits on main without conflict markers."
             fi
-            if [ -f "$out/message.md" ]; then
-              if looks_like_token < "$out/message.md"; then
+            if [ -f "$root/out/message.md" ] && [ ! -L "$root/out/message.md" ]; then
+              if looks_like_token < "$root/out/message.md"; then
                 echo "Claude's note on #$number carries what looks like a login token, so it isn't kept."
               else
-                cp "$out/message.md" "$resolved/$number.md"
+                cp "$root/out/message.md" "$resolved/$number.md"
               fi
             fi
-            git worktree remove --force "$work"
-          done < <(jq -r '.[] | [.number, .head_sha] | @tsv' <<< "$CONFLICTS")
-
-      # Each bundle's and note's sha256 is the job's output, which the push job checks them against.
-      - name: Take each bundle's digest
-        id: pack
-        if: ${{ !cancelled() }}
-        run: |
-          digests='{}'
-          for file in "$RUNNER_TEMP/resolved"/*; do
+          done < "$RUNNER_TEMP/pulls.tsv"
+          for file in "$resolved"/*; do
             [ -f "$file" ] || continue
             digests="$(jq -c --arg name "$(basename "$file")" --arg digest "$(sha256sum < "$file" | cut -c 1-64)" \
               '. + {($name): $digest}' <<< "$digests")"
           done
-          echo "digests=$digests" | tee -a "$GITHUB_OUTPUT"
+          echo "digests=$digests" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
-        if: ${{ !cancelled() && steps.pack.outputs.digests != '{}' }}
+        if: ${{ !cancelled() && steps.check.outputs.digests != '{}' }}
         with:
           name: resolved
           path: ${{ runner.temp }}/resolved

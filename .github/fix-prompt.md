@@ -19,6 +19,9 @@ request to it again.
 - Change only what the findings need, and keep to what the pull request means to do. Something new
   that the findings don't ask for goes in the message as a suggested issue, not in the fix.
 - Test first: write a failing test for each behaviour before the code that passes it.
+- The session runs offline: Go's modules for the tree are fetched before it starts, and nothing can
+  be fetched while it runs. So add no new dependency. If a fix seems to need one, leave
+  that finding and say why in the message.
 - The repository's app never pushes a change under `.github/`, or to Claude Code's own files,
   `.claude/`, `.mcp.json`, a `CLAUDE.md` or a `CLAUDE.local.md`, anywhere in the tree. A fix that
   touches one is offered on the pull request for a person to apply instead. Change one only if a

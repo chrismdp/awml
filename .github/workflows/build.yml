@@ -222,6 +222,19 @@ jobs:
             gh run view --repo "$GITHUB_REPOSITORY" --job "$job" --log-failed || true
           done | tail -n 300 > "$RUNNER_TEMP/build/failed.md"
 
+      # The session runs offline, so nothing it runs can carry data out through a proxy. Its home's
+      # Go module cache is filled here, before it starts, by fetching alone: go mod download runs no
+      # module's code. The renderer's packages, at the versions examples/render.sh asks for, go into
+      # npm's cache the same way, with their scripts off, so npx runs only true. A draft that needs
+      # a module or package not fetched here fails, which the prompt says.
+      - name: Fill the session's Go module and npm caches, by fetching alone
+        id: caches
+        run: |
+          home="$RUNNER_TEMP/session/home"
+          mkdir -p "$home"
+          HOME="$home" GOTOOLCHAIN=local go mod download
+          HOME="$home" PUPPETEER_SKIP_DOWNLOAD=true npm_config_ignore_scripts=true npx --yes -p @mermaid-js/mermaid-cli@11.4.1 -p mermaid@11.17.2 -- true
+
       # Claude Code runs its commands in a sandbox, bubblewrap with socat for its network, so that it
       # can scrub its login token from them, and they can't start without both. Ubuntu's runners
       # restrict the user namespaces bubblewrap needs, so allow them on this throwaway machine, and
@@ -233,7 +246,7 @@ jobs:
           sudo apt-get install -y bubblewrap socat
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           bwrap --dev-bind / / --unshare-pid true
-          npm install -g @anthropic-ai/claude-code
+          npm install -g @anthropic-ai/claude-code@2.1.312
 
       # Claude Code holds the maintainer's login token for its own calls, and strips it, with any
       # other credential, from the commands it runs, so text that steers Claude can't send it
@@ -255,11 +268,17 @@ jobs:
           BUILD_DIR: ${{ runner.temp }}/build
           PUPPETEER_EXECUTABLE_PATH: /usr/bin/google-chrome
           PUPPETEER_SKIP_DOWNLOAD: "true"
+          GOPROXY: "off"
+          GOFLAGS: -mod=mod
+          GOTOOLCHAIN: local
+          GOSUMDB: "off"
+          npm_config_offline: "true"
         run: |
           stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
           echo "::stop-commands::$stop"
           trap 'echo "::$stop::"' EXIT
-          bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/session/home" "$GITHUB_WORKSPACE" builds
+          bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/session/home" "$GITHUB_WORKSPACE" workspace
+          cp .git/config "$RUNNER_TEMP/git-config"
           prompt="$(sed "s|BUILD_DIR|$BUILD_DIR|g" "$RUNNER_TEMP/build-prompt.md")"
           status=0
           HOME="$RUNNER_TEMP/session/home" claude -p "$prompt" --model opus --max-turns 200 --permission-mode default \
@@ -274,14 +293,21 @@ jobs:
           cat "$RUNNER_TEMP/draft.log"
           exit "$status"
 
-      # Git runs here with no hooks and no fsmonitor, so nothing the session left in the tree runs.
+      # Git runs here, beside no login token, only if .git/config is the copy taken before the
+      # session, with no global or system config, no hooks, no fsmonitor, no external diff and no
+      # textconv, so nothing a session's commands left in .git or the tree can make git run it.
       - name: Make the patch
         id: patch
         run: |
+          git() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 command git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c diff.external= "$@"; }
+          if ! cmp -s .git/config "$RUNNER_TEMP/git-config" || [ -e .git/config.worktree ]; then
+            echo "The session's tree has a .git config other than the one it started with, so git isn't run on it."
+            exit 1
+          fi
           change="$RUNNER_TEMP/change"
           mkdir -p "$change"
-          git -c core.hooksPath=/dev/null -c core.fsmonitor=false add -A
-          git -c core.hooksPath=/dev/null -c core.fsmonitor=false diff --cached --binary > "$change/change.patch"
+          git add -A
+          git diff --cached --binary --no-ext-diff --no-textconv > "$change/change.patch"
           for file in message.md pull-request.md; do
             if [ -f "$RUNNER_TEMP/build/$file" ]; then cp "$RUNNER_TEMP/build/$file" "$change/"; fi
           done
