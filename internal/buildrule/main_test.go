@@ -33,39 +33,47 @@ func TestEvaluateStraightforwardPatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertVerdict(t, got, false, "No review rule matched this change.")
+	assertVerdict(t, got, "ship", "No rule moved the verdict towards ask.")
 }
 
-func TestEvaluateOpenFindings(t *testing.T) {
+// The reviews' findings can only move the verdict towards ask: an Important one asks, and a Nit
+// left unfixed means at least show. A pre-existing one is about code the change didn't write.
+func TestEvaluateFindings(t *testing.T) {
 	tests := []struct {
 		name     string
 		findings string
-		review   bool
+		outcome  string
 		reason   string
 	}{
 		{
 			name:     "an Important finding",
 			findings: `[{"severity": "Important"}]`,
-			review:   true,
-			reason:   "The reviews left 1 finding open.",
+			outcome:  "ask",
+			reason:   "The reviews left 1 Important finding.",
 		},
 		{
 			name:     "a Nit and an Important finding",
 			findings: `[{"severity": "Nit"}, {"severity": "Important"}]`,
-			review:   true,
-			reason:   "The reviews left 2 findings open.",
+			outcome:  "ask",
+			reason:   "The reviews left 1 Important finding.",
+		},
+		{
+			name:     "two Nits",
+			findings: `[{"severity": "Nit"}, {"severity": "Nit"}]`,
+			outcome:  "show",
+			reason:   "The reviews left 2 Nits unfixed.",
 		},
 		{
 			name:     "only a pre-existing finding",
 			findings: `[{"severity": "Pre-existing"}]`,
-			review:   false,
-			reason:   "No review rule matched this change.",
+			outcome:  "ship",
+			reason:   "No rule moved the verdict towards ask.",
 		},
 		{
 			name:     "no findings",
 			findings: `[]`,
-			review:   false,
-			reason:   "No review rule matched this change.",
+			outcome:  "ship",
+			reason:   "No rule moved the verdict towards ask.",
 		},
 	}
 	for _, tt := range tests {
@@ -79,82 +87,63 @@ func TestEvaluateOpenFindings(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			assertVerdict(t, got, tt.review, tt.reason)
+			assertVerdict(t, got, tt.outcome, tt.reason)
 		})
 	}
 }
 
-func TestEvaluateClassifier(t *testing.T) {
-	t.Run("asks for review", func(t *testing.T) {
-		repo := newRepo(t)
-		stage(t, repo, "main.go", "package main\n")
-		classification := filepath.Join(t.TempDir(), "classification.json")
-		writeFile(t, classification, `{"needs_review": true, "reasons": ["It changes how the parser reads scopes."]}`)
+// Classify's verdict is where the rule starts, and the rule can only move it towards ask. A
+// missing verdict asks.
+func TestEvaluateClassify(t *testing.T) {
+	tests := []struct {
+		name     string
+		classify string
+		path     string
+		outcome  string
+		reason   string
+	}{
+		{name: "ship stays ship", classify: "ship", path: "main.go", outcome: "ship", reason: "No rule moved the verdict towards ask."},
+		{name: "show stays show", classify: "show", path: "main.go", outcome: "show", reason: "Classify said to show it."},
+		{name: "ask stays ask", classify: "ask", path: "main.go", outcome: "ask", reason: "Classify asked for a review."},
+		{name: "no verdict asks", classify: "missing", path: "main.go", outcome: "ask", reason: "Classify gave no verdict, so the change waits for review."},
+		{name: "the rule's paths move ship to ask", classify: "ship", path: "SPEC.md", outcome: "ask", reason: "`SPEC.md` is a path that always needs review."},
+		{name: "the rule's paths move show to ask", classify: "show", path: "SPEC.md", outcome: "ask", reason: "`SPEC.md` is a path that always needs review."},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := newRepo(t)
+			stage(t, repo, tt.path, "changed\n")
 
-		got, err := evaluate(repo, config{MaxChangedLines: 400}, inputs{Classification: classification})
-		if err != nil {
-			t.Fatal(err)
-		}
-		assertVerdict(t, got, true, "The classifier asked for a review.")
-	})
-
-	t.Run("can't skip a review the rules require", func(t *testing.T) {
-		repo := newRepo(t)
-		stage(t, repo, "SPEC.md", "changed\n")
-		classification := filepath.Join(t.TempDir(), "classification.json")
-		writeFile(t, classification, `{"needs_review": false, "reasons": ["It is a small fix."]}`)
-
-		got, err := evaluate(repo, config{ReviewPaths: []string{"SPEC.md"}, MaxChangedLines: 400},
-			inputs{Classification: classification})
-		if err != nil {
-			t.Fatal(err)
-		}
-		assertVerdict(t, got, true, "`SPEC.md` is a path that always needs review.")
-	})
-
-	t.Run("finding nothing adds nothing", func(t *testing.T) {
-		repo := newRepo(t)
-		stage(t, repo, "main.go", "package main\n")
-		classification := filepath.Join(t.TempDir(), "classification.json")
-		writeFile(t, classification, `{"needs_review": false, "reasons": ["It is a small fix."]}`)
-
-		got, err := evaluate(repo, config{MaxChangedLines: 400}, inputs{Classification: classification})
-		if err != nil {
-			t.Fatal(err)
-		}
-		assertVerdict(t, got, false, "No review rule matched this change.")
-	})
+			got, err := evaluate(repo, config{ReviewPaths: []string{"SPEC.md"}, MaxChangedLines: 400},
+				inputs{Classify: tt.classify})
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertVerdict(t, got, tt.outcome, tt.reason)
+		})
+	}
 }
 
 func TestEvaluateRejectsUnreadableRecords(t *testing.T) {
 	tests := []struct {
-		name           string
-		findings       string
-		classification string
+		name     string
+		findings string
+		classify string
 	}{
 		{name: "unknown severity", findings: `[{"severity": "Minor"}]`},
 		{name: "findings not a list", findings: `{"severity": "Nit"}`},
 		{name: "missing findings file", findings: "missing"},
-		{name: "no needs_review", classification: `{"reasons": []}`},
-		{name: "needs_review not a boolean", classification: `{"needs_review": "yes"}`},
-		{name: "missing classification file", classification: "missing"},
+		{name: "an unknown verdict", classify: "merge"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := newRepo(t)
 			stage(t, repo, "main.go", "package main\n")
-			dir := t.TempDir()
-			var in inputs
+			in := inputs{Classify: tt.classify}
 			if tt.findings != "" {
-				in.Findings = filepath.Join(dir, "findings.json")
+				in.Findings = filepath.Join(t.TempDir(), "findings.json")
 				if tt.findings != "missing" {
 					writeFile(t, in.Findings, tt.findings)
-				}
-			}
-			if tt.classification != "" {
-				in.Classification = filepath.Join(dir, "classification.json")
-				if tt.classification != "missing" {
-					writeFile(t, in.Classification, tt.classification)
 				}
 			}
 
@@ -163,6 +152,106 @@ func TestEvaluateRejectsUnreadableRecords(t *testing.T) {
 			}
 		})
 	}
+}
+
+// The rule reads the branch's commits since main from git. A fix commit, known by the line its
+// message carries, means at least show. A commit the factory's app didn't both write and commit,
+// or a merge, asks, since only a person can say what it brings.
+func TestEvaluateTheBranchsCommits(t *testing.T) {
+	const factory = "awml-factory[bot]"
+	const app = "Factory <41+awml-factory[bot]@users.noreply.github.com>"
+	const person = "A Person <person@example.invalid>"
+	type made struct {
+		author, committer, message string
+	}
+	tests := []struct {
+		name    string
+		commits []made
+		outcome string
+		reason  string
+	}{
+		{
+			name:    "one build commit of the app's",
+			commits: []made{{app, app, "Build the thing\n\nCloses #1\n"}},
+			outcome: "ship",
+			reason:  "No rule moved the verdict towards ask.",
+		},
+		{
+			name:    "a fix commit on top",
+			commits: []made{{app, app, "Build the thing\n"}, {app, app, "Fix the findings\n\n" + fixLine + "\n"}},
+			outcome: "show",
+			reason:  "The branch carries 1 fix commit.",
+		},
+		{
+			name:    "the fix line only inside a longer line counts for nothing",
+			commits: []made{{app, app, "Build the thing\n\nSays " + fixLine + " in passing\n"}},
+			outcome: "ship",
+			reason:  "No rule moved the verdict towards ask.",
+		},
+		{
+			name:    "a person's commit",
+			commits: []made{{app, app, "Build the thing\n"}, {person, person, "Tweak\n"}},
+			outcome: "ask",
+			reason:  "A commit since main isn't the factory's.",
+		},
+		{
+			name:    "a person's commit that the app rebased",
+			commits: []made{{person, app, "Tweak\n"}},
+			outcome: "ask",
+			reason:  "A commit since main isn't the factory's.",
+		},
+		{
+			name:    "a commit that only claims the app's name",
+			commits: []made{{"Factory <awml-factory[bot]@example.invalid>", app, "Build\n"}},
+			outcome: "ask",
+			reason:  "A commit since main isn't the factory's.",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := newRepo(t)
+			stage(t, repo, "main.go", "package main\n")
+			commit(t, repo)
+			base := gitOutput(t, repo, "rev-parse", "HEAD")
+			for at, c := range tt.commits {
+				stage(t, repo, "main.go", fmt.Sprintf("package main\n\n// %d\n", at))
+				commitAs(t, repo, c.author, c.committer, c.message)
+			}
+			head := gitOutput(t, repo, "rev-parse", "HEAD")
+			judgeAt(t, repo, base, head)
+
+			got, err := evaluate(repo, config{MaxChangedLines: 400},
+				inputs{Classify: "ship", Head: head, Factory: factory})
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertVerdict(t, got, tt.outcome, tt.reason)
+		})
+	}
+
+	t.Run("a merge commit", func(t *testing.T) {
+		repo := newRepo(t)
+		stage(t, repo, "main.go", "package main\n")
+		commit(t, repo)
+		base := gitOutput(t, repo, "rev-parse", "HEAD")
+		runGit(t, repo, "checkout", "-q", "-b", "side")
+		stage(t, repo, "side.go", "package main\n")
+		commitAs(t, repo, app, app, "Side\n")
+		runGit(t, repo, "checkout", "-q", "-")
+		stage(t, repo, "other.go", "package main\n")
+		commitAs(t, repo, app, app, "Other\n")
+		runGit(t, repo, "-c", "user.name=Factory", "-c", "user.email=41+awml-factory[bot]@users.noreply.github.com",
+			"merge", "-q", "--no-edit", "side")
+		head := gitOutput(t, repo, "rev-parse", "HEAD")
+		judgeAt(t, repo, base, head)
+
+		got, err := evaluate(repo, config{MaxChangedLines: 400},
+			inputs{Classify: "ship", Head: head, Factory: factory})
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertVerdict(t, got, "ask", "The branch since main holds a merge commit.")
+	})
 }
 
 func TestEvaluateReviewPaths(t *testing.T) {
@@ -186,9 +275,12 @@ func TestEvaluateReviewPaths(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			wantReview := tt.name != "similar prefix is not enough"
-			if got.Review != wantReview {
-				t.Fatalf("evaluate().Review = %v, want %v; reasons: %q", got.Review, wantReview, got.Reasons)
+			want := "ask"
+			if tt.name == "similar prefix is not enough" {
+				want = "ship"
+			}
+			if got.Outcome != want {
+				t.Fatalf("evaluate().Outcome = %q, want %q; reasons: %q", got.Outcome, want, got.Reasons)
 			}
 		})
 	}
@@ -241,7 +333,7 @@ func TestEvaluateDeletedTests(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			assertVerdict(t, got, true, tt.reason)
+			assertVerdict(t, got, "ask", tt.reason)
 		})
 	}
 }
@@ -257,7 +349,7 @@ func TestEvaluateChangedLineLimit(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertVerdict(t, got, true, "The patch changes 402 lines, more than the limit of 400.")
+		assertVerdict(t, got, "ask", "The patch changes 402 lines, more than the limit of 400.")
 	})
 
 	t.Run("ignores generated reference copies", func(t *testing.T) {
@@ -271,7 +363,7 @@ func TestEvaluateChangedLineLimit(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertVerdict(t, got, false, "No review rule matched this change.")
+		assertVerdict(t, got, "ship", "No rule moved the verdict towards ask.")
 	})
 }
 
@@ -285,8 +377,8 @@ func TestEvaluateBinaryFiles(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertVerdict(t, got, true, "`.gitattributes` changes how git reads files.")
-		assertVerdict(t, got, true, "The patch changes 501 lines, more than the limit of 400.")
+		assertVerdict(t, got, "ask", "`.gitattributes` changes how git reads files.")
+		assertVerdict(t, got, "ask", "The patch changes 501 lines, more than the limit of 400.")
 	})
 
 	t.Run("a .gitattributes in a subdirectory", func(t *testing.T) {
@@ -297,7 +389,7 @@ func TestEvaluateBinaryFiles(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertVerdict(t, got, true, "`docs/.gitattributes` changes how git reads files.")
+		assertVerdict(t, got, "ask", "`docs/.gitattributes` changes how git reads files.")
 	})
 
 	t.Run("a .gitattributes can't hide a removed test function", func(t *testing.T) {
@@ -311,7 +403,7 @@ func TestEvaluateBinaryFiles(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertVerdict(t, got, true, "`thing_test.go` removes a test function.")
+		assertVerdict(t, got, "ask", "`thing_test.go` removes a test function.")
 		if contains(got.Reasons, "`thing_test.go` is a binary file.") {
 			t.Fatalf("reasons = %q, want thing_test.go read as text", got.Reasons)
 		}
@@ -327,8 +419,8 @@ func TestEvaluateBinaryFiles(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertVerdict(t, got, true, "`thing_test.go` is a binary file.")
-		assertVerdict(t, got, true, "`thing_test.go` removes a test function.")
+		assertVerdict(t, got, "ask", "`thing_test.go` is a binary file.")
+		assertVerdict(t, got, "ask", "`thing_test.go` removes a test function.")
 	})
 
 	t.Run("a new image or font that starts as its kind does", func(t *testing.T) {
@@ -353,7 +445,7 @@ func TestEvaluateBinaryFiles(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got.Review {
+			if got.Outcome != "ship" {
 				t.Errorf("a new %s that starts as its kind does needs review: %q", path, got.Reasons)
 			}
 		}
@@ -374,7 +466,7 @@ func TestEvaluateBinaryFiles(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			assertVerdict(t, got, true, "`"+path+"` is binary, and doesn't start as its name says, so the rule can't read it.")
+			assertVerdict(t, got, "ask", "`"+path+"` is binary, and doesn't start as its name says, so the rule can't read it.")
 		}
 	})
 
@@ -388,7 +480,7 @@ func TestEvaluateBinaryFiles(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertVerdict(t, got, true, "`examples/picture.png` replaces a binary file on main, which only a person can compare.")
+		assertVerdict(t, got, "ask", "`examples/picture.png` replaces a binary file on main, which only a person can compare.")
 	})
 
 	t.Run("a deleted image leaves nothing to read", func(t *testing.T) {
@@ -401,7 +493,7 @@ func TestEvaluateBinaryFiles(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertVerdict(t, got, false, "No review rule matched this change.")
+		assertVerdict(t, got, "ship", "No rule moved the verdict towards ask.")
 	})
 
 	t.Run("an image larger than the limit", func(t *testing.T) {
@@ -413,7 +505,7 @@ func TestEvaluateBinaryFiles(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertVerdict(t, got, true, "`examples/large.png` is binary and larger than 1 MiB, the most an image or font may be without review.")
+		assertVerdict(t, got, "ask", "`examples/large.png` is binary and larger than 1 MiB, the most an image or font may be without review.")
 		for _, reason := range got.Reasons {
 			if strings.Contains(reason, "small.png") {
 				t.Errorf("an image at the limit needs review: %q", reason)
@@ -429,8 +521,8 @@ func TestEvaluateBinaryFiles(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !got.Review {
-			t.Errorf("a binary Inter.WOFF2 merged by itself, though review.yml's list, which is case-sensitive, refuses it: %+v", got)
+		if got.Outcome != "ask" {
+			t.Errorf("a binary Inter.WOFF2 merged by itself, though bring-patch.sh's list, which is case-sensitive, refuses it: %+v", got)
 		}
 	})
 
@@ -442,7 +534,7 @@ func TestEvaluateBinaryFiles(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertVerdict(t, got, true, "`.github/picture.png` is a binary file.")
+		assertVerdict(t, got, "ask", "`.github/picture.png` is a binary file.")
 	})
 }
 
@@ -463,7 +555,7 @@ func TestEvaluateShowsEachPathInACodeSpan(t *testing.T) {
 		"`docs/c\\n- Merged by the maintainer.md` is a path that always needs review.",
 		"`docs/\\u003c!-- d.md` is a path that always needs review.",
 	} {
-		assertVerdict(t, got, true, want)
+		assertVerdict(t, got, "ask", want)
 	}
 	for _, reason := range got.Reasons {
 		if strings.ContainsAny(reason, "\n<") || strings.Count(reason, "`") != 2 {
@@ -485,13 +577,13 @@ func TestEvaluateSymbolicLinks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertVerdict(t, got, true, "`notes.md` is a symbolic link, so it always needs review.")
+	assertVerdict(t, got, "ask", "`notes.md` is a symbolic link, so it always needs review.")
 }
 
-func assertVerdict(t *testing.T, got verdict, review bool, reason string) {
+func assertVerdict(t *testing.T, got verdict, outcome string, reason string) {
 	t.Helper()
-	if got.Review != review {
-		t.Fatalf("Review = %v, want %v; reasons: %q", got.Review, review, got.Reasons)
+	if got.Outcome != outcome {
+		t.Fatalf("Outcome = %q, want %q; reasons: %q", got.Outcome, outcome, got.Reasons)
 	}
 	if !contains(got.Reasons, reason) {
 		t.Fatalf("reasons = %q, want %q", got.Reasons, reason)
@@ -524,6 +616,35 @@ func stage(t *testing.T, repo, path, contents string) {
 	}
 	writeFile(t, fullPath, contents)
 	runGit(t, repo, "add", "--", path)
+}
+
+// commitAs commits what's staged with the author, committer and message given.
+func commitAs(t *testing.T, repo, author, committer, message string) {
+	t.Helper()
+	name, email, _ := strings.Cut(strings.TrimSuffix(committer, ">"), " <")
+	command := exec.Command("git", "-C", repo, "-c", "user.name="+name, "-c", "user.email="+email,
+		"commit", "-q", "--author", author, "-F", "-")
+	command.Stdin = strings.NewReader(message)
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("git commit: %v\n%s", err, output)
+	}
+}
+
+// judgeAt leaves the repository as land.yml judges a commit: the files and HEAD at the base on
+// main, and the index holding the head's tree.
+func judgeAt(t *testing.T, repo, base, head string) {
+	t.Helper()
+	runGit(t, repo, "checkout", "-q", "--detach", base)
+	runGit(t, repo, "read-tree", head)
+}
+
+func gitOutput(t *testing.T, repo string, args ...string) string {
+	t.Helper()
+	output, err := exec.Command("git", append([]string{"-C", repo}, args...)...).Output()
+	if err != nil {
+		t.Fatalf("git %s: %v", strings.Join(args, " "), err)
+	}
+	return strings.TrimSpace(string(output))
 }
 
 func commit(t *testing.T, repo string) {

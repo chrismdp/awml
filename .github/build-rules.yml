@@ -1,3 +1,4 @@
-# A build needs the maintainer's review if any of these hold. Otherwise it merges by itself.
+# land.yml asks for the maintainer's review of a factory pull request if any of these hold.
+# Otherwise it ships or shows it, as Classify and the rest of the build rule say.
 review_paths: [SPEC.md, AGENTS.md, REVIEW.md, .github/, go.mod, go.sum, .claude-plugin/, .agents/, plugins/awml/.claude-plugin/, plugins/awml/.codex-plugin/]
 max_changed_lines: 400
