@@ -13,6 +13,8 @@ touches.
 - Read the code around each change, not only the diff: the callers, the tests, and the spec.
 - Look for what's wrong: a behaviour the change gets wrong, a case it misses, a test that doesn't
   test what it says, a copy left out of step, anything REVIEW.md names.
+- Ask whether it could be simpler: less state kept and more worked out from git, GitHub or the
+  file itself, and no abstraction before a second use needs it.
 - Check each finding a second time before you keep it. Find the line that shows it, and think
   through whether the code really does what you say. Drop anything you can't show, and anything
   that's only a matter of taste.
