@@ -465,6 +465,7 @@ lines:
   for (const [name, call, args] of [
     ["summary", () => api.summary(odd), ["summary", "--json", ...handOffPaths]],
     ["draw", () => api.draw(odd), ["draw", ...handOffPaths]],
+    ["graph", () => api.graph(odd), ["graph", ...handOffPaths]],
   ]) {
     const refused = runNativeResult(args, 1);
     assert.throws(call, (error) => {

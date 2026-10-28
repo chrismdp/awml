@@ -120,11 +120,9 @@ async function start(source) {
     graphJSON(sourceText, implementation = "") {
       const sources = given(sourceText);
       if (sources.length > 1 && implementation) throw new Error("an implementation is given for one workflow, not several");
-      for (const source of sources) {
-        const errors = this.unsound(text(source));
-        if (errors.length) throw new Error(errors.join("\n"));
-      }
       if (sources.length > 1) return graphOutput(globalThis.__awmlGraphMap(JSON.stringify(sources)));
+      const errors = this.unsound(text(sources[0]));
+      if (errors.length) throw new Error(errors.join("\n"));
       return graphOutput(typeof sources[0] === "string"
         ? globalThis.__awmlGraph(text(sources[0]), implementation)
         : globalThis.__awmlGraph(text(sources[0]), implementation, sources[0].file || ""));

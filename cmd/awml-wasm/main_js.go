@@ -192,7 +192,7 @@ func viewOf(args []js.Value) (*awml.Map, error) {
 		return nil, nil
 	}
 	if len(args) > 2 && args[2].Type() == js.TypeString {
-		if err := refMistakes([]awml.Workflow{{File: args[2].String(), Doc: doc.(*awml.Map)}}, awml.TogetherUnsound); err != nil {
+		if err := refMistakes([]awml.Workflow{{File: args[2].String(), Doc: doc.(*awml.Map)}}); err != nil {
 			return nil, err
 		}
 	}
@@ -347,7 +347,7 @@ func readGiven(list string, drawn bool) ([]awml.Workflow, error) {
 
 // refMistakes gives the mistakes together finds following each ref between the workflows given, one
 // to a line after the file's name, as awml prints them, or nil when there are none.
-func refMistakes(given []awml.Workflow, together func([]awml.Workflow) [][]string) error {
+func refMistakes(given []awml.Workflow) error {
 	var workflows []awml.Workflow
 	for _, w := range given {
 		if awml.IsCanonical(w.Doc) {
@@ -355,7 +355,7 @@ func refMistakes(given []awml.Workflow, together func([]awml.Workflow) [][]strin
 		}
 	}
 	var lines []string
-	for n, mistakes := range together(workflows) {
+	for n, mistakes := range awml.TogetherUnsound(workflows) {
 		for _, mistake := range mistakes {
 			if workflows[n].File != "" {
 				mistake = workflows[n].File + ": " + mistake
