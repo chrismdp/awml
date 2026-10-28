@@ -472,6 +472,83 @@ func TestConvertSaysAnUntrustedTriggerItTurnsIntoAnOutsideActionIsMarkedThere(t 
 	}
 }
 
+// A long comment at the top of an older file said what the workflow was for, as a description now
+// does, so convert makes it the description and leaves every other comment at the top.
+func TestConvertMakesTheCommentAFileStartsWithItsDescription(t *testing.T) {
+	old := `
+# Plans the family's dinners each Thursday.
+#
+#  - The family is fictional.
+# Bread comes from the bakery.
+
+# The week starts on Thursday.
+awml: "0.5"
+title: Dinners
+parts:
+  - {id: thu, kind: trigger, label: Thursday} # After the school run.
+`
+	want := `# The week starts on Thursday.
+# After the school run.
+awml: "0.8"
+title: Dinners
+description: |
+  Plans the family's dinners each Thursday.
+
+   - The family is fictional.
+  Bread comes from the bakery.
+parts:
+  - { id: thu, kind: trigger, label: "Thursday" }
+`
+	data, _, _, err := ConvertSources([]Source{{Text: []byte(old)}}, "")
+	if err != nil || string(data) != want {
+		t.Errorf("convert gave %v\n%s\nwant\n%s", err, data, want)
+	}
+	// A file that already has a description keeps its comment as a comment.
+	described := strings.Replace(old, "title: Dinners\n", "title: Dinners\ndescription: Dinners.\n", 1)
+	data, _, _, err = ConvertSources([]Source{{Text: []byte(described)}}, "")
+	if err != nil || !strings.HasPrefix(string(data), "# Plans the family's dinners each Thursday.\n#\n") || !strings.Contains(string(data), "\ndescription: Dinners.\n") {
+		t.Errorf("convert gave %v\n%s", err, data)
+	}
+	// A platform description has no description, so its comment stays.
+	platform := "# The server in the hall.\n" + strings.Replace(description08, `awml: "0.8"`, `awml: "0.7"`, 1)
+	data, _, _, err = ConvertSources([]Source{{Text: []byte(platform)}}, "")
+	if err != nil || !strings.HasPrefix(string(data), "# The server in the hall.\nawml: \"0.8\"\n") {
+		t.Errorf("convert gave %v\n%s", err, data)
+	}
+	// Empty # lines that end the comment are dropped, so the description is still a literal block.
+	trailing := "# Dinners.\n#\n#\nawml: \"0.5\"\ntitle: Dinners\nparts: []\n"
+	data, _, _, err = ConvertSources([]Source{{Text: []byte(trailing)}}, "")
+	if err != nil || string(data) != "awml: \"0.8\"\ntitle: Dinners\ndescription: |\n  Dinners.\nparts: []\n" {
+		t.Errorf("convert gave %v\n%s", err, data)
+	}
+	// A comment of only empty # lines says nothing, so it stays at the top.
+	empty := "#\n#\nawml: \"0.5\"\ntitle: Dinners\nparts: []\n"
+	data, _, _, err = ConvertSources([]Source{{Text: []byte(empty)}}, "")
+	if err != nil || string(data) != "#\n#\nawml: \"0.8\"\ntitle: Dinners\nparts: []\n" {
+		t.Errorf("convert gave %v\n%s", err, data)
+	}
+	// A comment indented after its # loses the indent its lines share, and a tab becomes spaces, so
+	// the description is still a literal block.
+	indented := "#   Plans the dinners.\n#\n#     - The family is fictional.\n#\tBread too.\nawml: \"0.5\"\ntitle: Dinners\nparts: []\n"
+	data, _, _, err = ConvertSources([]Source{{Text: []byte(indented)}}, "")
+	if err != nil || string(data) != "awml: \"0.8\"\ntitle: Dinners\ndescription: |\n  Plans the dinners.\n\n    - The family is fictional.\n   Bread too.\nparts: []\n" {
+		t.Errorf("convert gave %v\n%s", err, data)
+	}
+	// A first line indented more than the rest loses its indent, since a literal block can't start
+	// with a space.
+	deeper := "#   - Plans the dinners.\n# Bread too.\nawml: \"0.5\"\ntitle: Dinners\nparts: []\n"
+	data, _, _, err = ConvertSources([]Source{{Text: []byte(deeper)}}, "")
+	if err != nil || string(data) != "awml: \"0.8\"\ntitle: Dinners\ndescription: |\n  - Plans the dinners.\n  Bread too.\nparts: []\n" {
+		t.Errorf("convert gave %v\n%s", err, data)
+	}
+	// A file that starts with its fields, not a comment, has no description to take.
+	late := "awml: \"0.5\"\n# Dinners.\ntitle: Dinners\nparts: []\n"
+	data, _, _, err = ConvertSources([]Source{{Text: []byte(late)}}, "")
+	if err != nil || string(data) != "# Dinners.\nawml: \"0.8\"\ntitle: Dinners\nparts: []\n" {
+		t.Errorf("convert gave %v\n%s", err, data)
+	}
+}
+
 func TestUpgradeFrom05WritesEachPublishAsDataAndDropsBreaksFalse(t *testing.T) {
 	want := `awml: "0.8"
 title: Renewals

@@ -172,7 +172,8 @@ implementations:
     blocks:
       - {id: runner, label: Runner, platform: acme/platforms/ops-runner, parts: [renew, standing, library, phone, board]}
 `,
-    // Each comment moves to the top once, in the file's order.
+    // The comment the file starts with becomes its description, and each other comment moves to
+    // the top once, in the file's order.
     "comments-0.5.yaml": `# The family's dinners.
 awml: "0.5"
 title: Dinners
