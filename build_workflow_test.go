@@ -488,6 +488,11 @@ func TestTheGoCacheIsNeverShared(t *testing.T) {
 			if strings.HasPrefix(step.Uses, "actions/setup-go") && step.With["cache"] != "false" {
 				t.Errorf("%s's %s sets up Go with its cache on", file, name)
 			}
+			// setup-node turns npm's cache on by itself when package.json names a packageManager,
+			// which a change's own package.json can, in main's cache scope.
+			if strings.HasPrefix(step.Uses, "actions/setup-node") && step.With["package-manager-cache"] != "false" {
+				t.Errorf("%s's %s sets up Node with its package manager's cache left to package.json", file, name)
+			}
 		}
 	})
 	// A release builds the binaries people download, so it restores no cache a run of a change's

@@ -93,8 +93,10 @@ func TestLandExitsQuietlyUnlessEveryCheckPassedOnTheHead(t *testing.T) {
 		"reviews that never ran":  landRun("pull_request", "build/issue-120") + landJobs(landJob("test (1.22)", "completed", "success"), landJob("test (stable)", "completed", "success"), landJob("Bug review", "completed", "skipped"), landJob("Security review", "completed", "skipped")) + landPulls("awml-factory[bot]", head),
 		"a moved head":            landRun("pull_request", "build/issue-120") + passed + landPulls("awml-factory[bot]", strings.Repeat("cd", 20)),
 		"a person's pull request": landRun("pull_request", "build/issue-120") + passed + landPulls("someone", head),
-		"no open pull request":    landRun("pull_request", "build/issue-120") + passed + landPulls("", head),
-		"a fork's run":            fromAFork(landRun("pull_request", "build/issue-120")) + passed + landPulls("awml-factory[bot]", head),
+		"a person named as the app": landRun("pull_request", "build/issue-120") + passed +
+			strings.Replace(landPulls("awml-factory[bot]", head), `"type": "Bot"}}]`, `"type": "User"}}]`, 1),
+		"no open pull request": landRun("pull_request", "build/issue-120") + passed + landPulls("", head),
+		"a fork's run":         fromAFork(landRun("pull_request", "build/issue-120")) + passed + landPulls("awml-factory[bot]", head),
 	}
 	for name, answers := range quiet {
 		q := newRehearsal(t)

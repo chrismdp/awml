@@ -169,6 +169,11 @@ jobs:
           jq -r '["Important", "Nit", "Pre-existing"][] as $rank | .[] | select(.severity == $rank)
             | "- **\(.severity)**, from the \(.review) review, in `\(.file)\(if .line > 0 then ":\(.line)" else "" end)`: \(.title) \(.detail)"' \
             "$RUNNER_TEMP/checks/findings.json" > "$in/findings.md"
+          # A review's check carries only the first ten findings of each rank, so ten of a rank
+          # means some may be missing.
+          jq -r 'group_by([.review, .severity])[] | select(length >= 10) | first
+            | "\nThe \(.review) review'"'"'s \(.severity) findings stop at ten, all its check can carry, so some may be missing."' \
+            "$RUNNER_TEMP/checks/findings.json" >> "$in/findings.md"
           gh api "repos/$GITHUB_REPOSITORY/compare/$GITHUB_SHA...$HEAD_SHA" -H "Accept: application/vnd.github.diff" \
             > "$in/change.patch"
           gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/commits?per_page=100" \
@@ -191,6 +196,7 @@ jobs:
         if: steps.tries.outputs.decision == 'fix'
         with:
           node-version: 22
+          package-manager-cache: false
 
       # The session runs offline, so nothing it runs can carry data out through a proxy. Its home's
       # Go module cache is filled here, before it starts, by fetching alone: go mod download, from the

@@ -95,7 +95,7 @@ jobs:
           pull="$(gh api "repos/$GITHUB_REPOSITORY/pulls?head=$GITHUB_REPOSITORY_OWNER:$branch&base=main&state=open" |
             jq -c --arg repository "$GITHUB_REPOSITORY" --arg branch "$branch" \
               '[.[] | select(.base.ref == "main" and .head.ref == $branch and
-                .head.repo.full_name == $repository and .user.login == "awml-factory[bot]")] | first // empty')"
+                .head.repo.full_name == $repository and .user.login == "awml-factory[bot]" and .user.type == "Bot")] | first // empty')"
           [ -n "$pull" ] || leave "No open pull request of the app's is on $branch."
           [ "$(jq -r .head.sha <<< "$pull")" = "$head_sha" ] ||
             leave "The pull request has moved on since CI ran, so a newer CI result decides."

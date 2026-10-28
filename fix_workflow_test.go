@@ -2,6 +2,7 @@ package awml
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -229,5 +230,47 @@ func TestTheFixersCommentsAreFixedText(t *testing.T) {
 		if strings.Contains(body, "someone") || strings.Contains(body, "<!--") {
 			t.Errorf("a comment quotes the fix:\n%s", body)
 		}
+	}
+}
+
+// GitHub keeps ten annotations of each level a step, so a review's check carries only the first ten
+// findings of each rank. When a review's check has ten of a rank, findings.md says some of that
+// rank may be missing; with fewer, it says nothing of the kind.
+func TestTheFixerIsToldWhenFindingsMayBeMissing(t *testing.T) {
+	bring, _ := readFactoryWorkflow(t, "fix.yml").Jobs["fix"].step(t, "bring")
+	finding := func(review, severity string) string {
+		return `{"review": "` + review + `", "severity": "` + severity + `", "file": "fit.go", "line": 3, "title": "A slip", "detail": "It drops a part."}`
+	}
+	for _, c := range []struct {
+		name  string
+		nits  int
+		other string
+		says  bool
+	}{
+		{"ten Nits from one review", 10, finding("security", "Important"), true},
+		{"nine Nits from one review", 9, finding("security", "Nit"), false},
+	} {
+		r := newRehearsal(t)
+		var all []string
+		for range c.nits {
+			all = append(all, finding("bug", "Nit"))
+		}
+		r.write("checks/findings.json", "["+strings.Join(append(all, c.other), ", ")+"]")
+		r.write("fix/in/.keep", "")
+		t.Cleanup(func() { exec.Command("chmod", "-R", "u+w", filepath.Join(r.temp, "fix")).Run() })
+		r.run(bring, map[string]string{"PR_NUMBER": "8", "HEAD_SHA": strings.Repeat("ab", 20)}, `
+  "api repos/owner/repo/compare/"*) answer <<< 'diff' ;;
+  "api --paginate repos/owner/repo/pulls/8/commits"*) answer <<< '[{"sha": "abc", "commit": {"message": "A commit"}}]' ;;`)
+		r.mustPass()
+		md := r.read("fix/in/findings.md")
+		if says := strings.Contains(md, "may be missing"); says != c.says {
+			t.Errorf("with %s, findings.md says findings may be missing: %v, want %v:\n%s", c.name, says, c.says, md)
+		}
+		if c.says && !strings.Contains(md, "bug review's Nit findings") {
+			t.Errorf("with %s, findings.md doesn't name which review and rank:\n%s", c.name, md)
+		}
+	}
+	if comment := readText(t, ".github/workflows/ci.yml"); !strings.Contains(comment, "the first ten findings of each rank, in the order the review wrote them") {
+		t.Error("ci.yml's review job comment doesn't say only the first ten of each rank reach the other workflows")
 	}
 }
