@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func retryAnswers(test, review, branchSha, edited string, labels []string, builds int) string {
+func retryAnswers(test, review, branchSha, edited string, labels []string, builds int, renamed ...string) string {
 	head := strings.Repeat("ab", 20)
 	runs := []string{
 		// A build of another issue, and one from before the label was last added.
@@ -23,7 +23,7 @@ func retryAnswers(test, review, branchSha, edited string, labels []string, build
     {"name": "Bug review", "conclusion": "` + review + `"}]}' ;;
   "api repos/owner/repo/branches/build/issue-120"*) answer <<< '{"commit": {"sha": "` + branchSha + `"}}' ;;
   "api --paginate repos/owner/repo/actions/workflows/build.yml/runs"*) answer <<< '{"workflow_runs": [` + strings.Join(runs, ", ") + `]}' ;;` +
-		issueAnswer(edited, labels...) + labelEvents
+		issueAnswer(edited, labels...) + labelEventsRenamed(strings.Join(renamed, ""))
 }
 
 // retry.yml wakes when CI's tests fail on a factory branch's pull request, whatever else failed. It
@@ -42,6 +42,7 @@ func TestRetryActsWhenTheTestsFailAndCountsTheBuilds(t *testing.T) {
 		{"a failed test and review", retryAnswers("failure", "failure", head, "", []string{"build"}, 2), "again"},
 		{"three builds", retryAnswers("failure", "success", head, "", []string{"build"}, 3), "report"},
 		{"an issue edited since", retryAnswers("failure", "success", head, "2026-10-27T10:30:00Z", []string{"build"}, 1), "edited"},
+		{"an issue renamed since", retryAnswers("failure", "success", head, "", []string{"build"}, 1, "2026-10-27T10:30:00Z"), "edited"},
 		{"only a failed review", retryAnswers("success", "failure", head, "", []string{"build"}, 1), "none"},
 		{"a moved branch", retryAnswers("failure", "success", strings.Repeat("cd", 20), "", []string{"build"}, 1), "none"},
 		{"the label taken off", retryAnswers("failure", "success", head, "", []string{"tool"}, 1), "none"},
@@ -67,7 +68,7 @@ func TestRetryActsWhenTheTestsFailAndCountsTheBuilds(t *testing.T) {
 	}
 
 	report, _ := job.step(t, "report")
-	for decision, want := range map[string]string{"report": "failed three times", "edited": "changed since the build label"} {
+	for decision, want := range map[string]string{"report": "failed three times", "edited": "edited or renamed since the build label"} {
 		c := newRehearsal(t)
 		c.run(report, map[string]string{"ISSUE": "120", "DECISION": decision, "CI_URL": "https://github.com/owner/repo/actions/runs/77"},
 			`  "issue comment 120"*) ;;`)

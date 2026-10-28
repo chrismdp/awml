@@ -75,14 +75,18 @@ jobs:
                 issue(number: $number) { lastEditedAt labels(first: 100) { nodes { name } } }
               }
             }' --jq .data.repository.issue)"
-          labelled="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$issue/events?per_page=100" \
-            --jq '.[] | select(.event == "labeled" and .label.name == "build") | .created_at' | tail -n 1)"
+          # A rename doesn't change lastEditedAt, so the issue's renamed events count as edits too.
+          events="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$issue/events?per_page=100" \
+            --jq '.[] | select((.event == "labeled" and .label.name == "build") or .event == "renamed") | {event, created_at}' | jq -s .)"
+          labelled="$(jq -r '[.[] | select(.event == "labeled")] | last | .created_at // ""' <<< "$events")"
+          renamed="$(jq -r '[.[] | select(.event == "renamed")] | last | .created_at // ""' <<< "$events")"
           edited="$(jq -r '.lastEditedAt // ""' <<< "$state")"
+          if [[ "$renamed" > "$edited" ]]; then edited="$renamed"; fi
           jq -e '[.labels.nodes[].name] | index("build")' <<< "$state" > /dev/null && [ -n "$labelled" ] ||
             leave "Issue #$issue no longer carries the build label, so whoever took it off decides."
           echo "issue=$issue" >> "$GITHUB_OUTPUT"
           if [ -n "$edited" ] && ! [[ "$edited" < "$labelled" ]]; then
-            echo "Issue #$issue was edited at $edited, after the label was added at $labelled."
+            echo "Issue #$issue was edited or renamed at $edited, after the label was added at $labelled."
             echo "decision=edited" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -125,7 +129,7 @@ jobs:
             printf '**The build failed three times and needs a person.** CI'"'"'s tests failed on its pull request again. To try again, remove the build label and add it again. [CI'"'"'s run](%s)\n' \
               "$CI_URL" > "$RUNNER_TEMP/comment.md"
           else
-            printf '**This issue changed since the build label was added**, so the build won'"'"'t try again from text nobody approved. To build it as it reads now, remove the build label and add it again. [CI'"'"'s run](%s)\n' \
+            printf '**This issue was edited or renamed since the build label was added**, so the build won'"'"'t try again from text nobody approved. To build it as it reads now, remove the build label and add it again. [CI'"'"'s run](%s)\n' \
               "$CI_URL" > "$RUNNER_TEMP/comment.md"
           fi
           gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"

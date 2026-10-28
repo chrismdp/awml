@@ -79,14 +79,18 @@ jobs:
                 issue(number: $number) { lastEditedAt labels(first: 100) { nodes { name } } }
               }
             }' --jq .data.repository.issue)"
-          labelled="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$ISSUE/events?per_page=100" \
-            --jq '.[] | select(.event == "labeled" and .label.name == "build") | .created_at' | tail -n 1)"
+          # A rename doesn't change lastEditedAt, so the issue's renamed events count as edits too.
+          events="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$ISSUE/events?per_page=100" \
+            --jq '.[] | select((.event == "labeled" and .label.name == "build") or .event == "renamed") | {event, created_at}' | jq -s .)"
+          labelled="$(jq -r '[.[] | select(.event == "labeled")] | last | .created_at // ""' <<< "$events")"
+          renamed="$(jq -r '[.[] | select(.event == "renamed")] | last | .created_at // ""' <<< "$events")"
           edited="$(jq -r '.lastEditedAt // ""' <<< "$issue")"
+          if [[ "$renamed" > "$edited" ]]; then edited="$renamed"; fi
           run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           if ! jq -e '[.labels.nodes[].name] | index("build")' <<< "$issue" > /dev/null || [ -z "$labelled" ]; then
             why="This issue no longer carries the build label"
           elif [ -n "$edited" ] && ! [[ "$edited" < "$labelled" ]]; then
-            why="This issue was edited after the build label was last added"
+            why="This issue was edited or renamed after the build label was last added"
           else
             echo "go=true" >> "$GITHUB_OUTPUT"
             exit 0
@@ -163,15 +167,19 @@ jobs:
                 issue(number: $number) { number title bodyHTML lastEditedAt labels(first: 100) { nodes { name } } }
               }
             }' --jq .data.repository.issue)"
-          labelled="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$ISSUE/events?per_page=100" \
-            --jq '.[] | select(.event == "labeled" and .label.name == "build") | .created_at' | tail -n 1)"
+          # A rename doesn't change lastEditedAt, so the issue's renamed events count as edits too.
+          events="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$ISSUE/events?per_page=100" \
+            --jq '.[] | select((.event == "labeled" and .label.name == "build") or .event == "renamed") | {event, created_at}' | jq -s .)"
+          labelled="$(jq -r '[.[] | select(.event == "labeled")] | last | .created_at // ""' <<< "$events")"
+          renamed="$(jq -r '[.[] | select(.event == "renamed")] | last | .created_at // ""' <<< "$events")"
           edited="$(jq -r '.lastEditedAt // ""' <<< "$issue")"
+          if [[ "$renamed" > "$edited" ]]; then edited="$renamed"; fi
           if [ -z "$labelled" ]; then
             echo "The issue has never had the build label."
             exit 1
           fi
           if [ -n "$edited" ] && ! [[ "$edited" < "$labelled" ]]; then
-            echo "The issue was edited at $edited, after the build label was last added at $labelled, so it isn't drafted from."
+            echo "The issue was edited or renamed at $edited, after the build label was last added at $labelled, so it isn't drafted from."
             exit 1
           fi
           {
