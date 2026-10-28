@@ -133,6 +133,10 @@ func TestTheGuideToDrawingByHandMatchesDraw(t *testing.T) {
 	}
 	want = append(want, "  classDef untrusted "+untrustedOutline, "  classDef unstopped "+unstoppedOutline, "`untrusted`", "`unstopped`", "`"+orange+"`", "`"+green+"`")
 	want = append(want, pastel...)
+	// A map of several workflows draws each workflow as a box, and each line between a box and a part
+	// it shares, always dotted, with a head at one end, at each or at none.
+	want = append(want, "  style w1 "+workflowBox, "`w1_thu`", "`s1`", "`w1 -.-> s1`", "`s1 -.-> w1`",
+		"`s1 "+twoWay["-.->"]+" w1`", "`w1 "+headless["-.->"]+" s1`", "`w1_thu --> w1`")
 	for op, emoji := range ops {
 		want = append(want, fmt.Sprintf("| %s | `%s` |", emoji, op))
 	}
