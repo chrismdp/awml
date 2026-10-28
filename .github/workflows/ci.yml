@@ -7,8 +7,11 @@
 # them runs any of the change's code. Each job's result is its own check on the commit, so the
 # commit as pushed has one judge, and land.yml, fix.yml and retry.yml read its verdict from GitHub.
 # A fork's pull request, or one a stranger opened, gets no review: its review jobs fail at a gate
-# that holds no secret, so a person reviews and merges it, and a hand merge never sees green
-# reviews that didn't run, as it would if they were skipped.
+# that holds no secret, rather than being skipped, which GitHub would count as passed, so a person
+# reviews and merges it. But on pull_request a fork's own ci.yml runs, and it could add jobs named
+# Bug review and Security review that pass: a fork's checks prove nothing when its diff touches
+# .github/workflows/, and a person must look at such a pull request. GitHub's required workflows,
+# which would pin main's, need an organisation, which this repository isn't in.
 #
 # On pull_request GitHub runs the pull request's own ci.yml, not main's, so a person with write
 # access could change how their own pull request is reviewed, or skip a review. That's accepted:

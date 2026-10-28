@@ -591,3 +591,18 @@ func TestTheBuildAndTheFixerCommitAsTheFactorysApp(t *testing.T) {
 		}
 	}
 }
+
+// A fork's own ci.yml runs on its pull request, so it can add jobs named as the required checks
+// that pass. The header and AGENTS.md say a fork's checks prove nothing when its diff touches
+// .github/workflows/, and that a person must look at such a pull request, rather than promise more.
+func TestTheDocsSayAForksChecksCanLie(t *testing.T) {
+	for _, file := range []string{".github/workflows/ci.yml", "AGENTS.md"} {
+		text := readText(t, file)
+		if strings.Contains(text, "never sees green reviews") {
+			t.Errorf("%s promises a fork can't show green reviews", file)
+		}
+		if !strings.Contains(text, "a fork's checks prove nothing") {
+			t.Errorf("%s doesn't say a fork's checks prove nothing when it touches .github/workflows/", file)
+		}
+	}
+}

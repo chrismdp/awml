@@ -1,17 +1,21 @@
 package awml
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
 
 func retryAnswers(test, review, branchSha, edited string, labels []string, builds int, renamed ...string) string {
-	return retryAnswersOn(`{"commit": {"message": "Bake scones\n\nCloses #120", "author": {"date": "2026-10-27T13:05:00Z"}, "committer": {"date": "2026-10-27T13:05:00Z"}}}`,
-		test, review, branchSha, edited, labels, builds, renamed...)
+	return retryAnswersOn(1, "", test, review, branchSha, edited, labels, builds, renamed...)
 }
 
-// retryAnswersOn answers as retryAnswers does, with the head commit given.
-func retryAnswersOn(commit, test, review, branchSha, edited string, labels []string, builds int, renamed ...string) string {
+// retryAnswersOn answers as retryAnswers does, for the attempt of CI's run given, with CI's earlier
+// runs on the branch given as a list of runs and the case arms for their jobs.
+func retryAnswersOn(attempt int, earlier, test, review, branchSha, edited string, labels []string, builds int, renamed ...string) string {
+	if earlier == "" {
+		earlier = `[]' ;;`
+	}
 	head := strings.Repeat("ab", 20)
 	runs := []string{
 		// A build of another issue, and one from before the label was last added.
@@ -23,11 +27,14 @@ func retryAnswersOn(commit, test, review, branchSha, edited string, labels []str
 	}
 	return `
   "api repos/owner/repo/actions/runs/77"*) answer <<< '{"path": ".github/workflows/ci.yml", "event": "pull_request", "status": "completed",
-    "head_sha": "` + head + `", "head_branch": "build/issue-120", "head_repository": {"full_name": "owner/repo"}}' ;;
+    "head_sha": "` + head + `", "head_branch": "build/issue-120", "head_repository": {"full_name": "owner/repo"},
+    "id": 77, "run_attempt": ` + fmt.Sprint(attempt) + `, "created_at": "2026-10-27T13:30:00Z"}' ;;
+  "api --paginate repos/owner/repo/actions/workflows/ci.yml/runs"*) answer <<< '{"workflow_runs": [
+    {"id": 77, "event": "pull_request", "conclusion": "failure", "created_at": "2026-10-27T13:30:00Z", "head_repository": {"full_name": "owner/repo"}}` +
+		strings.TrimPrefix(earlier, "[") + `
   "api --paginate repos/owner/repo/actions/runs/77/jobs"*) answer <<< '{"jobs": [
     {"name": "test (1.22)", "conclusion": "` + test + `"}, {"name": "test (stable)", "conclusion": "success"},
     {"name": "Bug review", "conclusion": "` + review + `"}]}' ;;
-  "api repos/owner/repo/commits/` + head + `"*) answer <<< '` + commit + `' ;;
   "api repos/owner/repo/branches/build/issue-120"*) answer <<< '{"commit": {"sha": "` + branchSha + `"}}' ;;
   "api --paginate repos/owner/repo/actions/workflows/build.yml/runs"*) answer <<< '{"workflow_runs": [` + strings.Join(runs, ", ") + `]}' ;;` +
 		issueAnswer(edited, labels...) + labelEventsRenamed(strings.Join(renamed, ""))
@@ -54,12 +61,25 @@ func TestRetryActsWhenTheTestsFailAndCountsTheBuilds(t *testing.T) {
 		{"a moved branch", retryAnswers("failure", "success", strings.Repeat("cd", 20), "", []string{"build"}, 1), "none"},
 		{"the label taken off", retryAnswers("failure", "success", head, "", []string{"tool"}, 1), "none"},
 		{"a fork's run", fromAFork(retryAnswers("failure", "success", head, "", []string{"build"}, 1)), "none"},
-		{"a fix commit after the third build", retryAnswersOn(`{"commit": {"message": "Fix\n\nFixed-by: fix-review-findings", "author": {"date": "2026-10-27T13:30:00Z"}, "committer": {"date": "2026-10-27T13:30:00Z"}}}`,
+		// After three builds, a person is told once: on the first run since the last build started
+		// whose tests failed, whatever commit it's on, a fix's or a rebase's, and never on a re-run.
+		{"an earlier run since the last build whose tests failed", retryAnswersOn(1, `[,
+    {"id": 70, "event": "pull_request", "conclusion": "failure", "created_at": "2026-10-27T13:10:00Z", "head_repository": {"full_name": "owner/repo"}}]}' ;;
+  "api --paginate repos/owner/repo/actions/runs/70/jobs"*) answer <<< '{"jobs": [{"name": "test (1.22)", "conclusion": "failure"}]}' ;;`,
+			"failure", "success", head, "", []string{"build"}, 3), "none"},
+		{"an earlier run since the last build that failed by a review", retryAnswersOn(1, `[,
+    {"id": 71, "event": "pull_request", "conclusion": "failure", "created_at": "2026-10-27T13:10:00Z", "head_repository": {"full_name": "owner/repo"}}]}' ;;
+  "api --paginate repos/owner/repo/actions/runs/71/jobs"*) answer <<< '{"jobs": [{"name": "test (1.22)", "conclusion": "success"}, {"name": "Bug review", "conclusion": "failure"}]}' ;;`,
 			"failure", "success", head, "", []string{"build"}, 3), "report"},
-		{"a commit from before the third build", retryAnswersOn(`{"commit": {"message": "Bake scones", "author": {"date": "2026-10-27T12:30:00Z"}, "committer": {"date": "2026-10-27T12:30:00Z"}}}`,
-			"failure", "success", head, "", []string{"build"}, 3), "none"},
-		{"an older commit the rebase recommitted", retryAnswersOn(`{"commit": {"message": "Bake scones", "author": {"date": "2026-10-27T12:30:00Z"}, "committer": {"date": "2026-10-27T15:00:00Z"}}}`,
-			"failure", "success", head, "", []string{"build"}, 3), "none"},
+		{"a failed run from before the last build", retryAnswersOn(1, `[,
+    {"id": 60, "event": "pull_request", "conclusion": "failure", "created_at": "2026-10-27T12:30:00Z", "head_repository": {"full_name": "owner/repo"}}]}' ;;
+  "api --paginate repos/owner/repo/actions/runs/60/jobs"*) answer <<< '{"jobs": [{"name": "test (1.22)", "conclusion": "failure"}]}' ;;`,
+			"failure", "success", head, "", []string{"build"}, 3), "report"},
+		{"a fork's failed run since the last build", retryAnswersOn(1, `[,
+    {"id": 72, "event": "pull_request", "conclusion": "failure", "created_at": "2026-10-27T13:10:00Z", "head_repository": {"full_name": "a-stranger/repo"}}]}' ;;
+  "api --paginate repos/owner/repo/actions/runs/72/jobs"*) answer <<< '{"jobs": [{"name": "test (1.22)", "conclusion": "failure"}]}' ;;`,
+			"failure", "success", head, "", []string{"build"}, 3), "report"},
+		{"a re-run of the third build's failure", retryAnswersOn(2, "", "failure", "success", head, "", []string{"build"}, 3), "none"},
 	}
 	for _, tt := range tests {
 		r := newRehearsal(t)
@@ -98,5 +118,13 @@ func TestRetryActsWhenTheTestsFailAndCountsTheBuilds(t *testing.T) {
 		if step.Uses != "" {
 			t.Errorf("retry uses %s, but checks out nothing and runs only gh", step.Uses)
 		}
+	}
+}
+
+// The build runs are fetched once, for both their count and when the last one started.
+func TestRetryFetchesTheBuildsOnce(t *testing.T) {
+	tries, _ := readFactoryWorkflow(t, "retry.yml").Jobs["retry"].step(t, "tries")
+	if got := strings.Count(tries.Run, "actions/workflows/build.yml/runs"); got != 1 {
+		t.Errorf("retry fetches the build runs %d times, want once", got)
 	}
 }

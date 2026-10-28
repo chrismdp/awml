@@ -356,7 +356,8 @@ func TestLandAsksWhenClassifyEndedBadly(t *testing.T) {
 
 // On pull_request GitHub runs ci.yml from the merge with main, so a branch that hasn't touched
 // ci.yml is checked by main's, however main's has changed since. Only a branch that changes ci.yml
-// itself had checks other than main's, and is asked about.
+// itself had checks other than main's, and the build rule asks about it, as it asks about any
+// change under .github/. Land adds no rule of its own for it.
 func TestLandAsksWhenTheBranchChangesItsCI(t *testing.T) {
 	const app = "41+awml-factory[bot]@users.noreply.github.com"
 	ship := `{"annotation_level": "notice", "title": "Verdict", "message": "ship"}`
@@ -379,7 +380,7 @@ func TestLandAsksWhenTheBranchChangesItsCI(t *testing.T) {
 		t.Errorf("a branch older than main's ci.yml, which CI runs from the merge, judged %s for %s, want ship", moved.outputs["outcome"], moved.outputs["reasons"])
 	}
 	changed := rehearseJudgeWith(t, ci, write, nil, commits, "[]", ship)
-	if changed.outputs["outcome"] != "ask" || !strings.Contains(changed.outputs["reasons"], "This branch changes ci.yml, so its checks may not be main's.") {
+	if changed.outputs["outcome"] != "ask" || !strings.Contains(changed.outputs["reasons"], "`.github/workflows/ci.yml` is a path that always needs review.") {
 		t.Errorf("a branch that changes ci.yml judged %s for %s, want ask", changed.outputs["outcome"], changed.outputs["reasons"])
 	}
 }
@@ -411,5 +412,11 @@ func TestLandIgnoresAStrangersPullRequestOnTheBranch(t *testing.T) {
 	r.mustPass()
 	if r.outputs["ready"] != "true" || r.outputs["pr"] != "8" {
 		t.Errorf("with a stranger's newer pull request on the branch, land read %v, want the app's #8", r.outputs)
+	}
+}
+
+func TestLandAddsNoRuleOfItsOwnForCI(t *testing.T) {
+	if strings.Contains(readText(t, ".github/workflows/land.yml"), "-- .github/workflows/ci.yml") {
+		t.Error("land.yml keeps a ci.yml check of its own beside the build rule's review_paths")
 	}
 }

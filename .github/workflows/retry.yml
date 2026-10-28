@@ -91,30 +91,46 @@ jobs:
             exit 0
           fi
 
-          builds="$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows/build.yml/runs?created=%3E%3D$labelled&per_page=100" \
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows/build.yml/runs?created=%3E%3D$labelled&per_page=100" \
             --jq '.workflow_runs[]' |
             jq -s --arg title "Build of issue $issue" --arg since "$labelled" \
               '[.[] | select(.display_title == $title and .head_branch == "main" and
-                (.event | IN("issues", "workflow_dispatch")) and .created_at >= $since)] | length')"
+                (.event | IN("issues", "workflow_dispatch")) and .created_at >= $since)]' > "$RUNNER_TEMP/builds.json"
+          builds="$(jq length "$RUNNER_TEMP/builds.json")"
           echo "Issue #$issue has had $builds builds since the label was added at $labelled."
           if [ "$builds" -lt 3 ]; then
             echo "decision=again" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # Said once for each commit: only when the failed run is on a commit written since the last
-          # build started, by its author date, which resolve.yml keeps when it moves the branch, the
-          # build's own or a fix after it. A rerun of an older commit has been told already.
-          last="$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows/build.yml/runs?created=%3E%3D$labelled&per_page=100" \
-            --jq '.workflow_runs[]' |
-            jq -rs --arg title "Build of issue $issue" \
-              '[.[] | select(.display_title == $title and .head_branch == "main" and (.event | IN("issues", "workflow_dispatch")))]
-                | map(.created_at) | sort | last // ""')"
-          commit="$(gh api "repos/$GITHUB_REPOSITORY/commits/$head_sha")"
-          if jq -e --arg last "$last" '.commit.author.date >= $last' <<< "$commit" > /dev/null; then
-            echo "decision=report" >> "$GITHUB_OUTPUT"
-          else
-            echo "This commit was written before the last build started, and a person was told already."
+          # Said once: on the first attempt of the first CI run since the last build started whose
+          # tests failed, whatever commit it's on, the build's own, a fix's or one resolve.yml moved.
+          # An earlier such run of this repository's on the branch was told already, and a re-run is
+          # the same run again.
+          if [ "$(jq -r '.run_attempt // 1' <<< "$run")" != 1 ]; then
+            echo "This is a re-run of a run a person was told about already."
             echo "decision=none" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          last="$(jq -r 'map(.created_at) | sort | last // ""' "$RUNNER_TEMP/builds.json")"
+          created="$(jq -r .created_at <<< "$run")"
+          told=false
+          while read -r earlier; do
+            case "$earlier" in ''|*[!0-9]*) continue ;; esac
+            if gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$earlier/jobs?per_page=100" --jq '.jobs[]' |
+              jq -se '[.[] | select((.name | startswith("test (")) and .conclusion == "failure")] | length > 0' > /dev/null; then
+              told=true
+              break
+            fi
+          done < <(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=$branch&event=pull_request&created=%3E%3D$last&per_page=100" \
+            --jq '.workflow_runs[]' |
+            jq -r --arg repository "$GITHUB_REPOSITORY" --arg last "$last" --arg created "$created" --argjson id "$CI_RUN" \
+              'select(.id != $id and .event == "pull_request" and .head_repository.full_name == $repository and
+                .conclusion == "failure" and .created_at >= $last and .created_at < $created) | .id')
+          if [ "$told" = true ]; then
+            echo "An earlier run since the last build failed its tests, and a person was told then."
+            echo "decision=none" >> "$GITHUB_OUTPUT"
+          else
+            echo "decision=report" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Start the build again, with only the issue's number
