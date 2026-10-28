@@ -222,9 +222,7 @@ func TestTheGraphOfAMapHasEachWorkflowsBox(t *testing.T) {
 func TestTheGraphOfAMapSaysWhichWayALinePoints(t *testing.T) {
 	both := strings.Replace(shopWorkflow, "  - { from: fill, to: basket, kind: data }\n", "  - { from: fill, to: basket, kind: data }\n  - { from: fill, to: list, kind: data }\n", 1)
 	g := GraphMap(together(t, "plan.yaml", planWorkflow, "shop.yaml", both))
-	// A two-way line has no direction, so it runs from the shared part: Mermaid can draw the line
-	// from the box detached from its ends.
-	if l := g.Lines[3]; l.From != "s1" || l.To != "w2" || l.Points != "both" || !reflect.DeepEqual(l.Joins, []string{"w2_fill"}) {
+	if l := g.Lines[3]; l.From != "w2" || l.To != "s1" || l.Points != "both" || !reflect.DeepEqual(l.Joins, []string{"w2_fill"}) {
 		t.Errorf("a two-way line is %+v", l)
 	}
 	has(t, g.Mermaid(), "\n  s1 <-.-> w2\n")

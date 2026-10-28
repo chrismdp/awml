@@ -202,9 +202,7 @@ func GraphMap(workflows []Workflow) Graph {
 			case outOf[w] && !into[w]:
 				line.From, line.To = shared, box
 			case into[w] && outOf[w]:
-				// A two-way line has no direction, so it runs from the shared part: from the box,
-				// Mermaid can lay it out as a path of NaN, detached from its ends.
-				line.From, line.To, line.Points = shared, box, "both"
+				line.Points = "both"
 			case !into[w] && !outOf[w]:
 				line.Points = "none"
 			}
@@ -299,7 +297,8 @@ func publishedNames(workflows []Workflow) []string {
 // Mermaid draws the graph, so every drawing uses the same shapes and colours. It draws from the
 // graph's fields alone, so a graph read back from its JSON draws the same. At each level it writes
 // the parts in the order the graph lists them, then the comments, then the groups. It writes each
-// line from its from to its to, but a tie from its part to its comment.
+// line from its from to its to, but a tie from its part to its comment, and a two-way line from its
+// part to its box.
 func (g Graph) Mermaid() string {
 	out := append([]string{}, header...)
 	type node struct {
@@ -352,6 +351,11 @@ func (g Graph) Mermaid() string {
 		// A tie has no direction, so it runs from the part to the comment, and the comment hangs
 		// below or beside what it explains.
 		if kind == "tie" && kinds[from] == "comment" && kinds[to] != "comment" {
+			from, to = to, from
+		}
+		// A two-way line has no direction either, so it runs from the part to the box: from the
+		// box, Mermaid can lay it out as a path of NaN, detached from its ends.
+		if l.Points == "both" && kinds[from] == "" && kinds[to] != "" {
 			from, to = to, from
 		}
 		arrow := arrows[kind]
