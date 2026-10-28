@@ -156,7 +156,7 @@ bash "$RUNNER_TEMP/scrub-placeholders.sh" before "$TREE" "$RUNNER_TEMP/absent" s
 // patch of its own change alone; one that leaves something in a placeholder stops git.
 func TestTheBuildsPatchHoldsNoPlaceholder(t *testing.T) {
 	patch, _ := readFactoryWorkflow(t, "build.yml").Jobs["draft"].step(t, "patch")
-	for _, leaves := range []string{"empty placeholders", "a placeholder with something in it", "a .claude link", "something in node_modules"} {
+	for _, leaves := range []string{"empty placeholders", "a placeholder with something in it", "a .claude link", "something in node_modules", "a node_modules link"} {
 		r := newRehearsal(t)
 		repo, _ := r.newRepo("repo", map[string]string{"recipes.md": "Bread\n"})
 		r.write("host/scrub-placeholders.sh", readText(t, ".github/scrub-placeholders.sh"))
@@ -185,7 +185,21 @@ func TestTheBuildsPatchHoldsNoPlaceholder(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
+		// A folder outside the tree, which no cleaning may reach.
+		outside := filepath.Join(r.root, "outside")
+		if err := os.MkdirAll(filepath.Join(outside, ".bin"), 0o755); err != nil {
+			t.Fatal(err)
+		}
 		switch leaves {
+		case "a node_modules link":
+			// A session turns the placeholder into a link to it: removing node_modules/.bin, its
+			// own placeholder, would act through the link.
+			if err := os.RemoveAll(filepath.Join(repo, "node_modules")); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(outside, filepath.Join(repo, "node_modules")); err != nil {
+				t.Fatal(err)
+			}
 		case "something in node_modules":
 			r.write(filepath.Join(repo, "node_modules", "x"), "module.exports = 1\n")
 		case "a placeholder with something in it":
@@ -221,9 +235,13 @@ func TestTheBuildsPatchHoldsNoPlaceholder(t *testing.T) {
 		}
 		// Each is refused for what it is.
 		want := map[string]string{"a placeholder with something in it": "left a file with something in it at ./.env",
-			"a .claude link": "left a link at ./.claude", "something in node_modules": "left a folder with something in it at ./node_modules"}[leaves]
+			"a .claude link": "left a link at ./.claude", "something in node_modules": "left a folder with something in it at ./node_modules",
+			"a node_modules link": "left a link at ./node_modules"}[leaves]
 		if !strings.Contains(r.printed, want) {
 			t.Errorf("with %s, the step said:\n%s\nwant %q", leaves, r.printed, want)
+		}
+		if _, err := os.Stat(filepath.Join(outside, ".bin")); err != nil {
+			t.Errorf("with %s, cleaning removed a folder outside the tree: %v", leaves, err)
 		}
 	}
 }

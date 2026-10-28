@@ -67,6 +67,21 @@ case "$mode" in
   after)
     state="$3"
     refuse() { echo "The session left $1 at .${2#"$tree"}, where it started with nothing, so git isn't run on it."; exit 1; }
+    # Before anything is removed: no recorded path, nor any folder above it in the tree, may be a
+    # link, and each must resolve inside the tree, so nothing removed later acts through a link.
+    root="$(realpath "$tree")"
+    while IFS= read -r path; do
+      sofar=""
+      IFS=/ read -r -a parts <<< "$path"
+      for part in "${parts[@]}"; do
+        sofar="${sofar:+$sofar/}$part"
+        if [ -L "$tree/$sofar" ]; then refuse "a link" "$tree/$sofar"; fi
+      done
+      case "$(realpath -m "$tree/$path")" in
+        "$root"/*) ;;
+        *) refuse "a path that leads out of the tree" "$tree/$path" ;;
+      esac
+    done < <(grep -v '^standin ' "$state")
     # .claude first: the sandbox's placeholders for its settings, commands, agents, hooks and skills,
     # and anything Claude Code kept there, are said in full, each name escaped, and removed, since no
     # change may carry .claude and nothing on the host reads it.
@@ -80,8 +95,8 @@ case "$mode" in
         claude=true
       fi
     fi
-    # The rest deepest first, so a placeholder inside another goes before it, and a folder is
-    # removed only once nothing but placeholders was in it.
+    # The rest deepest first, a path inside another sorting after it and so, reversed, before it,
+    # and a folder is removed only once nothing but placeholders was in it.
     while IFS= read -r path; do
       case "$path" in .claude|.claude/*) if [ "$claude" = true ]; then continue; fi ;; esac
       at="$tree/$path"
@@ -98,7 +113,7 @@ case "$mode" in
       elif [ -e "$at" ]; then
         refuse "something other than a file or folder" "$at"
       fi
-    done < <(grep -v '^standin ' "$state" | awk -F/ '{ print NF "\t" $0 }' | LC_ALL=C sort -t "$(printf '\t')" -k1,1nr -k2 | cut -f 2-)
+    done < <(grep -v '^standin ' "$state" | LC_ALL=C sort -r)
     ;;
   exclude)
     mkdir -p "$tree/.git/info"
