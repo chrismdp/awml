@@ -479,6 +479,7 @@ jobs:
           private-key: ${{ secrets.FACTORY_APP_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
+          permission-contents: write
 
       # The fix is one more commit, the app's, as its push is, on the reviewed commit. Its message is
       # Claude's, with mentions and closing keywords broken, as pull-request-body.sh breaks them, since

@@ -1282,3 +1282,41 @@ func TestNoSessionCanReachDocker(t *testing.T) {
 		t.Errorf("the jobs that run a Claude session are %v", jobs)
 	}
 }
+
+// Each app token is minted with only the permissions its steps use: contents to push, pull
+// requests to open, edit or merge one, issues to open one. Anything left out is denied.
+func TestEveryAppTokenNamesOnlyThePermissionsItNeeds(t *testing.T) {
+	want := map[string]map[string]string{
+		"build.yml open":   {"permission-contents": "write", "permission-pull-requests": "write"},
+		"fix.yml write":    {"permission-contents": "write"},
+		"land.yml land":    {"permission-contents": "write", "permission-pull-requests": "write"},
+		"resolve.yml push": {"permission-contents": "write"},
+		"ci.yml report":    {"permission-issues": "write"},
+	}
+	found := 0
+	eachJob(t, func(file, name string, job workflowJob) {
+		for _, step := range job.Steps {
+			if !strings.HasPrefix(step.Uses, "actions/create-github-app-token@") {
+				continue
+			}
+			found++
+			expected, ok := want[file+" "+name]
+			if !ok {
+				t.Errorf("%s's %s mints an app token no test expects", file, name)
+				continue
+			}
+			got := map[string]string{}
+			for input, value := range step.With {
+				if strings.HasPrefix(input, "permission-") {
+					got[input] = value
+				}
+			}
+			if fmt.Sprint(got) != fmt.Sprint(expected) {
+				t.Errorf("%s's %s mints its app token with %v, want %v", file, name, got, expected)
+			}
+		}
+	})
+	if found != len(want) {
+		t.Errorf("found %d app tokens, want %d", found, len(want))
+	}
+}

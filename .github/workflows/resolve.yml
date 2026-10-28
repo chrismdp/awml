@@ -446,6 +446,7 @@ jobs:
           private-key: ${{ secrets.FACTORY_APP_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
+          permission-contents: write
 
       - name: Guard, push and comment on each pull request
         id: push

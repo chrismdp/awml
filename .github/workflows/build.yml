@@ -625,6 +625,8 @@ jobs:
           private-key: ${{ secrets.FACTORY_APP_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
 
       # The title and description come from main's pull-request-body.sh. gh pr view finds a branch's
       # closed or merged pull request when it has no open one, so only GitHub's list of the branch's

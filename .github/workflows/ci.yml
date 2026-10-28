@@ -415,6 +415,10 @@ jobs:
           # The session's own folder is read only if it, and everything in it, is a plain folder or
           # file where it should be, so no link can lead the host's read anywhere else.
           out="$RUNNER_TEMP/session/out"
+          if [ ! -e "$out" ] && [ ! -L "$out" ]; then
+            echo "::warning title=No verdict::Classify's session didn't run, so land asks for a review."
+            exit 0
+          fi
           if [ "$(realpath -e "$out" 2> /dev/null)" != "$(realpath -e "$RUNNER_TEMP")/session/out" ] ||
             [ -n "$(find "$out" ! -type f ! -type d -print -quit)" ]; then
             echo "::warning title=No verdict::Classify's folder holds a link or something else that isn't a plain file or folder, so land.yml asks for a review."
@@ -527,6 +531,7 @@ jobs:
           private-key: ${{ secrets.FACTORY_APP_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
+          permission-issues: write
 
       - name: Open an issue labelled build
         if: steps.report.outputs.new == 'true'

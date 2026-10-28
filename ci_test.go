@@ -636,3 +636,15 @@ func TestTheTrustedOpenersAreNamedByAccess(t *testing.T) {
 		}
 	}
 }
+
+// A Classify session that never ran, its install having failed, leaves no folder: Classify says so
+// as its verdict's warning, so land asks for a review, and passes.
+func TestClassifySaysWhenItsSessionDidntRun(t *testing.T) {
+	post, _ := readFactoryWorkflow(t, "ci.yml").Jobs["classify"].step(t, "post")
+	r := newRehearsal(t)
+	r.run(post, nil, "")
+	r.mustPass()
+	if !strings.Contains(r.printed, "::warning title=No verdict::Classify's session didn't run, so land asks for a review.") {
+		t.Errorf("Classify with no session said:\n%s", r.printed)
+	}
+}
