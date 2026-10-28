@@ -129,6 +129,17 @@ func TestRetryActsWhenTheTestsFailAndCountsTheBuilds(t *testing.T) {
   "api --paginate repos/owner/repo/actions/runs/72/jobs"*) answer <<< '{"jobs": [{"name": "test (1.22)", "conclusion": "failure"}]}' ;;`,
 			"failure", "success", head, "", []string{"build"}, 3), "report"},
 		{"a re-run of the third build's failure", retryAnswersOn(2, "", "failure", "success", head, "", []string{"build"}, 3), "none"},
+		// An edit since the label is said once too: unless an earlier run since the edit failed its
+		// tests, or this is a re-run. A takeover is checked first, since no edit brings the build back.
+		{"an issue edited since, after a failure since the edit", retryAnswersOn(1, earlierFailure(75, shaOf(9)), "failure", "success", head, "2026-10-27T10:30:00Z", []string{"build"}, 1), "none"},
+		{"an issue edited since, after a failure before the edit", retryAnswersOn(1, `[,
+    {"id": 76, "event": "pull_request", "conclusion": "failure", "created_at": "2026-10-27T10:15:00Z", "head_repository": {"full_name": "owner/repo"}}]}' ;;
+  "api --paginate repos/owner/repo/actions/runs/76/jobs"*) answer <<< '{"jobs": [{"name": "test (1.22)", "conclusion": "failure"}]}' ;;`,
+			"failure", "success", head, "2026-10-27T10:30:00Z", []string{"build"}, 1), "edited"},
+		{"a re-run of an edited issue's failure", retryAnswersOn(2, "", "failure", "success", head, "2026-10-27T10:30:00Z", []string{"build"}, 1), "none"},
+		{"an issue edited since, on a branch a person took over", onTheBranch(retryAnswers("failure", "success", head, "2026-10-27T10:30:00Z", []string{"build"}, 1),
+			factoryCommit, personsCommit), "takenover"},
+		{"a re-run of a takeover's failure", onTheBranch(retryAnswersOn(2, "", "failure", "success", head, "", []string{"build"}, 1), factoryCommit, personsCommit), "none"},
 	}
 	for _, tt := range tests {
 		r := newRehearsal(t)

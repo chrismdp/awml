@@ -689,3 +689,41 @@ func TestEvaluateGitlinks(t *testing.T) {
 	}
 	assertVerdict(t, got, "ask", "`vendor/lib` pins another repository's commit, so it always needs review.")
 }
+
+// An entry that starts with **/ matches at any depth: the file or folder it names, wherever it sits
+// in the tree. Other entries match from the root alone.
+func TestEvaluateReviewPathsAnywhere(t *testing.T) {
+	for path, want := range map[string]string{
+		".npmrc": "ask", "wasm/.npmrc": "ask", "web/node_modules/x": "ask", "node_modules/x": "ask",
+		"wasm/npmrc": "ship", "web/node_modules_old/x": "ship", "docs/SPEC.md": "ship",
+	} {
+		repo := newRepo(t)
+		stage(t, repo, path, "changed\n")
+		got, err := evaluate(repo, config{ReviewPaths: []string{"SPEC.md", "**/.npmrc", "**/node_modules/"}, MaxChangedLines: 400}, inputs{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Outcome != want {
+			t.Errorf("%s: evaluate().Outcome = %q, want %q; reasons: %q", path, got.Outcome, want, got.Reasons)
+		}
+	}
+}
+
+// The factory's own rules ask for a review of npm's files wherever they sit.
+func TestTheFactorysRulesAskForNpmsFilesAnywhere(t *testing.T) {
+	cfg, err := loadConfig("../../.github/build-rules.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"wasm/.npmrc", "web/node_modules/x", "web/.yarnrc", "web/.yarnrc.yml"} {
+		repo := newRepo(t)
+		stage(t, repo, path, "changed\n")
+		got, err := evaluate(repo, cfg, inputs{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Outcome != "ask" {
+			t.Errorf("%s: the factory's rules gave %q, want ask", path, got.Outcome)
+		}
+	}
+}

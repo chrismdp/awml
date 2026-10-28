@@ -41,6 +41,8 @@ parts:
   - { id: open, kind: code, op: do, label: "Open a pull request that says Closes #n, or give the one open from the branch already this try's title and description", in: public }
   - { id: standingpr, kind: approval, label: "The maintainer's standing approval: one open pull request an issue, from its own branch, accepted by the maintainer in #160, under rule 4", in: public }
   - { id: pr, kind: outside, label: "Open the pull request: Ask", in: public }
+  - { id: stopped, kind: code, op: do, cleans: true, label: "Say in a new comment on the issue, from fixed text, that the build stopped before its change reached a pull request, linking the run", in: public }
+  - { id: stopnote, kind: outside, label: "Comment on the issue: Allow", in: public }
   - { id: listed, kind: surface, label: "The repository's branches and pull requests, where each push is listed with its commit", in: public }
   - { id: strangers, kind: comment, label: "Anyone can open an issue or comment. The issue reaches Claude only as the text a person with write access approved by adding the label, and only the comments of people who can write to the repository are passed on, never those of a member who can only read" }
   - { id: label, kind: comment, label: "Only people with write access and the repository's app can add a label, and GitHub holds that, not a prompt, so a stranger's comment starts nothing. The draft step's token can only read, so it can't push (awml #26)" }
@@ -54,6 +56,7 @@ parts:
   - { id: reused, kind: comment, label: "The branch is reused, so a new try's push updates the open pull request's commits, and the build gives it the new try's title and description before the push, which starts CI, so the reviews judge the new commit against what it says and a squash keeps the new title. No earlier one needs closing (#160's follow-up)" }
   - { id: ownfiles, kind: comment, label: "Decided in #160's follow-up: the build works as the fixer does. A draft touching .github/ or Claude Code's own settings, .claude/, .mcp.json or a CLAUDE.md, isn't pushed: it's offered in a new comment, and the build stops without a retry, since nothing is pushed for CI to fail. No session loads settings or servers from the tree" }
   - { id: rendered, kind: comment, label: "The label approves the issue as the maintainer saw it, so the issue and its people's comments are read as GitHub renders them, bodyHTML from GraphQL, never the Markdown behind them: an HTML comment or other text the page hides never reaches Claude (#150)" }
+  - { id: silent, kind: comment, label: "A draft or open job that fails leaves no pull request, so CI never runs and retry-a-build never wakes. A last job says so on the issue, so the build never stops unseen" }
   - { id: starts, kind: comment, label: "GitHub starts other workflows from the app's pull request, but not from the Actions token's, so CI runs when the pull request opens" }
 lines:
   - { from: comment, to: who, kind: start, label: "the label" }
@@ -93,6 +96,10 @@ lines:
   - { from: standingpr, to: pr, kind: data, label: "[within limits]" }
   - { from: pr, to: app, kind: data }
   - { from: standingpr, to: listed, kind: data, label: "each pull request, as opened" }
+  - { from: build, to: stopped, kind: start, label: "[the draft failed]" }
+  - { from: push, to: stopped, kind: start, label: "[the push or the pull request failed]" }
+  - { from: stopped, to: stopnote, kind: data }
+  - { from: stopnote, to: token, kind: data }
   - { from: strangers, to: keep, kind: tie }
   - { from: rendered, to: keep, kind: tie }
   - { from: label, to: comment, kind: tie }
@@ -106,14 +113,16 @@ lines:
   - { from: reused, to: open, kind: tie }
   - { from: ownfiles, to: guard, kind: tie }
   - { from: starts, to: app, kind: tie }
+  - { from: silent, to: stopped, kind: tie }
 implementations:
   actions:
     label: "GitHub Actions, build.yml"
     blocks:
-      - { id: github, label: "GitHub: issues, branches and pull requests", parts: [comment, dispatch, thread, who, approve, token, app, repo, startnote, offered, standing, branch, standingpr, pr, listed] }
+      - { id: github, label: "GitHub: issues, branches and pull requests", parts: [comment, dispatch, thread, who, approve, token, app, repo, startnote, offered, stopnote, standing, branch, standingpr, pr, listed] }
       - { id: startjob, label: "Actions job: post the start comment, checking out nothing and running only gh", platform: actions-code, parts: [still, started] }
       - { id: draftjob, label: "Actions job: draft, with a read-only token", platform: actions-code, parts: [keep, bring, asked, failed] }
       - { id: agentjob, label: "Claude Code, claude-opus-5-5, on the maintainer's subscription", platform: actions-agent, in: draftjob, parts: [build] }
+      - { id: stoppedjob, label: "Actions job: say the build stopped, checking out nothing and running only gh", platform: actions-code, parts: [stopped] }
       - { id: openjob, label: "Actions job: push and open, running nothing from the change", platform: actions-code, parts: [patch, guard, offer, push, open] }
     comments:
       - { id: scrub, label: "Claude Code holds the maintainer's login token for its own calls, and strips it, with any other credential, from the commands it runs, which run in its sandbox, tests included. The job runs nothing of its own beside the secret (awml #121, #160)", in: agentjob, ties: [build] }

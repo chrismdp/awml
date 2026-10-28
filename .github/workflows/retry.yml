@@ -2,9 +2,10 @@
 # issue, up to three builds since the label was last added. It reads only GitHub: the CI run that
 # woke it, the build runs named for the issue, the label's events and the issue's last edit. It
 # hands the build nothing but the issue's number, and the build reads why the last try failed from
-# CI itself. After three builds, or if the issue was edited since the label went on, a new comment
-# on the issue says a person must act. Once a commit on the branch isn't the factory's, a person has
-# taken the branch over: it's never built over again, and a new comment on the issue says so once.
+# CI itself. Once a commit on the branch isn't the factory's, a person has taken the branch over:
+# it's never built over again, and a new comment on the issue says so. Otherwise, after three builds,
+# or if the issue was edited since the label went on, a new comment on the issue says a person must
+# act. Each is said once, on the first failure of CI's tests since it came to hold, never a re-run.
 # Drawn in .github/drawings/retry-a-build.yaml
 name: Retry a build
 
@@ -109,17 +110,38 @@ jobs:
           jq -e '[.labels.nodes[].name] | index("build")' <<< "$state" > /dev/null && [ -n "$labelled" ] ||
             leave "Issue #$issue no longer carries the build label, so whoever took it off decides."
           echo "issue=$issue" >> "$GITHUB_OUTPUT"
-          if [ -n "$edited" ] && ! [[ "$edited" < "$labelled" ]]; then
-            echo "Issue #$issue was edited or renamed at $edited, after the label was added at $labelled."
-            echo "decision=edited" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+
+          # Each outcome that needs a person is said once. told_already SINCE [SHA...] holds if this
+          # is a re-run, the same run again, or if an earlier CI run of this repository's on the
+          # branch, created since SINCE and before this one, and on one of the commits given if any
+          # are, failed its tests, when retry said so already.
+          attempt="$(jq -r '.run_attempt // 1' <<< "$run")"
+          created="$(jq -r .created_at <<< "$run")"
+          told_already() {
+            local since="$1" heads earlier
+            shift
+            [ "$attempt" = 1 ] || return 0
+            heads="$(jq -nc '$ARGS.positional' --args "$@")"
+            while read -r earlier; do
+              case "$earlier" in ''|*[!0-9]*) continue ;; esac
+              if gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$earlier/jobs?per_page=100" --jq '.jobs[]' |
+                jq -se '[.[] | select((.name | startswith("test (")) and .conclusion == "failure")] | length > 0' > /dev/null; then
+                return 0
+              fi
+            done < <(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=$branch&event=pull_request${since:+&created=%3E%3D$since}&per_page=100" \
+              --jq '.workflow_runs[]' |
+              jq -r --arg repository "$GITHUB_REPOSITORY" --arg since "$since" --arg created "$created" --argjson id "$CI_RUN" \
+                --argjson heads "$heads" \
+                'select(.id != $id and .event == "pull_request" and .head_repository.full_name == $repository and
+                  .conclusion == "failure" and .created_at >= $since and .created_at < $created and
+                  ($heads == [] or (.head_sha | IN($heads[])))) | .id')
+            return 1
+          }
 
           # A commit since main that isn't the factory's, by the same author and committer test as the
           # build rule's, means a person has taken the branch over: the build is never started over
-          # it. Said once: unless an earlier CI run on the branch, on a commit from the first such
-          # one on, already failed its tests, when retry said so, however many commits the person
-          # pushed at once.
+          # it, whatever else holds, so this comes first. Told once, however many commits the person
+          # pushed at once: unless a run on a commit from the first such one on was told already.
           factory() { [[ "$1" =~ ^([0-9]+\+)?awml-factory\[bot\]@users\.noreply\.github\.com$ ]]; }
           gh api --paginate "repos/$GITHUB_REPOSITORY/compare/main...$head_sha" \
             --jq '.commits[] | [.commit.author.email, .commit.committer.email, .sha] | @tsv' > "$RUNNER_TEMP/commits.tsv"
@@ -130,26 +152,23 @@ jobs:
             fi
           done < "$RUNNER_TEMP/commits.tsv"
           if [ "${#taken[@]}" -gt 0 ]; then
-            created="$(jq -r .created_at <<< "$run")"
-            told=false
-            while read -r earlier; do
-              case "$earlier" in ''|*[!0-9]*) continue ;; esac
-              if gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$earlier/jobs?per_page=100" --jq '.jobs[]' |
-                jq -se '[.[] | select((.name | startswith("test (")) and .conclusion == "failure")] | length > 0' > /dev/null; then
-                told=true
-                break
-              fi
-            done < <(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=$branch&event=pull_request&per_page=100" \
-              --jq '.workflow_runs[]' |
-              jq -r --arg repository "$GITHUB_REPOSITORY" --arg created "$created" --argjson id "$CI_RUN" \
-                --argjson taken "$(jq -nc '$ARGS.positional' --args "${taken[@]}")" \
-                'select(.id != $id and .event == "pull_request" and .head_repository.full_name == $repository and
-                  .conclusion == "failure" and .created_at < $created and (.head_sha | IN($taken[]))) | .id')
-            if [ "$told" = true ]; then
+            if told_already "" "${taken[@]}"; then
               echo "A person took $branch over, and was told when its tests first failed since."
               echo "decision=none" >> "$GITHUB_OUTPUT"
             else
               echo "decision=takenover" >> "$GITHUB_OUTPUT"
+            fi
+            exit 0
+          fi
+
+          # Told once: unless a run since the edit was told already.
+          if [ -n "$edited" ] && ! [[ "$edited" < "$labelled" ]]; then
+            echo "Issue #$issue was edited or renamed at $edited, after the label was added at $labelled."
+            if told_already "$edited"; then
+              echo "A person was told when the tests first failed since."
+              echo "decision=none" >> "$GITHUB_OUTPUT"
+            else
+              echo "decision=edited" >> "$GITHUB_OUTPUT"
             fi
             exit 0
           fi
@@ -165,32 +184,11 @@ jobs:
             echo "decision=again" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # Said once: on the first attempt of the first CI run since the last build started whose
-          # tests failed, whatever commit it's on, the build's own, a fix's or one resolve.yml moved.
-          # An earlier such run of this repository's on the branch was told already, and a re-run is
-          # the same run again.
-          if [ "$(jq -r '.run_attempt // 1' <<< "$run")" != 1 ]; then
-            echo "This is a re-run of a run a person was told about already."
-            echo "decision=none" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+          # Told once: on the first CI run since the last build started whose tests failed, whatever
+          # commit it's on, the build's own, a fix's or one resolve.yml moved.
           last="$(jq -r 'map(.created_at) | sort | last // ""' "$RUNNER_TEMP/builds.json")"
-          created="$(jq -r .created_at <<< "$run")"
-          told=false
-          while read -r earlier; do
-            case "$earlier" in ''|*[!0-9]*) continue ;; esac
-            if gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$earlier/jobs?per_page=100" --jq '.jobs[]' |
-              jq -se '[.[] | select((.name | startswith("test (")) and .conclusion == "failure")] | length > 0' > /dev/null; then
-              told=true
-              break
-            fi
-          done < <(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=$branch&event=pull_request&created=%3E%3D$last&per_page=100" \
-            --jq '.workflow_runs[]' |
-            jq -r --arg repository "$GITHUB_REPOSITORY" --arg last "$last" --arg created "$created" --argjson id "$CI_RUN" \
-              'select(.id != $id and .event == "pull_request" and .head_repository.full_name == $repository and
-                .conclusion == "failure" and .created_at >= $last and .created_at < $created) | .id')
-          if [ "$told" = true ]; then
-            echo "An earlier run since the last build failed its tests, and a person was told then."
+          if told_already "$last"; then
+            echo "A person was told when the tests first failed since the last build."
             echo "decision=none" >> "$GITHUB_OUTPUT"
           else
             echo "decision=report" >> "$GITHUB_OUTPUT"

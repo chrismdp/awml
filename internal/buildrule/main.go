@@ -119,7 +119,7 @@ func loadConfig(path string) (config, error) {
 		return config{}, errors.New("max_changed_lines must not be negative")
 	}
 	for _, path := range cfg.ReviewPaths {
-		if strings.TrimSpace(path) == "" {
+		if strings.TrimSpace(strings.TrimPrefix(path, "**/")) == "" {
 			return config{}, errors.New("review_paths must not contain an empty path")
 		}
 	}
@@ -174,7 +174,7 @@ func evaluate(repoDir string, cfg config, in inputs) (verdict, error) {
 	}
 	for _, path := range paths {
 		for _, protected := range cfg.ReviewPaths {
-			if path == protected || (strings.HasSuffix(protected, "/") && strings.HasPrefix(path, protected)) {
+			if underReview(path, protected) {
 				ask(fmt.Sprintf("%s is a path that always needs review.", shown(path)))
 				break
 			}
@@ -473,6 +473,25 @@ func changedModes(repo repository) (map[string]modeChange, error) {
 // shown puts a path in a code span for a reason, escaped as JSON escapes it, with a backtick
 // escaped too, since the reasons reach the pull request's description: no name can end the span
 // or the line there.
+// underReview reports whether path is the review path given, or under it if it ends in a slash. A
+// review path that starts with **/ matches at any depth, from the root or after any slash.
+func underReview(path, protected string) bool {
+	rest, anywhere := strings.CutPrefix(protected, "**/")
+	if !anywhere {
+		return path == protected || (strings.HasSuffix(protected, "/") && strings.HasPrefix(path, protected))
+	}
+	for {
+		if underReview(path, rest) {
+			return true
+		}
+		_, after, found := strings.Cut(path, "/")
+		if !found {
+			return false
+		}
+		path = after
+	}
+}
+
 func shown(path string) string {
 	quoted, _ := json.Marshal(path)
 	inner := strings.ReplaceAll(string(quoted[1:len(quoted)-1]), "`", `\u0060`)

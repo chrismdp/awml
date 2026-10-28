@@ -1,6 +1,7 @@
 package awml
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -230,8 +231,8 @@ func TestTheBuildRunsNoChecksOfItsOwn(t *testing.T) {
 	for name := range jobs {
 		names = append(names, name)
 	}
-	if strings.Join(sortedStrings(names), " ") != "draft open start" {
-		t.Errorf("build.yml's jobs are %v, want start, draft and open", names)
+	if strings.Join(sortedStrings(names), " ") != "draft open start stopped" {
+		t.Errorf("build.yml's jobs are %v, want start, draft, open and stopped", names)
 	}
 	text := readText(t, ".github/workflows/build.yml")
 	for _, never := range []string{"go test", "go vet", "make test-wasm", "gh workflow run", "classify-prompt", "review-bugs-prompt"} {
@@ -631,5 +632,53 @@ func TestTheOffersNameTheSameFiles(t *testing.T) {
 	fix := tail.FindString(readText(t, ".github/workflows/fix.yml"))
 	if build == "" || build != fix || strings.Contains(build, ",,") {
 		t.Errorf("the offers differ, or have a doubled comma:\n%s\n%s", build, fix)
+	}
+}
+
+// A build that stops before its change reaches a pull request leaves CI nothing to run on, so retry
+// never wakes. A last job says so on the issue in a new comment from fixed text, linking the run,
+// checking out nothing and running only gh, with the Actions token and only issues: write.
+func TestABuildThatStopsSaysSo(t *testing.T) {
+	jobs := readBuildWorkflow(t)
+	stopped, ok := jobs["stopped"]
+	if !ok {
+		t.Fatal("build.yml has no stopped job")
+	}
+	if fmt.Sprint(stopped.Needs) != "[start draft open]" ||
+		stopped.If != "${{ !cancelled() && (needs.draft.result == 'failure' || needs.open.result == 'failure') }}" {
+		t.Errorf("the stopped job needs %v and runs if %q", stopped.Needs, stopped.If)
+	}
+	if len(stopped.Permissions) != 1 || stopped.Permissions["issues"] != "write" {
+		t.Errorf("the stopped job has permissions %v, want issues: write alone", stopped.Permissions)
+	}
+	for _, step := range stopped.Steps {
+		if step.Uses != "" {
+			t.Errorf("the stopped job uses %s, but runs only gh", step.Uses)
+		}
+		if step.Env["GH_TOKEN"] != "${{ github.token }}" {
+			t.Errorf("the stopped job's step %q doesn't use the Actions token", step.Name)
+		}
+		for _, line := range strings.Split(step.Run, "\n") {
+			if strings.Contains(line, "${{") || strings.Contains(line, "$(") {
+				t.Errorf("the stopped job's comment isn't fixed text: %s", line)
+			}
+		}
+	}
+	say, _ := stopped.step(t, "say")
+	r := newRehearsal(t)
+	r.run(say, map[string]string{"ISSUE": "120"}, `
+  "issue comment 120"*) ;;`)
+	r.mustPass()
+	if bodies := r.bodies(); len(bodies) != 1 || !strings.Contains(bodies[0], "The build stopped") ||
+		!strings.Contains(bodies[0], "(https://github.com/owner/repo/actions/runs/1000)") ||
+		!strings.Contains(bodies[0], "remove the build label and add it again") {
+		t.Errorf("the stopped job said %q, want a new comment that the build stopped, linking the run", bodies)
+	}
+	drawing := readText(t, ".github/drawings/issue-to-pull-request.yaml")
+	for _, want := range []string{"id: stopped, kind: code, op: do, cleans: true,", "id: stopnote, kind: outside, label: \"Comment on the issue: Allow\"",
+		"from: stopped, to: stopnote, kind: data", "from: stopnote, to: token, kind: data", "to: stopped, kind: tie"} {
+		if !strings.Contains(drawing, want) {
+			t.Errorf("the build's drawing lacks %s", want)
+		}
 	}
 }

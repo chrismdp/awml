@@ -2,9 +2,10 @@
 # issue, up to three builds since the label was last added. It reads only GitHub: the CI run that
 # woke it, the build runs named for the issue, the label's events and the issue's last edit. It
 # hands the build nothing but the issue's number, and the build reads why the last try failed from
-# CI itself. After three builds, or if the issue was edited since the label went on, a new comment
-# on the issue says a person must act. Once a commit on the branch isn't the factory's, a person has
-# taken the branch over: it's never built over again, and a new comment on the issue says so once.
+# CI itself. Once a commit on the branch isn't the factory's, a person has taken the branch over:
+# it's never built over again, and a new comment on the issue says so. Otherwise, after three builds,
+# or if the issue was edited since the label went on, a new comment on the issue says a person must
+# act. Each is said once, on the first failure of CI's tests since it came to hold, never a re-run.
 awml: "0.8"
 title: A failed build tries again
 description: |

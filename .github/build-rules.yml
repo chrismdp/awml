@@ -1,4 +1,5 @@
 # land.yml asks for the maintainer's review of a factory pull request if any of these hold.
-# Otherwise it ships or shows it, as Classify and the rest of the build rule say.
-review_paths: [SPEC.md, AGENTS.md, REVIEW.md, .github/, go.mod, go.sum, .claude-plugin/, .agents/, plugins/awml/.claude-plugin/, plugins/awml/.codex-plugin/, .npmrc, .yarnrc, .yarnrc.yml, node_modules/]
+# Otherwise it ships or shows it, as Classify and the rest of the build rule say. A path matches from
+# the root, and one that starts with **/ at any depth.
+review_paths: [SPEC.md, AGENTS.md, REVIEW.md, .github/, go.mod, go.sum, .claude-plugin/, .agents/, plugins/awml/.claude-plugin/, plugins/awml/.codex-plugin/, "**/.npmrc", "**/.yarnrc", "**/.yarnrc.yml", "**/node_modules/"]
 max_changed_lines: 400

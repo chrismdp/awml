@@ -307,7 +307,7 @@ func TestLandShipsShowsOrAsks(t *testing.T) {
 }
 
 // npm's and yarn's settings and a committed node_modules change what npm runs, so the build rule
-// asks a person about a change to any of them.
+// asks a person about a change to any of them, wherever it sits in the tree.
 func TestTheBuildRuleAsksAboutNpmsOwnFiles(t *testing.T) {
 	var rules struct {
 		ReviewPaths []string `yaml:"review_paths"`
@@ -315,7 +315,7 @@ func TestTheBuildRuleAsksAboutNpmsOwnFiles(t *testing.T) {
 	if err := yaml.Unmarshal([]byte(readText(t, ".github/build-rules.yml")), &rules); err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{".npmrc", ".yarnrc", ".yarnrc.yml", "node_modules/"} {
+	for _, path := range []string{"**/.npmrc", "**/.yarnrc", "**/.yarnrc.yml", "**/node_modules/"} {
 		if !contains(rules.ReviewPaths, path) {
 			t.Errorf("the build rule doesn't ask about %s", path)
 		}

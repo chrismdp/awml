@@ -688,3 +688,25 @@ jobs:
           fi
           gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$BRANCH" \
             --title "$(cat "$RUNNER_TEMP/title.txt")" --body-file "$RUNNER_TEMP/pull-request.md"
+
+  # A draft or open job that fails leaves no pull request, so CI never runs on it and retry.yml never
+  # wakes. This says so on the issue, in a new comment from fixed text linking the run, so a person
+  # knows. A build that stopped on purpose, offering its change or finding nothing to push, has said
+  # why already and passed. It checks out nothing and runs only gh.
+  stopped:
+    needs: [start, draft, open]
+    if: ${{ !cancelled() && (needs.draft.result == 'failure' || needs.open.result == 'failure') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Say in a new comment that the build stopped
+        id: say
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          case "$ISSUE" in ''|*[!0-9]*) echo "The issue must be a number: $ISSUE"; exit 1 ;; esac
+          printf '**The build stopped** before its change reached a pull request, so CI has nothing to judge and the build won'"'"'t try again by itself. [The run](%s) shows where it stopped. To build this issue again, remove the build label and add it again.\n' \
+            "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > "$RUNNER_TEMP/stopped.md"
+          gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/stopped.md"

@@ -242,6 +242,22 @@ func TestEachReviewsFindingsAreItsChecksAnnotations(t *testing.T) {
 	if !strings.Contains(minor.printed, "::notice title=Unread binary files::") {
 		t.Errorf("the check doesn't say the review couldn't read 2 binary files:\n%s", minor.printed)
 	}
+	// GitHub keeps ten notices a step, so the unread files' notice comes before the ten
+	// Pre-existing findings it could otherwise be the eleventh of.
+	crowded := newRehearsal(t)
+	var olds []string
+	for i := 0; i < 10; i++ {
+		olds = append(olds, fmt.Sprintf(`{"severity": "Pre-existing", "file": "old.go", "line": %d, "title": "Old", "detail": "Before."}`, i+1))
+	}
+	crowded.write("session/out/bugs.json", "["+strings.Join(olds, ", ")+"]")
+	crowded.run(post, map[string]string{"KIND": "bugs", "UNREAD": "2"}, "")
+	crowded.mustPass()
+	if unread, first := strings.Index(crowded.printed, "::notice title=Unread binary files::"), strings.Index(crowded.printed, "::notice file="); unread < 0 || unread > first {
+		t.Errorf("the unread files' notice isn't the first notice:\n%s", crowded.printed)
+	}
+	if notices := strings.Count(crowded.printed, "::notice "); notices != 10 {
+		t.Errorf("the step posts %d notices, but GitHub keeps ten:\n%s", notices, crowded.printed)
+	}
 
 	many := newRehearsal(t)
 	var nits []string
