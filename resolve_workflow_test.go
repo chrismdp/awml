@@ -354,3 +354,42 @@ func TestResolveHoldsBackABranchByEachOfItsCommits(t *testing.T) {
 		t.Errorf("a branch that added a workflow in one commit and took it out in the next wasn't held back: %v", r.outputs)
 	}
 }
+
+// The push job checks each rebased commit's files, not the branch's net change, so a session that
+// added a change to .github/ in one commit and took it out in the next still can't have it pushed.
+func TestResolvePushesNoCommitThatTouchesGithub(t *testing.T) {
+	push, _ := readFactoryWorkflow(t, "resolve.yml").Jobs["push"].step(t, "push")
+	r := newRehearsal(t)
+	origin, main, _, _ := resolveRepo(t, r)
+	gitIn(t, origin, "config", "receive.denyCurrentBranch", "ignore")
+	gitIn(t, origin, "switch", "-q", "-c", "sneaky", main)
+	head := gitIn(t, origin, "rev-parse", "HEAD")
+	r.write(filepath.Join(origin, ".github/workflows/x.yml"), "name: X\n")
+	gitIn(t, origin, "add", "-A")
+	gitIn(t, origin, "commit", "-qm", "A workflow")
+	gitIn(t, origin, "rm", "-q", ".github/workflows/x.yml")
+	r.write(filepath.Join(origin, "recipes.md"), "Muffins\n")
+	gitIn(t, origin, "add", "-A")
+	gitIn(t, origin, "commit", "-qm", "Taken out again, and muffins")
+	bundle := filepath.Join(r.temp, "resolved", "6.bundle")
+	if err := os.MkdirAll(filepath.Dir(bundle), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, origin, "bundle", "create", bundle, main+"..HEAD")
+	gitIn(t, origin, "reset", "-q", "--hard", head)
+	gitIn(t, origin, "switch", "-q", "main")
+	sum := newRehearsal(t)
+	sum.run(workflowStep{Run: `sha256sum < "$FILE" | cut -c 1-64`}, map[string]string{"FILE": bundle}, "")
+	work := filepath.Join(r.root, "work")
+	gitIn(t, r.root, "clone", "-q", "--branch", "main", origin, work)
+	r.dir = work
+	r.run(push, map[string]string{"APP_TOKEN": "not-a-token", "MAIN_SHA": main, "FOUND": "{}",
+		"RESOLVED": `{"6.bundle": "` + strings.TrimSpace(sum.printed) + `"}`,
+		"PULLS":    `[{"number": 6, "branch": "sneaky", "head_sha": "` + head + `", "clean": false}]`}, `  "pr comment "*) ;;`)
+	if bodies := r.bodies(); len(bodies) != 1 || !strings.Contains(bodies[0], "never pushes") {
+		t.Errorf("the push job said %q, want that the app never pushes .github/", bodies)
+	}
+	if gitIn(t, origin, "rev-parse", "sneaky") != head {
+		t.Error("the push job pushed a branch one of whose commits touches .github/")
+	}
+}

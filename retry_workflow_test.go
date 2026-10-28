@@ -14,9 +14,23 @@ func retryAnswers(test, review, branchSha, edited string, labels []string, build
 const factoryCommit = `{"commit": {"author": {"email": "41+awml-factory[bot]@users.noreply.github.com"}, "committer": {"email": "41+awml-factory[bot]@users.noreply.github.com"}}}`
 const personsCommit = `{"commit": {"author": {"email": "someone@example.com"}, "committer": {"email": "someone@example.com"}}}`
 
-// onTheBranch answers the compare of the branch with main with the commits given, oldest first.
+// onTheBranch answers the compare of the branch with main with the commits given, oldest first,
+// the first commit's sha shaOf(1), the next shaOf(2), and so on.
 func onTheBranch(answers string, commits ...string) string {
-	return strings.Replace(answers, `"commits": [`+factoryCommit+`]`, `"commits": [`+strings.Join(commits, ", ")+`]`, 1)
+	var listed []string
+	for at, c := range commits {
+		listed = append(listed, `{"sha": "`+shaOf(at+1)+`", `+strings.TrimPrefix(c, "{"))
+	}
+	return strings.Replace(answers, `"commits": [`+factoryCommit+`]`, `"commits": [`+strings.Join(listed, ", ")+`]`, 1)
+}
+
+func shaOf(n int) string { return fmt.Sprintf("%040x", n) }
+
+// earlierFailure is an earlier CI run on the branch, on the commit given, whose tests failed.
+func earlierFailure(id int, sha string) string {
+	return fmt.Sprintf(`[,
+    {"id": %d, "event": "pull_request", "conclusion": "failure", "created_at": "2026-10-27T13:10:00Z", "head_sha": "%s", "head_repository": {"full_name": "owner/repo"}}]}' ;;
+  "api --paginate repos/owner/repo/actions/runs/%d/jobs"*) answer <<< '{"jobs": [{"name": "test (1.22)", "conclusion": "failure"}]}' ;;`, id, sha, id)
 }
 
 // retryAnswersOn answers as retryAnswers does, for the attempt of CI's run given, with CI's earlier
@@ -82,8 +96,14 @@ func TestRetryActsWhenTheTestsFailAndCountsTheBuilds(t *testing.T) {
 		// A person's commit on the branch means they've taken it over: the first time, a comment says
 		// so, and the build is never started over it.
 		{"a person's commit at the head", onTheBranch(retryAnswers("failure", "success", head, "", []string{"build"}, 1), factoryCommit, personsCommit), "takenover"},
-		{"a person's commit before the head", onTheBranch(retryAnswers("failure", "success", head, "", []string{"build"}, 1), factoryCommit, personsCommit, factoryCommit), "none"},
-		{"a second commit of the person's", onTheBranch(retryAnswers("failure", "success", head, "", []string{"build"}, 1), factoryCommit, personsCommit, personsCommit), "none"},
+		// Said once: unless an earlier run on a commit from the takeover on already failed its tests,
+		// and so was told, however many commits the person pushed at once.
+		{"a person's commit before the head", onTheBranch(retryAnswers("failure", "success", head, "", []string{"build"}, 1), factoryCommit, personsCommit, factoryCommit), "takenover"},
+		{"two commits of the person's pushed at once", onTheBranch(retryAnswers("failure", "success", head, "", []string{"build"}, 1), factoryCommit, personsCommit, personsCommit), "takenover"},
+		{"a second commit of the person's after a failure on the first", onTheBranch(retryAnswersOn(1, earlierFailure(73, shaOf(2)), "failure", "success", head, "", []string{"build"}, 1),
+			factoryCommit, personsCommit, personsCommit), "none"},
+		{"a person's commit after a failure on the factory's", onTheBranch(retryAnswersOn(1, earlierFailure(74, shaOf(1)), "failure", "success", head, "", []string{"build"}, 1),
+			factoryCommit, personsCommit), "takenover"},
 		{"a person's commit the app rebased", onTheBranch(retryAnswers("failure", "success", head, "", []string{"build"}, 1), factoryCommit,
 			`{"commit": {"author": {"email": "someone@example.com"}, "committer": {"email": "41+awml-factory[bot]@users.noreply.github.com"}}}`), "takenover"},
 		{"the app's commit a person amended", onTheBranch(retryAnswers("failure", "success", head, "", []string{"build"}, 1), factoryCommit,
@@ -156,5 +176,21 @@ func TestRetryFetchesTheBuildsOnce(t *testing.T) {
 	tries, _ := readFactoryWorkflow(t, "retry.yml").Jobs["retry"].step(t, "tries")
 	if got := strings.Count(tries.Run, "actions/workflows/build.yml/runs"); got != 1 {
 		t.Errorf("retry fetches the build runs %d times, want once", got)
+	}
+}
+
+// The drawing shows the takeover as retry's other outcomes are shown: a code step that cleans,
+// started from the tries step, and a comment on the issue, which the header mentions too.
+func TestRetrysDrawingShowsTheTakeover(t *testing.T) {
+	drawing := readText(t, ".github/drawings/retry-a-build.yaml")
+	for _, want := range []string{"id: takenover, kind: code, op: do, cleans: true,", "from: tries, to: takenover, kind: start, label: \"[a commit since main isn't the factory's]\"",
+		"from: takenover, to: takennote, kind: data", "id: takennote, kind: outside, label: \"Comment on the issue that a person took the branch over: Allow\"",
+		"to: takenover, kind: tie"} {
+		if !strings.Contains(drawing, want) {
+			t.Errorf("retry's drawing lacks %s", want)
+		}
+	}
+	if !strings.Contains(readText(t, ".github/workflows/retry.yml"), "taken the branch over") {
+		t.Error("retry.yml's header doesn't say what it does when a person has taken the branch over")
 	}
 }

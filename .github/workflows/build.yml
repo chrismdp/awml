@@ -474,7 +474,7 @@ jobs:
             say stale
           fi
           claudes='(^|/)\.claude(/|$)|(^|/)\.mcp\.json$|(^|/)CLAUDE(\.local)?\.md$|(^|/)\.npmrc$|(^|/)\.yarnrc(\.yml)?$|(^|/)node_modules(/|$)'
-          if git diff --cached --name-only --no-renames -z | grep -zqE "^\.github/|$claudes" ||
+          if git diff --cached --name-only --no-renames -z | grep -zE "^\.github/|$claudes" > /dev/null ||
             git diff --cached --raw --no-renames | awk '$2 == "120000" { found = 1 } END { exit !found }'; then
             echo "The draft changes files the app never pushes, or makes a symbolic link:"
             git diff --cached --name-only --no-renames -z | grep -zE "^\.github/|$claudes" | tr '\0' '\n' | jq -R . || true

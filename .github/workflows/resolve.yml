@@ -115,7 +115,7 @@ jobs:
             git fetch -q --no-tags origin "$head_sha"
             claudes='(^|/)\.claude(/|$)|(^|/)\.mcp\.json$|(^|/)CLAUDE(\.local)?\.md$|(^|/)\.npmrc$|(^|/)\.yarnrc(\.yml)?$|(^|/)node_modules(/|$)'
             # Every commit's files, not the branch's net change, since each commit would be pushed.
-            if git log --format= --name-only --no-renames -z "$GITHUB_SHA..$head_sha" | grep -zqE "^\.github/|$claudes"; then
+            if git log --format= --name-only --no-renames -z "$GITHUB_SHA..$head_sha" | grep -zE "^\.github/|$claudes" > /dev/null; then
               echo "#$number's commits change .github/, Claude Code's own files or npm's, which the app never pushes."
               pulls="$(jq -c --argjson number "$number" --arg branch "$branch" --arg head_sha "$head_sha" \
                 '. + [{number: $number, branch: $branch, head_sha: $head_sha, clean: false, held: true}]' <<< "$pulls")"
@@ -478,7 +478,7 @@ jobs:
               why="The rebased branch doesn't sit on \`main\`."
             elif git grep -qE '^(<<<<<<<|>>>>>>>)( |$)' "refs/rebased/$number" --; then
               why="The rebased branch still carries conflict markers."
-            elif git diff --name-only --no-renames -z "$MAIN_SHA" "refs/rebased/$number" | grep -zqE "^\.github/|$claudes"; then
+            elif git log --format= --name-only --no-renames -z "$MAIN_SHA..refs/rebased/$number" | grep -zE "^\.github/|$claudes" > /dev/null; then
               why="The branch changes \`.github/\`, Claude Code's own files or npm's, which the app never pushes."
             elif ! git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$APP_TOKEN" | base64 -w0)" \
                 push --force-with-lease="refs/heads/$branch:$head_sha" origin "refs/rebased/$number:refs/heads/$branch"; then

@@ -1173,3 +1173,22 @@ EOF
 		t.Error("a line a session wrote into its own step's script ran after the session")
 	}
 }
+
+// Under pipefail, a quiet grep at the end of a pipe exits at its first match, and the command
+// feeding it can then die of SIGPIPE, which fails the whole pipe: a match reads as none. So no
+// factory step or script pipes into grep -q; each reads all its input and throws the output away.
+func TestNoPipeEndsInAQuietGrep(t *testing.T) {
+	quiet := regexp.MustCompile(`\|\s*grep\s+-[A-Za-z]*q`)
+	files := []string{".github/bring-patch.sh", ".github/read-findings.sh", ".github/sandbox-settings.sh",
+		".github/pull-request-body.sh", ".github/picture-drawings.sh"}
+	for _, file := range factoryFiles {
+		files = append(files, ".github/workflows/"+file)
+	}
+	for _, file := range files {
+		for at, line := range strings.Split(readText(t, file), "\n") {
+			if quiet.MatchString(line) {
+				t.Errorf("%s:%d pipes into a quiet grep: %s", file, at+1, strings.TrimSpace(line))
+			}
+		}
+	}
+}

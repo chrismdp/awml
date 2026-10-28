@@ -81,7 +81,7 @@ refuse() {
   grep -zE "$claudes" | jq -Rs 'split("\u0000")[] | select(. != "")'
   exit 1
 }
-if [ "${#paths[@]}" -gt 0 ] && printf '%s\0' "${paths[@]}" | grep -zqE "$claudes"; then
+if [ "${#paths[@]}" -gt 0 ] && printf '%s\0' "${paths[@]}" | grep -zE "$claudes" > /dev/null; then
   printf '%s\0' "${paths[@]}" | refuse
 fi
 # GitHub's diff names a binary file without its contents, so git can't apply it, and the
@@ -109,7 +109,7 @@ awk 'function flush() { if (section != "" && !binary) printf "%s", section; sect
 if [ -s "$review/text.patch" ]; then
   git apply --index "$review/text.patch"
 fi
-if git diff --cached --name-only --no-renames -z | grep -zqE "$claudes"; then
+if git diff --cached --name-only --no-renames -z | grep -zE "$claudes" > /dev/null; then
   git diff --cached --name-only --no-renames -z | refuse
 fi
 staged="$(git diff --cached --name-only --no-renames -z | tr '\0' '\n')"
