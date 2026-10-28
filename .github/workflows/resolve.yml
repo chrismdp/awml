@@ -328,7 +328,7 @@ jobs:
                 "$HOST_DIR/scrub-placeholders.sh"
               prompt="$(sed -e "s|RESOLVE_DIR|$root/in|g" -e "s|OUT_DIR|$root/out|g" -e "s|MAIN_SHA|$MAIN_SHA|g" \
                 "$HOST_DIR/main/resolve-prompt.md")"
-              (cd "$root/work" && HOME="$HOST_DIR/pr-$number/home" claude -p "$prompt" --model opus --max-turns 200 --permission-mode default \
+              (cd "$root/work" && HOME="$HOST_DIR/pr-$number/home" claude -p "$prompt" --model sonnet --max-turns 200 --permission-mode default \
                 --setting-sources user --strict-mcp-config --add-dir "$root/in" --add-dir "$root/out" \
                 --disallowedTools "Read(//proc/**)" "Edit(./.git/**)" \
                 --allowedTools "Read(./**)" "Read(/$root/in/**)" "Read(/$root/out/**)" "Edit(./**)" "Edit(/$root/out/**)" "Glob" "Grep" \

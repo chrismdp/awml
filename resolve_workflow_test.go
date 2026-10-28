@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -513,6 +514,31 @@ func TestTheCheckKeepsOnlyAStraightRebase(t *testing.T) {
 		}
 		if kept == nil || !strings.Contains(r.printed, "isn't one straight line") {
 			t.Errorf("with %s, the check kept the rebase or didn't say why:\n%s", shape, r.printed)
+		}
+	}
+}
+
+// The rebase's session runs on Sonnet; every other session, the build's, the fix's and CI's
+// reviews and Classify, runs on Opus. Each workflow's drawing names the model its session runs on.
+func TestEachSessionRunsOnItsModel(t *testing.T) {
+	model := regexp.MustCompile(`claude -p "\$prompt" --model (\S+)`)
+	for _, at := range []struct{ file, drawing, want string }{
+		{"resolve.yml", "rebase-conflicting-pull-requests.yaml", "sonnet"},
+		{"build.yml", "issue-to-pull-request.yaml", "opus"},
+		{"fix.yml", "fix-review-findings.yaml", "opus"},
+		{"ci.yml", "ci-a-commit.yaml", "opus"},
+	} {
+		found := model.FindAllStringSubmatch(readText(t, ".github/workflows/"+at.file), -1)
+		if len(found) == 0 {
+			t.Errorf("%s starts no Claude session with a model", at.file)
+		}
+		for _, m := range found {
+			if m[1] != at.want {
+				t.Errorf("%s starts a session on %s, want %s", at.file, m[1], at.want)
+			}
+		}
+		if !strings.Contains(readText(t, ".github/drawings/"+at.drawing), "Claude Code, claude-"+at.want+"-5-5,") {
+			t.Errorf("%s doesn't name claude-%s-5-5 for the session", at.drawing, at.want)
 		}
 	}
 }
