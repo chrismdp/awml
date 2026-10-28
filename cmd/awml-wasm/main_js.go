@@ -288,7 +288,8 @@ func readGiven(list string, drawn bool) ([]awml.Workflow, error) {
 	}
 	// As awml does, every file's own mistakes and those following the refs between them are said
 	// together, each after its file's name, in the order the files were given.
-	var workflows []awml.Workflow
+	var files []string
+	var docs []*awml.Map
 	var errs [][]string
 	named := names{}
 	for _, item := range items {
@@ -308,14 +309,21 @@ func readGiven(list string, drawn bool) ([]awml.Workflow, error) {
 		if err != nil {
 			return nil, errors.New("isn't YAML: " + strings.Join(strings.Fields(err.Error()), " "))
 		}
-		workflows = append(workflows, awml.Workflow{File: given.File, Doc: doc.(*awml.Map)})
+		// A file that isn't a mapping has its mistakes said, as any other's, but isn't a workflow.
+		m, _ := doc.(*awml.Map)
+		files = append(files, given.File)
+		docs = append(docs, m)
 		errs = append(errs, find(doc))
 	}
-	var canonical []awml.Workflow
+	var workflows, canonical []awml.Workflow
 	var at []int
-	for i, w := range workflows {
-		if awml.IsCanonical(w.Doc) {
-			canonical = append(canonical, w)
+	for i, doc := range docs {
+		if doc == nil {
+			continue
+		}
+		workflows = append(workflows, awml.Workflow{File: files[i], Doc: doc})
+		if awml.IsCanonical(doc) {
+			canonical = append(canonical, workflows[len(workflows)-1])
 			at = append(at, i)
 		}
 	}
@@ -325,8 +333,8 @@ func readGiven(list string, drawn bool) ([]awml.Workflow, error) {
 	var lines []string
 	for i, mistakes := range errs {
 		for _, mistake := range mistakes {
-			if workflows[i].File != "" {
-				mistake = workflows[i].File + ": " + mistake
+			if files[i] != "" {
+				mistake = files[i] + ": " + mistake
 			}
 			lines = append(lines, mistake)
 		}

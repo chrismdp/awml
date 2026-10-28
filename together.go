@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -574,7 +575,7 @@ func (l *linked) reportUntrusted() {
 		named, _ := l.marked(root)
 		for _, line := range follow(source, j.parts, lines).breaches {
 			action := j.from[str(byID[keyOf(line.get("to"))], "id")]
-			if !l.reportedAlone(root, action) && !isOneOfPart(named, from[action.part]) {
+			if !l.reportedAlone(root, action) && !slices.Contains(from[action.part], named) {
 				from[action.part] = append(from[action.part], named)
 			}
 		}
@@ -592,15 +593,6 @@ func (l *linked) reportUntrusted() {
 		breach := untrustedBreach(named, str(action.part, "id"))
 		l.found[action.workflow] = append(l.found[action.workflow], mistake{check: "untrusted.outside", message: breach + ": " + untrustedAdvice, breach: breach})
 	}
-}
-
-func isOneOfPart(p partAt, choices []partAt) bool {
-	for _, c := range choices {
-		if c == p {
-			return true
-		}
-	}
-	return false
 }
 
 // unstopped gives each part, of the workflow that owns it, that's marked untrusted, in any copy, and

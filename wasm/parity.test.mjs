@@ -447,6 +447,17 @@ lines:
     });
   }
   for (const { file, source } of handOff) await writeFile(file, source);
+  // A file that isn't a mapping is refused by fit as awml refuses it, and the module carries on.
+  for (const [name, odd] of [["empty", ""], ["list", "- a\n"]]) {
+    const oddFile = `${temporary}/odd-${name}.yaml`;
+    await writeFile(oddFile, odd);
+    const refused = runNativeResult(["fit", "--json", oddFile, ...descriptions], 1);
+    assert.throws(() => api.fit([{ file: oddFile, source: odd }, ...descriptionSources]), (error) => {
+      assert.equal(`${error.message}\n`, refused.stderr, `fit of a file that's ${name}`);
+      return true;
+    });
+  }
+  assert.deepEqual(api.check(plan), [], "the module still answers after refusing those files");
 
   // A part they share is untrusted if any workflow's copy of it is marked untrusted. Its text reaches
   // the replier's send with nothing to stop it, a line that breaks a rule, so the check fails, and the
