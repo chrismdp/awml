@@ -458,6 +458,21 @@ lines:
     });
   }
   assert.deepEqual(api.check(plan), [], "the module still answers after refusing those files");
+  // Every file's own mistakes are said with the shared ones, each after its file's name, by summary
+  // and the map as by awml.
+  const odd = [{ file: handOff[0].file, source: plan.replace("  - { id: thu,", "  - { id: odd, kind: bogus, label: Odd }\n  - { id: thu,") }, handOff[1]];
+  for (const { file, source } of odd) await writeFile(file, source);
+  for (const [name, call, args] of [
+    ["summary", () => api.summary(odd), ["summary", "--json", ...handOffPaths]],
+    ["draw", () => api.draw(odd), ["draw", ...handOffPaths]],
+  ]) {
+    const refused = runNativeResult(args, 1);
+    assert.throws(call, (error) => {
+      assert.equal(`${error.message}\n`, refused.stderr, `${name} of files with a mistake of their own`);
+      return true;
+    });
+  }
+  for (const { file, source } of handOff) await writeFile(file, source);
 
   // A part they share is untrusted if any workflow's copy of it is marked untrusted. Its text reaches
   // the replier's send with nothing to stop it, a line that breaks a rule, so the check fails, and the

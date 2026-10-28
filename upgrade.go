@@ -12,7 +12,8 @@ import (
 // version comes back as it is. The file needn't pass Check, and the result may not either, since
 // newer versions hold a file to rules older ones didn't.
 //
-// From 0.7, only the version changes, since 0.8 changed only what a standing approval may cover.
+// From 0.7, only the version changes, since 0.8 changed only rules: what a standing approval may
+// cover, and that untrusted text reaching an action unchecked is a mistake.
 // From 0.6, a trigger of another workflow that only do steps lead into becomes their outside action,
 // which refers to it, since a trigger is never a destination. From 0.5, each publish line becomes a
 // data line, since a data line publishes whenever its scopes make it one. A line's breaks goes,
