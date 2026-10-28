@@ -409,7 +409,7 @@ The week's school pickups are copied into the parents' notes, and the thick line
 
 The school's newsletter arrives, and two `start` lines out of it have two steps take it side by side: one takes the term dates into the family notes, and one looks for anything that needs a reply.
 
-![The school newsletter, taken by two steps side by side](examples/tour/02-fork.svg)
+![The school newsletter, taken by two steps side by side](examples/tour/02-two-start-lines.svg)
 
 ### A step a person does
 
