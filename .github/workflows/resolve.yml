@@ -53,8 +53,9 @@ jobs:
           persist-credentials: false
 
       # A pull request is the build workflow's when a bot opened it from a build/issue- branch in
-      # this repository. The rebase commits as the app's bot, so a person's commit keeps its author
-      # and stays theirs.
+      # this repository. A branch whose commits change .github/ or Claude Code's own files is held
+      # back before any rebase, since the app never pushes those, and the push job says so. The
+      # rebase commits as the app's bot, so a person's commit keeps its author and stays theirs.
       - name: Find the conflicting pull requests and rebase each with git alone
         id: find
         env:
@@ -98,6 +99,13 @@ jobs:
             fi
 
             git fetch -q --no-tags origin "$head_sha"
+            claudes='(^|/)\.claude(/|$)|(^|/)\.mcp\.json$|(^|/)CLAUDE(\.local)?\.md$'
+            if git diff --name-only --no-renames -z "$GITHUB_SHA...$head_sha" | grep -zqE "^\.github/|$claudes"; then
+              echo "#$number's commits change .github/ or Claude Code's own files, which the app never pushes."
+              pulls="$(jq -c --argjson number "$number" --arg branch "$branch" --arg head_sha "$head_sha" \
+                '. + [{number: $number, branch: $branch, head_sha: $head_sha, clean: false, held: true}]' <<< "$pulls")"
+              continue
+            fi
             work="$RUNNER_TEMP/work/$number"
             git worktree add -q --detach "$work" "$head_sha"
             if git -C "$work" rebase -q "$GITHUB_SHA"; then
@@ -109,7 +117,7 @@ jobs:
             fi
             git worktree remove --force "$work"
             pulls="$(jq -c --argjson number "$number" --arg branch "$branch" --arg head_sha "$head_sha" --argjson clean "$clean" \
-              '. + [{number: $number, branch: $branch, head_sha: $head_sha, clean: $clean}]' <<< "$pulls")"
+              '. + [{number: $number, branch: $branch, head_sha: $head_sha, clean: $clean, held: false}]' <<< "$pulls")"
           done < <(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100" --jq '.[].number')
 
           digests='{}'
@@ -121,7 +129,7 @@ jobs:
           done
           {
             echo "pulls=$pulls"
-            echo "conflicts=$(jq -c '[.[] | select(.clean | not)]' <<< "$pulls")"
+            echo "conflicts=$(jq -c '[.[] | select((.clean | not) and (.held | not))]' <<< "$pulls")"
             echo "digests=$digests"
             echo "main_sha=$GITHUB_SHA"
           } | tee -a "$GITHUB_OUTPUT"
@@ -374,7 +382,7 @@ jobs:
           commit_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit"
           claudes='(^|/)\.claude(/|$)|(^|/)\.mcp\.json$|(^|/)CLAUDE(\.local)?\.md$'
           failed=0
-          while IFS=$'\t' read -r number branch head_sha clean; do
+          while IFS=$'\t' read -r number branch head_sha clean held; do
             case "$number" in ''|*[!0-9]*) echo "A pull request's number isn't a number: $number"; exit 1 ;; esac
             if ! [[ "$branch" =~ ^[A-Za-z0-9._/-]+$ ]] || ! [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]]; then
               echo "#$number's branch or head isn't one this workflow handles."
@@ -393,7 +401,9 @@ jobs:
               fi
             fi
             why=""
-            if [ -z "$want" ] || [ ! -f "$bundle" ]; then
+            if [ "$held" = true ]; then
+              why="The branch changes \`.github/\` or Claude Code's own files, which the app never pushes."
+            elif [ -z "$want" ] || [ ! -f "$bundle" ]; then
               why="Claude couldn't resolve its conflicts with \`main\` with confidence."
             elif [ "$(sha256sum < "$bundle" | cut -c 1-64)" != "$want" ]; then
               why="The rebased branch isn't the one the job that rebased it made."
@@ -426,5 +436,5 @@ jobs:
               fi
             } > "$RUNNER_TEMP/comment.md"
             gh pr comment "$number" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
-          done < <(jq -r '.[] | [.number, .branch, .head_sha, .clean] | @tsv' <<< "$PULLS")
+          done < <(jq -r '.[] | [.number, .branch, .head_sha, .clean, (.held // false)] | @tsv' <<< "$PULLS")
           exit "$failed"

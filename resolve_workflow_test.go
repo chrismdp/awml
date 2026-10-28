@@ -188,3 +188,40 @@ func gitRebase(dir, onto string) error {
 	command := gitCommandIn(dir, "rebase", "-q", onto)
 	return command.Run()
 }
+
+// A branch whose commits change .github/ or Claude Code's own files is never pushed by the app, so
+// the find job holds it back before any rebase, Claude's included, and the push job says so in the
+// pull request's one comment.
+func TestResolveHoldsBackABranchThatTouchesGithub(t *testing.T) {
+	find, _ := readFactoryWorkflow(t, "resolve.yml").Jobs["find"].step(t, "find")
+	r := newRehearsal(t)
+	origin, main, _, _ := resolveRepo(t, r)
+	gitIn(t, origin, "switch", "-q", "-c", "workflow", main+"^")
+	r.write(filepath.Join(origin, ".github/workflows/ci.yml"), "name: CI\n")
+	r.write(filepath.Join(origin, "recipes.md"), "Muffins\n")
+	gitIn(t, origin, "add", "-A")
+	gitIn(t, origin, "commit", "-qm", "A workflow and muffins")
+	workflow := gitIn(t, origin, "rev-parse", "HEAD")
+	gitIn(t, origin, "switch", "-q", "main")
+	work := filepath.Join(r.root, "work")
+	gitIn(t, r.root, "clone", "-q", "--branch", "main", origin, work)
+	r.dir = work
+	r.run(find, map[string]string{"GITHUB_SHA": main}, `
+  "api users/awml-factory%5Bbot%5D --jq .id") echo 41 ;;
+  "api --paginate repos/owner/repo/pulls?state=open&per_page=100 --jq .[].number") printf '9\n' ;;`+
+		resolvePull("9", "workflow", workflow))
+	r.mustPass()
+	if !strings.Contains(r.outputs["pulls"], `"held":true`) || r.outputs["conflicts"] != "[]" || r.outputs["digests"] != "{}" {
+		t.Errorf("the find job didn't hold the branch back: %v", r.outputs)
+	}
+
+	push, _ := readFactoryWorkflow(t, "resolve.yml").Jobs["push"].step(t, "push")
+	p := newRehearsal(t)
+	p.dir = work
+	p.run(push, map[string]string{"APP_TOKEN": "not-a-token", "MAIN_SHA": main, "FOUND": "{}", "RESOLVED": "{}",
+		"PULLS": `[{"number": 9, "branch": "workflow", "head_sha": "` + workflow + `", "clean": false, "held": true}]`},
+		`  "pr comment "*) ;;`)
+	if bodies := p.bodies(); len(bodies) != 1 || !strings.Contains(bodies[0], "never pushes") {
+		t.Errorf("the push job said %q, want that the app never pushes .github/", bodies)
+	}
+}
