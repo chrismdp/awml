@@ -527,6 +527,13 @@ parts:
 	if err != nil || string(data) != "#\n#\nawml: \"0.8\"\ntitle: Dinners\nparts: []\n" {
 		t.Errorf("convert gave %v\n%s", err, data)
 	}
+	// A comment indented after its # loses the indent its lines share, and a tab becomes spaces, so
+	// the description is still a literal block.
+	indented := "#   Plans the dinners.\n#\n#     - The family is fictional.\n#\tBread too.\nawml: \"0.5\"\ntitle: Dinners\nparts: []\n"
+	data, _, _, err = ConvertSources([]Source{{Text: []byte(indented)}}, "")
+	if err != nil || string(data) != "awml: \"0.8\"\ntitle: Dinners\ndescription: |\n  Plans the dinners.\n\n    - The family is fictional.\n   Bread too.\nparts: []\n" {
+		t.Errorf("convert gave %v\n%s", err, data)
+	}
 	// A file that starts with its fields, not a comment, has no description to take.
 	late := "awml: \"0.5\"\n# Dinners.\ntitle: Dinners\nparts: []\n"
 	data, _, _, err = ConvertSources([]Source{{Text: []byte(late)}}, "")
