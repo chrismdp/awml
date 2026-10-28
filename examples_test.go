@@ -216,6 +216,30 @@ func TestRenderStopsAtADetachedLine(t *testing.T) {
 	}
 }
 
+func TestNoDrawingHasADetachedLine(t *testing.T) {
+	svgs, err := filepath.Glob("examples/*.svg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, pattern := range []string{"examples/tour/*.svg", "examples/live/*.svg"} {
+		more, err := filepath.Glob(pattern)
+		if err != nil {
+			t.Fatal(err)
+		}
+		svgs = append(svgs, more...)
+	}
+	nan := regexp.MustCompile(`d="[^"]*NaN`)
+	for _, svg := range svgs {
+		src, err := os.ReadFile(svg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if nan.Match(src) {
+			t.Errorf("%s has a path of NaN, drawn detached from its ends", svg)
+		}
+	}
+}
+
 func TestEachExampleIsWrittenInTheHouseStyle(t *testing.T) {
 	for _, path := range append(append(examples(t), liveExamples(t)...), platformExamples(t)...) {
 		t.Run(path, func(t *testing.T) {
