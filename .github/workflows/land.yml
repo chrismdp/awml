@@ -23,14 +23,15 @@ on:
     branches: ["build/issue-*"]
 
 jobs:
-  # A newer CI result on a branch replaces an older one's reading, which no longer matches the
-  # branch's head. A fork's pull request may name its branch build/issue-N too, so the group carries
-  # the head's repository and CI's event. Only this reading job is cancelled: a land job that has
-  # started is never stopped between its merge and its comment.
+  # The reading jobs of a branch take turns, and none cancels another: a stranger's pull request from
+  # the same branch starts a run too, which mustn't stop the real one's. Each reads GitHub afresh and
+  # leaves quietly when there's nothing to do, so a stale one costs little. A fork's pull request may
+  # name its branch build/issue-N too, so the group carries the head's repository and CI's event. A
+  # land job that has started is never stopped between its merge and its comment.
   find:
     concurrency:
       group: land-${{ github.event.workflow_run.event }}-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
-      cancel-in-progress: true
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

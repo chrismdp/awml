@@ -1,6 +1,6 @@
 # Reviewing a change to AWML
 
-This says what failure looks like in this repository. The reviews on every pull request, and the build workflow's own before it opens one, hold every change to it, and a person reviewing by hand can use it too. `SPEC.md` is the authority on what AWML means, and `AGENTS.md` says how the repository is worked on.
+This says what failure looks like in this repository. CI's Bug review and Security review on every pull request hold each change to it, Classify and the fixer read it too, and a person reviewing by hand can use it as well. `SPEC.md` is the authority on what AWML means, and `AGENTS.md` says how the repository is worked on.
 
 A finding is **Important** when the change breaks one of these, or does something else that would be wrong on main. It's a **Nit** when it works but could be clearer or simpler. It's **Pre-existing** when the fault was there before the change and the change only passes near it.
 

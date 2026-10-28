@@ -24,7 +24,8 @@ var removedGoTest = regexp.MustCompile(`(?m)^-[[:space:]]*func[[:space:]]+Test`)
 // examples/fonts/Inter-Regular.ttf, is a fifteenth of that.
 const maxBinaryBytes = 1 << 20
 
-// A symbolic link's mode in git, and the mode git gives a path the change deletes.
+// The modes git gives a symbolic link, a gitlink, which points at a submodule's commit, and a path
+// the change deletes.
 const (
 	symbolicLink = "120000"
 	gitlink      = "160000"
