@@ -66,7 +66,10 @@ case "$mode" in
     ;;
   after)
     state="$3"
-    refuse() { echo "The session left $1 at .${2#"$tree"}, where it started with nothing, so git isn't run on it."; exit 1; }
+    refuse() {
+      echo "The session left $1 at .${2#"$tree"}, $(stat -c %s "$2" 2> /dev/null || echo 0) bytes, where it started with nothing, so git isn't run on it."
+      exit 1
+    }
     # Before anything is removed: no recorded path, nor any folder above it in the tree, may be a
     # link, and each must resolve inside the tree, so nothing removed later acts through a link.
     root="$(realpath "$tree")"

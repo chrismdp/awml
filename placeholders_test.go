@@ -234,7 +234,7 @@ func TestTheBuildsPatchHoldsNoPlaceholder(t *testing.T) {
 			t.Errorf("with %s, git ran on the tree:\n%s", leaves, r.printed)
 		}
 		// Each is refused for what it is.
-		want := map[string]string{"a placeholder with something in it": "left a file with something in it at ./.env",
+		want := map[string]string{"a placeholder with something in it": "left a file with something in it at ./.env, 8 bytes,",
 			"a .claude link": "left a link at ./.claude", "something in node_modules": "left a folder with something in it at ./node_modules",
 			"a node_modules link": "left a link at ./node_modules"}[leaves]
 		if !strings.Contains(r.printed, want) {
