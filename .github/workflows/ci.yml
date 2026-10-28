@@ -46,6 +46,12 @@ concurrency:
   group: ci-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Every step runs as bash --noprofile --norc -eo pipefail {0}, which GitHub uses only when the
+# shell is named, so a command that fails in a pipe fails its step, as in the rehearsals.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   # The tests hold no secret and a token that only reads. They run the change's code, so they
   # neither save Go's cache nor restore one.
@@ -247,9 +253,14 @@ jobs:
             exit 1
           fi
           file="$out/$KIND.json"
+          # The long runs go to a file of their own, read whole, and are searched there: no grep
+          # stops early in a pipe, so nothing feeding it dies of SIGPIPE and reads as no token.
           looks_like_token() {
+            local runs
+            runs="$(mktemp)"
             LC_ALL=C sed -E 's#base64,[A-Za-z0-9+/]+=*##g; s#data-points="[A-Za-z0-9+/]+=*"##g' |
-              LC_ALL=C grep -aoiE 'sk-ant-|[A-Za-z0-9_-]{80,}' | grep -iE 'sk-ant-|[0-9]' > /dev/null
+              LC_ALL=C grep -aoiE 'sk-ant-|[A-Za-z0-9_-]{80,}' > "$runs" || true
+            LC_ALL=C grep -qiE 'sk-ant-|[0-9]' "$runs"
           }
           if ! [[ "$UNREAD" =~ ^[0-9]{1,4}$ ]]; then
             echo "The patch left no readable count of the binary files the review couldn't read."
@@ -425,9 +436,14 @@ jobs:
             exit 0
           fi
           file="$out/classification.json"
+          # The long runs go to a file of their own, read whole, and are searched there: no grep
+          # stops early in a pipe, so nothing feeding it dies of SIGPIPE and reads as no token.
           looks_like_token() {
+            local runs
+            runs="$(mktemp)"
             LC_ALL=C sed -E 's#base64,[A-Za-z0-9+/]+=*##g; s#data-points="[A-Za-z0-9+/]+=*"##g' |
-              LC_ALL=C grep -aoiE 'sk-ant-|[A-Za-z0-9_-]{80,}' | grep -iE 'sk-ant-|[0-9]' > /dev/null
+              LC_ALL=C grep -aoiE 'sk-ant-|[A-Za-z0-9_-]{80,}' > "$runs" || true
+            LC_ALL=C grep -qiE 'sk-ant-|[0-9]' "$runs"
           }
           if ! jq -e '(.verdict | IN("ship", "show", "ask")) and
               (.reasons | type == "array" and length >= 1 and length <= 5 and all(.[]; type == "string"))' \
@@ -476,9 +492,11 @@ jobs:
           done < "$here/jobs.txt" > "$here/log.txt"
           tail -n 150 "$here/log.txt" | sed -e 's/</\&lt;/g' -e 's/@\([A-Za-z0-9]\)/@\xe2\x80\x8b\1/g' > "$here/output.txt"
 
-          longest="$(grep -o '`*' "$here/output.txt" | awk '{ if (length($0) > m) m = length($0) } END { print m + 0 }')"
+          # An empty log has no line for grep to match, and the commit's subject is only a courtesy, so
+          # neither stops the report.
+          longest="$({ grep -o '`*' "$here/output.txt" || true; } | awk '{ if (length($0) > m) m = length($0) } END { print m + 0 }')"
           fence="$(printf '%*s' "$(( longest >= 3 ? longest + 1 : 3 ))" '' | tr ' ' '`')"
-          subject="$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA" --jq '.commit.message | split("\n")[0]' |
+          subject="$({ gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA" --jq '.commit.message | split("\n")[0]' || true; } |
             cut -c 1-200 | sed -e 's/</\&lt;/g' -e 's/@\([A-Za-z0-9]\)/@\xe2\x80\x8b\1/g')"
           {
             echo "**The checks failed on main at $GITHUB_SHA, \"$subject\".**"

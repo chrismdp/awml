@@ -48,6 +48,12 @@ concurrency:
 env:
   ISSUE: ${{ inputs.issue || github.event.issue.number }}
 
+# Every step runs as bash --noprofile --norc -eo pipefail {0}, which GitHub uses only when the
+# shell is named, so a command that fails in a pipe fails its step, as in the rehearsals.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   # Says on the issue that the build has started, in a new comment linking the run. A build started
   # by dispatch first checks, from GitHub's record, that the issue still carries the build label and
@@ -287,7 +293,11 @@ jobs:
           home="$RUNNER_TEMP/session/home"
           mkdir -p "$home"
           HOME="$home" GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOVCS='*:off' go mod download
-          (cd "$(mktemp -d)" && HOME="$home" npm_config_userconfig=/dev/null npm_config_globalconfig=/dev/null npm_config_registry=https://registry.npmjs.org/ PUPPETEER_SKIP_DOWNLOAD=true npm_config_ignore_scripts=true npx --yes -p @mermaid-js/mermaid-cli@11.4.1 -p mermaid@11.17.2 -- true)
+          # npm refuses to load one file as both its user and its global config, so each is an empty
+          # file of its own.
+          user_npmrc="$(mktemp)"
+          global_npmrc="$(mktemp)"
+          (cd "$(mktemp -d)" && HOME="$home" npm_config_userconfig="$user_npmrc" npm_config_globalconfig="$global_npmrc" npm_config_registry=https://registry.npmjs.org/ PUPPETEER_SKIP_DOWNLOAD=true npm_config_ignore_scripts=true npx --yes -p @mermaid-js/mermaid-cli@11.4.1 -p mermaid@11.17.2 -- true)
 
       # Claude Code runs its commands in a sandbox, bubblewrap with socat for its network, so that it
       # can scrub its login token from them, and they can't start without both. Ubuntu's runners
@@ -416,9 +426,14 @@ jobs:
             echo "The kept change holds a symbolic link or something else that isn't a plain file, so it isn't kept."
             exit 1
           fi
+          # The long runs go to a file of their own, read whole, and are searched there: no grep
+          # stops early in a pipe, so nothing feeding it dies of SIGPIPE and reads as no token.
           looks_like_token() {
+            local runs
+            runs="$(mktemp)"
             LC_ALL=C sed -E 's#base64,[A-Za-z0-9+/]+=*##g; s#data-points="[A-Za-z0-9+/]+=*"##g' |
-              LC_ALL=C grep -aoiE 'sk-ant-|[A-Za-z0-9_-]{80,}' | grep -iE 'sk-ant-|[0-9]' > /dev/null
+              LC_ALL=C grep -aoiE 'sk-ant-|[A-Za-z0-9_-]{80,}' > "$runs" || true
+            LC_ALL=C grep -qiE 'sk-ant-|[0-9]' "$runs"
           }
           while IFS= read -r -d '' file; do
             if [ "$file" = "$change/change.patch" ]; then
@@ -537,10 +552,13 @@ jobs:
             say stale
           fi
           claudes='(^|/)\.claude(/|$)|(^|/)\.mcp\.json$|(^|/)CLAUDE(\.local)?\.md$|(^|/)\.npmrc$|(^|/)\.yarnrc(\.yml)?$|(^|/)node_modules(/|$)'
-          if git diff --cached --name-only --no-renames -z | grep -zE "^\.github/|$claudes" > /dev/null ||
+          # The names go to a file and are searched there, so no grep stops early in a pipe.
+          names="$(mktemp)"
+          git diff --cached --name-only --no-renames -z > "$names"
+          if grep -qzE "^\.github/|$claudes" "$names" ||
             git diff --cached --raw --no-renames | awk '$2 == "120000" { found = 1 } END { exit !found }'; then
             echo "The draft changes files the app never pushes, or makes a symbolic link:"
-            git diff --cached --name-only --no-renames -z | grep -zE "^\.github/|$claudes" | tr '\0' '\n' | jq -R . || true
+            grep -zE "^\.github/|$claudes" "$names" | tr '\0' '\n' | jq -R . || true
             git diff --cached --raw --no-renames | awk '$2 == "120000" { print "a symbolic link" }' | sort -u
             {
               printf '**The draft changes `.github/`, Claude Code'"'"'s own files** (`.claude/`, `.mcp.json` or a `CLAUDE.md`) **or npm'"'"'s** (`.npmrc`, `.yarnrc` or `node_modules/`), or makes a symbolic link, which the app never pushes, so the build stops here. [The run](%s)\n' "$run_url"

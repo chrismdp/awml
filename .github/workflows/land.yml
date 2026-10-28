@@ -22,6 +22,12 @@ on:
     types: [completed]
     branches: ["build/issue-*"]
 
+# Every step runs as bash --noprofile --norc -eo pipefail {0}, which GitHub uses only when the
+# shell is named, so a command that fails in a pipe fails its step, as in the rehearsals.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   # The reading job takes no turns in a concurrency group: a stranger's pull request from the same
   # branch starts a run too, and GitHub keeps only one run waiting in a group, so a newer one would

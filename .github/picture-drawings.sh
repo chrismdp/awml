@@ -48,9 +48,16 @@ fi
 examples/render.sh
 
 # With the renderer unchanged, only the drawings whose .mmd changed are kept.
+kept() {
+  local one
+  for one in "${keep[@]}"; do
+    if [ "$one" = "$1" ]; then return 0; fi
+  done
+  return 1
+}
 redrawn=()
 while IFS= read -r svg; do
-  if [ -n "$renderer" ] || printf '%s\n' "${keep[@]}" | grep -xF -- "$svg" > /dev/null; then
+  if [ -n "$renderer" ] || kept "$svg"; then
     redrawn+=("$svg")
   elif git cat-file -e "HEAD:$svg" 2> /dev/null; then
     git restore --source=HEAD --worktree -- "$svg"

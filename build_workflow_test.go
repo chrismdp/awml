@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -87,10 +88,15 @@ func (j workflowJob) session() int {
 }
 
 type factoryWorkflow struct {
-	RunName     string                 `yaml:"run-name"`
-	On          map[string]any         `yaml:"on"`
-	Concurrency any                    `yaml:"concurrency"`
-	Jobs        map[string]workflowJob `yaml:"jobs"`
+	RunName     string         `yaml:"run-name"`
+	On          map[string]any `yaml:"on"`
+	Concurrency any            `yaml:"concurrency"`
+	Defaults    struct {
+		Run struct {
+			Shell string `yaml:"shell"`
+		} `yaml:"run"`
+	} `yaml:"defaults"`
+	Jobs map[string]workflowJob `yaml:"jobs"`
 }
 
 func readFactoryWorkflow(t *testing.T, name string) factoryWorkflow {
@@ -239,7 +245,7 @@ func TestNothingInTheFactoryUsesAutoMerge(t *testing.T) {
 // a node_modules of its own, can make either run anything.
 var claudeInstall = regexp.MustCompile(`npm install -g @anthropic-ai/claude-code@[0-9]+\.[0-9]+\.[0-9]+\n`)
 var moduleFetch = regexp.MustCompile(`(?m)^.*HOME="[^"]+" GOTOOLCHAIN=local GOPROXY=https://proxy\.golang\.org GOVCS='\*:off' go mod download\)?$|` +
-	`^\s*\(cd "\$\(mktemp -d\)" && HOME="[^"]+" npm_config_userconfig=/dev/null npm_config_globalconfig=/dev/null ` +
+	`^\s*\(cd "\$\(mktemp -d\)" && HOME="[^"]+" npm_config_userconfig="\$[a-z_]+" npm_config_globalconfig="\$[a-z_]+" ` +
 	`npm_config_registry=https://registry\.npmjs\.org/ PUPPETEER_SKIP_DOWNLOAD=true npm_config_ignore_scripts=true npx --yes (-p \S+ )+-- true\)$`)
 
 // A command a script runs, at the start of a line or after ;, &&, || or a pipe.
@@ -373,8 +379,11 @@ func TestEveryJobThatRunsClaudeHasBubblewrap(t *testing.T) {
 
 // The token check every workflow uses on what a session wrote.
 const tokenCheck = `looks_like_token() {
+            local runs
+            runs="$(mktemp)"
             LC_ALL=C sed -E 's#base64,[A-Za-z0-9+/]+=*##g; s#data-points="[A-Za-z0-9+/]+=*"##g' |
-              LC_ALL=C grep -aoiE 'sk-ant-|[A-Za-z0-9_-]{80,}' | grep -iE 'sk-ant-|[0-9]' > /dev/null
+              LC_ALL=C grep -aoiE 'sk-ant-|[A-Za-z0-9_-]{80,}' > "$runs" || true
+            LC_ALL=C grep -qiE 'sk-ant-|[0-9]' "$runs"
           }`
 
 // Everything a session wrote is scanned for anything like the login token before it's uploaded,
@@ -694,6 +703,9 @@ func (r *rehearsal) run(step workflowStep, env map[string]string, answers string
 		vars[name] = value
 	}
 	command := exec.Command("bash", "--noprofile", "--norc", "-eo", "pipefail", script)
+	if pipeSignalResets() {
+		command = exec.Command("env", "--default-signal=PIPE", "bash", "--noprofile", "--norc", "-eo", "pipefail", script)
+	}
 	command.Dir = r.root
 	if r.dir != "" {
 		command.Dir = r.dir
@@ -726,6 +738,13 @@ func (r *rehearsal) run(step workflowStep, env map[string]string, answers string
 		r.inputs = append(r.inputs, input)
 	}
 }
+
+// A runner's steps start with SIGPIPE at its default, so a command writing to a pipe whose reader
+// has gone dies of it, as pipefail then reports. A test may start with SIGPIPE ignored, where the
+// writer only sees an error and may carry on, so a rehearsal resets it, where env can.
+var pipeSignalResets = sync.OnceValue(func() bool {
+	return exec.Command("env", "--default-signal=PIPE", "true").Run() == nil
+})
 
 func (r *rehearsal) mustPass() {
 	r.t.Helper()
@@ -1195,7 +1214,9 @@ EOF
 // fails. So no factory step or script pipes into one; each reads all its input. No input is
 // excepted, fixed text or not. An awk that exits only in its END block has read everything first.
 func TestNoPipeEndsEarly(t *testing.T) {
-	quiet := regexp.MustCompile(`\|\s*grep\s+-[A-Za-z]*q`)
+	quiet := regexp.MustCompile(`\|\s*(LC_ALL=C\s+)?grep\s+-[A-Za-z]*q`)
+	// GNU grep treats output sent to /dev/null as -q, and stops at its first match too.
+	silenced := regexp.MustCompile(`\|\s*(LC_ALL=C\s+)?grep\b.*>\s*/dev/null`)
 	head := regexp.MustCompile(`\|\s*head\b`)
 	awk := regexp.MustCompile(`\|\s*awk\b(.*)`)
 	files := []string{".github/bring-patch.sh", ".github/read-findings.sh", ".github/sandbox-settings.sh",
@@ -1213,7 +1234,7 @@ func TestNoPipeEndsEarly(t *testing.T) {
 					t.Errorf("%s:%d pipes into an awk that exits before END: %s", file, at+1, strings.TrimSpace(line))
 				}
 			}
-			if quiet.MatchString(line) {
+			if quiet.MatchString(line) || silenced.MatchString(line) {
 				t.Errorf("%s:%d pipes into a quiet grep: %s", file, at+1, strings.TrimSpace(line))
 			}
 		}
@@ -1336,5 +1357,82 @@ func TestEveryAppTokenNamesOnlyThePermissionsItNeeds(t *testing.T) {
 	})
 	if found != len(want) {
 		t.Errorf("found %d app tokens, want %d", found, len(want))
+	}
+}
+
+// npm refuses to load one file as both its user and its global config, so each is an empty file of
+// its own, made in the step that fetches, and neither is one the tree could have put there.
+func TestNpmReadsTwoEmptyConfigFilesOfItsOwn(t *testing.T) {
+	configs := regexp.MustCompile(`npm_config_userconfig="\$([a-z_]+)" npm_config_globalconfig="\$([a-z_]+)"`)
+	found := 0
+	eachJob(t, func(file, name string, job workflowJob) {
+		for _, step := range job.Steps {
+			if !strings.Contains(step.Run, "npm_config_userconfig") && !strings.Contains(step.Run, "npm_config_globalconfig") {
+				continue
+			}
+			found++
+			m := configs.FindStringSubmatch(step.Run)
+			if m == nil || m[1] == m[2] {
+				t.Errorf("%s's %s step %q doesn't give npm two config files of their own", file, name, step.Name)
+				continue
+			}
+			for _, config := range m[1:] {
+				if !strings.Contains(step.Run, config+`="$(mktemp)"`) {
+					t.Errorf("%s's %s step %q doesn't make $%s an empty file of its own", file, name, step.Name, config)
+				}
+			}
+		}
+	})
+	if found != 2 {
+		t.Errorf("found %d steps that set npm's config, want the build's and the fix's", found)
+	}
+}
+
+// GitHub runs a step with pipefail only when its shell is named bash, so every factory workflow
+// names it, and its steps run as the rehearsals run them.
+func TestEveryFactoryStepRunsWithPipefail(t *testing.T) {
+	for _, file := range factoryFiles {
+		if shell := readFactoryWorkflow(t, file).Defaults.Run.Shell; shell != "bash" {
+			t.Errorf("%s runs its steps with shell %q, not bash, so without pipefail", file, shell)
+		}
+	}
+}
+
+// A token scan reads all it's given, however early the token comes: a producer writing 200,000
+// lines, the token first, under pipefail, still finds it. A pipe ending in a grep that stops at its
+// first match kills what feeds it with SIGPIPE, so under pipefail the token reads as none: the
+// control, with grep -q, shows it. GNU grep 3.11 reads the rest when its output is /dev/null, but
+// other greps need not, so no scan relies on it.
+func TestTheTokenScanFindsAnEarlyTokenInALongInput(t *testing.T) {
+	scan := regexp.MustCompile(`(?s)\n\s*looks_like_token\(\) \{\n.*?\n\s*\}\n`)
+	produce := `{ echo "sk-ant-oat01-0123456789"; awk 'BEGIN { for (i = 0; i < 200000; i++) print "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }'; }`
+	found := func(function string) bool {
+		r := newRehearsal(t)
+		r.run(workflowStep{Run: function + "\nif " + produce + " | looks_like_token; then echo FOUND; fi\n"}, nil, "")
+		r.mustPass()
+		return strings.Contains(r.printed, "FOUND")
+	}
+	old := `looks_like_token() {
+  LC_ALL=C sed -E 's#base64,[A-Za-z0-9+/]+=*##g; s#data-points="[A-Za-z0-9+/]+=*"##g' |
+    LC_ALL=C grep -aoiE 'sk-ant-|[A-Za-z0-9_-]{80,}' | grep -qiE 'sk-ant-|[0-9]'
+}
+`
+	if !pipeSignalResets() {
+		t.Skip("env can't reset SIGPIPE here, so a writer to a closed pipe needn't die of it")
+	}
+	if found(old) {
+		t.Error("a scan that stops early found the token, so this rehearsal no longer shows what it guards against")
+	}
+	scans := 0
+	for _, file := range factoryFiles {
+		for _, function := range scan.FindAllString(readText(t, ".github/workflows/"+file), -1) {
+			scans++
+			if !found(function) {
+				t.Errorf("%s's token scan misses a token that comes first in a long input", file)
+			}
+		}
+	}
+	if scans != 5 {
+		t.Errorf("found %d token scans, want 5: two in ci.yml, and one each in build.yml, fix.yml and resolve.yml", scans)
 	}
 }

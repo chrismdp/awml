@@ -30,6 +30,12 @@ concurrency:
   group: resolve-main
   cancel-in-progress: true
 
+# Every step runs as bash --noprofile --norc -eo pipefail {0}, which GitHub uses only when the
+# shell is named, so a command that fails in a pipe fails its step, as in the rehearsals.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   # Finds the open pull requests GitHub flags as conflicting with main, keeps those from a branch
   # of this repository opened by its own people or the build's app, and rebases each with git
@@ -114,8 +120,11 @@ jobs:
 
             git fetch -q --no-tags origin "$head_sha"
             claudes='(^|/)\.claude(/|$)|(^|/)\.mcp\.json$|(^|/)CLAUDE(\.local)?\.md$|(^|/)\.npmrc$|(^|/)\.yarnrc(\.yml)?$|(^|/)node_modules(/|$)'
-            # Every commit's files, not the branch's net change, since each commit would be pushed.
-            if git log --format= --name-only --no-renames -z "$GITHUB_SHA..$head_sha" | grep -zE "^\.github/|$claudes" > /dev/null; then
+            # Every commit's files, not the branch's net change, since each commit would be pushed,
+            # written to a file and searched there, so no grep stops early in a pipe.
+            names="$(mktemp)"
+            git log --format= --name-only --no-renames -z "$GITHUB_SHA..$head_sha" > "$names"
+            if grep -qzE "^\.github/|$claudes" "$names"; then
               echo "#$number's commits change .github/, Claude Code's own files or npm's, which the app never pushes."
               pulls="$(jq -c --argjson number "$number" --arg branch "$branch" --arg head_sha "$head_sha" \
                 '. + [{number: $number, branch: $branch, head_sha: $head_sha, clean: false, held: true}]' <<< "$pulls")"
@@ -339,9 +348,14 @@ jobs:
           echo "::stop-commands::$stop"
           trap 'echo "::$stop::"' EXIT
           git() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 command git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c diff.external= "$@"; }
+          # The long runs go to a file of their own, read whole, and are searched there: no grep
+          # stops early in a pipe, so nothing feeding it dies of SIGPIPE and reads as no token.
           looks_like_token() {
+            local runs
+            runs="$(mktemp)"
             LC_ALL=C sed -E 's#base64,[A-Za-z0-9+/]+=*##g; s#data-points="[A-Za-z0-9+/]+=*"##g' |
-              LC_ALL=C grep -aoiE 'sk-ant-|[A-Za-z0-9_-]{80,}' | grep -iE 'sk-ant-|[0-9]' > /dev/null
+              LC_ALL=C grep -aoiE 'sk-ant-|[A-Za-z0-9_-]{80,}' > "$runs" || true
+            LC_ALL=C grep -qiE 'sk-ant-|[0-9]' "$runs"
           }
           if [ "$(stat -c %d:%i "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.git")" != "$(cat "$HOST_DIR/baseline/folders")" ]; then
             echo "The workspace or its .git isn't the folder it was before the sessions, so nothing is fetched from it."
@@ -470,6 +484,7 @@ jobs:
           run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           commit_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit"
           claudes='(^|/)\.claude(/|$)|(^|/)\.mcp\.json$|(^|/)CLAUDE(\.local)?\.md$|(^|/)\.npmrc$|(^|/)\.yarnrc(\.yml)?$|(^|/)node_modules(/|$)'
+          names="$(mktemp)"
           failed=0
           while IFS=$'\t' read -r number branch head_sha clean held; do
             case "$number" in ''|*[!0-9]*) echo "A pull request's number isn't a number: $number"; exit 1 ;; esac
@@ -502,7 +517,8 @@ jobs:
               why="The rebased branch doesn't sit on \`main\`."
             elif git grep -qE '^(<<<<<<<|>>>>>>>)( |$)' "refs/rebased/$number" --; then
               why="The rebased branch still carries conflict markers."
-            elif git log --format= --name-only --no-renames -z "$MAIN_SHA..refs/rebased/$number" | grep -zE "^\.github/|$claudes" > /dev/null; then
+            elif ! git log --format= --name-only --no-renames -z "$MAIN_SHA..refs/rebased/$number" > "$names" ||
+              grep -qzE "^\.github/|$claudes" "$names"; then
               why="The branch changes \`.github/\`, Claude Code's own files or npm's, which the app never pushes."
             elif ! git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$APP_TOKEN" | base64 -w0)" \
                 push --force-with-lease="refs/heads/$branch:$head_sha" origin "refs/rebased/$number:refs/heads/$branch"; then

@@ -19,6 +19,12 @@ on:
     types: [completed]
     branches: ["build/issue-*"]
 
+# Every step runs as bash --noprofile --norc -eo pipefail {0}, which GitHub uses only when the
+# shell is named, so a command that fails in a pipe fails its step, as in the rehearsals.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   # Decides, reading only GitHub, what this CI run means for its issue. It takes no turns in a
   # concurrency group: a stranger's pull request from the same branch starts CI, and so this
