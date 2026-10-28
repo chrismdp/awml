@@ -1012,7 +1012,7 @@ func TestGitAfterASessionCannotBePoisoned(t *testing.T) {
 	}
 
 	patch, _ := readFactoryWorkflow(t, "build.yml").Jobs["draft"].step(t, "patch")
-	for _, poison := range []string{"", "config", "moved .git", "nested .git"} {
+	for _, poison := range []string{"", "config", "moved .git", "nested .git", "nested .git in node_modules"} {
 		r := newRehearsal(t)
 		repo, _ := r.newRepo("repo", map[string]string{"recipes.md": "Bread\n", ".gitattributes": "*.md diff=bake filter=bake\n"})
 		r.write("baseline/git-config", readText(t, filepath.Join(repo, ".git/config")))
@@ -1034,8 +1034,11 @@ func TestGitAfterASessionCannotBePoisoned(t *testing.T) {
 			if out, err := exec.Command("cp", "-a", filepath.Join(r.root, "old.git"), filepath.Join(repo, ".git")).CombinedOutput(); err != nil {
 				t.Fatalf("%v: %s", err, out)
 			}
-		case "nested .git":
+		case "nested .git", "nested .git in node_modules":
 			inner := filepath.Join(repo, "examples", "inner")
+			if poison == "nested .git in node_modules" {
+				inner = filepath.Join(repo, "node_modules", "pkg")
+			}
 			gitIn(t, r.root, "init", "-q", inner)
 			r.write(filepath.Join(inner, "notes.md"), "Inner\n")
 			gitIn(t, inner, "add", "-A")

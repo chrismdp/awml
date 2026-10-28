@@ -676,3 +676,16 @@ func numberedLines(prefix string, count int) string {
 	}
 	return result.String()
 }
+
+// A gitlink pins another repository's commit in the tree, whose contents no diff here shows, so a
+// new or changed one always needs review.
+func TestEvaluateGitlinks(t *testing.T) {
+	repo := newRepo(t)
+	runGit(t, repo, "update-index", "--add", "--cacheinfo", "160000,"+strings.Repeat("ab", 20)+",vendor/lib")
+
+	got, err := evaluate(repo, config{MaxChangedLines: 400}, inputs{Classify: "ship"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertVerdict(t, got, "ask", "`vendor/lib` pins another repository's commit, so it always needs review.")
+}

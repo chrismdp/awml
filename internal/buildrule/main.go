@@ -27,6 +27,7 @@ const maxBinaryBytes = 1 << 20
 // A symbolic link's mode in git, and the mode git gives a path the change deletes.
 const (
 	symbolicLink = "120000"
+	gitlink      = "160000"
 	noFile       = "000000"
 )
 
@@ -218,6 +219,14 @@ func evaluate(repoDir string, cfg config, in inputs) (verdict, error) {
 	for _, path := range paths {
 		if modes[path].after == symbolicLink {
 			ask(fmt.Sprintf("%s is a symbolic link, so it always needs review.", shown(path)))
+		}
+	}
+
+	// A gitlink pins another repository's commit, whose contents no diff here shows, so a new or
+	// changed one always needs review.
+	for _, path := range paths {
+		if modes[path].after == gitlink {
+			ask(fmt.Sprintf("%s pins another repository's commit, so it always needs review.", shown(path)))
 		}
 	}
 
