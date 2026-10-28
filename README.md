@@ -524,7 +524,7 @@ Workflows hand work on through a context one writes and another reads, and may s
 
 <img src="examples/family-map.svg" alt="The family's dinners, shopping, bills check, pickups and question, drawn together">
 
-`awml` never reaches the network: it follows `owner/slug#id` to a file given at a path ending `owner/slug.yaml`, where `awml pull owner/slug -o owner` puts it.
+`awml` never reaches the network: it follows `owner/slug#id` to a file given at a path ending `owner/slug.yaml`, where `awml pull owner/slug -o owner` puts it, and reports the `ref` as a mistake where more than one file given is at such a path.
 
 ### Writing a file
 

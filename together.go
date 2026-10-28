@@ -85,7 +85,20 @@ func link(workflows []Workflow) linked {
 			if !ok || !refKinds[str(p, "kind")] {
 				continue
 			}
-			t := refersTo(workflows, w, workflow)
+			could := refersTo(workflows, w, workflow)
+			if len(could) > 1 {
+				var files []string
+				for _, c := range could {
+					files = append(files, workflows[c].File)
+				}
+				sort.Strings(files)
+				l.found[i].add("refs.known", fmt.Sprintf(`part "%s" refers to %s#%s, but %s are each at a path ending %s.yaml: give only the one it means`, str(p, "id"), workflow, id, naturalList(files), workflow))
+				continue
+			}
+			t := -1
+			if len(could) == 1 {
+				t = could[0]
+			}
 			if t == i {
 				l.found[i].add("refs.owner", fmt.Sprintf(`part "%s" refers to %s#%s, which is in its own workflow: a ref names a part of another workflow`, str(p, "id"), workflow, id))
 				continue

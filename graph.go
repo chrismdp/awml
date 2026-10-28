@@ -284,8 +284,8 @@ func publishedNames(workflows []Workflow) []string {
 			if !ok || strings.HasSuffix(name, ".yaml") {
 				continue
 			}
-			if t := refersTo(workflows, workflow, name); t >= 0 && t != w && names[t] == "" {
-				names[t] = name
+			if t := refersTo(workflows, workflow, name); len(t) == 1 && t[0] != w && names[t[0]] == "" {
+				names[t[0]] = name
 			}
 		}
 	}
