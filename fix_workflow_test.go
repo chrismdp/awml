@@ -47,9 +47,10 @@ func fixReRun(answers, test, review string) string {
 // It counts its tries from the fix commits on the branch, and gives up at two. Someone's push since
 // the review means it exits quietly.
 func TestFixActsOnlyWhenTheTestsPassedAndAReviewFailed(t *testing.T) {
-	fix := readFactoryWorkflow(t, "fix.yml").Jobs["fix"]
-	onlyReads(t, "fix.yml", "fix", fix)
-	tries, _ := fix.step(t, "tries")
+	fixer := readFactoryWorkflow(t, "fix.yml")
+	onlyReads(t, "fix.yml", "decide", fixer.Jobs["decide"])
+	onlyReads(t, "fix.yml", "fix", fixer.Jobs["fix"])
+	tries, _ := fixer.Jobs["decide"].step(t, "tries")
 	head := strings.Repeat("ab", 20)
 	important := `[{"annotation_level": "failure", "title": "Important: A wrong answer", "path": "fit.go", "start_line": 42, "message": "It drops a part."}]`
 	tests := []struct {
@@ -103,7 +104,7 @@ func TestFixActsOnlyWhenTheTestsPassedAndAReviewFailed(t *testing.T) {
 func TestTheFixCommitCarriesTheLineItsTriesAreCountedBy(t *testing.T) {
 	write := readFactoryWorkflow(t, "fix.yml").Jobs["write"]
 	push, _ := write.step(t, "push")
-	tries, _ := readFactoryWorkflow(t, "fix.yml").Jobs["fix"].step(t, "tries")
+	tries, _ := readFactoryWorkflow(t, "fix.yml").Jobs["decide"].step(t, "tries")
 	const line = "Fixed-by: fix-review-findings"
 	if !strings.Contains(readText(t, "internal/buildrule/main.go"), `const fixLine = "`+line+`"`) {
 		t.Errorf("the build rule doesn't count fix commits by %q", line)
@@ -269,9 +270,11 @@ func TestTheFixerIsToldWhenFindingsMayBeMissing(t *testing.T) {
 			all = append(all, finding("bug", "Nit"))
 		}
 		r.write("checks/findings.json", "["+strings.Join(append(all, c.other), ", ")+"]")
+		// The step reads the checks again, which the stand-in leaves as written here.
+		r.write("read-findings.sh", "#!/bin/bash\n")
 		r.write("fix/in/.keep", "")
 		t.Cleanup(func() { exec.Command("chmod", "-R", "u+w", filepath.Join(r.temp, "fix")).Run() })
-		r.run(bring, map[string]string{"PR_NUMBER": "8", "HEAD_SHA": strings.Repeat("ab", 20)}, `
+		r.run(bring, map[string]string{"PR_NUMBER": "8", "HEAD_SHA": strings.Repeat("ab", 20), "CI_RUN": "77"}, `
   "api repos/owner/repo/compare/"*) answer <<< 'diff' ;;
   "api --paginate repos/owner/repo/pulls/8/commits"*) answer <<< '[{"sha": "abc", "commit": {"message": "A commit"}}]' ;;`)
 		r.mustPass()

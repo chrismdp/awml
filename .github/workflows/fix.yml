@@ -23,57 +23,46 @@ on:
     workflows: [CI]
     types: [completed]
 
-# One fix at a time on a branch.
-concurrency:
-  group: fix-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
-  cancel-in-progress: false
-
 jobs:
-  fix:
-    # A first sift on the event's text. The decide step reads the run back from the API before it
+  # Decides, reading only GitHub, whether CI's run is one the fixer acts on, and on which pull
+  # request. It takes no turns in a concurrency group: a stranger's pull request from the same
+  # branch starts CI, and so this workflow, too, and GitHub keeps only one run waiting in a group,
+  # so a newer one would displace the real one's. A stranger's run leaves here, quietly.
+  decide:
+    # A first sift on the event's text. The tries step reads the run back from the API before it
     # trusts any of it.
     if: >-
       github.event.workflow_run.event == 'pull_request' &&
       github.event.workflow_run.conclusion == 'failure' &&
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 60
-    # The host's own folder: what the host reads after a session, which no session can write, in a
-    # folder under root's /var/lib, so nothing running as the runner's user can rename it away.
-    env:
-      HOST_DIR: /var/lib/awml-host
+    timeout-minutes: 10
     permissions:
       actions: read
       checks: read
       contents: read
       pull-requests: read
     outputs:
-      decision: ${{ steps.patch.outputs.decision || steps.tries.outputs.decision }}
-      reason: ${{ steps.patch.outputs.reason || steps.tries.outputs.reason }}
+      decision: ${{ steps.tries.outputs.decision }}
+      reason: ${{ steps.tries.outputs.reason }}
       pr: ${{ steps.tries.outputs.pr }}
       branch: ${{ steps.tries.outputs.branch }}
       head_sha: ${{ steps.tries.outputs.head_sha }}
-      digest: ${{ steps.pack.outputs.digest }}
-      session: ${{ steps.session.outcome }}
     steps:
-      # Main's script that reads the checks, its prompt, AGENTS.md and REVIEW.md are kept before the
-      # branch is checked out, so a branch can't rewrite what it's asked to do.
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
-      - name: Keep main's script, prompt, AGENTS.md and REVIEW.md
-        run: |
-          mkdir -p "$RUNNER_TEMP/fix/in" "$RUNNER_TEMP/fix/out"
-          cp .github/read-findings.sh .github/fix-prompt.md .github/sandbox-settings.sh "$RUNNER_TEMP/"
-          cp AGENTS.md REVIEW.md "$RUNNER_TEMP/fix/in/"
+      - name: Keep main's script that reads the checks
+        run: cp .github/read-findings.sh "$RUNNER_TEMP/"
 
       # Only a pull request CI reviews is fixed: one into main from a branch of this repository,
       # opened by someone with write access to this repository, or the build's app, by GitHub's
-      # record of who opened it. It acts only when both test jobs passed and a review failed: when a test failed
-      # too, the tests own the run, and retry-a-build acts. Someone has pushed since the review when
-      # the pull request's head isn't the commit CI ran on, and then it exits quietly. Its tries
-      # are the fix commits on the branch, known by the line each one's message carries. It passes
-      # on only the reviewed commit's sha, the pull request's number and branch, and a decision.
+      # record of who opened it. It acts only when both test jobs passed and a review failed: when a
+      # test failed too, the tests own the run, and retry-a-build acts. Someone has pushed since the
+      # review when the pull request's head isn't the commit CI ran on, and then it exits quietly.
+      # Its tries are the fix commits on the branch, known by the line each one's message carries.
+      # It passes on only the reviewed commit's sha, the pull request's number and branch, and a
+      # decision.
       - name: "Sort by GitHub's record: is the pull request open, its head still the reviewed commit, and how many fix commits does the branch carry?"
         id: tries
         env:
@@ -170,17 +159,53 @@ jobs:
           fi
           echo "decision=fix" >> "$GITHUB_OUTPUT"
 
+  # Fixes the pull request the decide job chose, one fix at a time on it, never cancelled.
+  fix:
+    needs: decide
+    if: needs.decide.outputs.decision == 'fix'
+    concurrency:
+      group: fix-session-${{ needs.decide.outputs.pr }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # The host's own folder: what the host reads after a session, which no session can write, in a
+    # folder under root's /var/lib, so nothing running as the runner's user can rename it away.
+    env:
+      HOST_DIR: /var/lib/awml-host
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+      pull-requests: read
+    outputs:
+      decision: ${{ steps.patch.outputs.decision }}
+      reason: ${{ steps.patch.outputs.reason }}
+      digest: ${{ steps.pack.outputs.digest }}
+      session: ${{ steps.session.outcome }}
+    steps:
+      # Main's script that reads the checks, its prompt, AGENTS.md and REVIEW.md are kept before the
+      # branch is checked out, so a branch can't rewrite what it's asked to do.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - name: Keep main's script, prompt, AGENTS.md and REVIEW.md
+        run: |
+          mkdir -p "$RUNNER_TEMP/fix/in" "$RUNNER_TEMP/fix/out"
+          cp .github/read-findings.sh .github/fix-prompt.md .github/sandbox-settings.sh "$RUNNER_TEMP/"
+          cp AGENTS.md REVIEW.md "$RUNNER_TEMP/fix/in/"
+
       # The findings, as both reviews' checks carry them, the patch, GitHub's diff of the reviewed
       # commit against main, and the commits, one line each, go to the session as read-only files.
       - name: Bring in both reviews' findings and the patch, as read-only files for the session
         id: bring
-        if: steps.tries.outputs.decision == 'fix'
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ steps.tries.outputs.pr }}
-          HEAD_SHA: ${{ steps.tries.outputs.head_sha }}
+          PR_NUMBER: ${{ needs.decide.outputs.pr }}
+          HEAD_SHA: ${{ needs.decide.outputs.head_sha }}
+          CI_RUN: ${{ github.event.workflow_run.id }}
         run: |
           in="$RUNNER_TEMP/fix/in"
+          bash "$RUNNER_TEMP/read-findings.sh" "$CI_RUN" "$RUNNER_TEMP/checks"
           jq -r '["Important", "Nit", "Pre-existing"][] as $rank | .[] | select(.severity == $rank)
             | "- **\(.severity)**, from the \(.review) review, in `\(.file)\(if .line > 0 then ":\(.line)" else "" end)`: \(.title) \(.detail)"' \
             "$RUNNER_TEMP/checks/findings.json" > "$in/findings.md"
@@ -196,19 +221,16 @@ jobs:
           chmod -R a-w "$in"
 
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-        if: steps.tries.outputs.decision == 'fix'
         with:
-          ref: ${{ steps.tries.outputs.head_sha }}
+          ref: ${{ needs.decide.outputs.head_sha }}
           fetch-depth: 0
           persist-credentials: false
       # The session runs the pull request's code, so Go's cache is neither saved nor restored.
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
-        if: steps.tries.outputs.decision == 'fix'
         with:
           go-version: stable
           cache: false
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
-        if: steps.tries.outputs.decision == 'fix'
         with:
           node-version: 22
           package-manager-cache: false
@@ -223,7 +245,6 @@ jobs:
       # prompt says.
       - name: Fill the session's Go module and npm caches, by fetching alone
         id: caches
-        if: steps.tries.outputs.decision == 'fix'
         run: |
           home="$RUNNER_TEMP/session/home"
           mkdir -p "$home"
@@ -236,7 +257,6 @@ jobs:
       # check bubblewrap works before Claude starts. Installing Claude Code runs nothing from the
       # change.
       - name: Install Claude Code and bubblewrap
-        if: steps.tries.outputs.decision == 'fix'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y bubblewrap socat
@@ -267,7 +287,6 @@ jobs:
       # write the step's own script, "$0", so nothing a command writes there runs after the session.
       - name: Fix every finding of both reviews, Important ones and Nits, test first
         id: session
-        if: steps.tries.outputs.decision == 'fix'
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
@@ -309,9 +328,8 @@ jobs:
       # global or system config, no hooks, no fsmonitor, no external diff and no textconv.
       - name: Make the patch
         id: patch
-        if: steps.tries.outputs.decision == 'fix'
         env:
-          HEAD_SHA: ${{ steps.tries.outputs.head_sha }}
+          HEAD_SHA: ${{ needs.decide.outputs.head_sha }}
         run: |
           git() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 command git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c diff.external= "$@"; }
           if ! cmp -s .git/config "$HOST_DIR/baseline/git-config" || [ -e .git/config.worktree ]; then
@@ -351,7 +369,6 @@ jobs:
       # output, which the write job checks the artifact against.
       - name: Keep the fix, with its digest, if it carries no login token
         id: pack
-        if: steps.tries.outputs.decision == 'fix'
         run: |
           fix="$HOST_DIR/fix"
           looks_like_token() {
@@ -388,24 +405,27 @@ jobs:
   # reviewed commit and applies the fix there, then runs only git, with no hooks, and gh, so it runs
   # nothing from the change.
   write:
-    needs: fix
-    if: ${{ !cancelled() && (needs.fix.outputs.decision == 'fix' || needs.fix.outputs.decision == 'giveup') }}
+    needs: [decide, fix]
+    if: ${{ !cancelled() && (needs.decide.outputs.decision == 'fix' || needs.decide.outputs.decision == 'giveup') }}
+    concurrency:
+      group: fix-push-${{ needs.decide.outputs.pr }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
       pull-requests: write
     env:
-      DECISION: ${{ needs.fix.outputs.decision }}
+      DECISION: ${{ needs.fix.outputs.decision || needs.decide.outputs.decision }}
       FIXED: ${{ needs.fix.result }}
-      PR_NUMBER: ${{ needs.fix.outputs.pr }}
-      BRANCH: ${{ needs.fix.outputs.branch }}
-      HEAD_SHA: ${{ needs.fix.outputs.head_sha }}
+      PR_NUMBER: ${{ needs.decide.outputs.pr }}
+      BRANCH: ${{ needs.decide.outputs.branch }}
+      HEAD_SHA: ${{ needs.decide.outputs.head_sha }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         if: env.DECISION == 'fix' && env.FIXED == 'success'
         with:
-          ref: ${{ needs.fix.outputs.head_sha }}
+          ref: ${{ needs.decide.outputs.head_sha }}
           persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         if: env.DECISION == 'fix' && env.FIXED == 'success'
@@ -421,7 +441,7 @@ jobs:
         id: guard
         env:
           CHANGE_DIGEST: ${{ needs.fix.outputs.digest }}
-          STOPPED: ${{ needs.fix.outputs.reason }}
+          STOPPED: ${{ needs.fix.outputs.reason || needs.decide.outputs.reason }}
           SESSION: ${{ needs.fix.outputs.session }}
         run: |
           stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"

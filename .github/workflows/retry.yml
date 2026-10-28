@@ -18,11 +18,11 @@ on:
     types: [completed]
     branches: ["build/issue-*"]
 
-concurrency:
-  group: retry-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
-  cancel-in-progress: false
-
 jobs:
+  # Decides, reading only GitHub, what this CI run means for its issue. It takes no turns in a
+  # concurrency group: a stranger's pull request from the same branch starts CI, and so this
+  # workflow, too, and GitHub keeps only one run waiting in a group, so a newer one would displace
+  # the real one's. A stranger's run leaves here, quietly.
   retry:
     # A first sift on the event's text. The tries step reads the run back from the API before it
     # trusts any of it.
@@ -33,10 +33,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      actions: write
+      actions: read
       contents: read
-      issues: write
+      issues: read
       pull-requests: read
+    outputs:
+      decision: ${{ steps.tries.outputs.decision }}
+      issue: ${{ steps.tries.outputs.issue }}
     steps:
       # Only pull_request runs count, which run once per commit, and only from a branch of this
       # repository, since a fork's branch can carry a build's name. The tests own a run where both
@@ -200,12 +203,25 @@ jobs:
             echo "decision=report" >> "$GITHUB_OUTPUT"
           fi
 
+  # Acts on the issue the retry job chose, one run at a time on it, never cancelled.
+  act:
+    needs: retry
+    if: contains(fromJSON('["again", "report", "edited", "takenover"]'), needs.retry.outputs.decision)
+    concurrency:
+      group: retry-issue-${{ needs.retry.outputs.issue }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      issues: write
+    steps:
       - name: Start the build again, with only the issue's number
         id: again
-        if: steps.tries.outputs.decision == 'again'
+        if: needs.retry.outputs.decision == 'again'
         env:
           GH_TOKEN: ${{ github.token }}
-          ISSUE: ${{ steps.tries.outputs.issue }}
+          ISSUE: ${{ needs.retry.outputs.issue }}
         run: |
           case "$ISSUE" in ''|*[!0-9]*) echo "The issue must be a number: $ISSUE"; exit 1 ;; esac
           gh workflow run build.yml --repo "$GITHUB_REPOSITORY" --ref main -f issue="$ISSUE"
@@ -213,11 +229,11 @@ jobs:
       # New comments, from fixed text, since a person must act.
       - name: Say in a new comment that a person must act
         id: report
-        if: contains(fromJSON('["report", "edited", "takenover"]'), steps.tries.outputs.decision)
+        if: contains(fromJSON('["report", "edited", "takenover"]'), needs.retry.outputs.decision)
         env:
           GH_TOKEN: ${{ github.token }}
-          ISSUE: ${{ steps.tries.outputs.issue }}
-          DECISION: ${{ steps.tries.outputs.decision }}
+          ISSUE: ${{ needs.retry.outputs.issue }}
+          DECISION: ${{ needs.retry.outputs.decision }}
           CI_URL: ${{ github.event.workflow_run.html_url }}
         run: |
           case "$ISSUE" in ''|*[!0-9]*) echo "The issue must be a number: $ISSUE"; exit 1 ;; esac

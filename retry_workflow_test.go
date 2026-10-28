@@ -155,7 +155,9 @@ func TestRetryActsWhenTheTestsFailAndCountsTheBuilds(t *testing.T) {
 		}
 	}
 
-	again, _ := job.step(t, "again")
+	act := readFactoryWorkflow(t, "retry.yml").Jobs["act"]
+	onlyReads(t, "retry.yml", "retry", job)
+	again, _ := act.step(t, "again")
 	r := newRehearsal(t)
 	r.run(again, map[string]string{"ISSUE": "120"}, `  "workflow run build.yml"*) ;;`)
 	r.mustPass()
@@ -163,7 +165,7 @@ func TestRetryActsWhenTheTestsFailAndCountsTheBuilds(t *testing.T) {
 		t.Errorf("retry started the build with %q, want only the issue's number", r.calls)
 	}
 
-	report, _ := job.step(t, "report")
+	report, _ := act.step(t, "report")
 	for decision, want := range map[string]string{"report": "failed three times", "edited": "edited or renamed since the build label",
 		"takenover": "A person has taken this build's branch over"} {
 		c := newRehearsal(t)
@@ -174,10 +176,10 @@ func TestRetryActsWhenTheTestsFailAndCountsTheBuilds(t *testing.T) {
 			t.Errorf("retry's %s comment is %q", decision, bodies)
 		}
 	}
-	if len(job.Permissions) != 4 || job.Permissions["actions"] != "write" || job.Permissions["issues"] != "write" {
-		t.Errorf("retry has %v, want to write only actions and issues", job.Permissions)
+	if len(act.Permissions) != 2 || act.Permissions["actions"] != "write" || act.Permissions["issues"] != "write" {
+		t.Errorf("retry's act job has %v, want to write only actions and issues", act.Permissions)
 	}
-	for _, step := range job.Steps {
+	for _, step := range append(append([]workflowStep{}, job.Steps...), act.Steps...) {
 		if step.Uses != "" {
 			t.Errorf("retry uses %s, but checks out nothing and runs only gh", step.Uses)
 		}

@@ -87,9 +87,10 @@ func (j workflowJob) session() int {
 }
 
 type factoryWorkflow struct {
-	RunName string                 `yaml:"run-name"`
-	On      map[string]any         `yaml:"on"`
-	Jobs    map[string]workflowJob `yaml:"jobs"`
+	RunName     string                 `yaml:"run-name"`
+	On          map[string]any         `yaml:"on"`
+	Concurrency any                    `yaml:"concurrency"`
+	Jobs        map[string]workflowJob `yaml:"jobs"`
 }
 
 func readFactoryWorkflow(t *testing.T, name string) factoryWorkflow {
@@ -1229,25 +1230,41 @@ func TestARehearsalRunsAStepUnderPipefail(t *testing.T) {
 	}
 }
 
-// A workflow woken by another's run that takes turns does so per branch of the repository the run
-// came from, so a fork's branch of the same name never queues behind, nor cancels, the real run.
-// land.yml's reading job takes no turns at all. And no workflow
-// trusts a person by how GitHub associates them with the repository, only by their permission.
-func TestEachRunTakesTurnsByItsOwnRepositorysBranch(t *testing.T) {
-	branch := "${{ github.event.workflow_run.head_branch }}"
-	for file, group := range map[string]string{
-		"fix.yml":   "group: fix-${{ github.event.workflow_run.head_repository.full_name }}-" + branch,
-		"retry.yml": "group: retry-${{ github.event.workflow_run.head_repository.full_name }}-" + branch,
-	} {
-		if !strings.Contains(readText(t, ".github/workflows/"+file), group) {
-			t.Errorf("%s doesn't take turns as %s", file, group)
+// A workflow woken by another's run may be woken by a stranger's: a pull request of their own, from
+// the same branch, starts CI too. GitHub keeps only one run waiting in a concurrency group, and a
+// newer one displaces it, so no stranger's run may share a group with a real one. A workflow woken
+// by another's run has no group of its own, nor has the job that decides, which only reads GitHub
+// and leaves quietly when there's nothing to do. A job that works takes turns per pull request or
+// issue, as the deciding job chose it, and is never cancelled. And no workflow trusts a person by
+// how GitHub associates them with the repository, only by their permission.
+func TestNoStrangersRunCanDisplaceARealOne(t *testing.T) {
+	grouped := map[string]string{
+		"fix.yml fix": "fix-session-${{ needs.decide.outputs.pr }}", "fix.yml write": "fix-push-${{ needs.decide.outputs.pr }}",
+		"retry.yml act": "retry-issue-${{ needs.retry.outputs.issue }}", "land.yml land": "land-pull-${{ needs.find.outputs.pr }}",
+	}
+	for _, file := range []string{"fix.yml", "retry.yml", "land.yml"} {
+		workflow := readFactoryWorkflow(t, file)
+		if workflow.Concurrency != nil {
+			t.Errorf("%s takes turns as a whole, where a stranger's run can displace a real one: %v", file, workflow.Concurrency)
+		}
+		for name, job := range workflow.Jobs {
+			want, ok := grouped[file+" "+name]
+			if !ok {
+				if job.Concurrency != nil {
+					t.Errorf("%s's %s takes turns, where a stranger's run can displace a real one: %v", file, name, job.Concurrency)
+				}
+				continue
+			}
+			group, _ := job.Concurrency.(map[string]any)
+			if group["group"] != want || group["cancel-in-progress"] != false || job.Needs == nil {
+				t.Errorf("%s's %s takes turns as %v, want %s, never cancelled, after the job that decides", file, name, job.Concurrency, want)
+			}
 		}
 	}
 	for _, file := range factoryFiles {
 		for at, line := range strings.Split(readText(t, ".github/workflows/"+file), "\n") {
-			if strings.Contains(line, "group:") && strings.Contains(line, "workflow_run.head_branch") &&
-				!strings.Contains(line, "workflow_run.head_repository.full_name") {
-				t.Errorf("%s:%d takes turns by a branch name alone: %s", file, at+1, strings.TrimSpace(line))
+			if strings.Contains(line, "group:") && strings.Contains(line, "workflow_run") {
+				t.Errorf("%s:%d takes turns by what woke it, which a stranger's run shares: %s", file, at+1, strings.TrimSpace(line))
 			}
 			if strings.Contains(line, "authorAssociation") || strings.Contains(line, "author_association") {
 				t.Errorf("%s:%d trusts how GitHub associates a person: %s", file, at+1, strings.TrimSpace(line))

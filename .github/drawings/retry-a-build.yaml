@@ -59,4 +59,7 @@ implementations:
     label: "GitHub Actions, retry.yml"
     blocks:
       - { id: github, label: "GitHub: branches, runs and issues", parts: [testsfailed, token, dispatch, issuenote, editnote, takennote] }
-      - { id: retryjob, label: "Actions job: retry or report, checking out nothing and running only gh", platform: actions-code, parts: [tries, again, report, edited, takenover] }
+      - { id: retryjob, label: "Actions job: decide, reading only GitHub, checking out nothing and running only gh, in no concurrency group", platform: actions-code, parts: [tries] }
+      - { id: actjob, label: "Actions job: retry or report, running only gh, one at a time on the issue decided", platform: actions-code, parts: [again, report, edited, takenover] }
+    comments:
+      - { id: turns, label: "A stranger's pull request from the same branch starts CI, and so retry, too, and GitHub keeps only one run waiting in a concurrency group, so a newer one would displace the real one's. The deciding job takes no turns, and a stranger's run leaves there; the acting job takes turns per issue, never cancelled", in: retryjob, ties: [tries] }

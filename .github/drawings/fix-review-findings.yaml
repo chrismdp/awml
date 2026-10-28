@@ -80,10 +80,12 @@ implementations:
     label: "GitHub Actions, fix.yml"
     blocks:
       - { id: github, label: "GitHub: pull requests, checks and comments", parts: [failed, token, app, checks, branch, standpush, pushed, offered, gaveup, listed] }
-      - { id: fixjob, label: "Actions job: read, decide and fix, with a token that only reads", platform: actions-code, parts: [tries, bring, asked, repo, change] }
+      - { id: decidejob, label: "Actions job: decide, reading only GitHub, with a token that only reads, in no concurrency group", platform: actions-code, parts: [tries] }
+      - { id: fixjob, label: "Actions job: fix, with a token that only reads, one at a time on the pull request decided", platform: actions-code, parts: [bring, asked, repo, change] }
       - { id: agent, label: "Claude Code, claude-opus-5-5, on the maintainer's subscription", platform: actions-agent, in: fixjob, parts: [fix] }
-      - { id: writejob, label: "Actions job: push or comment, running nothing from the change", platform: actions-code, parts: [guard, push, offer, giveup] }
+      - { id: writejob, label: "Actions job: push or comment, running nothing from the change, one at a time on the pull request decided", platform: actions-code, parts: [guard, push, offer, giveup] }
     comments:
+      - { id: turns, label: "A stranger's pull request from the same branch starts CI, and so the fixer, too, and GitHub keeps only one run waiting in a concurrency group, so a newer one would displace the real one's. The decide job takes no turns, and a stranger's run leaves there; the fix and write jobs take turns per pull request, never cancelled", in: decidejob, ties: [tries] }
       - { id: sandbox, label: "The session runs its commands, tests included, only in its sandbox, keeping the login token from them, loading no settings or servers from the tree. The job runs nothing of its own beside the secret (awml #121, #160)", in: agent, ties: [fix] }
       - { id: reads, label: "Read is limited to the workspace and the session's own input folder, with Read(//proc/**) denied, and Edit and Write are denied on .git/**. Git after the session runs with core.hooksPath=/dev/null and core.fsmonitor=false (#160)", in: agent, ties: [fix] }
       - { id: hashed, label: "The fix is an artifact within this run only, because the job split keeps the app's token away from the change's code. The fix job gives its sha256 as an output, the write job checks it, and everything the session wrote is scanned for a token before it's uploaded, pushed or posted. It's uploaded with retention-days: 30, so an offered fix can be downloaded for 30 days (#160 rule 6)", in: writejob, ties: [change] }
