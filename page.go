@@ -6,9 +6,18 @@ import (
 	"unicode/utf16"
 )
 
-// Page writes one standalone HTML page that draws AWML documents with Mermaid in the browser. Each
-// document must have no mistakes.
-func Page(docs []*Map) string {
+// Page writes one standalone HTML page that draws AWML workflows with Mermaid in the browser: their
+// map first, if there are several, then each one's views. Each workflow must have no mistakes but
+// lines that break a rule.
+func Page(given []Workflow) string {
+	var workflows []Workflow
+	var docs []*Map
+	for _, w := range given {
+		if IsCanonical(w.Doc) {
+			workflows = append(workflows, w)
+			docs = append(docs, w.Doc)
+		}
+	}
 	docs = workflowViews(docs)
 	// Two views of one workflow share its title; several workflows each have their own heading.
 	titles := map[string]bool{}
@@ -22,16 +31,22 @@ func Page(docs []*Map) string {
 	out := []string{"<!doctype html>", `<html lang="en">`, `<meta charset="utf-8">`,
 		`<meta name="viewport" content="width=device-width, initial-scale=1">`,
 		"<title>" + name + "</title>", "<style>\n" + style + "\n</style>", "<main>", "<h1>" + name + "</h1>"}
-	sources := make([]string, len(docs))
-	for i, d := range docs {
-		title, view := escape(str(d, "title")), views[str(d, "view")]
-		if label := str(d, "implementationLabel"); label != "" {
-			view += ": " + escape(label)
-		}
+	var sources []string
+	section := func(title, view, drawing string) {
 		out = append(out, "<section>", "<h2>"+title+"</h2>", `<p class="view">`+view+"</p>",
 			fmt.Sprintf(`<div class="panel"><div class="awml" role="img" aria-label="%s, %s"></div></div>`, title, strings.ToLower(view)),
 			"</section>")
-		sources[i] = quote(Draw(d))
+		sources = append(sources, quote(drawing))
+	}
+	if len(workflows) > 1 {
+		section(name, "Map: how the workflows fit together", DrawMap(workflows))
+	}
+	for _, d := range docs {
+		view := views[str(d, "view")]
+		if label := str(d, "implementationLabel"); label != "" {
+			view += ": " + escape(label)
+		}
+		section(escape(str(d, "title")), view, Draw(d))
 	}
 	out = append(out, "</main>")
 	// Inside a script, "<" is the only thing that can end it early, so none is left in the drawings.
