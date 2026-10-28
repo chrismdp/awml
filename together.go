@@ -513,12 +513,14 @@ func (l linked) sharedPart(root partAt) *Map {
 // reaches the action that way within it.
 func (l linked) reportedAlone(source, action partAt) bool {
 	doc := l.workflows[action.workflow].Doc
+	parts := items(doc, "parts")
+	byID := partsOf(parts)
 	for _, c := range l.copiesOf(source) {
 		if c.workflow != action.workflow || c.part.get("untrusted") != true {
 			continue
 		}
-		for _, line := range follow(c.part, items(doc, "parts"), items(doc, "lines")).breaches {
-			if line.get("to") == action.part.get("id") {
+		for _, line := range follow(c.part, parts, items(doc, "lines")).breaches {
+			if byID[keyOf(line.get("to"))] == action.part {
 				return true
 			}
 		}

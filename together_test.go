@@ -639,3 +639,18 @@ func TestFitOfOneWorkflowIsAsBefore(t *testing.T) {
 		t.Errorf("JudgeTogether gave %+v\nwant %+v", got, want)
 	}
 }
+
+// A file can hold an id YAML reads as a list, which is a mistake of its own, and the check still
+// follows untrusted text across the workflows given without failing on it.
+func TestUntrustedTextAcrossWorkflowsSurvivesAnIDThatIsAList(t *testing.T) {
+	plan := strings.Replace(planWorkflow, "  - { id: thu,", "  - { id: odd, kind: trigger, label: The order form, untrusted: true }\n  - { id: [x], kind: outside, label: \"Send it: Allow\", in: family }\n  - { id: thu,", 1)
+	plan = strings.Replace(plan, "lines:\n", "lines:\n  - { from: odd, to: [x], kind: start }\n", 1)
+	workflows := []Workflow{
+		{File: "plan.yaml", Doc: parsed(t, plan)},
+		{File: "shop.yaml", Doc: parsed(t, shopWorkflow)},
+	}
+	if len(Check(workflows[0].Doc)) == 0 {
+		t.Fatal("the plan's list id isn't a mistake of its own")
+	}
+	TogetherMistakes(workflows)
+}
