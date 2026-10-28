@@ -19,7 +19,7 @@ func fixAnswers(tests, review, pullUser, pullSha string, fixCommits int, annotat
 	}
 	commits := []string{`{"sha": "1", "commit": {"message": "Add scones"}}`}
 	for i := 0; i < fixCommits; i++ {
-		commits = append(commits, `{"sha": "2", "commit": {"message": "Fix\n\nFixed-by: fix-review-findings"}}`)
+		commits = append(commits, `{"sha": "2", "commit": {"message": "Fix\n\nFixed-by: fix-review-findings\nFixed-by: fix-review-findings"}}`)
 	}
 	return `
   "api repos/owner/repo/actions/runs/77"*) answer <<< '{"path": ".github/workflows/ci.yml", "event": "pull_request", "status": "completed",

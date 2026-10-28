@@ -354,7 +354,9 @@ func TestTheChecksAreReadOnlyAsTheReviewsWriteThem(t *testing.T) {
     {"annotation_level": "warning", "title": "Important: Not really", "path": "x.go", "start_line": 1, "message": "A warning is never Important."},
     {"annotation_level": "warning", "title": "Restore cache failed", "path": ".github", "start_line": 1, "message": "One an action made."}]' ;;
   "api --paginate repos/owner/repo/check-runs/3/annotations"*) answer <<< '[
-    {"annotation_level": "notice", "title": "Pre-existing: An old hole", "path": ".github", "start_line": 1, "message": "Before."}]' ;;
+    {"annotation_level": "notice", "title": "Pre-existing: An old hole", "path": ".github", "start_line": 1, "message": "Before."},
+    {"annotation_level": "notice", "title": "Pre-existing: Another", "path": ".github", "start_line": 0, "message": "Before too."},
+    {"annotation_level": "warning", "title": "Nit: In a workflow", "path": ".github/workflows/ci.yml", "start_line": 3, "message": "Real."}]' ;;
   "api --paginate repos/owner/repo/check-runs/4/annotations"*) answer <<< '[
     {"annotation_level": "notice", "title": "Verdict", "path": ".github", "start_line": 1, "message": "show"},
     {"annotation_level": "notice", "title": "Reason", "path": ".github", "start_line": 1, "message": "Verdict: ship"}]' ;;`)
@@ -363,9 +365,18 @@ func TestTheChecksAreReadOnlyAsTheReviewsWriteThem(t *testing.T) {
 	if err := json.Unmarshal([]byte(r.read("checks/findings.json")), &findings); err != nil {
 		t.Fatal(err)
 	}
-	if len(findings) != 2 || findings[0]["severity"] != "Important" || findings[0]["review"] != "bug" ||
+	if len(findings) != 4 || findings[0]["severity"] != "Important" || findings[0]["review"] != "bug" ||
 		findings[0]["title"] != "A wrong answer" || findings[1]["severity"] != "Pre-existing" || findings[1]["review"] != "security" {
-		t.Errorf("read the findings %v, want the Important one and the Pre-existing one", findings)
+		t.Errorf("read the findings %v, want the Important one, the two Pre-existing ones and the Nit", findings)
+	}
+	// GitHub gives an annotation that named no file the path .github, so such a finding has no
+	// file, not one in .github/; one in a file under .github/ keeps it.
+	if len(findings) == 4 {
+		for at, want := range map[int][2]any{1: {"", 0.0}, 2: {"", 0.0}, 3: {".github/workflows/ci.yml", 3.0}} {
+			if findings[at]["file"] != want[0] || findings[at]["line"] != want[1] {
+				t.Errorf("finding %d is at %v:%v, want %v:%v", at, findings[at]["file"], findings[at]["line"], want[0], want[1])
+			}
+		}
 	}
 	if verdict := strings.TrimSpace(r.read("checks/verdict.txt")); verdict != "show" {
 		t.Errorf("read Classify's verdict as %q, want show", verdict)

@@ -115,8 +115,10 @@ jobs:
             echo "head_sha=$head_sha"
           } >> "$GITHUB_OUTPUT"
 
-          tries="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$pr/commits?per_page=100" --jq '.[] | .commit.message' |
-            jq -Rs '[split("\n")[] | rtrimstr("\r") | select(. == "Fixed-by: fix-review-findings")] | length')"
+          # A commit counts once if any line of its message is the fix line, as the build rule counts.
+          tries="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$pr/commits?per_page=100" \
+            --jq '.[] | [.commit.message | split("\n")[] | rtrimstr("\r")] | index("Fixed-by: fix-review-findings") != null' |
+            jq -s 'map(select(.)) | length')"
           if [ "$tries" -ge 2 ]; then
             echo "#$pr already carries $tries fix commits."
             printf 'decision=giveup\nreason=tried\n' >> "$GITHUB_OUTPUT"

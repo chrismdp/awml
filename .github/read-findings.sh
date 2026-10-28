@@ -4,6 +4,7 @@
 # from main's copy. The checks carry text from sessions that read a pull request's patch, so it's
 # data: a finding counts only if its annotation's level and the start of its title agree on its
 # rank, as the review job writes them, and Classify's verdict only if it's one of three words.
+# GitHub gives an annotation that named no file the path .github, so such a finding has no file.
 #
 # Usage: read-findings.sh RUN DIR, where RUN is the CI run's id. It writes DIR/findings.json, a list
 # of the findings of the run's Bug review and Security review, each with its review, severity, file,
@@ -36,7 +37,8 @@ while IFS=$'\t' read -r name id; do
     jq --arg review "$review" --slurpfile all "$dir/findings.json" '$all[0] + [.[]
       | {failure: "Important", warning: "Nit", notice: "Pre-existing"}[.annotation_level] as $rank
       | select($rank != null and ((.title // "") | startswith($rank + ": ")))
-      | {review: $review, severity: $rank, file: (.path // ""), line: (.start_line // 0),
+      | (if (.path // "") == ".github" then {file: "", line: 0} else {file: (.path // ""), line: (.start_line // 0)} end) as $at
+      | {review: $review, severity: $rank, file: $at.file, line: $at.line,
          title: (.title | ltrimstr($rank + ": ")), detail: (.message // "")}]' > "$dir/merged.json"
   mv "$dir/merged.json" "$dir/findings.json"
 done < <(jq -r '.[] | [.name, .id] | @tsv' "$dir/jobs.json")

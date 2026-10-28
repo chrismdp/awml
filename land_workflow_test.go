@@ -2,6 +2,7 @@ package awml
 
 import (
 	"encoding/json"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -113,6 +114,14 @@ func TestLandExitsQuietlyUnlessEveryCheckPassedOnTheHead(t *testing.T) {
 // main's rule built from this repository.
 func rehearseJudge(t *testing.T, commits []struct{ author, message string }, annotations, verdict string, classifyPassed ...string) *rehearsal {
 	t.Helper()
+	return rehearseJudgeWith(t, nil, nil, commits, annotations, verdict, classifyPassed...)
+}
+
+// rehearseJudgeWith rehearses the judge step as rehearseJudge does, with main starting from the
+// files given and moved on by mainMoves, if it's given, once the branch has been made.
+func rehearseJudgeWith(t *testing.T, files map[string]string, mainMoves func(origin string), commits []struct{ author, message string },
+	annotations, verdict string, classifyPassed ...string) *rehearsal {
+	t.Helper()
 	find := readFactoryWorkflow(t, "land.yml").Jobs["find"]
 	step, _ := find.step(t, "judge")
 	r := newRehearsal(t)
@@ -122,7 +131,11 @@ func rehearseJudge(t *testing.T, commits []struct{ author, message string }, ann
 	}
 	r.write("build-rules.yml", readText(t, ".github/build-rules.yml"))
 	r.write("read-findings.sh", readText(t, ".github/read-findings.sh"))
-	origin, _ := r.newRepo("origin", map[string]string{"recipes.md": "Bread\n"})
+	main := map[string]string{"recipes.md": "Bread\n"}
+	for file, text := range files {
+		main[file] = text
+	}
+	origin, _ := r.newRepo("origin", main)
 	gitIn(t, origin, "switch", "-q", "-c", "build/issue-120")
 	for at, c := range commits {
 		r.write(filepath.Join(origin, "recipes.md"), "Bread\n"+strings.Repeat("Scones\n", at+1))
@@ -131,6 +144,9 @@ func rehearseJudge(t *testing.T, commits []struct{ author, message string }, ann
 	}
 	head := gitIn(t, origin, "rev-parse", "HEAD")
 	gitIn(t, origin, "switch", "-q", "main")
+	if mainMoves != nil {
+		mainMoves(origin)
+	}
 	work := filepath.Join(r.root, "work")
 	gitIn(t, r.root, "clone", "-q", "--branch", "main", origin, work)
 	r.dir = work
@@ -331,5 +347,27 @@ func TestLandAsksWhenClassifyEndedBadly(t *testing.T) {
 		`{"annotation_level": "notice", "title": "Verdict", "message": "ship"}`, "false")
 	if judged.outputs["outcome"] != "ask" || !strings.Contains(judged.outputs["reasons"], "Classify gave no verdict") {
 		t.Errorf("a Classify that didn't pass, with a ship notice, judged %s for %s, want ask", judged.outputs["outcome"], judged.outputs["reasons"])
+	}
+}
+
+// A pull request's checks come from its branch's own ci.yml, which can be older than main's, so a
+// branch whose ci.yml isn't main's is asked about: its checks may not be the ones main would run.
+func TestLandAsksWhenTheBranchsCIIsntMains(t *testing.T) {
+	const app = "41+awml-factory[bot]@users.noreply.github.com"
+	ship := `{"annotation_level": "notice", "title": "Verdict", "message": "ship"}`
+	commits := []struct{ author, message string }{{app, "Add scones"}}
+	ci := map[string]string{".github/workflows/ci.yml": "name: CI\n"}
+	same := rehearseJudgeWith(t, ci, nil, commits, "[]", ship)
+	if same.outputs["outcome"] != "ship" {
+		t.Errorf("a branch with main's ci.yml judged %s for %s, want ship", same.outputs["outcome"], same.outputs["reasons"])
+	}
+	moved := rehearseJudgeWith(t, ci, func(origin string) {
+		if err := os.WriteFile(filepath.Join(origin, ".github/workflows/ci.yml"), []byte("name: CI\n# A newer check\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		gitIn(t, origin, "commit", "-qam", "Main's CI changes")
+	}, commits, "[]", ship)
+	if moved.outputs["outcome"] != "ask" || !strings.Contains(moved.outputs["reasons"], "This branch's CI is older than main's, so its checks may not be main's.") {
+		t.Errorf("a branch whose ci.yml is older than main's judged %s for %s, want ask", moved.outputs["outcome"], moved.outputs["reasons"])
 	}
 }
