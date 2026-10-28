@@ -1,0 +1,92 @@
+# A pull request that conflicts with main is rebased onto it. The repository is public, so
+# everything sits in one scope: anyone may read the pull requests and their branches. What matters
+# is who may act. Only branches in the repository itself, opened by its own people or by the build
+# workflow, are touched. A plain git rebase comes first, and a clean one is pushed straight away.
+# Only a real conflict starts a Claude session, which resolves it with a read-only token and hands
+# back the rebased branch. The app replaces the branch only if nobody has pushed to it meanwhile, and runs no checks of its
+# own: its push starts CI, which judges the rebased commit as it judges every push. When it ends, one
+# comment on the pull request says what was resolved, or why it couldn't be.
+#
+# The actions implementation runs it on GitHub Actions. Finding the conflicting pull requests runs
+# in one job, with the plain git rebase, and Claude resolves a conflict in a second. The push and the comment run in a third job on a fresh
+# runner, which shares none of the second's access and runs nothing from the branch.
+awml: "0.8"
+title: A pull request that conflicts with main is rebased onto it
+description: |
+  The factory's rebase: when main moves, each of its own people's pull requests that now conflicts
+  is rebased by git, or by a Claude session where git finds a real conflict, and pushed by the app.
+  CI judges the result.
+scopes:
+  - { id: public, label: "public: anyone who reads the repository", processing: any }
+parts:
+  - { id: landed, kind: trigger, label: "A commit lands on main", wait: PT1H }
+  - { id: token, kind: connector, label: "The repository, through its own Actions token", in: public, ref: issue-to-pull-request.yaml#token }
+  - { id: app, kind: connector, label: "The repository, through its own GitHub App", in: public, ref: issue-to-pull-request.yaml#app }
+  - { id: find, kind: code, op: bring-in, label: "Bring in the open pull requests that GitHub flags as conflicting with main", in: public }
+  - { id: whose, kind: code, op: sort, label: "Sort by rule: is the branch in this repository, opened by its own people or the build workflow?", in: public }
+  - { id: repo, kind: context, label: "The branch's commits and main, from git", in: public, untrusted: true }
+  - { id: plain, kind: code, op: other, label: "Rebase the branch onto main with git alone, hooks and fsmonitor off, running nothing from the branch", in: public }
+  - { id: prompt, kind: context, label: "Main's rebase prompt and AGENTS.md, copied out before the session starts", in: public }
+  - { id: rebase, kind: ai, op: draft, label: "Resolve the rebase's conflicts, keeping both sides of each", in: public }
+  - { id: bundle, kind: context, label: "The rebased branch, as a bundle", in: public }
+  - { id: guard, kind: code, op: sort, label: "Sort by git alone, running nothing from the branch: does it sit on main, with no conflict markers and no change to .github/ or Claude Code's own files?", in: public }
+  - { id: push, kind: code, op: do, label: "Force-push the rebased branch with --force-with-lease at the commit the find step saw", in: public }
+  - { id: standing, kind: approval, label: "The maintainer's standing approval: one force push of a rebase onto main to each of its own people's conflicting branches, a push to main, accepted by the maintainer in #160, under rule 4", in: public }
+  - { id: replace, kind: outside, label: "Replace the pull request's branch: Ask", in: public }
+  - { id: tell, kind: code, op: do, cleans: true, label: "Once it ends, post one new comment: fixed text saying it was pushed, with links to the old and new commits, or why it couldn't be, with Claude's note escaped: < escaped, mentions broken, length capped", in: public }
+  - { id: thread, kind: surface, label: "The pull request's commits and thread, where each push is listed", in: public }
+  - { id: told, kind: outside, label: "Comment on the pull request: Allow", in: public }
+  - { id: strangers, kind: comment, label: "A fork's pull request, or one opened by a stranger, is never touched, so every commit Claude reads was pushed by the repository's own people. Their text can still steer the session, and what it reaches is one push to their own branch, which CI then judges" }
+  - { id: nojudge, kind: comment, label: "It pushes and doesn't judge: the check job is gone, and CI runs on the pushed commit. A bad push costs a CI run (#160 rule 4)" }
+  - { id: quick, kind: comment, label: "Decided by the maintainer: as quick as possible. A clean git rebase is pushed with no Claude session; Claude starts only on a real conflict. CI's reviews still run on the pushed commit, since a resolution is new code" }
+  - { id: gitonly, kind: comment, label: "Decided in #160's follow-up: the check job goes, but its cheap git-only guards stay in the push job, since they run none of the branch's code and catch a session that pushed something other than a rebase" }
+  - { id: held, kind: comment, label: "The draft step's token can only read, so it can't push. The push names the commit the find step saw, so GitHub refuses it if anyone pushed meanwhile (awml #26)" }
+  - { id: undo, kind: comment, label: "The branch's commits can steer the session, so the push goes under a standing approval. It can be undone: the old commit stays on GitHub and the comment names it, so the branch can be put back with one push" }
+  - { id: onecomment, kind: comment, label: "One comment, when it ends, which notifies. Every comment is an outside action, so Claude's text in it is escaped, and the rest is fixed text with links. No status comment edited along the way and no marker for a later run to find (#160 rule 5)" }
+  - { id: ci, kind: comment, label: "GitHub starts CI from the app's push, though not from one by the Actions token, so CI runs on the rebased branch and shows on the pull request. The app's key is a secret only the push step is given" }
+lines:
+  - { from: landed, to: find, kind: start, label: "the push" }
+  - { from: token, to: find, kind: data, label: "open pull requests and GitHub's conflict flag" }
+  - { from: find, to: whose, kind: start, label: "[for each that conflicts]" }
+  - { from: whose, to: plain, kind: start, label: "[the repository's own]" }
+  - { from: repo, to: plain, kind: data }
+  - { from: plain, to: bundle, kind: data, label: "[clean]" }
+  - { from: plain, to: guard, kind: start, label: "[clean]" }
+  - { from: plain, to: rebase, kind: start, label: "[a real conflict]" }
+  - { from: repo, to: rebase, kind: data }
+  - { from: prompt, to: rebase, kind: data }
+  - { from: rebase, to: bundle, kind: data }
+  - { from: rebase, to: guard, kind: start, label: "the rebased branch" }
+  - { from: bundle, to: guard, kind: data }
+  - { from: guard, to: push, kind: start, label: "[a clean rebase]" }
+  - { from: bundle, to: push, kind: data }
+  - { from: push, to: standing, kind: start }
+  - { from: standing, to: replace, kind: data, label: "[within limits]" }
+  - { from: standing, to: thread, kind: data, label: "each push, as made" }
+  - { from: replace, to: app, kind: data }
+  - { from: push, to: tell, kind: start, label: "[pushed or refused]" }
+  - { from: guard, to: tell, kind: start, label: "[not a clean rebase]" }
+  - { from: rebase, to: tell, kind: start, label: "[gave up]" }
+  - { from: tell, to: told, kind: data }
+  - { from: told, to: token, kind: data }
+  - { from: strangers, to: whose, kind: tie }
+  - { from: nojudge, to: replace, kind: tie }
+  - { from: gitonly, to: guard, kind: tie }
+  - { from: quick, to: plain, kind: tie }
+  - { from: held, to: push, kind: tie }
+  - { from: undo, to: standing, kind: tie }
+  - { from: onecomment, to: tell, kind: tie }
+  - { from: ci, to: app, kind: tie }
+implementations:
+  actions:
+    label: "GitHub Actions, resolve.yml"
+    blocks:
+      - { id: github, label: "GitHub: pull requests, branches, comments", parts: [landed, token, app, repo, standing, replace, thread, told] }
+      - { id: findjob, label: "Actions job: find and rebase with git, with a read-only token", platform: actions-code, parts: [find, whose, plain] }
+      - { id: draftjob, label: "Actions job: resolve a conflict, with a read-only token", platform: actions-code, parts: [prompt] }
+      - { id: agentjob, label: "Claude Code, claude-opus-5-5, on the maintainer's subscription", platform: actions-agent, in: draftjob, parts: [rebase] }
+      - { id: pushjob, label: "Actions job: guard, push and comment, running nothing from the branch", platform: actions-code, parts: [bundle, guard, push, tell] }
+    comments:
+      - { id: sandbox, label: "Claude Code runs its commands only in its sandbox, keeping the login token from them, and loads no settings or servers from the branch. The job runs nothing of its own beside the secret (awml #121, #160)", in: agentjob, ties: [rebase] }
+      - { id: reads, label: "Read is limited to the workspace and the session's own input folder, with Read(//proc/**) denied, and Edit and Write are denied on .git/**. Git after the session runs with core.hooksPath=/dev/null and core.fsmonitor=false (#160)", in: agentjob, ties: [rebase] }
+      - { id: hashed, label: "The bundle is an artifact within this run only, because the job split keeps the app's token away from the branch. The job that rebased gives its sha256 as an output, the push job checks it, and it's scanned for a token before it's uploaded (#160 rule 6)", in: pushjob, ties: [bundle] }

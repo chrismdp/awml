@@ -1,0 +1,53 @@
+# When CI's tests fail on a build's pull request, this starts the build again for the branch's
+# issue, up to three builds since the label was last added. It reads only GitHub: the CI run that
+# woke it, the build runs named for the issue, the label's events and the issue's last edit. It
+# hands the build nothing but the issue's number, and the build reads why the last try failed from
+# CI itself. After three builds, or if the issue was edited since the label went on, a new comment
+# on the issue says a person must act.
+awml: "0.8"
+title: A failed build tries again
+description: |
+  The factory's retry: CI's failed tests on a build's pull request start the build again, up to
+  three builds since the label was last added.
+scopes:
+  - { id: public, label: "public: anyone who reads the repository", processing: any }
+parts:
+  - { id: testsfailed, kind: trigger, label: "CI's tests fail on a pull_request run from a build/issue-* branch of this repository, whatever else failed", wait: PT1H }
+  - { id: token, kind: connector, label: "The repository, through its own Actions token", in: public, ref: issue-to-pull-request.yaml#token }
+  - { id: tries, kind: code, op: sort, cleans: true, label: "Sort by GitHub's record, passing on only the issue's number and a count: is the run at the branch's head, is the issue's lastEditedAt, from GraphQL, older than the build label's last labelled event, and how many build.yml runs for the issue have started since?", in: public }
+  - { id: again, kind: code, op: do, label: "Start the build again, with only the issue's number", in: public }
+  - { id: dispatch, kind: outside, label: "Start the build again: Allow", ref: issue-to-pull-request.yaml#dispatch, in: public }
+  - { id: report, kind: code, op: do, label: "Say in a new comment on the issue, from fixed text, that the build failed three times and needs a person, linking CI's run", in: public }
+  - { id: issuenote, kind: outside, label: "Comment on the issue: Allow", in: public }
+  - { id: edited, kind: code, op: do, label: "Say in a new comment on the issue, from fixed text, that it was edited since the label went on, so a person must add the label again", in: public }
+  - { id: editnote, kind: outside, label: "Comment on the issue that it changed: Allow", in: public }
+  - { id: derived, kind: comment, label: "Decided in #160's follow-up: a try is a build.yml run for the issue since the label was last added, found by the run's name. The fixer's and the rebase's pushes don't count. Nothing is carried from one run to the next (#160 rule 3)" }
+  - { id: noinputs, kind: comment, label: "It trusts nothing from inputs, and passes on nothing the build trusts: the build checks the label and the issue's last edit again, and reads CI's failed log itself (#160 rule 2)" }
+  - { id: ours, kind: comment, label: "Decided in #160's follow-up: only pull_request runs count, which run once per commit, and only from a branch of this repository, since a fork's branch can carry a build's name (#153)" }
+  - { id: pinned, kind: comment, label: "Decided in #160's follow-up: a retry drafts from the issue as it reads now, so an issue edited since the label went on stops here until a person adds the label again (awml #120)" }
+  - { id: testsown, kind: comment, label: "Decided in #160's follow-up: the tests own a run where both they and a review failed, so this acts and the fixer doesn't. A fix commit that breaks a test lands here too, redrafts and uses a try; the tries cap stops it" }
+  - { id: forperson, kind: comment, label: "New comments, since a person must act. No status comment and no marker for a later run to find (#160 rule 5)" }
+lines:
+  - { from: testsfailed, to: tries, kind: start, label: "CI's run and its branch" }
+  - { from: token, to: tries, kind: data, label: "the build runs, the label's events and the issue's last edit" }
+  - { from: tries, to: again, kind: start, label: "[unedited, fewer than three]" }
+  - { from: again, to: dispatch, kind: data, label: "the issue's number" }
+  - { from: dispatch, to: token, kind: data }
+  - { from: tries, to: report, kind: start, label: "[three]" }
+  - { from: report, to: issuenote, kind: data }
+  - { from: issuenote, to: token, kind: data }
+  - { from: tries, to: edited, kind: start, label: "[edited since the label]" }
+  - { from: edited, to: editnote, kind: data }
+  - { from: editnote, to: token, kind: data }
+  - { from: derived, to: tries, kind: tie }
+  - { from: noinputs, to: again, kind: tie }
+  - { from: ours, to: testsfailed, kind: tie }
+  - { from: pinned, to: edited, kind: tie }
+  - { from: forperson, to: report, kind: tie }
+  - { from: testsown, to: testsfailed, kind: tie }
+implementations:
+  actions:
+    label: "GitHub Actions, retry.yml"
+    blocks:
+      - { id: github, label: "GitHub: branches, runs and issues", parts: [testsfailed, token, dispatch, issuenote, editnote] }
+      - { id: retryjob, label: "Actions job: retry or report, checking out nothing and running only gh", platform: actions-code, parts: [tries, again, report, edited] }
