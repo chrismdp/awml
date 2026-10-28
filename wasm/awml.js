@@ -73,10 +73,6 @@ async function start(source) {
     // and after where it comes among the workflows, as in 1#plan, for one given as text alone.
     fitJSON(sourceTexts, implementation = "") {
       const sources = given(sourceTexts);
-      for (const sourceText of sources) {
-        const errors = this.check(text(sourceText));
-        if (errors.length) throw new Error(errors.join("\n"));
-      }
       const output = globalThis.__awmlFit(JSON.stringify(sources), implementation);
       const decoded = JSON.parse(output);
       if (decoded.error) throw new Error(decoded.error);

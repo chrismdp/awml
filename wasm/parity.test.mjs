@@ -427,6 +427,27 @@ lines:
       return true;
     });
   }
+  // Untrusted text follows an outside action into the workflow it starts. Here the order form's text
+  // reaches the basket with nothing to stop it, a line that breaks a rule: check fails and fit
+  // refuses, while the map, its graph and the summary are still given, the same from both.
+  const taintedPlan = plan.replace("label: The order form, in: family", "label: The order form, untrusted: true, in: family");
+  const tainted = [{ file: handOff[0].file, source: taintedPlan }, handOff[1]];
+  for (const { file, source } of tainted) await writeFile(file, source);
+  assert.equal(api.checksJSON(tainted) + "\n", runNative(["check", "--json", ...handOffPaths], 1), "checks JSON of untrusted text across a hand-off");
+  assert.equal(api.checks(tainted).checks.find((check) => check.id === "untrusted.outside").result, "fail");
+  assert.equal(api.draw(tainted) + "\n", runNative(["draw", ...handOffPaths]), "map of untrusted text across a hand-off");
+  assert.equal(api.graphJSON(tainted) + "\n", runNative(["graph", ...handOffPaths]), "map graph of untrusted text across a hand-off");
+  assert.equal(api.summaryJSON(tainted) + "\n", runNative(["summary", "--json", ...handOffPaths]), "summary of untrusted text across a hand-off");
+  {
+    const refused = runNativeResult(["fit", "--json", ...handOffPaths, ...descriptions], 1);
+    assert.equal(refused.stdout, "", "fit of untrusted text across a hand-off: awml prints nothing");
+    assert.throws(() => api.fit([...tainted, ...descriptionSources]), (error) => {
+      assert.equal(`${error.message}\n`, refused.stderr, "fit of untrusted text across a hand-off");
+      return true;
+    });
+  }
+  for (const { file, source } of handOff) await writeFile(file, source);
+
   // A part they share is untrusted if any workflow's copy of it is marked untrusted. Its text reaches
   // the replier's send with nothing to stop it, a line that breaks a rule, so the check fails, and the
   // map and the summary are still given, as awml gives them.

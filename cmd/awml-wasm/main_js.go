@@ -286,7 +286,10 @@ func readGiven(list string, drawn bool) ([]awml.Workflow, error) {
 	if err := json.Unmarshal([]byte(list), &items); err != nil {
 		return nil, err
 	}
-	workflows := make([]awml.Workflow, 0, len(items))
+	// As awml does, every file's own mistakes and those following the refs between them are said
+	// together, each after its file's name, in the order the files were given.
+	var workflows []awml.Workflow
+	var errs [][]string
 	named := names{}
 	for _, item := range items {
 		var given struct {
@@ -305,13 +308,31 @@ func readGiven(list string, drawn bool) ([]awml.Workflow, error) {
 		if err != nil {
 			return nil, errors.New("isn't YAML: " + strings.Join(strings.Fields(err.Error()), " "))
 		}
-		if mistakes := find(doc); len(mistakes) != 0 {
-			return nil, errors.New(strings.Join(mistakes, "\n"))
-		}
 		workflows = append(workflows, awml.Workflow{File: given.File, Doc: doc.(*awml.Map)})
+		errs = append(errs, find(doc))
 	}
-	if err := refMistakes(workflows, together); err != nil {
-		return nil, err
+	var canonical []awml.Workflow
+	var at []int
+	for i, w := range workflows {
+		if awml.IsCanonical(w.Doc) {
+			canonical = append(canonical, w)
+			at = append(at, i)
+		}
+	}
+	for n, mistakes := range together(canonical) {
+		errs[at[n]] = append(errs[at[n]], mistakes...)
+	}
+	var lines []string
+	for i, mistakes := range errs {
+		for _, mistake := range mistakes {
+			if workflows[i].File != "" {
+				mistake = workflows[i].File + ": " + mistake
+			}
+			lines = append(lines, mistake)
+		}
+	}
+	if lines != nil {
+		return nil, errors.New(strings.Join(lines, "\n"))
 	}
 	return workflows, nil
 }
