@@ -30,6 +30,12 @@ concurrency:
   group: resolve-main
   cancel-in-progress: true
 
+# Every step runs as bash --noprofile --norc -eo pipefail {0}, which GitHub uses only when the
+# shell is named, so a command that fails in a pipe fails its step, as in the rehearsals.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   # Finds the open pull requests GitHub flags as conflicting with main, keeps those from a branch
   # of this repository opened by its own people or the build's app, and rebases each with git

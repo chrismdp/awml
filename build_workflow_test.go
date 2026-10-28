@@ -87,10 +87,15 @@ func (j workflowJob) session() int {
 }
 
 type factoryWorkflow struct {
-	RunName     string                 `yaml:"run-name"`
-	On          map[string]any         `yaml:"on"`
-	Concurrency any                    `yaml:"concurrency"`
-	Jobs        map[string]workflowJob `yaml:"jobs"`
+	RunName     string         `yaml:"run-name"`
+	On          map[string]any `yaml:"on"`
+	Concurrency any            `yaml:"concurrency"`
+	Defaults    struct {
+		Run struct {
+			Shell string `yaml:"shell"`
+		} `yaml:"run"`
+	} `yaml:"defaults"`
+	Jobs map[string]workflowJob `yaml:"jobs"`
 }
 
 func readFactoryWorkflow(t *testing.T, name string) factoryWorkflow {
@@ -239,7 +244,7 @@ func TestNothingInTheFactoryUsesAutoMerge(t *testing.T) {
 // a node_modules of its own, can make either run anything.
 var claudeInstall = regexp.MustCompile(`npm install -g @anthropic-ai/claude-code@[0-9]+\.[0-9]+\.[0-9]+\n`)
 var moduleFetch = regexp.MustCompile(`(?m)^.*HOME="[^"]+" GOTOOLCHAIN=local GOPROXY=https://proxy\.golang\.org GOVCS='\*:off' go mod download\)?$|` +
-	`^\s*\(cd "\$\(mktemp -d\)" && HOME="[^"]+" npm_config_userconfig=/dev/null npm_config_globalconfig=/dev/null ` +
+	`^\s*\(cd "\$\(mktemp -d\)" && HOME="[^"]+" npm_config_userconfig="\$[a-z_]+" npm_config_globalconfig="\$[a-z_]+" ` +
 	`npm_config_registry=https://registry\.npmjs\.org/ PUPPETEER_SKIP_DOWNLOAD=true npm_config_ignore_scripts=true npx --yes (-p \S+ )+-- true\)$`)
 
 // A command a script runs, at the start of a line or after ;, &&, || or a pipe.
@@ -1336,5 +1341,43 @@ func TestEveryAppTokenNamesOnlyThePermissionsItNeeds(t *testing.T) {
 	})
 	if found != len(want) {
 		t.Errorf("found %d app tokens, want %d", found, len(want))
+	}
+}
+
+// npm refuses to load one file as both its user and its global config, so each is an empty file of
+// its own, made in the step that fetches, and neither is one the tree could have put there.
+func TestNpmReadsTwoEmptyConfigFilesOfItsOwn(t *testing.T) {
+	configs := regexp.MustCompile(`npm_config_userconfig="\$([a-z_]+)" npm_config_globalconfig="\$([a-z_]+)"`)
+	found := 0
+	eachJob(t, func(file, name string, job workflowJob) {
+		for _, step := range job.Steps {
+			if !strings.Contains(step.Run, "npm_config_userconfig") && !strings.Contains(step.Run, "npm_config_globalconfig") {
+				continue
+			}
+			found++
+			m := configs.FindStringSubmatch(step.Run)
+			if m == nil || m[1] == m[2] {
+				t.Errorf("%s's %s step %q doesn't give npm two config files of their own", file, name, step.Name)
+				continue
+			}
+			for _, config := range m[1:] {
+				if !strings.Contains(step.Run, config+`="$(mktemp)"`) {
+					t.Errorf("%s's %s step %q doesn't make $%s an empty file of its own", file, name, step.Name, config)
+				}
+			}
+		}
+	})
+	if found != 2 {
+		t.Errorf("found %d steps that set npm's config, want the build's and the fix's", found)
+	}
+}
+
+// GitHub runs a step with pipefail only when its shell is named bash, so every factory workflow
+// names it, and its steps run as the rehearsals run them.
+func TestEveryFactoryStepRunsWithPipefail(t *testing.T) {
+	for _, file := range factoryFiles {
+		if shell := readFactoryWorkflow(t, file).Defaults.Run.Shell; shell != "bash" {
+			t.Errorf("%s runs its steps with shell %q, not bash, so without pipefail", file, shell)
+		}
 	}
 }

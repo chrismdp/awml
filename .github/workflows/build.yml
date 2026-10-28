@@ -48,6 +48,12 @@ concurrency:
 env:
   ISSUE: ${{ inputs.issue || github.event.issue.number }}
 
+# Every step runs as bash --noprofile --norc -eo pipefail {0}, which GitHub uses only when the
+# shell is named, so a command that fails in a pipe fails its step, as in the rehearsals.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   # Says on the issue that the build has started, in a new comment linking the run. A build started
   # by dispatch first checks, from GitHub's record, that the issue still carries the build label and
@@ -287,7 +293,11 @@ jobs:
           home="$RUNNER_TEMP/session/home"
           mkdir -p "$home"
           HOME="$home" GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOVCS='*:off' go mod download
-          (cd "$(mktemp -d)" && HOME="$home" npm_config_userconfig=/dev/null npm_config_globalconfig=/dev/null npm_config_registry=https://registry.npmjs.org/ PUPPETEER_SKIP_DOWNLOAD=true npm_config_ignore_scripts=true npx --yes -p @mermaid-js/mermaid-cli@11.4.1 -p mermaid@11.17.2 -- true)
+          # npm refuses to load one file as both its user and its global config, so each is an empty
+          # file of its own.
+          user_npmrc="$(mktemp)"
+          global_npmrc="$(mktemp)"
+          (cd "$(mktemp -d)" && HOME="$home" npm_config_userconfig="$user_npmrc" npm_config_globalconfig="$global_npmrc" npm_config_registry=https://registry.npmjs.org/ PUPPETEER_SKIP_DOWNLOAD=true npm_config_ignore_scripts=true npx --yes -p @mermaid-js/mermaid-cli@11.4.1 -p mermaid@11.17.2 -- true)
 
       # Claude Code runs its commands in a sandbox, bubblewrap with socat for its network, so that it
       # can scrub its login token from them, and they can't start without both. Ubuntu's runners

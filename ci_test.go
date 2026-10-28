@@ -648,3 +648,18 @@ func TestClassifySaysWhenItsSessionDidntRun(t *testing.T) {
 		t.Errorf("Classify with no session said:\n%s", r.printed)
 	}
 }
+
+// The report says main is failing however little it learns: with no failed log and no commit
+// message, it still writes the issue, with an empty fence and no subject.
+func TestTheReportStillReportsWithNothingToQuote(t *testing.T) {
+	report, _ := readFactoryWorkflow(t, "ci.yml").Jobs["report"].step(t, "report")
+	r := newRehearsal(t)
+	r.run(report, nil, `
+  "api repos/owner/repo/actions/runs/"*"/jobs --paginate"*) answer <<< '{"jobs": []}' ;;
+  "api repos/owner/repo/commits/"*) echo "HTTP 502" >&2; exit 1 ;;
+  "issue list "*) answer <<< '[]' ;;`)
+	r.mustPass()
+	if title := strings.TrimSpace(r.read("report/title.txt")); title != "Main is failing:" {
+		t.Errorf("the report's title is %q, want one with no subject", title)
+	}
+}
