@@ -84,7 +84,7 @@ implementations:
       - { id: github, label: "GitHub: pull requests, branches, comments", parts: [landed, token, app, repo, standing, replace, thread, told] }
       - { id: findjob, label: "Actions job: find and rebase with git, with a read-only token", platform: actions-code, parts: [find, whose, plain] }
       - { id: draftjob, label: "Actions job: resolve a conflict, with a read-only token", platform: actions-code, parts: [prompt] }
-      - { id: agentjob, label: "Claude Code, claude-opus-5-5, on the maintainer's subscription", platform: actions-agent, in: draftjob, parts: [rebase] }
+      - { id: agentjob, label: "Claude Code, claude-sonnet-5-5, on the maintainer's subscription", platform: actions-agent, in: draftjob, parts: [rebase] }
       - { id: pushjob, label: "Actions job: guard, push and comment, running nothing from the branch", platform: actions-code, parts: [bundle, guard, push, tell] }
     comments:
       - { id: sandbox, label: "Claude Code runs its commands only in its sandbox, keeping the login token from them, and loads no settings or servers from the branch. The job runs nothing of its own beside the secret (awml #121, #160)", in: agentjob, ties: [rebase] }
