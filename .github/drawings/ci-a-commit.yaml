@@ -6,7 +6,9 @@
 # branch, once both reviews have ended, a third session classifies the change: ship, show or ask.
 # None of them runs any of the change's code. Each job's result is its check on the commit, so the
 # commit as pushed has one judge, and every other workflow reads that judge's verdict from GitHub.
-# A fork's pull request, or one a stranger opened, gets the tests only.
+# A fork's pull request, or one a stranger opened, gets no review: its review jobs fail at a gate
+# that holds no secret, so a person reviews and merges it, and a hand merge never sees green
+# reviews that didn't run, as it would if they were skipped.
 awml: "0.8"
 title: A commit is checked
 description: |
@@ -21,7 +23,7 @@ parts:
   - { id: commit, kind: context, label: "The commit as pushed, and its pull request's title and description, if it has one", in: public, untrusted: true }
   - { id: tests, kind: code, op: check, label: "Run the tests, vet, the examples and wasm parity, on Go 1.22 and on the newest Go", in: public }
   - { id: record, kind: code, op: do, label: "Record each test job's result as its check on the commit", in: public }
-  - { id: whose, kind: code, op: sort, label: "Sort by rule: is this a pull_request run from a branch of this repository, opened by its own people or the app? A push to main runs the tests only", in: public }
+  - { id: whose, kind: code, op: sort, label: "Sort by rule, in a gate that holds no secret: is this a pull_request run from a branch of this repository, opened by its own people or the app? If not, the review fails here. A push to main runs the tests only", in: public }
   - { id: bring, kind: code, op: bring-in, label: "Bring in the pull request's patch against main as data, and list the binary files it changes in a file of the job's own", in: public }
   - { id: patch, kind: context, label: "The patch applied to main, made read-only, with the list of binary files", in: public }
   - { id: repo, kind: context, label: "Main's review prompts, AGENTS.md and REVIEW.md, copied out before any session starts", in: public }
@@ -32,7 +34,7 @@ parts:
   - { id: postclass, kind: code, op: do, label: "Make Classify's verdict and its reasons the job's own check, which always passes", in: public }
   - { id: checks, kind: context, label: "The head commit's checks: test (1.22), test (stable), Bug review, Security review and Classify", in: public, untrusted: true }
   - { id: onejudge, kind: comment, label: "One judge: these checks on the commit as pushed. Nothing merges without the tests and both reviews passing on the head commit, and land and fix read only these, never a record a workflow passed on (#160 rules 1 and 2)" }
-  - { id: forks, kind: comment, label: "A fork's pull request, or one a stranger opened between two branches here, gets the tests only: its author could steer the sessions, which hold the maintainer's login token. The test jobs hold no secret and a token that only reads. Keeping the check on who opened it was agreed in #160's follow-up" }
+  - { id: forks, kind: comment, label: "A fork's pull request, or one a stranger opened between two branches here, gets no review: its author could steer the sessions, which hold the maintainer's login token. Its review jobs still run, and fail at the gate before any secret is given, since GitHub counts a skipped required check as passed. The test jobs hold no secret and a token that only reads. Keeping the check on who opened it was agreed in #160's follow-up" }
   - { id: onerun, kind: comment, label: "Decided in #160's follow-up: CI runs on pull_request for every branch but main, and on push only for main, so each commit has one run. The build pushes, then opens its pull request, so CI first runs when it opens" }
   - { id: norun, kind: comment, label: "The sessions read the patch as data and run none of the change's code. No job that holds the Claude token runs tests, make or go run, since the runner has sudo and its memory holds the job's secrets (#160)" }
   - { id: mains, kind: comment, label: "Main's prompts, AGENTS.md and REVIEW.md are copied out before a session starts, so the patch can't rewrite what it's held to. GitHub runs the pull request's own ci.yml, so a person with write access could change how their pull request is reviewed: they're trusted, and the app never pushes .github/ (#160)" }

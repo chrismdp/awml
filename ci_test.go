@@ -63,18 +63,76 @@ func TestTheRequiredChecksKeepTheirNames(t *testing.T) {
 // A fork's pull request, or one opened by anyone without write access, gets the tests only: its
 // author could steer the sessions, which hold the maintainer's login token. Anyone who can read the
 // repository can open a pull request between two of its branches, so the opener must be the owner,
-// a member, a collaborator or the build's app. A push to main runs the tests only.
-func TestOnlyOwnPeoplesPullRequestsAreReviewed(t *testing.T) {
+// Bug review and Security review run on every pull request, since GitHub counts a required check
+// that was skipped as passed, and a hand merge would see green reviews that never ran. A fork's
+// pull request, or one opened by anyone without write access, fails at the first step, the gate,
+// which checks out nothing and holds no secret: its author could steer the sessions, which hold
+// the maintainer's login token. Anyone who can read the repository can open a pull request between
+// two of its branches, so the opener must be the owner, a member, a collaborator or the build's
+// app. Only the session step, which runs only once the gate has passed, holds the token. A push to
+// main runs the tests only.
+func TestEveryPullRequestIsReviewedOrFailsAtTheGate(t *testing.T) {
 	jobs := readFactoryWorkflow(t, "ci.yml").Jobs
-	want := `github.event_name == 'pull_request' &&
-		github.event.pull_request.head.repo.full_name == github.repository &&
-		(contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association) ||
-		github.event.pull_request.user.login == 'awml-factory[bot]')`
-	if strings.Join(strings.Fields(jobs["review"].If), " ") != strings.Join(strings.Fields(want), " ") {
-		t.Errorf("the reviews run if %q, want only on a pull request from this repository that its own people or the app opened", jobs["review"].If)
+	review := jobs["review"]
+	if review.If != "github.event_name == 'pull_request'" {
+		t.Errorf("the reviews run if %q, want on every pull request", review.If)
 	}
 	if jobs["test"].If != "" {
 		t.Errorf("the tests run only if %q, but every commit is tested", jobs["test"].If)
+	}
+	gate, at := review.step(t, "gate")
+	if at != 0 || gate.Uses != "" {
+		t.Errorf("the gate is step %d and uses %q, want the first step, running only a script", at, gate.Uses)
+	}
+	for i, step := range review.Steps {
+		holds := false
+		for _, value := range step.Env {
+			if strings.Contains(value, "secrets.") {
+				holds = true
+			}
+		}
+		for _, value := range step.With {
+			if strings.Contains(value, "secrets.") {
+				holds = true
+			}
+		}
+		if holds && step.ID != "session" {
+			t.Errorf("the review job's step %d, %q, is given a secret", i, step.Name)
+		}
+		if step.ID == "session" && !strings.Contains(step.If, "steps.gate.outcome == 'success'") {
+			t.Errorf("the session runs if %q, not only once the gate has passed", step.If)
+		}
+	}
+	event := func(repo, association, login string) map[string]string {
+		return map[string]string{"HEAD_REPOSITORY": repo, "AUTHOR_ASSOCIATION": association, "AUTHOR": login}
+	}
+	for name, tt := range map[string]struct {
+		env    map[string]string
+		passes bool
+	}{
+		"the owner's pull request":      {event("owner/repo", "OWNER", "the-owner"), true},
+		"a collaborator's pull request": {event("owner/repo", "COLLABORATOR", "a-collaborator"), true},
+		"the app's pull request":        {event("owner/repo", "NONE", "awml-factory[bot]"), true},
+		"a fork's pull request":         {event("a-stranger/repo", "OWNER", "the-owner"), false},
+		"a stranger's pull request":     {event("owner/repo", "CONTRIBUTOR", "a-stranger"), false},
+		"a stranger named like the app": {event("owner/repo", "NONE", "awml-factory"), false},
+	} {
+		r := newRehearsal(t)
+		r.run(gate, tt.env, "")
+		if r.failed == tt.passes {
+			t.Errorf("%s: the gate passed is %v, want %v:\n%s", name, !r.failed, tt.passes, r.printed)
+		}
+		if !tt.passes && !strings.Contains(r.printed, "isn't reviewed") {
+			t.Errorf("%s: the gate fails without saying why:\n%s", name, r.printed)
+		}
+	}
+	classify := jobs["classify"].If
+	for _, want := range []string{"github.event.pull_request.head.repo.full_name == github.repository",
+		`contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association)`,
+		"github.event.pull_request.user.login == 'awml-factory[bot]'"} {
+		if !strings.Contains(classify, want) {
+			t.Errorf("Classify runs if %q, which lacks %s", classify, want)
+		}
 	}
 }
 

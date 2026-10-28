@@ -55,7 +55,7 @@ func TestRetryActsWhenTheTestsFailAndCountsTheBuilds(t *testing.T) {
 		{"the label taken off", retryAnswers("failure", "success", head, "", []string{"tool"}, 1), "none"},
 		{"a fork's run", fromAFork(retryAnswers("failure", "success", head, "", []string{"build"}, 1)), "none"},
 		{"a fix commit after the third build", retryAnswersOn(`{"commit": {"message": "Fix\n\nFixed-by: fix-review-findings", "author": {"date": "2026-10-27T13:30:00Z"}, "committer": {"date": "2026-10-27T13:30:00Z"}}}`,
-			"failure", "success", head, "", []string{"build"}, 3), "none"},
+			"failure", "success", head, "", []string{"build"}, 3), "report"},
 		{"a commit from before the third build", retryAnswersOn(`{"commit": {"message": "Bake scones", "author": {"date": "2026-10-27T12:30:00Z"}, "committer": {"date": "2026-10-27T12:30:00Z"}}}`,
 			"failure", "success", head, "", []string{"build"}, 3), "none"},
 		{"an older commit the rebase recommitted", retryAnswersOn(`{"commit": {"message": "Bake scones", "author": {"date": "2026-10-27T12:30:00Z"}, "committer": {"date": "2026-10-27T15:00:00Z"}}}`,
