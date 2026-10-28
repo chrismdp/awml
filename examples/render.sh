@@ -36,6 +36,11 @@ printf '@font-face{font-family:"Inter";font-style:normal;font-weight:400;src:url
   "$(base64 < examples/fonts/Inter-Regular.woff2 | tr -d '\n')" > "$tmp/inter.css"
 render() {
   npx -y -p @mermaid-js/mermaid-cli@11.4.1 -p mermaid@11.17.2 mmdc -q -p "$tmp/puppeteer.json" -C "$tmp/inter.css" -b white -i "$1" -o "${1%.mmd}.svg"
+  # Mermaid sometimes lays a line out as a path of NaN, which is drawn detached from its ends.
+  if grep -q 'd="[^"]*NaN' "${1%.mmd}.svg"; then
+    echo "$1: Mermaid drew a line as a path of NaN, detached from its ends" >&2
+    exit 1
+  fi
 }
 # set -e doesn't fire for a command substitution in a for list or an argument, so the helper's
 # output is taken in an assignment, which stops the script when the helper fails.

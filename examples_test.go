@@ -204,6 +204,18 @@ func TestRenderPinsMermaid(t *testing.T) {
 	}
 }
 
+// Mermaid sometimes lays a line out as a path of NaN, and the line is drawn detached from its ends,
+// so render.sh stops at such a path rather than let it reach a drawing.
+func TestRenderStopsAtADetachedLine(t *testing.T) {
+	src, err := os.ReadFile("examples/render.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(src), `grep -q 'd="[^"]*NaN' "${1%.mmd}.svg"`) {
+		t.Error("render.sh doesn't stop at a path of NaN")
+	}
+}
+
 func TestEachExampleIsWrittenInTheHouseStyle(t *testing.T) {
 	for _, path := range append(append(examples(t), liveExamples(t)...), platformExamples(t)...) {
 		t.Run(path, func(t *testing.T) {

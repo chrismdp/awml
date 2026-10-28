@@ -202,7 +202,9 @@ func GraphMap(workflows []Workflow) Graph {
 			case outOf[w] && !into[w]:
 				line.From, line.To = shared, box
 			case into[w] && outOf[w]:
-				line.Points = "both"
+				// A two-way line has no direction, so it runs from the shared part: from the box,
+				// Mermaid can lay it out as a path of NaN, detached from its ends.
+				line.From, line.To, line.Points = shared, box, "both"
 			case !into[w] && !outOf[w]:
 				line.Points = "none"
 			}
