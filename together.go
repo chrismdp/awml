@@ -685,6 +685,7 @@ func SummariseTogether(workflows []Workflow) Summary {
 		each = append(each, Summarise(w.Doc))
 	}
 	out := TotalSummaries(each...)
+	out.Shared = []SharedSummary{}
 	l := link(workflows)
 	for _, copies := range l.shared {
 		entry := SharedSummary{Label: str(copies[0].part, "label"), Kind: str(copies[0].part, "kind")}

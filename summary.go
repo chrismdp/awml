@@ -24,7 +24,8 @@ type Summary struct {
 	ScopeNames      []string           `json:"scopeNames"`
 	PlatformNames   []string           `json:"platformNames"`
 	Untrusted       []UntrustedSummary `json:"untrusted"`
-	// Only workflows given together have parts they share.
+	// Only workflows given together have parts they share. Their list is empty when they share none,
+	// and one workflow alone has no list.
 	Shared []SharedSummary `json:"shared,omitempty"`
 }
 

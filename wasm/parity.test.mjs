@@ -475,6 +475,42 @@ lines:
   }
   for (const { file, source } of handOff) await writeFile(file, source);
 
+  // What a command refuses to do, both refuse in awml's words, which awml says as a mistake in how it
+  // was called.
+  const laptop = { file: descriptions[0], source: descriptionSources[0] };
+  for (const [name, call, args] of [
+    ["draw of an implementation of several", () => api.draw(handOff, "home"), ["draw", "--implementation", "home", ...handOffPaths]],
+    ["graph of an implementation of several", () => api.graph(handOff, "home"), ["graph", "--implementation", "home", ...handOffPaths]],
+    ["fit of an implementation of several", () => api.fit([...handOff, laptop], "home"), ["fit", "--implementation", "home", ...handOffPaths, laptop.file]],
+    ["fit of no workflow", () => api.fit([laptop]), ["fit", laptop.file]],
+    ["fit of no description", () => api.fit(handOff), ["fit", ...handOffPaths]],
+  ]) {
+    const refused = runNativeResult(args, 2);
+    assert.throws(call, (error) => {
+      assert.equal(refused.stderr.split("\n")[1], `awml ${args[0]}: error: ${error.message}`, name);
+      return true;
+    });
+  }
+  // A file that can't be on a map, or isn't YAML, is named as awml names it, after every other file's
+  // mistakes.
+  const notYAML = { file: `${temporary}/not-yaml.yaml`, source: "parts: [\n" };
+  await writeFile(notYAML.file, notYAML.source);
+  for (const [name, call, args, files] of [
+    ["draw of a platform description with a workflow", () => api.draw([handOff[0], laptop]), ["draw", handOff[0].file, laptop.file], handOff],
+    ["graph of a platform description with a workflow", () => api.graph([handOff[0], laptop]), ["graph", handOff[0].file, laptop.file], handOff],
+    ["draw of a file that isn't YAML", () => api.draw([notYAML, ...odd]), ["draw", notYAML.file, ...handOffPaths], odd],
+    ["summary of a file that isn't YAML", () => api.summary([notYAML, ...odd]), ["summary", notYAML.file, ...handOffPaths], odd],
+    ["fit of a file that isn't YAML", () => api.fit([notYAML, ...odd, laptop]), ["fit", notYAML.file, ...handOffPaths, laptop.file], odd],
+  ]) {
+    for (const { file, source } of files) await writeFile(file, source);
+    const refused = runNativeResult(args, 1);
+    for (const { file, source } of handOff) await writeFile(file, source);
+    assert.throws(call, (error) => {
+      assert.equal(`${error.message}\n`, refused.stderr, name);
+      return true;
+    });
+  }
+
   // A part they share is untrusted if any workflow's copy of it is marked untrusted. Its text reaches
   // the replier's send with nothing to stop it, a line that breaks a rule, so the check fails, and the
   // map and the summary are still given, as awml gives them.

@@ -234,6 +234,25 @@ func TestAFileGivenTwiceIsReadOnce(t *testing.T) {
 	}
 }
 
+// One file named twice is one workflow, so it's drawn, judged and summarised as one.
+func TestOneFileGivenTwiceIsOneWorkflow(t *testing.T) {
+	placed := planWorkflow + "implementations:\n  home:\n    label: At home\n    blocks:\n      - { id: box, label: A laptop, parts: [plan, list, tell, ready] }\n"
+	dir := folder(t, "plan.yaml", placed, "laptop.yaml", agentLaptop)
+	plan, laptop := filepath.Join(dir, "plan.yaml"), filepath.Join(dir, "laptop.yaml")
+	for _, args := range [][]string{
+		{"summary", plan},
+		{"draw", plan},
+		{"graph", plan},
+		{"draw", "--implementation", "home", plan},
+		{"fit", "--implementation", "home", plan, laptop},
+	} {
+		twice := append(append([]string{}, args...), filepath.Join(dir, ".", "plan.yaml"))
+		if got, want := awmlRun(twice...), awmlRun(args...); got != want {
+			t.Errorf("%q gave %+v\nwant %+v", twice, got, want)
+		}
+	}
+}
+
 // Mistakes found by following refs between files stop the commands that draw, count and fit them,
 // as one file's own mistakes do: each is printed, and nothing else.
 func TestCommandsRefuseFilesWhoseRefsHaveMistakes(t *testing.T) {
