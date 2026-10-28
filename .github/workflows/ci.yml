@@ -65,6 +65,7 @@ jobs:
       - run: go vet ./...
       - run: go test ./...
       - run: go run ./cmd/awml check examples/*.yaml examples/tour/*.yaml examples/platforms/*.yaml
+      - run: go run ./cmd/awml check .github/drawings/*.yaml
       - run: make test-wasm
 
   # Bug review and Security review, side by side, each a fresh Claude session in a job of its own,

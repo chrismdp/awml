@@ -199,6 +199,16 @@ func TestTheDraftReadsWhyTheLastTryFailedFromCI(t *testing.T) {
 	if passed.read("build/failed.md") != "" {
 		t.Error("the draft read a failed log when CI's latest run passed")
 	}
+
+	// A run that failed only by a review has no failed test to tell of, so there's no failed.md,
+	// whose presence tells Claude a test failed.
+	reviewed := newRehearsal(t)
+	reviewed.write("build/.kept", "")
+	reviewed.run(failed, map[string]string{"ISSUE": "120"}, strings.Replace(runs("failure"), `"name": "test (1.22)", "conclusion": "failure"`, `"name": "test (1.22)", "conclusion": "success"`, 1))
+	reviewed.mustPass()
+	if _, err := os.Stat(filepath.Join(reviewed.temp, "build", "failed.md")); err == nil {
+		t.Error("the draft has a failed.md when only a review failed")
+	}
 }
 
 // The build runs no checks of its own: CI judges the commit it pushes. So nothing in build.yml runs

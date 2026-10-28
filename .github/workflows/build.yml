@@ -222,7 +222,10 @@ jobs:
           while read -r job; do
             case "$job" in ''|*[!0-9]*) continue ;; esac
             gh run view --repo "$GITHUB_REPOSITORY" --job "$job" --log-failed || true
-          done | tail -n 300 > "$RUNNER_TEMP/build/failed.md"
+          done | tail -n 300 > "$RUNNER_TEMP/failed.log"
+          # Only a failed test's log is a reason a test failed: a run that failed by a review alone
+          # leaves no failed.md, whose presence tells Claude a test failed.
+          if [ -s "$RUNNER_TEMP/failed.log" ]; then mv "$RUNNER_TEMP/failed.log" "$RUNNER_TEMP/build/failed.md"; fi
 
       # The session runs offline, so nothing it runs can carry data out through a proxy. Its home's
       # Go module cache is filled here, before it starts, by fetching alone: go mod download, from the

@@ -14,7 +14,8 @@
 # of its own, so it can't read Claude Code's environment through /proc, and adds its own list of
 # paths no command may write, beside writes allowed anywhere under /home, /tmp, /opt and the like,
 # which no setting can narrow. So on top of the scrub's list, no command may write the workspace's
-# .git, nor the tree's for KIND workspace, the runner's own files, its actions, its tool cache, where
+# .git, nor the tree's for KIND workspace, the runner's file commands and event, its own files, its
+# actions, its tool cache, where
 # Claude Code itself is installed, any folder on PATH or Go's bin, or the git and shell settings of
 # the runner's own home, and none
 # may read the runner's files: the scrub keys its own list to HOME, which is the session's here. No
@@ -56,6 +57,14 @@ deny_made() {
 for path in "${extra[@]}"; do
   if [ -e "$path" ]; then deny_write+=("$path"); else deny_made dir "$path"; fi
 done
+# The runner's file commands and the event: a command that appended to GITHUB_ENV or GITHUB_PATH
+# would set what every later step of the job runs with, outside the sandbox, so their folders are
+# denied whatever the scrub keeps, with the event a later step reads.
+for var in GITHUB_ENV GITHUB_PATH GITHUB_OUTPUT GITHUB_STEP_SUMMARY; do
+  file="${!var:-}"
+  case "$file" in /*) deny_made dir "$(dirname "$file")" ;; esac
+done
+case "${GITHUB_EVENT_PATH:-}" in /*) deny_made file "$GITHUB_EVENT_PATH" ;; esac
 for file in .gitconfig .bashrc .bash_profile .profile .npmrc; do deny_made file "$HOME/$file"; done
 for dir in .config .local .ssh; do deny_made dir "$HOME/$dir"; done
 # Every folder on PATH, and Go's own bin, so a command can't put a program where a later step would

@@ -835,9 +835,17 @@ func TestTheSandboxSettingsAreExplicit(t *testing.T) {
 		home := filepath.Join(r.temp, "session", "home")
 		onPath := filepath.Join(r.root, "tools", "bin")
 		gopath := filepath.Join(r.root, "gopath")
+		commands := filepath.Join(r.root, "runner-temp", "_runner_file_commands")
+		summaries := filepath.Join(r.root, "runner-temp", "_step_summaries")
+		event := filepath.Join(r.root, "workflow", "event.json")
+		for _, file := range []string{commands + "/set_env_1", commands + "/add_path_1", commands + "/set_output_1", summaries + "/step_summary_1", event} {
+			r.write(file, "")
+		}
 		r.run(workflowStep{Run: `bash "$RUNNER_TEMP/sandbox-settings.sh" "$SESSION" "$TREE" ` + kind + ` "$OTHER"` + "\n"},
 			map[string]string{"SESSION": home, "TREE": tree, "GITHUB_WORKSPACE": workspace, "RUNNER_TOOL_CACHE": tools, "OTHER": other,
-				"PATH": onPath + ":" + os.Getenv("PATH"), "GOPATH": gopath}, "")
+				"PATH": onPath + ":" + os.Getenv("PATH"), "GOPATH": gopath,
+				"GITHUB_ENV": commands + "/set_env_1", "GITHUB_PATH": commands + "/add_path_1", "GITHUB_OUTPUT": commands + "/set_output_1",
+				"GITHUB_STEP_SUMMARY": summaries + "/step_summary_1", "GITHUB_EVENT_PATH": event}, "")
 		r.mustPass()
 		var settings struct {
 			Sandbox struct {
@@ -870,7 +878,7 @@ func TestTheSandboxSettingsAreExplicit(t *testing.T) {
 			t.Errorf("%s: the sandbox allows hosts %v, want none", kind, box.Network.AllowedDomains)
 		}
 		for _, denied := range []string{workspace + "/.git", r.root + "/runners", tools, r.root + "/.gitconfig", r.root + "/.config", other,
-			onPath, gopath + "/bin"} {
+			onPath, gopath + "/bin", commands, summaries, event} {
 			if !contains(box.Filesystem.DenyWrite, denied) {
 				t.Errorf("%s: the sandbox lets commands write %s: %v", kind, denied, box.Filesystem.DenyWrite)
 			}
@@ -1090,6 +1098,19 @@ func TestEveryActionIsPinnedToACommit(t *testing.T) {
 		for _, line := range strings.Split(readText(t, ".github/workflows/"+file), "\n") {
 			if strings.Contains(line, "uses:") && !pinned.MatchString(line) {
 				t.Errorf("%s uses an action not pinned to a commit: %s", file, strings.TrimSpace(line))
+			}
+		}
+	}
+}
+
+// The files the app never pushes are named to every session that could write one, and in AGENTS.md:
+// .github/, Claude Code's own files, and npm's and yarn's settings and a committed node_modules.
+func TestTheNeverPushedFilesAreNamedToTheSessions(t *testing.T) {
+	for _, file := range []string{".github/build-prompt.md", ".github/fix-prompt.md", "AGENTS.md"} {
+		text := readText(t, file)
+		for _, name := range []string{".github/", ".claude/", ".mcp.json", "CLAUDE.md", ".npmrc", ".yarnrc", ".yarnrc.yml", "node_modules/"} {
+			if !strings.Contains(text, "`"+name+"`") {
+				t.Errorf("%s doesn't name %s among the files the app never pushes", file, name)
 			}
 		}
 	}
