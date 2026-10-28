@@ -739,6 +739,19 @@ func JudgeTogether(workflows []Workflow, descriptions []*Map) FitReport {
 	if len(workflows) == 1 {
 		return Judge(workflows[0].Doc, nil, descriptions)
 	}
+	results, gaps := judgeModel(togetherFitModel(workflows), nil, descriptions)
+	if results == nil {
+		results = []FitResult{}
+	}
+	if gaps == nil {
+		gaps = []string{}
+	}
+	return FitReport{Results: results, Gaps: gaps}
+}
+
+// togetherFitModel gives what fit judges of several workflows, with each part they share once and
+// each part and scope named after its file.
+func togetherFitModel(workflows []Workflow) fitModel {
 	j := link(workflows).join()
 	security := &Map{}
 	var groups, parts, lines []any
@@ -756,12 +769,5 @@ func JudgeTogether(workflows []Workflow, descriptions []*Map) FitReport {
 	security.set("lines", lines)
 	model := newFitModel(security)
 	model.names = j.names
-	results, gaps := judgeModel(model, nil, descriptions)
-	if results == nil {
-		results = []FitResult{}
-	}
-	if gaps == nil {
-		gaps = []string{}
-	}
-	return FitReport{Results: results, Gaps: gaps}
+	return model
 }

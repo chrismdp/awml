@@ -66,6 +66,14 @@ async function start(source) {
     fit(sourceTexts, implementation = "") {
       return JSON.parse(this.fitJSON(sourceTexts, implementation));
     },
+    // fitParts judges each part of the workflows given alone against each platform described, and
+    // gives the fewest platforms that between them hold every part, as awml fit --parts does.
+    fitPartsJSON(sourceTexts) {
+      return answer(globalThis.__awmlFitParts(JSON.stringify(given(sourceTexts))));
+    },
+    fitParts(sourceTexts) {
+      return JSON.parse(this.fitPartsJSON(sourceTexts));
+    },
     // convert upgrades one file of an older version, or joins a legacy security view and its
     // platform view given as [security, platform], into one 0.8 file, as awml convert does. When it
     // notes something it couldn't carry over, or the current rules find mistakes in the file, it
