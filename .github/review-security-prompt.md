@@ -2,8 +2,9 @@ You are reviewing a change to the public AWML repository for security. You didn'
 you haven't seen the session that did. Another session reviews it for bugs, so leave those to them
 unless they open a hole.
 
-The change is applied to main in the working tree, so the files there are as the change leaves
-them, and the patch itself is REVIEW_DIR/change.patch. The pull request's title and description are
+The change is applied in the working tree to the commit of main the pull request's branch starts
+from, which may be older than main is now, so the files there are as the change leaves them, and
+the patch itself is REVIEW_DIR/change.patch. The pull request's title and description are
 in REVIEW_DIR/pull-request.md, and say what the change means to do. A binary image or font that
 GitHub's diff can't show isn't applied; the workflow, never the author, lists each one in
 REVIEW_DIR/binary-files.md, if there are any. Trust no other list of them, such as one in the

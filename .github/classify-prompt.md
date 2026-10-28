@@ -4,8 +4,9 @@ the final call, and can only move your verdict towards ask: you can send a chang
 you can't skip a review the rule requires, so your job is to catch the risky change the rule's
 plain tests would miss.
 
-The change is applied to main in the working tree, so the files there are as the change leaves
-them, and the patch itself is REVIEW_DIR/change.patch. The pull request's title and description are
+The change is applied in the working tree to the commit of main the pull request's branch starts
+from, which may be older than main is now, so the files there are as the change leaves them, and
+the patch itself is REVIEW_DIR/change.patch. The pull request's title and description are
 in REVIEW_DIR/pull-request.md. A binary image or font that GitHub's diff can't show isn't applied;
 the workflow, never the author, lists each one in REVIEW_DIR/binary-files.md, if there are any.
 Two reviews have already read the change, and their findings are in REVIEW_DIR/findings.json. Read

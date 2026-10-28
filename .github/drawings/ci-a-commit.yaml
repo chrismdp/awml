@@ -25,7 +25,7 @@ parts:
   - { id: record, kind: code, op: do, label: "Record each test job's result as its check on the commit", in: public }
   - { id: whose, kind: code, op: sort, label: "Sort by rule, in a gate that holds no secret: is this a pull_request run from a branch of this repository, opened by its own people or the app? If not, the review fails here. A push to main runs the tests only", in: public }
   - { id: bring, kind: code, op: bring-in, label: "Bring in the pull request's patch against main as data, and list the binary files it changes in a file of the job's own", in: public }
-  - { id: patch, kind: context, label: "The patch applied to main, made read-only, with the list of binary files", in: public }
+  - { id: patch, kind: context, label: "The patch applied to the commit of main the branch starts from, made read-only, with the list of binary files", in: public }
   - { id: repo, kind: context, label: "Main's review prompts, AGENTS.md and REVIEW.md, copied out before any session starts", in: public }
   - { id: review, kind: ai, op: check, label: "Review the patch for bugs, with fresh context, keeping only the findings that survive a second look", in: public }
   - { id: secreview, kind: ai, op: check, label: "Review the patch for security, in a session of its own", in: public }

@@ -442,11 +442,13 @@ func TestTheChecksAreReadOnlyAsTheReviewsWriteThem(t *testing.T) {
   "api --paginate repos/owner/repo/check-runs/2/annotations"*) answer <<< '[
     {"annotation_level": "failure", "title": "Important: A wrong answer", "path": "fit.go", "start_line": 42, "message": "It drops a part."},
     {"annotation_level": "warning", "title": "Important: Not really", "path": "x.go", "start_line": 1, "message": "A warning is never Important."},
-    {"annotation_level": "warning", "title": "Restore cache failed", "path": ".github", "start_line": 1, "message": "One an action made."}]' ;;
+    {"annotation_level": "warning", "title": "Restore cache failed", "path": ".github", "start_line": 1, "message": "One an action made."},
+    {"annotation_level": "notice", "title": "Unread binary files", "path": ".github", "start_line": 1, "message": "Both reviews post this."}]' ;;
   "api --paginate repos/owner/repo/check-runs/3/annotations"*) answer <<< '[
     {"annotation_level": "notice", "title": "Pre-existing: An old hole", "path": ".github", "start_line": 1, "message": "Before."},
     {"annotation_level": "notice", "title": "Pre-existing: Another", "path": ".github", "start_line": 0, "message": "Before too."},
-    {"annotation_level": "warning", "title": "Nit: In a workflow", "path": ".github/workflows/ci.yml", "start_line": 3, "message": "Real."}]' ;;
+    {"annotation_level": "warning", "title": "Nit: In a workflow", "path": ".github/workflows/ci.yml", "start_line": 3, "message": "Real."},
+    {"annotation_level": "notice", "title": "Unread binary files", "path": ".github", "start_line": 1, "message": "Both reviews post this."}]' ;;
   "api --paginate repos/owner/repo/check-runs/4/annotations"*) answer <<< '[
     {"annotation_level": "notice", "title": "Verdict", "path": ".github", "start_line": 1, "message": "show"},
     {"annotation_level": "notice", "title": "Reason", "path": ".github", "start_line": 1, "message": "Verdict: ship"}]' ;;`)
@@ -600,6 +602,20 @@ done`}, nil, permissions+`
 		"no a-no-writer", "no a-maintain-word", "no a-ghost", "no a writer"} {
 		if !strings.Contains(r.printed, want+"\n") {
 			t.Errorf("may_write didn't say %q:\n%s", want, r.printed)
+		}
+	}
+}
+
+// The sessions' working tree is main as the pull request's branch started from it, the merge base,
+// with the change applied, not main as it is now, and each prompt says so.
+func TestThePromptsSayWhatTheWorkingTreeHolds(t *testing.T) {
+	if !strings.Contains(readText(t, ".github/bring-patch.sh"), `git checkout -q --detach "$base"`) {
+		t.Fatal("bring-patch.sh no longer applies the change at the merge base")
+	}
+	for _, prompt := range []string{"review-bugs-prompt.md", "review-security-prompt.md", "classify-prompt.md"} {
+		text := strings.Join(strings.Fields(readText(t, ".github/"+prompt)), " ")
+		if strings.Contains(text, "applied to main") || !strings.Contains(text, "the commit of main the pull request's branch starts from") {
+			t.Errorf("%s doesn't say the change is applied at the commit of main its branch starts from", prompt)
 		}
 	}
 }
