@@ -8,7 +8,7 @@
 # own: CI judges the commit when the pull request opens, as it judges every pull request, and
 # land-a-pull-request, fix-review-findings and retry-a-build each wake on CI finishing, reading
 # GitHub rather than anything this workflow writes.
-awml: "0.8"
+awml: "0.9"
 title: An issue becomes a pull request
 description: |
   The factory's build: a labelled issue becomes a draft, and the app pushes it and opens a pull

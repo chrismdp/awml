@@ -1,4 +1,4 @@
-awml: "0.8"
+awml: "0.9"
 title: A client's email, answered with a draft
 description: |
   This workflow drafts a reply to a client's email. The file holds its design and its office

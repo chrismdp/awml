@@ -12,6 +12,9 @@ import (
 // version comes back as it is. The file needn't pass Check, and the result may not either, since
 // newer versions hold a file to rules older ones didn't.
 //
+// From 0.8, only the version changes, since 0.9 changed only a rule: that no line goes from an
+// outside action into a context. Such a line stays for the check to report, since whether it meant a
+// review whose yes a code step records, or a connector a bring-in step reads, is the author's call.
 // From 0.7, each fork goes, since several start lines out of one part already show work side by
 // side, and each line into it joins each line out of it. Otherwise only the version changes, since
 // 0.8 changed only rules: what a standing approval may cover, and that untrusted text reaching an

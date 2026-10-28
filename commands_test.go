@@ -8,7 +8,7 @@ import (
 )
 
 // A workflow whose line into a Block action breaks a rule: check fails, and draw draws it red.
-const redLineWorkflow = `awml: "0.8"
+const redLineWorkflow = `awml: "0.9"
 title: The bakery's old files
 scopes:
   - { id: bakery, label: "bakery: Ana, Ben", processing: any }

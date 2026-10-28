@@ -7,7 +7,7 @@ import (
 )
 
 const fitSecurity = `
-awml: "0.8"
+awml: "0.9"
 title: Mail
 scopes:
   - {id: private, label: private, processing: any}
@@ -52,12 +52,12 @@ func fitDocs(t *testing.T, sources ...string) []*Map {
 
 func TestFitAppliesAllFiveRules(t *testing.T) {
 	platforms := []string{
-		`{awml: "0.8", platform: {id: fitting, label: Fitting}, off_for_up_to: PT1H, steps: code, agents: [], calls: [anthropic], holds: [notes]}`,
-		`{awml: "0.8", platform: {id: slow, label: Slow}, off_for_up_to: P1D, steps: code, agents: [], calls: [anthropic], holds: [notes]}`,
-		`{awml: "0.8", platform: {id: exposed, label: Exposed}, off_for_up_to: PT0S, steps: code, agents: [openai], calls: [anthropic], holds: [notes]}`,
-		`{awml: "0.8", platform: {id: no-model, label: No model}, off_for_up_to: PT0S, steps: code, agents: [], calls: [openai], holds: [notes]}`,
-		`{awml: "0.8", platform: {id: no-notes, label: No notes}, off_for_up_to: PT0S, steps: code, agents: [], calls: [anthropic], holds: []}`,
-		`{awml: "0.8", platform: {id: agent, label: Agent}, off_for_up_to: PT0S, steps: agent, agents: [anthropic], calls: any, holds: [notes]}`,
+		`{awml: "0.9", platform: {id: fitting, label: Fitting}, off_for_up_to: PT1H, steps: code, agents: [], calls: [anthropic], holds: [notes]}`,
+		`{awml: "0.9", platform: {id: slow, label: Slow}, off_for_up_to: P1D, steps: code, agents: [], calls: [anthropic], holds: [notes]}`,
+		`{awml: "0.9", platform: {id: exposed, label: Exposed}, off_for_up_to: PT0S, steps: code, agents: [openai], calls: [anthropic], holds: [notes]}`,
+		`{awml: "0.9", platform: {id: no-model, label: No model}, off_for_up_to: PT0S, steps: code, agents: [], calls: [openai], holds: [notes]}`,
+		`{awml: "0.9", platform: {id: no-notes, label: No notes}, off_for_up_to: PT0S, steps: code, agents: [], calls: [anthropic], holds: []}`,
+		`{awml: "0.9", platform: {id: agent, label: Agent}, off_for_up_to: PT0S, steps: agent, agents: [anthropic], calls: any, holds: [notes]}`,
 	}
 	docs := fitDocs(t, append([]string{fitSecurity}, platforms...)...)
 	got, gaps := Fit(docs[0], nil, docs[1:])
@@ -76,7 +76,7 @@ func TestFitAppliesAllFiveRules(t *testing.T) {
 
 func TestFitReportsSecurityGaps(t *testing.T) {
 	security := `
-awml: "0.8"
+awml: "0.9"
 title: Gaps
 scopes: [{id: private, label: private}]
 parts:
@@ -107,8 +107,8 @@ func TestFitJudgesADrawnPlacement(t *testing.T) {
       - {id: session, label: Session, in: machine, platform: session, parts: [bring, mail]}
       - {id: phone, label: Phone, parts: []}
 `)
-	host := `{awml: "0.8", platform: {id: host, label: Host}, off_for_up_to: PT0S, steps: code, agents: [openai], calls: [anthropic], holds: [notes]}`
-	session := `{awml: "0.8", platform: {id: session, label: Session}, off_for_up_to: P1D, steps: agent, agents: [anthropic], calls: any, holds: [notes]}`
+	host := `{awml: "0.9", platform: {id: host, label: Host}, off_for_up_to: PT0S, steps: code, agents: [openai], calls: [anthropic], holds: [notes]}`
+	session := `{awml: "0.9", platform: {id: session, label: Session}, off_for_up_to: P1D, steps: agent, agents: [anthropic], calls: any, holds: [notes]}`
 	got, gaps := Fit(doc, placement, fitDocs(t, host, session))
 	want := []string{
 		"machine  no: openai's agents run here, and business doesn't allow openai",
@@ -150,7 +150,7 @@ func TestFitReportsBlocksWithoutDescriptionsAsNotJudged(t *testing.T) {
 // judged against the platform.
 func TestFitAsksForAWaitOnATriggerWithNoLineOut(t *testing.T) {
 	security := `
-awml: "0.8"
+awml: "0.9"
 title: Gaps
 scopes: [{id: private, label: private, processing: any}]
 parts:

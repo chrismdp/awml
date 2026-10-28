@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-const canonical = `awml: "0.8"
+const canonical = `awml: "0.9"
 title: Bread
 scopes:
   - {id: bakery, label: Bakery, processing: any}
@@ -42,7 +42,7 @@ func TestCanonicalCheck(t *testing.T) {
 		t.Fatal(got)
 	}
 	cases := []struct{ old, new, want string }{
-		{`awml: "0.8"`, "awml: \"0.8\"\nview: security", `the file has unknown field "view"`},
+		{`awml: "0.9"`, "awml: \"0.9\"\nview: security", `the file has unknown field "view"`},
 		{"scopes:", "groups:", `the file has unknown field "groups"`},
 		{"parts: [plan, notes]", "parts: [plan, plan, notes]", `part "plan" is placed twice in implementation "home"`},
 		{"parts: [plan, notes]", "parts: [plan]", `part "notes" is not placed in implementation "home"`},
@@ -151,10 +151,10 @@ lines:
 	if strings.Count(page, "<section>") != 2 || !strings.Contains(page, "At home") {
 		t.Fatal("page lacks implementation")
 	}
-	if str(doc, "awml") != "0.8" || str(items(doc, "parts")[1], "in") != "bakery" {
+	if str(doc, "awml") != "0.9" || str(items(doc, "parts")[1], "in") != "bakery" {
 		t.Fatal("projection mutated input")
 	}
-	description := parseCanonical(t, `awml: "0.8"
+	description := parseCanonical(t, `awml: "0.9"
 platform: {id: scripts, label: Scripts}
 off_for_up_to: PT0S
 steps: code

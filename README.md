@@ -494,8 +494,8 @@ awml pull family/dinners@1 -o dinners
 - `awml graph` takes what `awml draw` takes, and prints what it would draw as JSON, with nothing laid out, for a tool that lays the drawing out itself. Each id is the one `awml draw` gives it, and the spec lists the fields. Its text isn't escaped and keeps its line breaks, so a tool that shows it must escape it and handle them.
 - `awml page` writes one standalone HTML page with the security view, then every implementation, each with a heading. Several files appear in the order given. The page takes their shared title, or Workflows when they differ.
 - `awml summary` counts the scopes, platforms, parts and lines in one workflow, and lists every publish with what it adds or loosens. It includes platforms from every implementation and counts the design once, and lists what each untrusted part's text reaches, what stops it and the risks accepted. Given several workflows, it counts each part they share once, and lists those parts. `--json` prints the registry's JSON form.
-- `awml convert old.yaml` upgrades a file of any older version to 0.8, printed to standard output, and every other command refuses an older file. Each fork goes, and each line into it joins each line out of it, with the line out's kind and label, or the label of the line in where the line out has none, and convert names a fork that nothing leads into, which goes with every line out of it. A trigger of another workflow that only `do` steps lead into becomes their outside action, which starts that workflow, and convert says where any untrusted mark it drops belongs. A `publish` line becomes a `data` line, and a line marked red with `breaks` loses it, gaining a comment if the check doesn't find what it breaks. `awml convert security.yaml platform.yaml` joins a matching 0.3 or 0.2 pair into one file, turning platform groups into blocks of the `default` implementation. Add `--implementation ID` to name the implementation. The comment block a file starts with becomes its `description`, unless it has one, and other YAML comments move to the top. If it notes something to do by hand, or the new version's rules find mistakes in the result, it lists them and exits 1.
-- `awml login` saves an API token for the registry. `awml push` checks and uploads one 0.8 file in the API's workflow field. `awml pull` downloads the latest or a numbered version as `<slug>.yaml`, and `awml pull owner/platforms/slug` does the same for a published platform description. It still downloads an older pair as `security.yaml` and `platform.yaml`. The commands use `https://awml.io` unless `--registry` or `AWML_REGISTRY_URL` says otherwise. Add `--private` to the first push of a private organisation workflow.
+- `awml convert old.yaml` upgrades a file of any older version to 0.9, printed to standard output, and every other command refuses an older file. Each fork goes, and each line into it joins each line out of it, with the line out's kind and label, or the label of the line in where the line out has none, and convert names a fork that nothing leads into, which goes with every line out of it. A trigger of another workflow that only `do` steps lead into becomes their outside action, which starts that workflow, and convert says where any untrusted mark it drops belongs. A `publish` line becomes a `data` line, and a line marked red with `breaks` loses it, gaining a comment if the check doesn't find what it breaks. `awml convert security.yaml platform.yaml` joins a matching 0.3 or 0.2 pair into one file, turning platform groups into blocks of the `default` implementation. Add `--implementation ID` to name the implementation. The comment block a file starts with becomes its `description`, unless it has one, and other YAML comments move to the top. If it notes something to do by hand, or the new version's rules find mistakes in the result, it lists them and exits 1.
+- `awml login` saves an API token for the registry. `awml push` checks and uploads one 0.9 file in the API's workflow field. `awml pull` downloads the latest or a numbered version as `<slug>.yaml`, and `awml pull owner/platforms/slug` does the same for a published platform description. It still downloads an older pair as `security.yaml` and `platform.yaml`. The commands use `https://awml.io` unless `--registry` or `AWML_REGISTRY_URL` says otherwise. Add `--private` to the first push of a private organisation workflow.
 
 For example, the client email workflow can run on the scheduled scripts platform, while the other descriptions show why they don't fit:
 
@@ -531,7 +531,7 @@ Workflows hand work on through a context one writes and another reads, and may s
 One file holds one workflow and its implementations:
 
 ```yaml
-awml: "0.8"
+awml: "0.9"
 title: The family's dinners
 description: |
   Plans the family's dinners each Thursday. The family is fictional.
@@ -555,7 +555,7 @@ implementations:
       - { id: phone, label: Family phone, parts: [chat] }
 ```
 
-- The file needs `awml`, the version `"0.8"`; `title`, the workflow's name; and `parts`. It may have `description`, what the workflow is for in Markdown, and `scopes`, `lines` and `implementations`. Upgrade a file of an older version with `awml convert`.
+- The file needs `awml`, the version `"0.9"`; `title`, the workflow's name; and `parts`. It may have `description`, what the workflow is for in Markdown, and `scopes`, `lines` and `implementations`. Upgrade a file of an older version with `awml convert`.
 - A **scope** has an `id` and a `label`, and may have `in`, the id of its parent scope, and `processing`, the companies it allows.
 - A **part** has an `id`, a `kind` and a `label`. Its `in` names its scope. A step may have `op`, a trigger `wait`, and a context `at`. A trigger, connector or context may have `untrusted`, and a code step `cleans`. A context, connector or surface may have `ref`, the part of another workflow it is, and an outside action `ref`, the trigger of the workflow it starts.
 - An **implementation** has an id in the `implementations` map, a `label` and `blocks`. Each block has an `id`, a `label` and `parts`, the ids it holds. It may have `in`, its parent block, and `platform`, a platform description id: a bare id for your own, or `owner/platforms/slug` for one published to the registry. Every part except a trigger or comment needs exactly one block per implementation.
@@ -569,7 +569,7 @@ Every id, label, kind and reference to an id is text. `awml` reads YAML 1.2, whi
 
 ### What `awml check` reports
 
-`awml check` reports structural mistakes, invalid operations, tiers that disagree with the drawing, and untrusted text that reaches an outside action with nothing to stop it or accept the risk. It also checks each implementation's block references, nesting and placement, and its comments' ties, and how each `ref` is written. It warns when AI decides a `do` step, when one `do` step leads to more than one change, when the file's triggers start more than one workflow, when no line links a part to a trigger, when a comment is tied to nothing, and when no trigger's run reaches a step, review or standing approval. Warnings leave the exit status alone. A line that breaks a rule, such as one into a Block action, is still a mistake, but `awml draw` draws it red rather than refusing the file. [`SPEC.md`](SPEC.md) gives the exact rules.
+`awml check` reports structural mistakes, invalid operations, tiers that disagree with the drawing, and untrusted text that reaches an outside action with nothing to stop it or accept the risk. It reports a line from an outside action into a context, since only a step writes to one: a sign-off a later run reads back is a review whose `[yes]` leads to a code `do` step that writes it. It also checks each implementation's block references, nesting and placement, and its comments' ties, and how each `ref` is written. It warns when AI decides a `do` step, when one `do` step leads to more than one change, when the file's triggers start more than one workflow, when no line links a part to a trigger, when a comment is tied to nothing, and when no trigger's run reaches a step, review or standing approval. Warnings leave the exit status alone. A line that breaks a rule, such as one into a Block action, is still a mistake, but `awml draw` draws it red rather than refusing the file. [`SPEC.md`](SPEC.md) gives the exact rules.
 
 ### Examples to start from
 
@@ -583,6 +583,6 @@ Besides the gallery, [`examples/`](examples) has workflows to start from. The fa
 
 ## Status and licence
 
-Draft 0.8. The notation and the file format may still change.
+Draft 0.9. The notation and the file format may still change.
 
 MIT. See `LICENSE`.

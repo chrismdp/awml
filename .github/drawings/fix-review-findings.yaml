@@ -6,7 +6,7 @@
 # CI judges the fix as it judges every commit. It stops after two fix commits on a branch, exits
 # quietly if anyone has pushed since the review, and offers a fix to .github/ or Claude Code's own
 # files as the run's artifact, with the commands to download and apply it in a new comment.
-awml: "0.8"
+awml: "0.9"
 title: A failed review is fixed
 description: |
   The factory's fixer: when a review fails on a pull request, a session fixes the findings and the
