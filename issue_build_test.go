@@ -154,7 +154,7 @@ func TestTheDraftReadsOnlyTheIssueAsApproved(t *testing.T) {
 		{"2026-10-27T09:30:00Z", ""}, {"2026-10-27T10:30:00Z", ""}, {"2026-10-27T09:30:00Z", "2026-10-27T10:30:00Z"},
 	} {
 		r := newRehearsal(t)
-		repo, _ := r.newRepo("repo", map[string]string{"AGENTS.md": "How to work.\n", "REVIEW.md": "What fails.\n", ".github/build-prompt.md": "Build it.\n", ".github/sandbox-settings.sh": "echo settings\n"})
+		repo, _ := r.newRepo("repo", map[string]string{"AGENTS.md": "How to work.\n", "REVIEW.md": "What fails.\n", ".github/build-prompt.md": "Build it.\n", ".github/sandbox-settings.sh": "echo settings\n", ".github/scrub-placeholders.sh": "echo placeholders\n"})
 		r.dir = repo
 		r.run(keep, map[string]string{"ISSUE": "120"}, comments+issueAnswer(change.edited, "build", "tool")+labelEventsRenamed(change.renamed))
 		issue := r.read("build/issue.md")
@@ -727,7 +727,7 @@ func TestTheBuildLabelCountsOnlyFromSomeoneWhoCanWrite(t *testing.T) {
 		}
 
 		r := newRehearsal(t)
-		repo, _ := r.newRepo("repo", map[string]string{"AGENTS.md": "How to work.\n", "REVIEW.md": "What fails.\n", ".github/build-prompt.md": "Build it.\n", ".github/sandbox-settings.sh": "echo settings\n"})
+		repo, _ := r.newRepo("repo", map[string]string{"AGENTS.md": "How to work.\n", "REVIEW.md": "What fails.\n", ".github/build-prompt.md": "Build it.\n", ".github/sandbox-settings.sh": "echo settings\n", ".github/scrub-placeholders.sh": "echo placeholders\n"})
 		r.dir = repo
 		r.run(keep, map[string]string{"ISSUE": "120"}, `
   "api repos/owner/repo/collaborators/ghost/permission"*) echo "Not Found" >&2; exit 1 ;;

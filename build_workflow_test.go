@@ -1079,6 +1079,8 @@ func TestGitAfterASessionCannotBePoisoned(t *testing.T) {
 		}
 		r.write("host/baseline/folders", string(folders))
 		r.write("host/baseline/head", gitIn(t, repo, "rev-parse", "HEAD")+"\n")
+		r.write("host/scrub-placeholders.sh", readText(t, ".github/scrub-placeholders.sh"))
+		r.write("host/baseline/absent", "")
 		r.write("build/issue.md", "# Bake scones\n")
 		r.write(filepath.Join(repo, "recipes.md"), "Bread\nScones\n")
 		pwned := filepath.Join(r.root, "pwned")
@@ -1516,6 +1518,8 @@ func TestThePatchStepSaysHowTheGitConfigChanged(t *testing.T) {
 		}
 		r.write("host/baseline/folders", string(folders))
 		r.write("host/baseline/head", gitIn(t, repo, "rev-parse", "HEAD")+"\n")
+		r.write("host/scrub-placeholders.sh", readText(t, ".github/scrub-placeholders.sh"))
+		r.write("host/baseline/absent", "")
 		r.write("build/issue.md", "# Bake scones\n")
 		switch change {
 		case "worktree":

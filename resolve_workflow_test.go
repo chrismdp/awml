@@ -304,6 +304,8 @@ func keptWorkspace(t *testing.T, r *rehearsal) string {
 		t.Fatal(err)
 	}
 	r.write("host/baseline/folders", string(folders))
+	r.write("host/scrub-placeholders.sh", readText(t, ".github/scrub-placeholders.sh"))
+	r.write("host/baseline/absent", "")
 	return workspace
 }
 

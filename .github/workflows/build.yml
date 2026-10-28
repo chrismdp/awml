@@ -190,7 +190,7 @@ jobs:
           build="$RUNNER_TEMP/build"
           mkdir -p "$build"
           cp AGENTS.md REVIEW.md "$build/"
-          cp .github/build-prompt.md .github/sandbox-settings.sh "$RUNNER_TEMP/"
+          cp .github/build-prompt.md .github/sandbox-settings.sh .github/scrub-placeholders.sh "$RUNNER_TEMP/"
           owner="${GITHUB_REPOSITORY%%/*}"
           name="${GITHUB_REPOSITORY#*/}"
           issue="$(gh api graphql -F owner="$owner" -F name="$name" -F number="$ISSUE" -f query='
@@ -358,6 +358,12 @@ jobs:
             cp .git/config "$HOST_DIR/baseline/git-config"
             stat -c %d:%i "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.git" > "$HOST_DIR/baseline/folders"
             git -c core.hooksPath=/dev/null -c core.fsmonitor=false rev-parse HEAD > "$HOST_DIR/baseline/head"
+            # The sandbox leaves a placeholder in the tree for each path its scrub protects that
+            # isn't there, so main's script records which are missing, in the host's folder, and
+            # puts a stand-in in place of a missing package.json or .git/commondir, since node
+            # refuses an empty package.json, and an empty commondir stops every use of the repository.
+            cp "$RUNNER_TEMP/scrub-placeholders.sh" "$HOST_DIR/"
+            bash "$HOST_DIR/scrub-placeholders.sh" before "$GITHUB_WORKSPACE" "$HOST_DIR/baseline/absent" standin
             bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/session/home" "$HOST_DIR" "$0"
             prompt="$(sed "s|BUILD_DIR|$BUILD_DIR|g" "$RUNNER_TEMP/build-prompt.md")"
             status=0
@@ -383,6 +389,9 @@ jobs:
           stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
           echo "::stop-commands::$stop"
           trap 'echo "::$stop::"' EXIT
+          # The sandbox's placeholders, and the stand-ins, go before git reads the tree: each must
+          # still be empty, or unchanged, or nothing is made of the tree.
+          bash "$HOST_DIR/scrub-placeholders.sh" after "$GITHUB_WORKSPACE" "$HOST_DIR/baseline/absent"
           git() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_NO_REPLACE_OBJECTS=1 command git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c diff.external= "$@"; }
           # Which part changed is said, each config key's name JSON-escaped, so a run shows what
           # touched it and no name can be a workflow command.
