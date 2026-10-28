@@ -454,12 +454,20 @@ func TestTheCheckKeepsOnlyAStraightRebase(t *testing.T) {
 		gitIn(t, repo, "-c", "user.name=x", "-c", "user.email=x@example.invalid", "commit", "-qm", message)
 		return gitIn(t, repo, "rev-parse", "HEAD")
 	}
-	for _, shape := range []string{"straight", "a merge", "a merge onto main's history", "an extra commit"} {
+	for _, shape := range []string{"straight", "merged main in", "a merge", "a merge onto main's history", "an extra commit"} {
 		r := newRehearsal(t)
 		workspace := keptWorkspace(t, r)
 		base := gitIn(t, workspace, "rev-parse", "HEAD")
 		gitIn(t, workspace, "switch", "-q", "-c", "scones")
 		commit(workspace, "scones.md", "Scones\n", "Scones")
+		if shape == "merged main in" {
+			// main merged into the branch, as GitHub's Update branch does: a plain rebase drops
+			// the merge, so the branch's own commits are counted without it.
+			gitIn(t, workspace, "switch", "-q", "main")
+			commit(workspace, "flour.md", "Flour\n", "Flour")
+			gitIn(t, workspace, "switch", "-q", "scones")
+			gitIn(t, workspace, "-c", "user.name=x", "-c", "user.email=x@example.invalid", "merge", "-q", "--no-edit", "main")
+		}
 		head := commit(workspace, "scones.md", "Scones\nJam\n", "Jam")
 		gitIn(t, workspace, "switch", "-q", "-")
 		main := commit(workspace, "bread.md", "Rye\n", "Rye")
@@ -497,9 +505,9 @@ func TestTheCheckKeepsOnlyAStraightRebase(t *testing.T) {
 		r.run(check, map[string]string{"MAIN_SHA": main, "GITHUB_WORKSPACE": workspace}, "")
 		r.mustPass()
 		_, kept := os.Stat(filepath.Join(r.temp, "host", "resolved", "5.bundle"))
-		if shape == "straight" {
+		if shape == "straight" || shape == "merged main in" {
 			if kept != nil {
-				t.Errorf("a straight rebase wasn't kept:\n%s", r.printed)
+				t.Errorf("with %s, a straight rebase wasn't kept:\n%s", shape, r.printed)
 			}
 			continue
 		}
