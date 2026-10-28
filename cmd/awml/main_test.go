@@ -519,8 +519,8 @@ func TestPageWritesOneHTMLFile(t *testing.T) {
 		t.Errorf("page gave %+v", r)
 	}
 	html, err := os.ReadFile(out)
-	if err != nil || string(html) != awml.Page([]*awml.Map{doc(t, good), doc(t, lunches)}) {
-		t.Errorf("the page isn't the two drawings: %v", err)
+	if err != nil || string(html) != awml.Page([]awml.Workflow{{File: a, Path: a, Doc: doc(t, good)}, {File: b, Path: b, Doc: doc(t, lunches)}}) {
+		t.Errorf("the page isn't the map and the two drawings: %v", err)
 	}
 }
 

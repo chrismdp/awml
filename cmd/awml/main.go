@@ -370,11 +370,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if err != nil {
 		return refused(err)
 	}
-	docs := make([]*awml.Map, len(workflows))
-	for i, w := range workflows {
-		docs[i] = w.Doc
-	}
-	if err := os.WriteFile(*out, []byte(awml.Page(docs)), 0o644); err != nil {
+	if err := os.WriteFile(*out, []byte(awml.Page(workflows)), 0o644); err != nil {
 		fmt.Fprintf(stderr, "%s: can't be written: %s\n", *out, reason(err))
 		return 1
 	}

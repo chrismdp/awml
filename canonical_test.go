@@ -147,7 +147,7 @@ lines:
 	if _, err := View(security, "home"); err == nil {
 		t.Fatal("implementation accepted on a view")
 	}
-	page := Page([]*Map{doc})
+	page := Page(given(doc))
 	if strings.Count(page, "<section>") != 2 || !strings.Contains(page, "At home") {
 		t.Fatal("page lacks implementation")
 	}
@@ -243,7 +243,7 @@ func TestCanonicalMultipleImplementationsAndNestedAccess(t *testing.T) {
 	if got := Summarise(file); got.Platforms != 3 || got.Steps.AI != 1 || got.Contexts != 1 {
 		t.Fatalf("%+v", got)
 	}
-	if page := Page([]*Map{file}); strings.Count(page, "<section>") != 3 {
+	if page := Page(given(file)); strings.Count(page, "<section>") != 3 {
 		t.Fatal("not all implementations drawn")
 	}
 	if got := Check(parseCanonical(t, strings.Split(canonical, "implementations:")[0])); len(got) != 0 {
