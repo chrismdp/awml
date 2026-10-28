@@ -48,20 +48,22 @@ func readRef(value any) (workflow, part string, ok bool) {
 	return "", "", false
 }
 
-// refersTo gives the workflow among those given that a ref from the one named refers to, or -1 when
-// none of them is it. A path is followed from the folder the referring file is in. owner/slug is
-// followed to a file at a path ending owner/slug.yaml, where awml pull -o owner puts it. Both are
-// matched against where each file is, however it was named.
-func refersTo(workflows []Workflow, from Workflow, workflow string) int {
+// refersTo gives each workflow among those given that a ref from the one named could refer to, in
+// the order given: none when it's to a workflow not given, and more than one when several files are
+// at a path ending owner/slug.yaml. A path is followed from the folder the referring file is in.
+// owner/slug is followed to a file at a path ending owner/slug.yaml, where awml pull -o owner puts
+// it. Both are matched against where each file is, however it was named.
+func refersTo(workflows []Workflow, from Workflow, workflow string) []int {
 	want := ""
 	if strings.HasSuffix(workflow, ".yaml") {
 		want = path.Join(path.Dir(from.at()), workflow)
 	}
+	var found []int
 	for i, w := range workflows {
 		file := w.at()
 		if want != "" && file == want || want == "" && strings.HasSuffix(file, "/"+workflow+".yaml") {
-			return i
+			found = append(found, i)
 		}
 	}
-	return -1
+	return found
 }

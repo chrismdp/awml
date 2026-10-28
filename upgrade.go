@@ -507,7 +507,7 @@ func ConvertSources(sources []Source, implementation string) (file []byte, notes
 			return nil, nil, nil, err
 		}
 	}
-	if d := describe(top); strings.TrimSpace(d) != "" && !converted.has("platform") && !converted.has("description") {
+	if d := describeFrom(top); strings.TrimSpace(d) != "" && !converted.has("platform") && !converted.has("description") {
 		converted.set("description", d)
 		comments = comments[1:]
 	}
@@ -524,10 +524,10 @@ func ConvertSources(sources []Source, implementation string) (file []byte, notes
 	return out.Bytes(), notes, Check(converted), nil
 }
 
-// describe gives the comment block a file starts with as a description: each line without its #,
+// describeFrom gives the comment block a file starts with as a description: each line without its #,
 // its tabs as spaces, and without the indent the lines share, the first line without any, ending in
 // one newline, so it's written as a literal block.
-func describe(comment string) string {
+func describeFrom(comment string) string {
 	lines := strings.Split(comment, "\n")
 	shared := -1
 	for i, line := range lines {

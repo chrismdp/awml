@@ -170,6 +170,10 @@ func TestFitTellsDescriptionsFromWorkflowsByWhatTheyHold(t *testing.T) {
 	if got := awmlRun("fit", "--implementation", "home", dir, laptop); got.code != 2 || !strings.Contains(got.stderr, "judges one workflow") {
 		t.Errorf("fit --implementation of two gave %+v", got)
 	}
+	// Each part they share is judged once, named after its file.
+	if got := awmlRun("fit", "--parts", dir, laptop); got.code != 0 || !strings.HasPrefix(got.stdout, "plan#thu    held by laptop\n") || strings.Count(got.stdout, "\nplan#list   held by none\n") != 1 || !strings.HasSuffix(got.stdout, "no placement: plan#list, plan#tell and shop#fill are held by no platform given\n") {
+		t.Errorf("fit --parts of two gave %+v", got)
+	}
 }
 
 // chdir moves the test into a folder until it ends.

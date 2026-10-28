@@ -381,7 +381,7 @@ parts: [{id: draft, kind: ai, op: draft, label: Draft, in: business}]
 		t.Errorf("gap fit as JSON gave %+v", r)
 	}
 	// A fit with nothing to judge, or nothing to judge it against, is a mistake in the command.
-	usage := "usage: awml fit [-h] [--json] [--implementation ID] files [files ...]\nawml fit: error: "
+	usage := "usage: awml fit [-h] [--json] [--parts] [--implementation ID] files [files ...]\nawml fit: error: "
 	for _, tc := range []struct {
 		files []string
 		want  string
@@ -395,6 +395,56 @@ parts: [{id: draft, kind: ai, op: draft, label: Draft, in: business}]
 			t.Errorf("fit of %d files gave %+v", len(tc.files), r)
 		}
 	}
+}
+
+func TestFitPartsJudgesEachPartAlone(t *testing.T) {
+	workflow := write(t, "reply.yaml", `
+awml: "0.9"
+title: Reply
+scopes: [{id: business, label: business, processing: {anthropic: any}}]
+parts:
+  - {id: mail, kind: trigger, label: Mail comes, wait: PT1H, in: business}
+  - {id: draft, kind: ai, op: draft, label: Draft, in: business}
+lines: [{from: mail, to: draft, kind: start}]
+`)
+	worker := write(t, "worker.yaml", goodPlatformForCommand)
+	laptop := write(t, "laptop.yaml", strings.Replace(strings.Replace(goodPlatformForCommand, "worker", "laptop", 2), "PT0S", "P1D", 1))
+	plain := awmlRun("fit", "--parts", workflow, laptop, worker)
+	want := "mail   held by worker\n" +
+		"       not by laptop: mail may wait PT1H, but the platform may be off for P1D\n" +
+		"draft  held by laptop and worker\n"
+	if plain != (result{0, want, ""}) {
+		t.Errorf("fit --parts gave %+v", plain)
+	}
+	json := awmlRun("fit", "--parts", "--json", workflow, laptop, worker)
+	wantJSON := `{"parts":[{"part":"mail","platforms":["worker"],"reasons":[{"platform":"laptop","reasons":["mail may wait PT1H, but the platform may be off for P1D"]}],"models":{}},` +
+		`{"part":"draft","platforms":["laptop","worker"],"reasons":[],"models":{"laptop":["anthropic"],"worker":["anthropic"]}}],"placements":[],"gaps":[]}`
+	if json != (result{0, wantJSON + "\n", ""}) {
+		t.Errorf("fit --parts --json gave %+v", json)
+	}
+	gap := write(t, "gap.yaml", strings.Replace(mustRead(t, workflow), "wait: PT1H, ", "", 1))
+	if r := awmlRun("fit", "--parts", gap, worker); r != (result{1, `trigger "mail" has no wait` + "\n", ""}) {
+		t.Errorf("fit --parts of a gap gave %+v", r)
+	}
+	usage := "usage: awml fit [-h] [--json] [--parts] [--implementation ID] files [files ...]\nawml fit: error: "
+	if r := awmlRun("fit", "--parts", "--implementation", "office", workflow, worker); r != (result{2, "", usage + "argument --parts: not allowed with argument --implementation\n"}) {
+		t.Errorf("fit --parts of an implementation gave %+v", r)
+	}
+	if r := awmlRun("fit", "--parts", workflow); r != (result{2, "", usage + "no platform descriptions were given\n"}) {
+		t.Errorf("fit --parts without descriptions gave %+v", r)
+	}
+	if r := awmlRun("fit", "-h"); !strings.Contains(r.stdout, "  --parts     judge each part alone, and give the fewest platforms that hold them all\n") {
+		t.Errorf("fit -h gave %+v", r)
+	}
+}
+
+func mustRead(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
 }
 
 func TestFitJudgesAnImplementation(t *testing.T) {
@@ -518,8 +568,8 @@ func TestPageWritesOneHTMLFile(t *testing.T) {
 		t.Errorf("page gave %+v", r)
 	}
 	html, err := os.ReadFile(out)
-	if err != nil || string(html) != awml.Page([]*awml.Map{doc(t, good), doc(t, lunches)}) {
-		t.Errorf("the page isn't the two drawings: %v", err)
+	if err != nil || string(html) != awml.Page([]awml.Workflow{{File: a, Path: a, Doc: doc(t, good)}, {File: b, Path: b, Doc: doc(t, lunches)}}) {
+		t.Errorf("the page isn't the map and the two drawings: %v", err)
 	}
 }
 
@@ -981,7 +1031,7 @@ func TestFitAnImplementationWithoutDescriptions(t *testing.T) {
 	if got := awmlRun("fit", "--json", "--implementation", "home", path); got != (result{0, want, ""}) {
 		t.Errorf("fit --json without descriptions gave %+v", got)
 	}
-	if got := awmlRun("fit", path); got != (result{2, "", "usage: awml fit [-h] [--json] [--implementation ID] files [files ...]\nawml fit: error: no platform descriptions were given\n"}) {
+	if got := awmlRun("fit", path); got != (result{2, "", "usage: awml fit [-h] [--json] [--parts] [--implementation ID] files [files ...]\nawml fit: error: no platform descriptions were given\n"}) {
 		t.Errorf("design fit without descriptions gave %+v", got)
 	}
 }

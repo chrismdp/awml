@@ -95,8 +95,8 @@ options:
   -h, --help  show this help message and exit
   --json      print every check and its result as JSON
 `},
-	"fit": {"usage: awml fit [-h] [--json] [--implementation ID] files [files ...]\n", `
-Judge each platform described as running every workflow given.
+	"fit": {"usage: awml fit [-h] [--json] [--parts] [--implementation ID] files [files ...]\n", `
+Judge each platform described as running every workflow given, or with --parts, each part alone.
 
 positional arguments:
   files       workflows and platform descriptions, told apart by what they hold, or folders of them
@@ -104,6 +104,7 @@ positional arguments:
 options:
   -h, --help  show this help message and exit
   --json      print JSON
+  --parts     judge each part alone, and give the fewest platforms that hold them all
   --implementation ID  judge one implementation
 `},
 	"summary": {"usage: awml summary [-h] [--json] files [files ...]\n", `
@@ -152,6 +153,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	var out *string
 	implementation := ""
 	jsonOutput := false
+	parts := false
 	private := false
 	var registryFlag *string
 	flags := true
@@ -207,6 +209,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			out = &v
 		case flags && (command == "summary" || command == "fit" || command == "check") && a == "--json":
 			jsonOutput = true
+		case flags && command == "fit" && a == "--parts":
+			parts = true
 		case flags && command == "push" && a == "--private":
 			private = true
 		case flags && strings.HasPrefix(a, "-") && a != "-":
@@ -328,28 +332,28 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
+	if command == "fit" && parts {
+		if implementation != "" {
+			return fail(commands[command].usage, "awml fit", "argument --parts: not allowed with argument --implementation")
+		}
+		report, err := awml.FitPartsSources(given)
+		if err != nil {
+			return refused(err)
+		}
+		if len(report.Gaps) != 0 {
+			return printFit(report, report.Gaps, jsonOutput, 1, stdout, stderr)
+		}
+		return printFit(report, awml.PartsLines(report), jsonOutput, 0, stdout, stderr)
+	}
 	if command == "fit" {
 		report, err := awml.FitSources(given, implementation)
 		if err != nil {
 			return refused(err)
 		}
-		output := awml.FitLines(report.Results)
-		code := 0
 		if len(report.Gaps) != 0 {
-			output = report.Gaps
-			code = 1
+			return printFit(report, report.Gaps, jsonOutput, 1, stdout, stderr)
 		}
-		if jsonOutput {
-			if err := json.NewEncoder(stdout).Encode(report); err != nil {
-				fmt.Fprintf(stderr, "awml fit: can't write its output: %s\n", err)
-				return 1
-			}
-		} else {
-			for _, line := range output {
-				fmt.Fprintln(stdout, line)
-			}
-		}
-		return code
+		return printFit(report, awml.FitLines(report.Results), jsonOutput, 0, stdout, stderr)
 	}
 	if command == "summary" {
 		summary, err := awml.SummariseSources(given)
@@ -370,15 +374,26 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if err != nil {
 		return refused(err)
 	}
-	docs := make([]*awml.Map, len(workflows))
-	for i, w := range workflows {
-		docs[i] = w.Doc
-	}
-	if err := os.WriteFile(*out, []byte(awml.Page(docs)), 0o644); err != nil {
+	if err := os.WriteFile(*out, []byte(awml.Page(workflows)), 0o644); err != nil {
 		fmt.Fprintf(stderr, "%s: can't be written: %s\n", *out, reason(err))
 		return 1
 	}
 	return 0
+}
+
+// printFit prints what awml fit found, as JSON or as its lines, and gives the exit code.
+func printFit(report any, lines []string, jsonOutput bool, code int, stdout, stderr io.Writer) int {
+	if jsonOutput {
+		if err := json.NewEncoder(stdout).Encode(report); err != nil {
+			fmt.Fprintf(stderr, "awml fit: can't write its output: %s\n", err)
+			return 1
+		}
+		return code
+	}
+	for _, line := range lines {
+		fmt.Fprintln(stdout, line)
+	}
+	return code
 }
 
 // sources reads each file named, saying why one can't be read.

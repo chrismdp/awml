@@ -53,6 +53,9 @@ for (const path of top.sort()) {
     const report = api.fit([source, ...descriptionSources]);
     assert.equal(api.fitJSON([source, ...descriptionSources]) + "\n",
       runNative(["fit", "--json", relative, ...descriptions], report.gaps.length ? 1 : 0), `${relative}: design fit`);
+    const parts = api.fitParts([source, ...descriptionSources]);
+    assert.equal(api.fitPartsJSON([source, ...descriptionSources]) + "\n",
+      runNative(["fit", "--parts", "--json", relative, ...descriptions], parts.gaps.length ? 1 : 0), `${relative}: fit of each part`);
     for (const [, implementation] of (source.split("implementations:\n")[1] || "").matchAll(/^  (\w+):\s*$/gm)) {
       assert.equal(api.draw(source, implementation) + "\n",
         runNative(["draw", "--implementation", implementation, relative]), `${relative}: ${implementation} Mermaid`);
@@ -435,6 +438,11 @@ lines:
   assert.equal(api.fitJSON([...handOff, ...descriptionSources]) + "\n",
     runNative(["fit", "--json", ...descriptions, ...handOffPaths], handOffFit.gaps.length ? 1 : 0), "fit together");
   assert(Object.keys(handOffFit.results.find((result) => result.fits || result.judged).models).every((step) => step.includes("#")));
+  const handOffParts = api.fitParts([...handOff, ...descriptionSources]);
+  assert.equal(api.fitPartsJSON([...handOff, ...descriptionSources]) + "\n",
+    runNative(["fit", "--parts", "--json", ...descriptions, ...handOffPaths], handOffParts.gaps.length ? 1 : 0), "fit of each part together");
+  assert(handOffParts.parts.length && handOffParts.parts.every(({ part }) => part.includes("#")), "fit of each part together names each after its file");
+  assert.throws(() => api.fitParts(handOff), /no platform descriptions were given/);
   // A ref is followed to where a file is: by awml from the folder it runs in, and by WebAssembly from
   // one root, so files named from the same folder link the same way in both.
   await mkdir(`${temporary}/family`);
@@ -446,6 +454,15 @@ lines:
   for (const { file, source } of located) await writeFile(`${temporary}/${file}`, source);
   assert.equal(api.checksJSON(located) + "\n", runNative(["check", "--json", ...located.map(({ file }) => file)], 1, temporary), "checks JSON of files named from one folder");
   assert.deepEqual(api.checks(located).checks.find((check) => check.id === "refs.known").mistakes.map(({ file }) => file), ["family/plan.yaml", "work/shop.yaml"]);
+  // A published ref that two files given could be is a mistake on the file that refers, either way round.
+  await mkdir(`${temporary}/old/family`, { recursive: true });
+  await writeFile(`${temporary}/old/family/plan.yaml`, located[0].source);
+  for (const order of [["old/family/plan.yaml", "family/plan.yaml"], ["family/plan.yaml", "old/family/plan.yaml"]]) {
+    const either = [...order.map((file) => ({ file, source: located[0].source })), located[1]];
+    assert.equal(api.checksJSON(either) + "\n", runNative(["check", "--json", ...either.map(({ file }) => file)], 1, temporary), "checks JSON of a ref two files could be");
+    assert.match(api.checks(either).checks.find((check) => check.id === "refs.known").mistakes.find(({ file }) => file === "work/shop.yaml").message,
+      /family\/plan\.yaml and old\/family\/plan\.yaml are each at a path ending family\/plan\.yaml/);
+  }
   const broken = [handOff[0], { file: handOff[1].file, source: shop.replace("plan.yaml#list", "plan.yaml#lists") }];
   await writeFile(broken[1].file, broken[1].source);
   assert.equal(api.checksJSON(broken) + "\n", runNative(["check", "--json", ...handOffPaths], 1), "checks JSON together, with a ref to a part that isn't there");
@@ -724,6 +741,11 @@ const fitPaths = [
 ];
 const fitSources = await Promise.all(fitPaths.map((path) => readFile(new URL(`../${path}`, import.meta.url), "utf8")));
 assert.equal(api.fitJSON(fitSources) + "\n", runNative(["fit", "--json", ...fitPaths]), "fit JSON");
+// Without the scheduled scripts, no one platform holds the client email, and two between them do.
+const splitPaths = fitPaths.filter((path) => !path.includes("scripts-mac-mini"));
+const splitSources = fitSources.filter((_, i) => !fitPaths[i].includes("scripts-mac-mini"));
+assert.equal(api.fitPartsJSON(splitSources) + "\n", runNative(["fit", "--parts", "--json", ...splitPaths]), "fit of each part JSON");
+assert.deepEqual(api.fitParts(splitSources).placements, [["cowork-mac-mini", "worker"]], "the fewest platforms that hold the client email");
 
 // The examples that share a part are drawn together as their map.
 const familyPaths = ["examples/dinners.yaml", "examples/shopping.yaml", "examples/bills.yaml", "examples/pickups.yaml", "examples/question.yaml"];

@@ -120,6 +120,21 @@ func TestAPublishedRefIsFollowedToAFilePulledIntoItsOwnersFolder(t *testing.T) {
 	togetherFinds(t, together(t, "pulled/other/plan.yaml", planWorkflow, "shop.yaml", shop))
 }
 
+// A published ref that more than one file given could be is a mistake on the referring file, which
+// names each, so what it refers to never depends on the order the files are given in.
+func TestAPublishedRefThatSeveralFilesGivenCouldBeIsAMistake(t *testing.T) {
+	shop := strings.Replace(shopWorkflow, "ref: plan.yaml#list", "ref: family/plan#list", 1)
+	want := []string{`part "list" refers to family/plan#list, but x/family/plan.yaml and y/family/plan.yaml are each at a path ending family/plan.yaml: give only the one it means`}
+	togetherFinds(t, together(t, "x/family/plan.yaml", planWorkflow, "y/family/plan.yaml", planWorkflow, "shop.yaml", shop), nil, nil, want)
+	togetherFinds(t, together(t, "shop.yaml", shop, "y/family/plan.yaml", planWorkflow, "x/family/plan.yaml", planWorkflow), want, nil, nil)
+	// The referring file is one of those it could be.
+	workflows := together(t, "x/family/plan.yaml", shop, "y/family/plan.yaml", planWorkflow)
+	togetherFinds(t, workflows, []string{`part "list" refers to family/plan#list, but x/family/plan.yaml and y/family/plan.yaml are each at a path ending family/plan.yaml: give only the one it means`}, nil)
+	if got := publishedNames(together(t, "x/family/plan.yaml", planWorkflow, "y/family/plan.yaml", planWorkflow, "shop.yaml", shop)); !reflect.DeepEqual(got, []string{"", "", ""}) {
+		t.Errorf("publishedNames gave %q, want none, since the ref could be either", got)
+	}
+}
+
 // A ref names a part of another workflow, so one that names its own is a mistake, whether or not the
 // part is there.
 func TestARefToItsOwnWorkflowIsAMistake(t *testing.T) {

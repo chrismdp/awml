@@ -308,7 +308,7 @@ func TestCheckNoLongerWarnsOfUntrustedText(t *testing.T) {
 
 func TestAPageDrawsNoUntrustedView(t *testing.T) {
 	doc := parsed(t, orderForm)
-	html := Page([]*Map{doc})
+	html := Page(given(doc))
 	if got, want := drawings(t, html), []string{Draw(doc)}; !reflect.DeepEqual(got, want) {
 		t.Errorf("drawings = %q", got)
 	}

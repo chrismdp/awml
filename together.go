@@ -85,7 +85,20 @@ func link(workflows []Workflow) linked {
 			if !ok || !refKinds[str(p, "kind")] {
 				continue
 			}
-			t := refersTo(workflows, w, workflow)
+			could := refersTo(workflows, w, workflow)
+			if len(could) > 1 {
+				var files []string
+				for _, c := range could {
+					files = append(files, workflows[c].File)
+				}
+				sort.Strings(files)
+				l.found[i].add("refs.known", fmt.Sprintf(`part "%s" refers to %s#%s, but %s are each at a path ending %s.yaml: give only the one it means`, str(p, "id"), workflow, id, naturalList(files), workflow))
+				continue
+			}
+			t := -1
+			if len(could) == 1 {
+				t = could[0]
+			}
 			if t == i {
 				l.found[i].add("refs.owner", fmt.Sprintf(`part "%s" refers to %s#%s, which is in its own workflow: a ref names a part of another workflow`, str(p, "id"), workflow, id))
 				continue
@@ -726,6 +739,19 @@ func JudgeTogether(workflows []Workflow, descriptions []*Map) FitReport {
 	if len(workflows) == 1 {
 		return Judge(workflows[0].Doc, nil, descriptions)
 	}
+	results, gaps := judgeModel(togetherFitModel(workflows), nil, descriptions)
+	if results == nil {
+		results = []FitResult{}
+	}
+	if gaps == nil {
+		gaps = []string{}
+	}
+	return FitReport{Results: results, Gaps: gaps}
+}
+
+// togetherFitModel gives what fit judges of several workflows, with each part they share once and
+// each part and scope named after its file.
+func togetherFitModel(workflows []Workflow) fitModel {
 	j := link(workflows).join()
 	security := &Map{}
 	var groups, parts, lines []any
@@ -743,12 +769,5 @@ func JudgeTogether(workflows []Workflow, descriptions []*Map) FitReport {
 	security.set("lines", lines)
 	model := newFitModel(security)
 	model.names = j.names
-	results, gaps := judgeModel(model, nil, descriptions)
-	if results == nil {
-		results = []FitResult{}
-	}
-	if gaps == nil {
-		gaps = []string{}
-	}
-	return FitReport{Results: results, Gaps: gaps}
+	return model
 }

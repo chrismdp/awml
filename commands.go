@@ -156,21 +156,9 @@ func graphSources(sources []Source, implementation, verb string) (Graph, error) 
 // telling the two apart by what they hold: a file with platform is a platform description. Given an
 // implementation, it judges where that implementation of one workflow places its parts.
 func FitSources(sources []Source, implementation string) (FitReport, error) {
-	read, err := ReadSources(sources, false)
+	workflows, descriptions, err := fitGiven(sources)
 	if err != nil {
 		return FitReport{}, err
-	}
-	var workflows []Workflow
-	var descriptions []*Map
-	for _, w := range read {
-		if w.Doc.has("platform") {
-			descriptions = append(descriptions, w.Doc)
-		} else {
-			workflows = append(workflows, w)
-		}
-	}
-	if len(workflows) == 0 {
-		return FitReport{}, Refusal("no workflow was given")
 	}
 	if implementation != "" {
 		if len(workflows) > 1 {
@@ -186,6 +174,43 @@ func FitSources(sources []Source, implementation string) (FitReport, error) {
 		return FitReport{}, Refusal("no platform descriptions were given")
 	}
 	return JudgeTogether(workflows, descriptions), nil
+}
+
+// FitPartsSources judges each part of the workflows given on its own against each platform
+// described, and gives the fewest platforms that between them hold every part, as awml fit --parts
+// does.
+func FitPartsSources(sources []Source) (PartsReport, error) {
+	workflows, descriptions, err := fitGiven(sources)
+	if err != nil {
+		return PartsReport{}, err
+	}
+	if len(descriptions) == 0 {
+		return PartsReport{}, Refusal("no platform descriptions were given")
+	}
+	return JudgeParts(workflows, descriptions), nil
+}
+
+// fitGiven reads the files fit is given and tells the workflows from the platform descriptions by
+// what they hold: a file with platform is a platform description. It refuses where no workflow was
+// given.
+func fitGiven(sources []Source) ([]Workflow, []*Map, error) {
+	read, err := ReadSources(sources, false)
+	if err != nil {
+		return nil, nil, err
+	}
+	var workflows []Workflow
+	var descriptions []*Map
+	for _, w := range read {
+		if w.Doc.has("platform") {
+			descriptions = append(descriptions, w.Doc)
+		} else {
+			workflows = append(workflows, w)
+		}
+	}
+	if len(workflows) == 0 {
+		return nil, nil, Refusal("no workflow was given")
+	}
+	return workflows, descriptions, nil
 }
 
 // SummariseSources summarises the workflows given together, as awml summary does.
