@@ -293,6 +293,49 @@ lines:
 	}
 }
 
+// A fork that nothing leads into never ran, so it goes with every line out of it, and convert names
+// it, for the author to draw where that work starts by hand. A fork something leads into has nothing
+// to note.
+func TestConvertNamesAForkThatNothingLeadsInto(t *testing.T) {
+	source := `awml: "0.7"
+title: Bread
+parts:
+  - {id: morning, kind: trigger, label: Morning}
+  - {id: idle, kind: fork}
+  - {id: split, kind: fork}
+  - {id: bake, kind: code, label: Bake}
+  - {id: pack, kind: code, label: Pack}
+lines:
+  - {from: idle, to: bake, kind: start}
+  - {from: morning, to: split, kind: start}
+  - {from: split, to: pack, kind: start}
+`
+	want := `awml: "0.8"
+title: Bread
+parts:
+  - { id: morning, kind: trigger, label: "Morning" }
+  - { id: bake, kind: code, label: "Bake" }
+  - { id: pack, kind: code, label: "Pack" }
+lines:
+  - { from: morning, to: pack, kind: start }
+`
+	for _, version := range []string{"0.7", "0.6"} {
+		data, notes, _, err := ConvertSources([]Source{{Text: []byte(strings.Replace(source, `awml: "0.7"`, `awml: "`+version+`"`, 1))}}, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(data) != want {
+			t.Errorf("convert from %s gave\n%s\nwant\n%s", version, data, want)
+		}
+		if want := []string{`part "idle" was a fork that nothing led into, so it never ran: it went, with every line out of it`}; !reflect.DeepEqual(notes, want) {
+			t.Errorf("convert from %s notes %q\nwant %q", version, notes, want)
+		}
+	}
+	if _, notes, _, err := ConvertSources([]Source{{Text: []byte(newsletter07)}}, ""); err != nil || notes != nil {
+		t.Errorf("convert notes %q, %v", notes, err)
+	}
+}
+
 // Each fork's parts are worked out once, so forks in a row, each with two lines into the one before,
 // convert at once rather than in a time that doubles with each fork.
 func TestConvertWorksOutEachForkOnce(t *testing.T) {
