@@ -47,6 +47,18 @@ func TestTheHelperDrawsAFileWhoseOnlyMistakesAreRedLines(t *testing.T) {
 	}
 }
 
+// The security view shows where untrusted text goes, so the helper draws no untrusted view.
+func TestTheHelperDrawsOnlyTheSecurityViewOfAFileThatMarksAPartUntrusted(t *testing.T) {
+	path := copyExample(t, "../tour/14-untrusted-text.yaml", func(s string) string { return s })
+	drawings, err := drawExample(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{strings.TrimSuffix(path, ".yaml") + ".mmd"}; !reflect.DeepEqual(drawings, want) {
+		t.Errorf("drawings = %q, want %q", drawings, want)
+	}
+}
+
 func TestTheHelperRefusesAFileWithAMistakeThatIsntALine(t *testing.T) {
 	path := copyExample(t, "../live/red-line.yaml", func(s string) string {
 		return strings.Replace(s, "kind: trigger", "kind: nonsense", 1)

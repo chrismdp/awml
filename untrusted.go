@@ -1,7 +1,6 @@
 package awml
 
 import (
-	"errors"
 	"fmt"
 )
 
@@ -40,30 +39,97 @@ func stops(p *Map) bool {
 	return kind == "review" || kind == "person" || kind == "code" && p.get("cleans") == true
 }
 
-// reach follows the text of one untrusted part along every line that leads on. It gives the parts
-// the text reaches, the source among them, and the parts that stop it, which it reaches but goes no
-// further than.
-func reach(source *Map, parts, lines []*Map) (reached, stopped map[*Map]bool) {
-	byID := map[any]*Map{}
-	for _, p := range parts {
-		byID[keyOf(p.get("id"))] = p
-	}
-	reached, stopped = map[*Map]bool{source: true}, map[*Map]bool{}
-	for queue := []*Map{source}; len(queue) > 0; queue = queue[1:] {
-		for _, l := range lines {
-			to := byID[keyOf(l.get("to"))]
-			if !lineLeads(l) || to == nil || byID[keyOf(l.get("from"))] != queue[0] || reached[to] || stopped[to] {
-				continue
-			}
-			if stops(to) {
-				stopped[to] = true
-				continue
-			}
-			reached[to] = true
-			queue = append(queue, to)
+// trail is where the text of one untrusted part goes: the parts it reaches, the source among them,
+// and the parts that stop it, which it reaches but goes no further than. carries holds each line
+// it goes along, and cleared each line out of a part that stopped it. unstopped holds each line on
+// its way to an outside action that nothing stops and nobody accepted, and breaches each line that
+// brings it into such an action. accepted holds each outside action it reaches under a standing
+// approval, which accepts the risk, with that approval.
+type trail struct {
+	reached, stopped            map[*Map]bool
+	carries, cleared, unstopped map[*Map]bool
+	breaches                    []*Map
+	accepted                    map[[2]*Map]bool
+}
+
+// follow follows the text of one untrusted part along every line that leads on. It carries with it
+// the standing approval it last passed, if only forks have come since, since a way to an action is
+// followed back through any fork, and a standing approval on the way to an action accepts the risk.
+func follow(source *Map, parts, lines []*Map) trail {
+	byID := partsOf(parts)
+	out := map[*Map][]*Map{}
+	for _, l := range lines {
+		if from := byID[keyOf(l.get("from"))]; from != nil && lineLeads(l) && byID[keyOf(l.get("to"))] != nil {
+			out[from] = append(out[from], l)
 		}
 	}
-	return reached, stopped
+	tr := trail{reached: map[*Map]bool{source: true}, stopped: map[*Map]bool{}, carries: map[*Map]bool{},
+		cleared: map[*Map]bool{}, unstopped: map[*Map]bool{}, accepted: map[[2]*Map]bool{}}
+	// A state is a part the text has reached, with the standing approval that accepts its risk.
+	type state struct{ part, approval *Map }
+	type step struct {
+		from state
+		line *Map
+		to   state
+	}
+	var steps []step
+	breached := map[*Map]bool{}
+	seen := map[state]bool{{source, nil}: true}
+	for queue := []state{{source, nil}}; len(queue) > 0; queue = queue[1:] {
+		at := queue[0]
+		var approval *Map
+		switch at.part.get("kind") {
+		case "approval":
+			approval = at.part
+		case "fork":
+			approval = at.approval
+		}
+		for _, l := range out[at.part] {
+			to := byID[keyOf(l.get("to"))]
+			next := state{to, approval}
+			tr.carries[l] = true
+			steps = append(steps, step{at, l, next})
+			if to.get("kind") == "outside" {
+				if approval != nil {
+					tr.accepted[[2]*Map{to, approval}] = true
+				} else if !breached[l] {
+					breached[l] = true
+					tr.breaches = append(tr.breaches, l)
+				}
+			}
+			if stops(to) {
+				tr.stopped[to] = true
+				continue
+			}
+			tr.reached[to] = true
+			if !seen[next] {
+				seen[next] = true
+				queue = append(queue, next)
+			}
+		}
+	}
+	for p := range tr.stopped {
+		for _, l := range out[p] {
+			tr.cleared[l] = true
+		}
+	}
+	// Each step that leads on to a breach is on the text's way to it, back to the source.
+	breach := func(s step) bool { return s.to.approval == nil && s.to.part.get("kind") == "outside" }
+	bad := map[state]bool{}
+	for changed := true; changed; {
+		changed = false
+		for _, s := range steps {
+			if (breach(s) || bad[s.to]) && !bad[s.from] {
+				bad[s.from], changed = true, true
+			}
+		}
+	}
+	for _, s := range steps {
+		if breach(s) || bad[s.to] {
+			tr.unstopped[s.line] = true
+		}
+	}
+	return tr
 }
 
 // untrustedParts gives the parts a file marks untrusted, in the file's order.
@@ -77,98 +143,137 @@ func untrustedParts(parts []*Map) []*Map {
 	return found
 }
 
-// untrustedWarnings warns of each outside action that untrusted text reaches, naming the parts the
-// text comes from.
-func untrustedWarnings(parts, lines []*Map) mistakeList {
-	from := map[*Map][]string{}
-	for _, source := range untrustedParts(parts) {
-		reached, _ := reach(source, parts, lines)
-		for p := range reached {
-			if p.get("kind") == "outside" {
-				from[p] = append(from[p], fmt.Sprintf(`"%s"`, show(source.get("id"))))
-			}
-		}
+// The words awml check adds after a line that brings untrusted text into an outside action with
+// nothing to stop it or accept the risk.
+const untrustedAdvice = "a review, a person's own step or a code step marked cleans on the way would stop it, or a standing approval in front of the action would accept the risk"
+
+// untrustedBreach gives the words for untrusted text from the parts named that reaches an outside
+// action with nothing to stop it or accept the risk.
+func untrustedBreach(sources []string, action string) string {
+	what := "part"
+	if len(sources) > 1 {
+		what = "parts"
 	}
-	var warnings mistakeList
-	for _, p := range parts {
-		if sources := from[p]; sources != nil {
-			what := "part"
-			if len(sources) > 1 {
-				what = "parts"
-			}
-			warnings.add("warn.untrusted-outside", fmt.Sprintf(`untrusted text from %s %s reaches outside action "%s": a review, a person's own step or a code step marked cleans in between would stop it`,
-				what, naturalList(sources), show(p.get("id"))))
-		}
-	}
-	return warnings
+	return fmt.Sprintf(`untrusted text from %s %s reaches outside action "%s" with nothing to stop it or accept the risk`, what, naturalList(sources), action)
 }
 
-// UntrustedSummary names one untrusted part, the steps and outside actions its text reaches, and
-// the reviews and steps that stop it. A step that stops the text takes it in, so it is among the
-// steps too.
+// untrustedOutside reports each outside action that untrusted text reaches with nothing on the way
+// to stop it or accept the risk, with each line that brings it there, naming the parts the text
+// comes from. Such a line breaks a rule, so it's drawn red.
+func untrustedOutside(parts, lines []*Map) mistakeList {
+	byID := partsOf(parts)
+	from := map[*Map][]string{}
+	into := map[*Map]map[*Map]bool{}
+	for _, source := range untrustedParts(parts) {
+		for _, l := range follow(source, parts, lines).breaches {
+			action := byID[keyOf(l.get("to"))]
+			if into[action] == nil {
+				into[action] = map[*Map]bool{}
+			}
+			if name := fmt.Sprintf(`"%s"`, show(source.get("id"))); !isOneOf(name, from[action]...) {
+				from[action] = append(from[action], name)
+			}
+			into[action][l] = true
+		}
+	}
+	var errors mistakeList
+	for _, p := range parts {
+		if from[p] == nil {
+			continue
+		}
+		var breaching []*Map
+		for _, l := range lines {
+			if into[p][l] {
+				breaching = append(breaching, l)
+			}
+		}
+		errors.addBreach("untrusted.outside", untrustedBreach(from[p], show(p.get("id"))), untrustedAdvice, breaching...)
+	}
+	return errors
+}
+
+// partsOf indexes parts by id.
+func partsOf(parts []*Map) map[any]*Map {
+	byID := map[any]*Map{}
+	for _, p := range parts {
+		byID[keyOf(p.get("id"))] = p
+	}
+	return byID
+}
+
+// untrustedLooks gives how each view draws untrusted text: for each line it touches, carries where
+// the text goes along it, stopped where it leaves what stopped the text, and unstopped where it's
+// on the text's way to an outside action that nothing stops and nobody accepted, which wins; and
+// each part marked untrusted whose text goes that way.
+func untrustedLooks(parts, lines []*Map) (looks map[*Map]string, unstopped map[*Map]bool) {
+	looks, unstopped = map[*Map]string{}, map[*Map]bool{}
+	rank := map[string]int{"stopped": 1, "carries": 2, "unstopped": 3}
+	mark := func(l *Map, look string) {
+		if rank[look] > rank[looks[l]] {
+			looks[l] = look
+		}
+	}
+	for _, source := range untrustedParts(parts) {
+		tr := follow(source, parts, lines)
+		for l := range tr.cleared {
+			mark(l, "stopped")
+		}
+		for l := range tr.carries {
+			mark(l, "carries")
+		}
+		for l := range tr.unstopped {
+			mark(l, "unstopped")
+		}
+		if tr.breaches != nil {
+			unstopped[source] = true
+		}
+	}
+	return looks, unstopped
+}
+
+// UntrustedSummary names one untrusted part, the steps and outside actions its text reaches, the
+// reviews and steps that stop it, and each outside action it reaches under a standing approval
+// that accepts the risk. A step that stops the text takes it in, so it is among the steps too.
 type UntrustedSummary struct {
-	Part           string   `json:"part"`
-	Steps          []string `json:"steps"`
-	OutsideActions []string `json:"outsideActions"`
-	StoppedBy      []string `json:"stoppedBy"`
+	Part           string         `json:"part"`
+	Steps          []string       `json:"steps"`
+	OutsideActions []string       `json:"outsideActions"`
+	StoppedBy      []string       `json:"stoppedBy"`
+	RisksAccepted  []AcceptedRisk `json:"risksAccepted"`
+}
+
+// AcceptedRisk is an outside action that untrusted text reaches, and the standing approval in front
+// of it that accepts the risk, whose label says who accepted it and on what evidence.
+type AcceptedRisk struct {
+	OutsideAction string `json:"outsideAction"`
+	Approval      string `json:"approval"`
 }
 
 func summariseUntrusted(parts, lines []*Map) []UntrustedSummary {
 	var out []UntrustedSummary
 	for _, source := range untrustedParts(parts) {
-		reached, stopped := reach(source, parts, lines)
+		tr := follow(source, parts, lines)
 		entry := UntrustedSummary{Part: str(source, "label")}
 		for _, p := range parts {
 			label := str(p, "label")
-			if (reached[p] || stopped[p]) && steps[str(p, "kind")] {
+			if (tr.reached[p] || tr.stopped[p]) && steps[str(p, "kind")] {
 				entry.Steps = append(entry.Steps, label)
 			}
-			if reached[p] && p.get("kind") == "outside" {
+			if tr.reached[p] && p.get("kind") == "outside" {
 				entry.OutsideActions = append(entry.OutsideActions, label)
 			}
-			if stopped[p] {
+			if tr.stopped[p] {
 				entry.StoppedBy = append(entry.StoppedBy, label)
+			}
+		}
+		for _, action := range parts {
+			for _, approval := range parts {
+				if tr.accepted[[2]*Map{action, approval}] {
+					entry.RisksAccepted = append(entry.RisksAccepted, AcceptedRisk{str(action, "label"), str(approval, "label")})
+				}
 			}
 		}
 		out = append(out, entry)
 	}
 	return out
-}
-
-// HasUntrusted is whether a workflow marks any part untrusted, and so has an untrusted view.
-func HasUntrusted(doc *Map) bool {
-	return IsCanonical(doc) && len(untrustedParts(items(doc, "parts"))) > 0
-}
-
-// UntrustedView projects a sound workflow into its untrusted view: the security view, drawn to show
-// where untrusted text reaches. The source is never changed.
-func UntrustedView(doc *Map) (*Map, error) {
-	if !HasUntrusted(doc) {
-		return nil, errors.New("the file marks no part untrusted, so it has no untrusted view")
-	}
-	view, err := View(doc, "")
-	if err != nil {
-		return nil, err
-	}
-	view.set("view", "untrusted")
-	return view, nil
-}
-
-// untrustedLooks gives the untrusted view's class for each part the text reaches, and marks each
-// part that stops it.
-func untrustedLooks(parts, lines []*Map) (class map[string]string, marked map[string]bool) {
-	class, marked = map[string]string{}, map[string]bool{}
-	for _, source := range untrustedParts(parts) {
-		reached, stopped := reach(source, parts, lines)
-		for p := range reached {
-			class[str(p, "id")] = "taint"
-			if p.get("kind") == "outside" {
-				class[str(p, "id")] = "taintout"
-			}
-		}
-		for p := range stopped {
-			marked[str(p, "id")] = true
-		}
-	}
-	return class, marked
 }

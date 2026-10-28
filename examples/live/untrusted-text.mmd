@@ -11,20 +11,20 @@ config:
 flowchart TB
   subgraph bakery["bakery#58; Ana#44; Ben"]
     direction TB
-    form(["An order on the website#39;s form ⚠️"])
-    keep("<small style='color:rgb(61,67,79)'>⚙️ 📥 bring-in</small><br>Keep only the cake#44; the quantity and the date#44; each checked against the price list 🛡️")
-    book("<small style='color:rgb(61,67,79)'>⚙️ 🛠️ do</small><br>Book the bake")
-    rota>"Add it to the baking rota#58; Allow"]
-    draft("<small style='color:rgb(61,67,79)'>🤖 ✏️ draft</small><br>Draft a reply to the customer#39;s note")
+    form(["An enquiry on the website#39;s form"])
+    sort("<small style='color:rgb(61,67,79)'>🤖 🗂️ sort</small><br>Sort the enquiry")
+    file("<small style='color:rgb(61,67,79)'>⚙️ 🛠️ do</small><br>Label it with its kind")
+    label>"Label it in the shared inbox#58; Allow"]
+    draft("<small style='color:rgb(61,67,79)'>🤖 ✏️ draft</small><br>Draft a reply")
     ask("<small style='color:rgb(61,67,79)'>⚙️ 🛠️ do</small><br>Ask to send the reply")
-    approve("<small style='color:rgb(61,67,79)'>👤 ✅ review</small><br>Ana#39;s yes to the exact reply 🛡️")
+    approve("<small style='color:rgb(61,67,79)'>👤 ✅ review</small><br>Ana#39;s yes to the exact reply")
     send>"Send the reply#58; Ask"]
   end
 
-  form --> keep
-  keep --> book
-  book --> rota
-  form --> draft
+  form --> sort
+  sort --> file
+  file -->|"untrusted text from part #34;form#34; reaches outside action #34;label#34; with nothing to stop it or accept the risk"| label
+  sort --> draft
   draft --> ask
   ask --> approve
   approve -->|"#91;yes#93;"| send
@@ -38,10 +38,15 @@ flowchart TB
   classDef person fill:#f7d79a,stroke:#9a6100,color:#16171b
   classDef uml fill:#16171b,stroke:#16171b,color:#16171b
   classDef gap fill:#ffffff,stroke:#8a93a3,stroke-dasharray:4 3,color:#6b7280
-  classDef taint fill:#ead9f5,stroke:#7b3fa0,color:#16171b
-  classDef taintout fill:#f9cdc7,stroke:#d0342c,stroke-width:2.5px,color:#16171b
-  class rota,send out
-  class keep,book code
+  classDef untrusted stroke:#d97a00,stroke-width:3px
+  classDef unstopped stroke:#d0342c,stroke-width:3px
+  class form trig
+  class label,send out
+  class sort,draft ai
+  class file,ask code
   class approve person
-  class form,draft,ask taint
+  class form unstopped
   style bakery fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
+  linkStyle 0,1,2 stroke:#d0342c,stroke-width:2.5px,color:#b0271f
+  linkStyle 3,4,5 stroke:#d97a00,stroke-width:2.5px
+  linkStyle 6 stroke:#109a74,stroke-width:2.5px

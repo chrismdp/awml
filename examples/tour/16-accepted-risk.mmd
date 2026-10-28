@@ -12,7 +12,7 @@ flowchart TB
   subgraph bakery["bakery#58; Ana#44; Ben"]
     direction TB
     quarter(["Every 15 minutes"])
-    chat{{"The website#39;s chat ⚠️"}}
+    chat{{"The website#39;s chat"}}
     bring("<small style='color:rgb(61,67,79)'>⚙️ 📥 bring-in</small><br>Bring in the questions that arrived")
     sheet[("Ana#39;s answer sheet#58; hours and allergens")]
     draft("<small style='color:rgb(61,67,79)'>🤖 ✏️ draft</small><br>Draft a reply to each question about opening hours or allergens#44; from the answer sheet")
@@ -42,6 +42,8 @@ flowchart TB
   classDef person fill:#f7d79a,stroke:#9a6100,color:#16171b
   classDef uml fill:#16171b,stroke:#16171b,color:#16171b
   classDef gap fill:#ffffff,stroke:#8a93a3,stroke-dasharray:4 3,color:#6b7280
+  classDef untrusted stroke:#d97a00,stroke-width:3px
+  classDef unstopped stroke:#d0342c,stroke-width:3px
   class quarter trig
   class sheet ctx
   class chat con
@@ -50,4 +52,7 @@ flowchart TB
   class draft ai
   class bring,send code
   class approval person
+  class chat untrusted
   style bakery fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
+  linkStyle 1,2,4 stroke:#d97a00,stroke-width:2.5px
+  linkStyle 6 stroke:#109a74,stroke-width:2.5px

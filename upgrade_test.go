@@ -118,7 +118,8 @@ implementations:
       - {id: runner, label: Runner, platform: acme/platforms/ops-runner, parts: [renew, standing, library, phone, board]}
 `
 
-// 0.8 changed only what a standing approval may cover, so a 0.7 file changes only its version, even
+// 0.8 changed only rules, what a standing approval may cover and that untrusted text reaching an
+// action unchecked is a mistake, so a 0.7 file changes only its version, even
 // one that still has a line from a do step into a trigger with a ref, which converting a 0.6 file
 // would turn into an outside action.
 func TestUpgradeFrom07ChangesOnlyTheVersion(t *testing.T) {

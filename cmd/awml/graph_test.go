@@ -32,7 +32,6 @@ func TestGraphPrintsWhatDrawDrawsAsJSON(t *testing.T) {
 	workflow := doc(t, placedOrders)
 	security, _ := awml.View(workflow, "")
 	home, _ := awml.View(workflow, "home")
-	untrusted, _ := awml.UntrustedView(workflow)
 	for _, tc := range []struct {
 		args []string
 		view *awml.Map
@@ -40,7 +39,6 @@ func TestGraphPrintsWhatDrawDrawsAsJSON(t *testing.T) {
 		{[]string{path}, security},
 		{[]string{"--implementation", "home", path}, home},
 		{[]string{"--implementation=home", path}, home},
-		{[]string{"--untrusted", path}, untrusted},
 	} {
 		if r := awmlRun(append([]string{"graph"}, tc.args...)...); r != (result{0, encoded(t, awml.GraphOf(tc.view)), ""}) {
 			t.Errorf("graph %v gave %+v", tc.args, r)
@@ -53,16 +51,12 @@ func TestGraphPrintsWhatDrawDrawsAsJSON(t *testing.T) {
 
 func TestGraphRefusesWhatDrawRefuses(t *testing.T) {
 	path := write(t, "orders.yaml", placedOrders)
-	usage := commands["graph"].usage
-	if r := awmlRun("graph", "--untrusted", "--implementation", "home", path); r != (result{2, "", usage + "awml graph: error: argument --untrusted: not allowed with argument --implementation\n"}) {
-		t.Errorf("graph --untrusted --implementation gave %+v", r)
+	// The security view shows where untrusted text goes, so there's no untrusted view to ask for.
+	if r := awmlRun("graph", "--untrusted", path); r != (result{2, "", usage + "awml: error: unrecognized arguments: --untrusted\n"}) {
+		t.Errorf("graph --untrusted gave %+v", r)
 	}
 	if r := awmlRun("graph", "--implementation", "away", path); r != (result{1, "", "unknown implementation \"away\"\n"}) {
 		t.Errorf("graph of an unknown implementation gave %+v", r)
-	}
-	plain := write(t, "plain.yaml", good)
-	if r := awmlRun("graph", "--untrusted", plain); r != (result{1, "", "the file marks no part untrusted, so it has no untrusted view\n"}) {
-		t.Errorf("graph --untrusted of a file with nothing untrusted gave %+v", r)
 	}
 	if r := awmlRun("graph"); r.code != 2 || !strings.Contains(r.stderr, "the following arguments are required: files") {
 		t.Errorf("graph of nothing gave %+v", r)
@@ -82,10 +76,8 @@ func TestGraphOfSeveralWorkflowsIsTheirMap(t *testing.T) {
 	if got := awmlRun("graph", dir); got != (result{0, want, ""}) {
 		t.Errorf("graph of a folder gave %+v", got)
 	}
-	for _, option := range []string{"--untrusted", "--implementation=home"} {
-		if got := awmlRun("graph", option, plan, shopping); got.code != 2 || !strings.Contains(got.stderr, "awml graph: error: ") || !strings.Contains(got.stderr, "takes one workflow, not several") {
-			t.Errorf("graph %s of two gave %+v", option, got)
-		}
+	if got := awmlRun("graph", "--implementation=home", plan, shopping); got.code != 2 || !strings.Contains(got.stderr, "awml graph: error: ") || !strings.Contains(got.stderr, "takes one workflow, not several") {
+		t.Errorf("graph --implementation=home of two gave %+v", got)
 	}
 }
 
@@ -93,7 +85,7 @@ func TestTheHelpListsGraph(t *testing.T) {
 	if r := awmlRun("--help"); !strings.Contains(r.stdout, "{draw,graph,page,") || !strings.Contains(r.stdout, "    graph            print what a file's drawing shows, as JSON\n") {
 		t.Errorf("help gave %s", r.stdout)
 	}
-	if r := awmlRun("graph", "--help"); r.code != 0 || !strings.HasPrefix(r.stdout, "usage: awml graph [-h] [--implementation ID | --untrusted] files [files ...]\n") {
+	if r := awmlRun("graph", "--help"); r.code != 0 || !strings.HasPrefix(r.stdout, "usage: awml graph [-h] [--implementation ID] files [files ...]\n") {
 		t.Errorf("graph --help gave %+v", r)
 	}
 }

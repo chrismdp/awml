@@ -127,21 +127,6 @@ func TestAMistakeThatIsntALinesIsDrawnAsBefore(t *testing.T) {
 	}
 }
 
-func TestUntrustedTextGoesAlongALineThatBreaksARule(t *testing.T) {
-	src := strings.Replace(orderForm, "{ from: orders, to: plan, kind: data }", "{ from: orders, to: plan, kind: data }\n  - { from: read, to: box, kind: start, label: \"printed by the live system\" }", 1)
-	doc := parsed(t, src)
-	got := Summarise(doc).Untrusted[0]
-	if want := []string{"Pin the plan to the board: Allow", "Print the label: Allow"}; !reflect.DeepEqual(got.OutsideActions, want) {
-		t.Errorf("outside actions = %q, want %q", got.OutsideActions, want)
-	}
-	if !reflect.DeepEqual(warningsOf(doc, "warn.untrusted-outside"), []string{
-		`untrusted text from part "form" reaches outside action "board": a review, a person's own step or a code step marked cleans in between would stop it`,
-		`untrusted text from part "form" reaches outside action "box": a review, a person's own step or a code step marked cleans in between would stop it`,
-	}) {
-		t.Errorf("Warnings gave %q", Warnings(doc))
-	}
-}
-
 func TestADoStepsWarningsCountALineThatBreaksARule(t *testing.T) {
 	doc := parsed(t, `awml: "0.8"
 title: T

@@ -221,22 +221,29 @@ func TestAnOutsideActionsRefNamesTheTriggerOfTheWorkflowItStarts(t *testing.T) {
 	}
 }
 
+// breachOf is the mistake awml check reports where text from a part reaches an outside action
+// with nothing to stop it or accept the risk.
+func breachOf(from, action string) string {
+	return `untrusted text from part ` + from + ` reaches outside action "` + action + `" with nothing to stop it or accept the risk: ` + untrustedFix
+}
+
 // Given together, untrusted text that reaches an outside action carries on into the trigger it
-// starts, and through the workflow it starts. Checked alone, the started workflow doesn't know.
+// starts, and through the workflow it starts, and a line that brings it into an action there with
+// nothing to stop it or accept the risk is a mistake. Checked alone, the started workflow doesn't
+// know.
 func TestUntrustedTextFollowsAnOutsideActionIntoTheWorkflowItStarts(t *testing.T) {
-	stop := `: a review, a person's own step or a code step marked cleans in between would stop it`
 	plan := strings.Replace(planWorkflow, "  - { id: tell,", "  - { id: form, kind: connector, label: The order form, untrusted: true, in: family }\n  - { id: tell,", 1)
 	plan = strings.Replace(plan, "lines:\n", "lines:\n  - { from: form, to: tell, kind: data }\n", 1)
 	workflows := together(t, "plan.yaml", plan, "shop.yaml", shopWorkflow)
-	if got := Warnings(workflows[0].Doc); !reflect.DeepEqual(got, []string{`untrusted text from part "form" reaches outside action "ready"` + stop}) {
-		t.Errorf("the plan alone warns %q", got)
+	mistakes(t, workflows[0].Doc, breachOf(`"form"`, "ready"))
+	mistakes(t, workflows[1].Doc)
+	togetherFinds(t, workflows, nil, []string{breachOf(`"form" in plan.yaml`, "basket")})
+	// It's a line that breaks a rule, so the map is still drawn.
+	if got := TogetherUnsound(workflows); !reflect.DeepEqual(got, [][]string{nil, nil}) {
+		t.Errorf("TogetherUnsound gave %q", got)
 	}
-	if got := Warnings(workflows[1].Doc); len(got) != 0 {
-		t.Errorf("the shopping alone warns %q", got)
-	}
-	want := [][]string{nil, {`untrusted text from part "form" in plan.yaml reaches outside action "basket"` + stop}}
-	if got := TogetherWarnings(workflows); !reflect.DeepEqual(got, want) {
-		t.Errorf("TogetherWarnings gave\n  %q\nwant\n  %q", got, want)
+	if got := TogetherWarnings(workflows); !reflect.DeepEqual(got, [][]string{nil, nil}) {
+		t.Errorf("TogetherWarnings gave %q", got)
 	}
 	untrusted := []UntrustedSummary{{Part: "The order form", Steps: []string{"Tell the shopping the list is ready", "Fill the basket"},
 		OutsideActions: []string{"Start the shopping: Allow", "Fill the basket: Allow"}}}
@@ -246,8 +253,16 @@ func TestUntrustedTextFollowsAnOutsideActionIntoTheWorkflowItStarts(t *testing.T
 	// A review in the started workflow stops it there.
 	shop := strings.Replace(shopWorkflow, "  - { from: ready, to: fill, kind: start }", "  - { from: ready, to: ok, kind: start }\n  - { from: ok, to: fill, kind: start }", 1)
 	shop = strings.Replace(shop, "  - { id: fill,", "  - { id: ok, kind: review, label: Check the list, in: home }\n  - { id: fill,", 1)
-	if got := TogetherWarnings(together(t, "plan.yaml", plan, "shop.yaml", shop)); !reflect.DeepEqual(got, [][]string{nil, nil}) {
-		t.Errorf("TogetherWarnings past a review gave %q", got)
+	togetherFinds(t, together(t, "plan.yaml", plan, "shop.yaml", shop))
+	// A standing approval in front of the action there accepts the risk, and the summary lists it.
+	shop = strings.Replace(shopWorkflow, "  - { from: fill, to: basket, kind: data }", "  - { from: fill, to: yes, kind: start }\n  - { from: yes, to: basket, kind: data }\n  - { from: yes, to: orders, kind: data }", 1)
+	shop = strings.Replace(shop, `  - { id: basket, kind: outside, label: "Fill the basket: Allow", in: home }`, `  - { id: yes, kind: approval, label: "The parents' standing approval, risk accepted by the parents", in: home }`+"\n"+
+		`  - { id: basket, kind: outside, label: "Fill the basket: Ask", in: home }`+"\n"+`  - { id: orders, kind: surface, label: "The parents' orders", in: home }`, 1)
+	workflows = together(t, "plan.yaml", plan, "shop.yaml", shop)
+	togetherFinds(t, workflows)
+	accepted := []AcceptedRisk{{OutsideAction: "Fill the basket: Ask", Approval: "The parents' standing approval, risk accepted by the parents"}}
+	if got := SummariseTogether(workflows).Untrusted[0].RisksAccepted; !reflect.DeepEqual(got, accepted) {
+		t.Errorf("the risks accepted are %+v", got)
 	}
 }
 
@@ -308,15 +323,8 @@ func TestUntrustedTextIsFollowedAcrossWorkflows(t *testing.T) {
 	plan := strings.Replace(planWorkflow, "  - { id: list,", "  - { id: form, kind: connector, label: The order form, untrusted: true, in: family }\n  - { id: list,", 1)
 	plan = strings.Replace(plan, "lines:\n", "lines:\n  - { from: form, to: plan, kind: data }\n", 1)
 	workflows := together(t, "plan.yaml", plan, "shop.yaml", shopWorkflow)
-	stop := `: a review, a person's own step or a code step marked cleans in between would stop it`
-	if got := Warnings(workflows[0].Doc); !reflect.DeepEqual(got, []string{`untrusted text from part "form" reaches outside action "ready"` + stop}) {
-		t.Fatalf("the plan alone warns %q", got)
-	}
-	got := TogetherWarnings(workflows)
-	want := [][]string{nil, {`untrusted text from part "form" in plan.yaml reaches outside action "basket"` + stop}}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("TogetherWarnings gave %q\nwant %q", got, want)
-	}
+	mistakes(t, workflows[0].Doc, breachOf(`"form"`, "ready"))
+	togetherFinds(t, workflows, nil, []string{breachOf(`"form" in plan.yaml`, "basket")})
 	summary := SummariseTogether(workflows)
 	if len(summary.Untrusted) != 1 || !reflect.DeepEqual(summary.Untrusted[0].OutsideActions, []string{"Start the shopping: Allow", "Fill the basket: Allow"}) {
 		t.Errorf("the summary's untrusted parts are %+v", summary.Untrusted)
@@ -368,32 +376,32 @@ lines:
 // followed from there, into every workflow.
 func TestAPartIsUntrustedIfAnyCopyIsMarked(t *testing.T) {
 	workflows := together(t, "sorter.yaml", sorterWorkflow, "replier.yaml", replierWorkflow)
-	stop := `: a review, a person's own step or a code step marked cleans in between would stop it`
-	want := [][]string{
-		{`untrusted text from part "mail" in replier.yaml reaches outside action "label"` + stop},
-		{`untrusted text from part "mail" in replier.yaml reaches outside action "send"` + stop},
-	}
-	if got := TogetherWarnings(workflows); !reflect.DeepEqual(got, want) {
-		t.Errorf("TogetherWarnings gave %q\nwant %q", got, want)
-	}
+	togetherFinds(t, workflows,
+		[]string{breachOf(`"mail" in replier.yaml`, "label")},
+		[]string{breachOf(`"mail" in replier.yaml`, "send")})
 	untrusted := []UntrustedSummary{{Part: "The shop inbox", Steps: []string{"Sort the mail", "Tag the mail", "Draft a reply", "Send it"},
 		OutsideActions: []string{"Label the mail: Allow", "Send the reply: Allow"}}}
 	if got := SummariseTogether(workflows).Untrusted; !reflect.DeepEqual(got, untrusted) {
 		t.Errorf("the summary's untrusted parts are %+v\nwant %+v", got, untrusted)
 	}
-	if got := DrawMap(workflows); !strings.Contains(got, `s1{{"The shop inbox ⚠️"}}`) {
-		t.Errorf("the map doesn't mark the inbox untrusted:\n%s", got)
-	}
-	// Where the owner's copy is marked too, what it reaches in its own workflow is warned of there.
+	// The map draws the inbox with the red outline of text that reaches an action unstopped.
+	got := DrawMap(workflows) + "\n"
+	has(t, got, `s1{{"The shop inbox"}}`)
+	has(t, got, "\n  class s1 unstopped\n")
+	// Where the owner's copy is marked too, what it reaches in its own workflow is reported there.
 	marked := strings.Replace(sorterWorkflow, "label: The shop inbox, in: office }", "label: The shop inbox, in: office, untrusted: true }", 1)
 	workflows = together(t, "sorter.yaml", marked, "replier.yaml", replierWorkflow)
-	if got := warningsOf(workflows[0].Doc, "warn.untrusted-outside"); !reflect.DeepEqual(got, []string{`untrusted text from part "mail" reaches outside action "label"` + stop}) {
-		t.Fatalf("the sorter alone warns %q", got)
-	}
-	want = [][]string{nil, {`untrusted text from part "mail" in sorter.yaml reaches outside action "send"` + stop}}
-	if got := TogetherWarnings(workflows); !reflect.DeepEqual(got, want) {
-		t.Errorf("TogetherWarnings gave %q\nwant %q", got, want)
-	}
+	mistakes(t, workflows[0].Doc, breachOf(`"mail"`, "label"))
+	togetherFinds(t, workflows, nil, []string{breachOf(`"mail" in sorter.yaml`, "send")})
+}
+
+// On a map, a part marked untrusted whose text reaches no action unstopped has the orange outline.
+func TestTheMapDrawsAnUntrustedPartsOutline(t *testing.T) {
+	shop := strings.Replace(shopWorkflow, "label: The shopping list is ready, wait: PT1H }", "label: The shopping list is ready, wait: PT1H, untrusted: true }", 1)
+	shop = strings.Replace(shop, "label: Fill the basket, in: home }", "label: Fill the basket, in: home, cleans: true }", 1)
+	got := DrawMap(together(t, "plan.yaml", planWorkflow, "shop.yaml", shop)) + "\n"
+	has(t, got, "\n  classDef untrusted "+untrustedOutline+"\n")
+	has(t, got, "\n  class w2_ready untrusted\n")
 }
 
 func TestTheMapDrawsABoxForEachWorkflowAndEachSharedPartOnce(t *testing.T) {
@@ -630,4 +638,19 @@ func TestFitOfOneWorkflowIsAsBefore(t *testing.T) {
 	if got, want := JudgeTogether([]Workflow{{File: "mail.yaml", Doc: docs[0]}}, docs[1:]), Judge(docs[0], nil, docs[1:]); !reflect.DeepEqual(got, want) {
 		t.Errorf("JudgeTogether gave %+v\nwant %+v", got, want)
 	}
+}
+
+// A file can hold an id YAML reads as a list, which is a mistake of its own, and the check still
+// follows untrusted text across the workflows given without failing on it.
+func TestUntrustedTextAcrossWorkflowsSurvivesAnIDThatIsAList(t *testing.T) {
+	plan := strings.Replace(planWorkflow, "  - { id: thu,", "  - { id: odd, kind: trigger, label: The order form, untrusted: true }\n  - { id: [x], kind: outside, label: \"Send it: Allow\", in: family }\n  - { id: thu,", 1)
+	plan = strings.Replace(plan, "lines:\n", "lines:\n  - { from: odd, to: [x], kind: start }\n", 1)
+	workflows := []Workflow{
+		{File: "plan.yaml", Doc: parsed(t, plan)},
+		{File: "shop.yaml", Doc: parsed(t, shopWorkflow)},
+	}
+	if len(Check(workflows[0].Doc)) == 0 {
+		t.Fatal("the plan's list id isn't a mistake of its own")
+	}
+	TogetherMistakes(workflows)
 }

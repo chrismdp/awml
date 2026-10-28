@@ -474,33 +474,40 @@ lines:
 
 func TestSummaryListsWhatEachUntrustedPartsTextReaches(t *testing.T) {
 	r := awmlRun("summary", write(t, "orders.yaml", orders))
-	want := "untrusted parts: 1\n  An order on the website's form\n    steps:\n      Keep only the order number and quantity\n      Note it\n    outside actions:\n      Pin it to the board: Allow\n    stopped by:\n      Keep only the order number and quantity\n"
-	if r := awmlRun("summary", write(t, "nothing.yaml", strings.Replace(orders, "{ from: form, to: note, kind: start }", "{ from: keep, to: note, kind: start }", 1))); !strings.HasSuffix(r.stdout, "    outside actions: none\n    stopped by:\n      Keep only the order number and quantity\n") {
+	want := "untrusted parts: 1\n  An order on the website's form\n    steps:\n      Keep only the order number and quantity\n      Note it\n    outside actions:\n      Pin it to the board: Allow\n    stopped by:\n      Keep only the order number and quantity\n    risks accepted: none\n"
+	if r := awmlRun("summary", write(t, "nothing.yaml", strings.Replace(orders, "{ from: form, to: note, kind: start }", "{ from: keep, to: note, kind: start }", 1))); !strings.HasSuffix(r.stdout, "    outside actions: none\n    stopped by:\n      Keep only the order number and quantity\n    risks accepted: none\n") {
 		t.Errorf("summary gave %+v", r)
 	}
 	if r.code != 0 || !strings.HasSuffix(r.stdout, want) {
 		t.Errorf("summary gave %+v", r)
 	}
+	// A standing approval in front of the action accepts the risk, and the summary lists it under it.
+	accepted := strings.Replace(orders, "Pin it to the board: Allow", "Pin it to the board: Ask", 1)
+	accepted = strings.Replace(accepted, "  - { id: board,", "  - { id: yes, kind: approval, label: \"Ana's standing approval, risk accepted by Ana\", in: bakery }\n  - { id: list, kind: surface, label: \"Ana's list\", in: bakery }\n  - { id: board,", 1)
+	accepted = strings.Replace(accepted, "  - { from: note, to: board, kind: start }", "  - { from: note, to: yes, kind: start }\n  - { from: yes, to: board, kind: start }\n  - { from: yes, to: list, kind: data }", 1)
+	path := write(t, "accepted.yaml", accepted)
+	if r := awmlRun("check", path); r.code != 0 {
+		t.Errorf("check gave %+v", r)
+	}
+	if r := awmlRun("summary", path); !strings.HasSuffix(r.stdout, "    risks accepted:\n      Pin it to the board: Ask\n        under Ana's standing approval, risk accepted by Ana\n") {
+		t.Errorf("summary gave %+v", r)
+	}
 }
 
-func TestDrawUntrustedDrawsTheUntrustedView(t *testing.T) {
+// Untrusted text that reaches an outside action with nothing to stop it or accept the risk breaks
+// a rule, so check fails on it, and draw draws it red, as every line that breaks a rule. The
+// security view shows where the text goes, so there's no untrusted view to ask for.
+func TestCheckFailsOnUntrustedTextThatReachesAnActionUnstopped(t *testing.T) {
 	path := write(t, "orders.yaml", orders)
-	view, err := awml.UntrustedView(doc(t, orders))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if r := awmlRun("draw", "--untrusted", path); r != (result{0, awml.Draw(view) + "\n", ""}) {
-		t.Errorf("draw --untrusted gave %+v", r)
-	}
-	if r := awmlRun("draw", "--untrusted", "--implementation", "home", path); r.code != 2 || !strings.Contains(r.stderr, "argument --untrusted: not allowed with argument --implementation") {
-		t.Errorf("draw --untrusted --implementation gave %+v", r)
-	}
-	plain := write(t, "plain.yaml", strings.Replace(strings.Replace(orders, ", untrusted: true", "", 1), ", cleans: true", "", 1))
-	if r := awmlRun("draw", "--untrusted", plain); r != (result{1, "", "the file marks no part untrusted, so it has no untrusted view\n"}) {
-		t.Errorf("draw --untrusted of a file with nothing untrusted gave %+v", r)
-	}
-	if r := awmlRun("check", path); r.code != 0 || !strings.Contains(r.stdout, `warning: untrusted text from part "form" reaches outside action "board"`) {
+	words := `untrusted text from part "form" reaches outside action "board" with nothing to stop it or accept the risk`
+	if r := awmlRun("check", path); r != (result{1, path + ": " + words + ": a review, a person's own step or a code step marked cleans on the way would stop it, or a standing approval in front of the action would accept the risk\n", ""}) {
 		t.Errorf("check gave %+v", r)
+	}
+	if r := awmlRun("draw", path); r.code != 0 || !strings.Contains(r.stdout, "  linkStyle 2,3 stroke:#d0342c") || !strings.Contains(r.stdout, "  class form unstopped\n") {
+		t.Errorf("draw gave %+v", r)
+	}
+	if r := awmlRun("draw", "--untrusted", path); r != (result{2, "", usage + "awml: error: unrecognized arguments: --untrusted\n"}) {
+		t.Errorf("draw --untrusted gave %+v", r)
 	}
 }
 
@@ -652,7 +659,7 @@ func TestAMistakeInTheCommandShowsHowToUseIt(t *testing.T) {
 	}{
 		{nil, "usage: awml [-h] [--version] [--registry URL] {draw,graph,page,check,fit,summary,convert,login,push,pull} ...\nawml: error: the following arguments are required: command\n"},
 		{[]string{"drew", "a.yaml"}, "usage: awml [-h] [--version] [--registry URL] {draw,graph,page,check,fit,summary,convert,login,push,pull} ...\nawml: error: argument command: invalid choice: 'drew' (choose from 'draw', 'graph', 'page', 'check', 'fit', 'summary', 'convert', 'login', 'push', 'pull')\n"},
-		{[]string{"draw"}, "usage: awml draw [-h] [--implementation ID | --untrusted] files [files ...]\nawml draw: error: the following arguments are required: files\n"},
+		{[]string{"draw"}, "usage: awml draw [-h] [--implementation ID] files [files ...]\nawml draw: error: the following arguments are required: files\n"},
 		{[]string{"check"}, "usage: awml check [-h] [--json] files [files ...]\nawml check: error: the following arguments are required: files\n"},
 		{[]string{"page", "a.yaml"}, "usage: awml page [-h] -o OUT files [files ...]\nawml page: error: the following arguments are required: -o/--out\n"},
 		{[]string{"page", "a.yaml", "-o"}, "usage: awml page [-h] -o OUT files [files ...]\nawml page: error: argument -o/--out: expected one argument\n"},

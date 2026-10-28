@@ -12,13 +12,14 @@ func TestSummariseEveryExample(t *testing.T) {
 	pubDinners := PublishingSummary{Count: 1, Labels: []string{"standing rule: dinners to carers · adds June and Beth"}}
 	pubGrandma := PublishingSummary{Count: 1, Labels: []string{"standing rule: pickups to Grandma · adds Grandma Rose"}}
 	pubChecklist := PublishingSummary{Count: 1, Labels: []string{"the checklist, with no names in it · adds Kit"}}
+	untrustedLegend := []UntrustedSummary{{Part: "Text anyone can write, marked untrusted: a thick orange outline", StoppedBy: []string{"A review: a person's yes"}}}
 	cases := map[string]Summary{
 		"examples/client-email.yaml":              {Steps: StepCounts{AI: 3, Code: 3, Person: 1}, Operations: map[string]int{"bring-in": 1, "sort": 2, "learn": 1, "draft": 1, "do": 2}, OutsideActions: TierCounts{Allow: 1, Ask: 1}, Triggers: 1, Contexts: 2, Connectors: 1, Scopes: 2, Platforms: 4, PublishingLines: pubClient},
 		"examples/dinners.yaml":                   {Steps: StepCounts{AI: 1}, Triggers: 1, Contexts: 2, Surfaces: 2, Scopes: 2, Platforms: 3, PublishingLines: pubDinners},
 		"examples/shopping.yaml":                  {Steps: StepCounts{Code: 1}, Operations: map[string]int{"do": 1}, OutsideActions: TierCounts{Allow: 1, Ask: 1}, Triggers: 1, Reviews: 1, Contexts: 2, Connectors: 1, Scopes: 2, Platforms: 3},
 		"examples/bills.yaml":                     {Steps: StepCounts{Code: 1}, Operations: map[string]int{"check": 1}, Triggers: 1, Connectors: 1, Surfaces: 1, Scopes: 3, Platforms: 3},
 		"examples/pickups.yaml":                   {Steps: StepCounts{Code: 1}, Operations: map[string]int{"bring-in": 1}, Triggers: 1, Contexts: 1, Connectors: 1, Surfaces: 1, Scopes: 2, Platforms: 3},
-		"examples/legend.yaml":                    {Steps: StepCounts{AI: 1, Code: 1, Person: 1}, OutsideActions: TierCounts{Ask: 1}, Triggers: 1, Reviews: 1, Contexts: 1, Connectors: 1, Surfaces: 1},
+		"examples/legend.yaml":                    {Steps: StepCounts{AI: 1, Code: 1, Person: 1}, OutsideActions: TierCounts{Ask: 1}, Triggers: 1, Reviews: 1, Contexts: 1, Connectors: 2, Surfaces: 1, Untrusted: untrustedLegend},
 		"examples/question.yaml":                  {Steps: StepCounts{AI: 1, Code: 1}, Operations: map[string]int{"answer": 2}, Triggers: 1, Contexts: 3, Surfaces: 1, Scopes: 3, RefusedReads: 1},
 		"examples/tour/01-draft-and-send.yaml":    {Steps: StepCounts{AI: 1, Code: 1}, Operations: map[string]int{"draft": 1, "do": 1}, OutsideActions: TierCounts{Ask: 1}, Triggers: 1, Reviews: 1, Scopes: 1},
 		"examples/tour/02-fork.yaml":              {Steps: StepCounts{AI: 2}, Operations: map[string]int{"learn": 1, "check": 1}, Triggers: 1, Contexts: 1, Surfaces: 1, Scopes: 1},

@@ -114,9 +114,25 @@ func TestDrawOfSeveralWorkflowsDrawsTheirMap(t *testing.T) {
 	if got := awmlRun("draw", dir); got != (result{0, want, ""}) {
 		t.Errorf("draw of a folder gave %+v", got)
 	}
-	for _, option := range []string{"--untrusted", "--implementation=home"} {
-		if got := awmlRun("draw", option, plan, shopping); got.code != 2 || !strings.Contains(got.stderr, "draws one workflow") {
-			t.Errorf("draw %s of two gave %+v", option, got)
+	if got := awmlRun("draw", "--implementation=home", plan, shopping); got.code != 2 || !strings.Contains(got.stderr, "draws one workflow") {
+		t.Errorf("draw --implementation=home of two gave %+v", got)
+	}
+}
+
+// Untrusted text that reaches an outside action unstopped in a workflow another starts is a line
+// that breaks a rule: check fails on it, and the commands that draw and count red lines go ahead.
+func TestUntrustedTextAcrossWorkflowsFailsTheCheckButIsStillDrawn(t *testing.T) {
+	plan := strings.Replace(planWorkflow, "  - { id: tell,", "  - { id: form, kind: connector, label: The order form, untrusted: true, in: family }\n  - { id: tell,", 1)
+	plan = strings.Replace(plan, "lines:\n", "lines:\n  - { from: form, to: tell, kind: data }\n", 1)
+	dir := folder(t, "plan.yaml", plan, "shop.yaml", shopWorkflow)
+	planPath, shopPath := filepath.Join(dir, "plan.yaml"), filepath.Join(dir, "shop.yaml")
+	got := awmlRun("check", planPath, shopPath)
+	if got.code != 1 || !strings.Contains(got.stdout, shopPath+`: untrusted text from part "form" in `+planPath+` reaches outside action "basket" with nothing to stop it or accept the risk: `) {
+		t.Errorf("check gave %+v", got)
+	}
+	for _, args := range [][]string{{"draw", planPath, shopPath}, {"summary", planPath, shopPath}} {
+		if got := awmlRun(args...); got.code != 0 || got.stderr != "" {
+			t.Errorf("awml %q gave %+v", args, got)
 		}
 	}
 }
@@ -258,7 +274,7 @@ func TestCommandsRefuseFilesWhoseRefsHaveMistakes(t *testing.T) {
 	// One file is held to its refs too.
 	path := write(t, "plan.yaml", strings.Replace(planWorkflow, "shop.yaml#ready", "plan.yaml#thu", 1))
 	want := path + `: part "ready" refers to plan.yaml#thu, which is in its own workflow: a ref names a part of another workflow` + "\n"
-	for _, args := range [][]string{{"draw", path}, {"draw", "--untrusted", path}, {"summary", path}, {"fit", path, laptop}} {
+	for _, args := range [][]string{{"draw", path}, {"summary", path}, {"fit", path, laptop}} {
 		if got := awmlRun(args...); got != (result{1, "", want}) {
 			t.Errorf("awml %q gave %+v", args, got)
 		}

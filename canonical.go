@@ -69,10 +69,14 @@ func View(doc *Map, implementation string) (*Map, error) {
 	}
 	// Each line that publishes keeps, in widens, what it adds or loosens, which its label ends with.
 	widens := widenings(doc)
+	// Each line untrusted text touches keeps how it's drawn for it, in untrusted, and each part marked
+	// untrusted whose text reaches an outside action unstopped is marked unstopped.
+	looks, unstopped := untrustedLooks(items(view, "parts"), items(view, "lines"))
 	var lines []any
 	for i, line := range items(view, "lines") {
 		said, publishes := widens[i]
-		if breaches := words[i]; breaches != nil || publishes {
+		look := looks[line]
+		if breaches := words[i]; breaches != nil || publishes || look != "" {
 			line = copyMap(line)
 			if breaches != nil {
 				line.set("breaks", breaches)
@@ -84,11 +88,25 @@ func View(doc *Map, implementation string) (*Map, error) {
 				}
 				line.set("widens", list)
 			}
+			if look != "" {
+				line.set("untrusted", look)
+			}
 		}
 		lines = append(lines, line)
 	}
 	if lines != nil {
 		view.set("lines", lines)
+	}
+	if len(unstopped) > 0 {
+		var parts []any
+		for _, part := range items(view, "parts") {
+			if unstopped[part] {
+				part = copyMap(part)
+				part.set("unstopped", true)
+			}
+			parts = append(parts, part)
+		}
+		view.set("parts", parts)
 	}
 	return view, nil
 }
@@ -356,9 +374,6 @@ func workflowViews(docs []*Map) []*Map {
 			continue
 		}
 		views = append(views, security)
-		if untrusted, err := UntrustedView(doc); err == nil {
-			views = append(views, untrusted)
-		}
 		implementations := doc.get("implementations")
 		for _, name := range ImplementationIDs(doc) {
 			platform, _ := View(doc, name)

@@ -57,7 +57,7 @@ func TestTheGraphOfAWorkflowHasItsParts(t *testing.T) {
 		t.Errorf("view is %q", g.View)
 	}
 	want := []GraphPart{
-		{ID: "mail", Kind: "trigger", Label: "A customer emails", In: "owner", Untrusted: true},
+		{ID: "mail", Kind: "trigger", Label: "A customer emails", In: "owner", Untrusted: true, Unstopped: true},
 		{ID: "draft", Kind: "ai", Label: "Draft a reply", In: "owner", Decider: "ai", Op: "draft"},
 		{ID: "notes", Kind: "context", Label: "Ana's notes", In: "owner"},
 		{ID: "send", Kind: "outside", Label: "Send the reply: Ask, once a day", In: "owner", Tier: "Ask"},
@@ -87,16 +87,16 @@ func TestTheGraphOfAWorkflowHasItsGroups(t *testing.T) {
 func TestTheGraphOfAWorkflowHasItsLines(t *testing.T) {
 	g := graphOf(t, bakeryReplies, "")
 	want := []GraphLine{
-		{From: "mail", To: "draft", Kind: "start", Points: "to"},
+		{From: "mail", To: "draft", Kind: "start", Points: "to", Untrusted: "unstopped"},
 		{From: "notes", To: "draft", Kind: "data", Points: "to"},
-		{From: "draft", To: "send", Kind: "data", Label: "the reply", Points: "to", Breaks: g.Lines[2].Breaks},
-		{From: "draft", To: "board", Kind: "data", Label: "posted", Points: "to", Publishes: true, Widens: []string{"adds Ben"}},
+		{From: "draft", To: "send", Kind: "data", Label: "the reply", Points: "to", Breaks: g.Lines[2].Breaks, Untrusted: "unstopped"},
+		{From: "draft", To: "board", Kind: "data", Label: "posted", Points: "to", Publishes: true, Widens: []string{"adds Ben"}, Untrusted: "carries"},
 		{From: "gap", To: "send", Kind: "tie", Points: "none"},
 	}
 	if !reflect.DeepEqual(g.Lines, want) {
 		t.Errorf("lines are\n%+v", g.Lines)
 	}
-	if breaks := g.Lines[2].Breaks; len(breaks) != 2 || !strings.Contains(breaks[0], "draft") {
+	if breaks := g.Lines[2].Breaks; len(breaks) != 3 || !strings.Contains(breaks[0], "draft") || !strings.Contains(breaks[2], `untrusted text from part "mail"`) {
 		t.Errorf("the red line breaks %q", breaks)
 	}
 }
@@ -133,30 +133,28 @@ func TestTheGraphOfAPlatformViewHasItsBlocksAndPlaces(t *testing.T) {
 	}
 }
 
-func TestTheGraphOfTheUntrustedViewSaysWhatTheTextReaches(t *testing.T) {
-	doc := parsed(t, ordersForGraph)
-	view, err := UntrustedView(doc)
+// Each line says how it's drawn for untrusted text, and the part it comes from whether it reaches an
+// outside action unstopped.
+func TestTheGraphSaysWhereUntrustedTextGoes(t *testing.T) {
+	g := graphOf(t, ordersForGraph, "")
+	want := map[string]string{"form>keep": "carries", "keep>book": "stopped", "book>rota": "", "form>draft": "unstopped", "draft>send": "unstopped"}
+	if got := untrustedLines(t, g); !reflect.DeepEqual(got, want) {
+		t.Errorf("lines are %q, want %q", got, want)
+	}
+	if got := unstoppedParts(g); !reflect.DeepEqual(got, []string{"form"}) {
+		t.Errorf("unstopped parts are %q", got)
+	}
+	encoded, err := json.Marshal(g)
 	if err != nil {
 		t.Fatal(err)
 	}
-	g := GraphOf(view)
-	if g.View != "untrusted" {
-		t.Errorf("view is %q", g.View)
-	}
-	got := map[string][3]bool{}
-	for _, p := range g.Parts {
-		got[p.ID] = [3]bool{p.Untrusted, p.Reached, p.Stops}
-	}
-	want := map[string][3]bool{"form": {true, true, false}, "keep": {false, false, true}, "book": {}, "rota": {},
-		"draft": {false, true, false}, "send": {false, true, false}}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("untrusted, reached and stops are %v", got)
-	}
-	// Only the untrusted view says what the text reaches.
-	for _, p := range GraphOf(mustView(t, doc, "")).Parts {
-		if p.Reached || p.Stops {
-			t.Errorf("the security view says %+v", p)
+	for _, field := range []string{`"untrusted":true,"unstopped":true`, `"untrusted":"carries"`, `"untrusted":"stopped"`, `"untrusted":"unstopped"`} {
+		if !strings.Contains(string(encoded), field) {
+			t.Errorf("the graph's JSON has no %s:\n%s", field, encoded)
 		}
+	}
+	if strings.Contains(string(encoded), `"reached"`) || strings.Contains(string(encoded), `"stops"`) {
+		t.Errorf("the graph's JSON still says what the untrusted view did:\n%s", encoded)
 	}
 }
 
@@ -255,7 +253,7 @@ func TestTheGraphsJSONNamesItsFields(t *testing.T) {
 	for _, want := range []string{`{"view":"platform","groups":[{"id":"laptop","label":"Ana's laptop"}`,
 		`{"id":"send","kind":"outside","label":"Send the reply: Ask, once a day","in":"mailer","tier":"Ask"}`,
 		`{"id":"draft","kind":"ai","label":"Draft a reply","in":"laptop","decider":"ai","op":"draft"}`,
-		`{"from":"draft","to":"board","kind":"data","label":"posted","points":"to","publishes":true,"widens":["adds Ben"]}`,
+		`{"from":"draft","to":"board","kind":"data","label":"posted","points":"to","publishes":true,"widens":["adds Ben"],"untrusted":"carries"}`,
 		`{"from":"draft","to":"send","kind":"data","label":"the reply","points":"to","breaks":["part \"draft\" leads to outside action \"send\", but its op is draft",`,
 		`{"from":"gap","to":"send","kind":"tie","points":"none"}`,
 		`"comments":[{"id":"gap","label":"Missing from the design: nobody reads the replies","in":"mailer","gap":true,"ties":["send"]}`,

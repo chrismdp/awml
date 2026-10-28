@@ -92,13 +92,14 @@ Give workflows that share parts together, as `awml check dinners.yaml shopping.y
 
 If you have no shell, or `awml` can't be installed, go through `references/checking-by-hand.md` for each file instead. Then say plainly that the files were checked by hand, not by `awml check`, and that `awml check` will confirm them.
 
+Untrusted text that reaches an outside action with nothing to stop it is a mistake, unless a standing approval in front of the action accepts the risk. Put a review, a person's own step or a `cleans` code step on the way, or a standing approval whose label says who accepted the risk and on what evidence. The drawing shows each line the text goes along thick orange, the line out of what stops it thick green, and each line on its way to an action nobody accepted thick red.
+
 In the security view, a `data` line into a box that isn't the source's or one inside it is a publish, which the drawing shows thick, with who it adds or what it loosens. Read each one: a publish nobody meant usually means a part is in the wrong box. The drawing reads the boxes to find each publish, so it can't see a box drawn in the wrong place. So look at each box inside another yourself: if it adds anyone, or its terms are looser, it belongs beside the other, and a `data` line into it is really publishing. Drawn inside the business, the consultant's private scope would hide that taking the reply there loosens the terms it is kept under.
 
 ## 4. Draw
 
 - `awml draw standup.yaml` prints the file's Mermaid, which needs Mermaid 11.4.1 or later. Where the host renders Mermaid, show it in a `mermaid` code block.
 - `awml draw --implementation ID standup.yaml` prints that implementation's platform view.
-- `awml draw --untrusted standup.yaml` prints the untrusted view, for a file that marks a part untrusted.
 - `awml draw dinners.yaml shopping.yaml` prints the map of workflows that share parts: a box for each, each trigger outside its workflow's box with a line into it, each shared part once between them, and a line from each outside action that starts another workflow to the trigger it starts.
 - `awml graph standup.yaml` takes what `awml draw` takes, and prints what it would draw as JSON with nothing laid out, for a tool that lays the drawing out itself. The spec lists its fields.
 - `awml page standup.yaml -o standup.html` writes one standalone HTML page with the security view and every implementation, to share or open in a browser.

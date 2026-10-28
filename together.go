@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -183,7 +184,7 @@ func link(workflows []Workflow) linked {
 	}
 	sort.SliceStable(l.shared, func(a, b int) bool { return before(first(l.shared[a]), first(l.shared[b])) })
 	l.warnShared()
-	l.warnUntrusted()
+	l.reportUntrusted()
 	return l
 }
 
@@ -507,16 +508,21 @@ func (l linked) sharedPart(root partAt) *Map {
 	return p
 }
 
-// warnedAlone is whether a workflow's own check warns that a part's text reaches one of its outside
-// actions: whether its own copy of the part is marked untrusted, and reaches the action within it.
-func (l linked) warnedAlone(source, action partAt) bool {
+// reportedAlone is whether a workflow's own check reports that a part's text reaches one of its
+// outside actions unstopped: whether its own copy of the part is marked untrusted, and its text
+// reaches the action that way within it.
+func (l linked) reportedAlone(source, action partAt) bool {
 	doc := l.workflows[action.workflow].Doc
+	parts := items(doc, "parts")
+	byID := partsOf(parts)
 	for _, c := range l.copiesOf(source) {
 		if c.workflow != action.workflow || c.part.get("untrusted") != true {
 			continue
 		}
-		if alone, _ := reach(c.part, items(doc, "parts"), items(doc, "lines")); alone[action.part] {
-			return true
+		for _, line := range follow(c.part, parts, items(doc, "lines")).breaches {
+			if byID[keyOf(line.get("to"))] == action.part {
+				return true
+			}
 		}
 	}
 	return false
@@ -553,23 +559,25 @@ func workflowNames(workflows []Workflow) []string {
 	return names
 }
 
-// warnUntrusted warns of each outside action that untrusted text reaches through a part shared with
-// another workflow, or through an outside action into the workflow it starts, which no workflow's
-// own check sees. It names the part the text comes from by the first copy marked untrusted.
-func (l *linked) warnUntrusted() {
+// reportUntrusted reports each outside action that untrusted text reaches unstopped through a part
+// shared with another workflow, or through an outside action into the workflow it starts, which no
+// workflow's own check sees. It names the part the text comes from by the first copy marked
+// untrusted. Each is a line that breaks a rule, though the line is in the workflows together, so it
+// doesn't stop a drawing.
+func (l *linked) reportUntrusted() {
 	if len(l.shared) == 0 && len(l.starts) == 0 {
 		return
 	}
 	j := l.join()
 	lines := j.carrying()
+	byID := partsOf(j.parts)
 	from := map[*Map][]partAt{}
 	for _, source := range untrustedParts(j.parts) {
-		reached, _ := reach(source, j.parts, lines)
 		root := j.from[str(source, "id")]
 		named, _ := l.marked(root)
-		for _, p := range j.parts {
-			action := j.from[str(p, "id")]
-			if reached[p] && p.get("kind") == "outside" && !l.warnedAlone(root, action) {
+		for _, line := range follow(source, j.parts, lines).breaches {
+			action := j.from[str(byID[keyOf(line.get("to"))], "id")]
+			if !l.reportedAlone(root, action) && !slices.Contains(from[action.part], named) {
 				from[action.part] = append(from[action.part], named)
 			}
 		}
@@ -584,35 +592,50 @@ func (l *linked) warnUntrusted() {
 		for _, s := range sources {
 			named = append(named, fmt.Sprintf(`"%s" in %s`, str(s.part, "id"), l.workflows[s.workflow].File))
 		}
-		what := "part"
-		if len(named) > 1 {
-			what = "parts"
-		}
-		l.found[action.workflow].add("warn.untrusted-outside", fmt.Sprintf(`untrusted text from %s %s reaches outside action "%s": a review, a person's own step or a code step marked cleans in between would stop it`,
-			what, naturalList(named), str(action.part, "id")))
+		breach := untrustedBreach(named, str(action.part, "id"))
+		l.found[action.workflow] = append(l.found[action.workflow], mistake{check: "untrusted.outside", message: breach + ": " + untrustedAdvice, breach: breach})
 	}
 }
 
+// unstopped gives each part, of the workflow that owns it, that's marked untrusted, in any copy, and
+// whose text reaches an outside action unstopped, in its own workflow or through the workflows given.
+func (l linked) unstopped() map[*Map]bool {
+	j := l.join()
+	found := map[*Map]bool{}
+	for _, source := range untrustedParts(j.parts) {
+		if follow(source, j.parts, j.carrying()).breaches != nil {
+			found[j.from[str(source, "id")].part] = true
+		}
+	}
+	return found
+}
+
 // TogetherMistakes follows each ref between the workflows given, and gives the mistakes in each: a
-// ref to a part that isn't there, and a copy that disagrees with the part it refers to. A ref to a
-// workflow not given is left alone, as a file checked on its own leaves it.
+// ref to a part that isn't there, a copy that disagrees with the part it refers to, and untrusted
+// text that reaches an outside action unstopped through a part they share or an outside action that
+// starts another. A ref to a workflow not given is left alone, as a file checked on its own leaves
+// it.
 func TogetherMistakes(workflows []Workflow) [][]string {
-	return link(workflows).list(false)
+	return link(workflows).list(func(m mistake) bool { return !strings.HasPrefix(m.check, "warn.") })
+}
+
+// TogetherUnsound gives the mistakes TogetherMistakes gives that stop a drawing: every one but
+// untrusted text that reaches an outside action unstopped, which is a line that breaks a rule.
+func TogetherUnsound(workflows []Workflow) [][]string {
+	return link(workflows).list(func(m mistake) bool { return !strings.HasPrefix(m.check, "warn.") && m.breach == "" })
 }
 
 // TogetherWarnings gives the warnings in each workflow that only the workflows together show: a
-// context more than one writes, a connector more than one brings items in from, and untrusted text
-// that reaches an outside action through a part they share or an outside action that starts
-// another.
+// context more than one writes, and a connector more than one brings items in from.
 func TogetherWarnings(workflows []Workflow) [][]string {
-	return link(workflows).list(true)
+	return link(workflows).list(func(m mistake) bool { return strings.HasPrefix(m.check, "warn.") })
 }
 
-func (l linked) list(warnings bool) [][]string {
+func (l linked) list(chosen func(mistake) bool) [][]string {
 	out := make([][]string, len(l.found))
 	for i, found := range l.found {
 		for _, m := range found {
-			if strings.HasPrefix(m.check, "warn.") == warnings {
+			if chosen(m) {
 				out[i] = append(out[i], m.message)
 			}
 		}

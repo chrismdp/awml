@@ -52,14 +52,10 @@ async function start(source) {
     },
     // summary, fit and draw take one file or several, each its text or { file, source }. Given
     // together, workflows follow each ref between them, a path ref from the file's name, which is
-    // its path from one root. Each throws the mistakes following the refs finds, one to a line after
-    // the file's name, as awml prints them.
+    // its path from one root. Each throws every file's own mistakes and those following the refs finds,
+    // one to a line after the file's name, as awml prints them.
     summaryJSON(sourceTexts) {
       const sources = given(sourceTexts);
-      for (const sourceText of sources) {
-        const errors = this.unsound(text(sourceText));
-        if (errors.length) throw new Error(errors.join("\n"));
-      }
       const output = globalThis.__awmlSummary(JSON.stringify(sources));
       const decoded = JSON.parse(output);
       if (decoded.error) throw new Error(decoded.error);
@@ -73,10 +69,6 @@ async function start(source) {
     // and after where it comes among the workflows, as in 1#plan, for one given as text alone.
     fitJSON(sourceTexts, implementation = "") {
       const sources = given(sourceTexts);
-      for (const sourceText of sources) {
-        const errors = this.check(text(sourceText));
-        if (errors.length) throw new Error(errors.join("\n"));
-      }
       const output = globalThis.__awmlFit(JSON.stringify(sources), implementation);
       const decoded = JSON.parse(output);
       if (decoded.error) throw new Error(decoded.error);
@@ -108,10 +100,6 @@ async function start(source) {
       const sources = given(sourceText);
       if (sources.length > 1) {
         if (implementation) throw new Error("an implementation is drawn for one workflow, not several");
-        for (const source of sources) {
-          const errors = this.unsound(text(source));
-          if (errors.length) throw new Error(errors.join("\n"));
-        }
         const output = globalThis.__awmlDrawMap(JSON.stringify(sources));
         if (output.startsWith("{")) throw new Error(JSON.parse(output).error);
         return output;
@@ -125,14 +113,6 @@ async function start(source) {
       if (output.startsWith("{")) throw new Error(JSON.parse(output).error);
       return output;
     },
-    // drawUntrusted draws where untrusted text reaches, as awml draw --untrusted does.
-    drawUntrusted(sourceText) {
-      const errors = this.unsound(sourceText);
-      if (errors.length) throw new Error(errors.join("\n"));
-      const output = globalThis.__awmlDrawUntrusted(sourceText);
-      if (output.startsWith("{")) throw new Error(JSON.parse(output).error);
-      return output;
-    },
     // graph gives what draw draws, with nothing laid out, as awml graph does: one workflow's view,
     // or the map of several workflows given together. It takes what draw takes, and throws what draw
     // throws. Every label is given exactly as the file wrote it, and no text in it is escaped, so a
@@ -140,27 +120,15 @@ async function start(source) {
     graphJSON(sourceText, implementation = "") {
       const sources = given(sourceText);
       if (sources.length > 1 && implementation) throw new Error("an implementation is given for one workflow, not several");
-      for (const source of sources) {
-        const errors = this.unsound(text(source));
-        if (errors.length) throw new Error(errors.join("\n"));
-      }
       if (sources.length > 1) return graphOutput(globalThis.__awmlGraphMap(JSON.stringify(sources)));
+      const errors = this.unsound(text(sources[0]));
+      if (errors.length) throw new Error(errors.join("\n"));
       return graphOutput(typeof sources[0] === "string"
         ? globalThis.__awmlGraph(text(sources[0]), implementation)
         : globalThis.__awmlGraph(text(sources[0]), implementation, sources[0].file || ""));
     },
     graph(sourceText, implementation = "") {
       return JSON.parse(this.graphJSON(sourceText, implementation));
-    },
-    // graphUntrusted gives what drawUntrusted draws, as awml graph --untrusted does, with its text
-    // unescaped as graph gives it.
-    graphUntrustedJSON(sourceText) {
-      const errors = this.unsound(sourceText);
-      if (errors.length) throw new Error(errors.join("\n"));
-      return graphOutput(globalThis.__awmlGraphUntrusted(sourceText));
-    },
-    graphUntrusted(sourceText) {
-      return JSON.parse(this.graphUntrustedJSON(sourceText));
     },
   };
 }

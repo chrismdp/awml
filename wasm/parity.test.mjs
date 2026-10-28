@@ -12,7 +12,7 @@ const descriptions = (await yamlFiles(new URL("../examples/platforms/", import.m
 const descriptionSources = await Promise.all(descriptions.map((path) => readFile(path, "utf8")));
 let passed = 0;
 let placements = 0;
-let untrustedViews = 0;
+let untrustedDrawings = 0;
 let conversions = 0;
 for (const path of top.sort()) {
   const source = await readFile(path, "utf8");
@@ -44,10 +44,10 @@ for (const path of top.sort()) {
   }
   assert.equal(api.draw(source) + "\n", runNative(["draw", relative]), `${relative}: Mermaid`);
   assert.equal(api.graphJSON(source) + "\n", runNative(["graph", relative]), `${relative}: graph`);
+  // The security view shows where untrusted text goes, in both.
   if (/untrusted: true/.test(source)) {
-    assert.equal(api.drawUntrusted(source) + "\n", runNative(["draw", "--untrusted", relative]), `${relative}: untrusted Mermaid`);
-    assert.equal(api.graphUntrustedJSON(source) + "\n", runNative(["graph", "--untrusted", relative]), `${relative}: untrusted graph`);
-    untrustedViews++;
+    assert(api.graph(source).lines.some((line) => line.untrusted), `${relative}: the graph says where untrusted text goes`);
+    untrustedDrawings++;
   }
   if (!failed && !/^platform:/m.test(source)) {
     const report = api.fit([source, ...descriptionSources]);
@@ -78,11 +78,12 @@ const canonicalSource = await readFile(canonicalPath, "utf8");
 assert.deepEqual(api.check(canonicalSource), []);
 assert.equal(api.draw(canonicalSource, "home") + "\n", runNative(["draw", "--implementation", "home", canonicalPath]));
 assert.throws(() => api.draw(canonicalSource, "missing"), /unknown implementation/);
-assert.throws(() => api.drawUntrusted(canonicalSource), /marks no part untrusted/);
 assert.deepEqual(api.graph(canonicalSource, "home"), JSON.parse(runNative(["graph", "--implementation", "home", canonicalPath])));
 assert.throws(() => api.graph(canonicalSource, "missing"), /unknown implementation/);
-assert.throws(() => api.graphUntrusted(canonicalSource), /marks no part untrusted/);
-assert(untrustedViews > 0, "no example marks a part untrusted");
+// There's no untrusted view, in the API or the WebAssembly beneath it.
+for (const name of ["drawUntrusted", "graphUntrusted", "graphUntrustedJSON"]) assert.equal(api[name], undefined, `the API still has ${name}`);
+for (const name of ["__awmlDrawUntrusted", "__awmlGraphUntrusted"]) assert.equal(globalThis[name], undefined, `the WebAssembly still has ${name}`);
+assert(untrustedDrawings > 0, "no example marks a part untrusted");
 assert.throws(() => api.fit([canonicalSource, ...descriptionSources], "missing"), /unknown implementation/);
 assert.equal(api.fitJSON([canonicalSource], "home") + "\n",
   runNative(["fit", "--json", "--implementation", "home", canonicalPath]), "fit without descriptions");
@@ -352,7 +353,7 @@ scopes:
   - { id: family, label: "family: parents, kids", processing: any }
 parts:
   - { id: thu, kind: trigger, label: "Thursday 19:00", wait: PT1H }
-  - { id: form, kind: connector, label: The order form, untrusted: true, in: family }
+  - { id: form, kind: connector, label: The order form, in: family }
   - { id: plan, kind: ai, op: draft, label: "Plan next week's dinners", in: family }
   - { id: list, kind: context, label: Shopping list, at: notes/list, in: family }
   - { id: tell, kind: code, op: do, label: Tell the shopping the list is ready, in: family }
@@ -426,7 +427,57 @@ lines:
       return true;
     });
   }
-  // A part they share is untrusted if any workflow's copy of it is marked untrusted.
+  // Untrusted text follows an outside action into the workflow it starts. Here the order form's text
+  // reaches the basket with nothing to stop it, a line that breaks a rule: check fails and fit
+  // refuses, while the map, its graph and the summary are still given, the same from both.
+  const taintedPlan = plan.replace("label: The order form, in: family", "label: The order form, untrusted: true, in: family");
+  const tainted = [{ file: handOff[0].file, source: taintedPlan }, handOff[1]];
+  for (const { file, source } of tainted) await writeFile(file, source);
+  assert.equal(api.checksJSON(tainted) + "\n", runNative(["check", "--json", ...handOffPaths], 1), "checks JSON of untrusted text across a hand-off");
+  assert.equal(api.checks(tainted).checks.find((check) => check.id === "untrusted.outside").result, "fail");
+  assert.equal(api.draw(tainted) + "\n", runNative(["draw", ...handOffPaths]), "map of untrusted text across a hand-off");
+  assert.equal(api.graphJSON(tainted) + "\n", runNative(["graph", ...handOffPaths]), "map graph of untrusted text across a hand-off");
+  assert.equal(api.summaryJSON(tainted) + "\n", runNative(["summary", "--json", ...handOffPaths]), "summary of untrusted text across a hand-off");
+  {
+    const refused = runNativeResult(["fit", "--json", ...handOffPaths, ...descriptions], 1);
+    assert.equal(refused.stdout, "", "fit of untrusted text across a hand-off: awml prints nothing");
+    assert.throws(() => api.fit([...tainted, ...descriptionSources]), (error) => {
+      assert.equal(`${error.message}\n`, refused.stderr, "fit of untrusted text across a hand-off");
+      return true;
+    });
+  }
+  for (const { file, source } of handOff) await writeFile(file, source);
+  // A file that isn't a mapping is refused by fit as awml refuses it, and the module carries on.
+  for (const [name, odd] of [["empty", ""], ["list", "- a\n"]]) {
+    const oddFile = `${temporary}/odd-${name}.yaml`;
+    await writeFile(oddFile, odd);
+    const refused = runNativeResult(["fit", "--json", oddFile, ...descriptions], 1);
+    assert.throws(() => api.fit([{ file: oddFile, source: odd }, ...descriptionSources]), (error) => {
+      assert.equal(`${error.message}\n`, refused.stderr, `fit of a file that's ${name}`);
+      return true;
+    });
+  }
+  assert.deepEqual(api.check(plan), [], "the module still answers after refusing those files");
+  // Every file's own mistakes are said with the shared ones, each after its file's name, by summary
+  // and the map as by awml.
+  const odd = [{ file: handOff[0].file, source: plan.replace("  - { id: thu,", "  - { id: odd, kind: bogus, label: Odd }\n  - { id: thu,") }, handOff[1]];
+  for (const { file, source } of odd) await writeFile(file, source);
+  for (const [name, call, args] of [
+    ["summary", () => api.summary(odd), ["summary", "--json", ...handOffPaths]],
+    ["draw", () => api.draw(odd), ["draw", ...handOffPaths]],
+    ["graph", () => api.graph(odd), ["graph", ...handOffPaths]],
+  ]) {
+    const refused = runNativeResult(args, 1);
+    assert.throws(call, (error) => {
+      assert.equal(`${error.message}\n`, refused.stderr, `${name} of files with a mistake of their own`);
+      return true;
+    });
+  }
+  for (const { file, source } of handOff) await writeFile(file, source);
+
+  // A part they share is untrusted if any workflow's copy of it is marked untrusted. Its text reaches
+  // the replier's send with nothing to stop it, a line that breaks a rule, so the check fails, and the
+  // map and the summary are still given, as awml gives them.
   const sorter = `awml: "0.8"
 title: Inbox sorter
 scopes:
@@ -461,7 +512,9 @@ lines:
   const inbox = [{ file: `${temporary}/sorter.yaml`, source: sorter }, { file: `${temporary}/replier.yaml`, source: replier }];
   for (const { file, source } of inbox) await writeFile(file, source);
   const inboxPaths = inbox.map(({ file }) => file);
-  assert.equal(api.checksJSON(inbox) + "\n", runNative(["check", "--json", ...inboxPaths]), "checks JSON of a part marked untrusted by a copy");
+  assert.equal(api.checksJSON(inbox) + "\n", runNative(["check", "--json", ...inboxPaths], 1), "checks JSON of a part marked untrusted by a copy");
+  assert.equal(api.checks(inbox).checks.find((check) => check.id === "untrusted.outside").result, "fail");
+  assert.match(api.draw(inbox), /class s1 unstopped/);
   assert.equal(api.summaryJSON(inbox) + "\n", runNative(["summary", "--json", ...inboxPaths]), "summary JSON of a part marked untrusted by a copy");
   assert.equal(api.draw(inbox) + "\n", runNative(["draw", ...inboxPaths]), "map of a part marked untrusted by a copy");
   assert.deepEqual(api.summary(inbox).untrusted.map(({ outsideActions }) => outsideActions), [["Send the reply: Allow"]]);
@@ -580,9 +633,8 @@ assert.equal([
 assert.deepEqual(api.unsound(redSource), []);
 assert.deepEqual(api.unsound(badSource), api.check(badSource));
 assert.equal(api.draw(redSource) + "\n", runNative(["draw", redRelative]), "red line: Mermaid");
-assert.match(api.draw(redSource), /linkStyle 1 stroke:#d0342c/);
+assert.match(api.draw(redSource), /linkStyle 0,1 stroke:#d0342c/);
 assert.equal(api.draw(redSource, "home") + "\n", runNative(["draw", "--implementation", "home", redRelative]), "red line: home Mermaid");
-assert.equal(api.drawUntrusted(redSource) + "\n", runNative(["draw", "--untrusted", redRelative]), "red line: untrusted Mermaid");
 assert.equal(api.graphJSON(redSource) + "\n", runNative(["graph", redRelative]), "red line: graph");
 assert(api.graph(redSource).lines.some((line) => line.breaks), "red line: the graph says which lines break a rule");
 assert.equal(api.summaryJSON(redSource) + "\n", runNative(["summary", "--json", redRelative]), "red line: summary JSON");
@@ -604,7 +656,7 @@ const family = await Promise.all(familyPaths.map(async (file) => ({ file, source
 assert.equal(api.draw(family) + "\n", await readFile(new URL("../examples/family-map.mmd", import.meta.url), "utf8"), "the family's map");
 assert.equal(api.summaryJSON(family) + "\n", runNative(["summary", "--json", ...familyPaths]), "the family's summary JSON");
 
-console.log(`Node wasm parity: ${passed} examples passed (check, warnings, summary, convert, Mermaid, graph); ${placements} implementations; ${untrustedViews} untrusted views; ${conversions} conversions; invalid check messages and fit passed`);
+console.log(`Node wasm parity: ${passed} examples passed (check, warnings, summary, convert, Mermaid, graph); ${placements} implementations; ${untrustedDrawings} drawings of untrusted text; ${conversions} conversions; invalid check messages and fit passed`);
 
 async function yamlFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });

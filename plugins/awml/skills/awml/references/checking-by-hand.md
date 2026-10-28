@@ -21,7 +21,7 @@ Use this only where `awml check` can't run, as in a chat with no shell. It cover
 10. Each line has `from`, `to` and `kind`, and may have `label`. Nothing else.
 11. `from` and `to` each name a part in the same file, never a group.
 12. Each line's `kind` is one of `start`, `data`, `refused`, `tie` and `hidden`. There is no `publish`: a `data` line publishes whenever its scopes make it one.
-13. No line has `breaks`. A line that breaks rule 18, 19 or 21 is a mistake, and the drawing shows it red, so a file never marks one by hand.
+13. No line has `breaks`. A line that breaks rule 18, 19, 21 or 23 is a mistake, and the drawing shows it red, so a file never marks one by hand.
 14. A line with a comment at either end is a `tie` or a `hidden` line. A `tie` has a comment at one end or both.
 15. No line but a `tie` or a `hidden` one goes into a `trigger`. A trigger only starts its own workflow, so to start another, a `do` step leads to an `outside` part whose `ref` names the other's trigger.
 
@@ -30,7 +30,7 @@ Use this only where `awml check` can't run, as in a chat with no shell. It cover
 16. Every `title`, `description`, `id`, `label`, `kind`, `in`, `from`, `to`, `op` and `ref` is text. YAML reads some bare values as something else, so each of these is in double quotes: `true` and `false`, numbers such as `12` or `0.5`, and dates such as `2026-10-20`. Quote `yes`, `no`, `on`, `off` and times such as `19:00` too, which YAML 1.1 tools misread.
 17. The file is YAML that reads at all. In the `{ id: …, label: … }` form the examples use, a comma ends a value and `: ` starts a new one, so quote any label with a comma, a colon followed by a space, a `#`, or a first character of `[`, `{`, `&`, `*`, `!`, `|`, `>`, `'`, `"`, `%` or `@`. `[yes]` is always quoted.
 
-## Operations and tiers
+## Operations, tiers and untrusted text
 
 For these, skip any `hidden`, `refused` or `tie` line: only `start` and `data` lines lead anywhere. In a drawing of a live system, a line that breaks one of these rules may be what the system really did. It stays a mistake, and the drawing shows it red, so leave it there until the system changes.
 
@@ -39,15 +39,16 @@ For these, skip any `hidden`, `refused` or `tie` line: only `start` and `data` l
 20. **Each outside action's label gives its tier.** The first word after the label's last colon is `Allow`, `Ask` or `Block`, as in `"Send the mail: Ask"` or `"Fill the basket: Allow under £180"`.
 21. **Each tier agrees with what stands in front of it.** For each `outside` part, find the parts whose lines lead into it, passing back through any fork. For an Ask action, each of them is a `review`, an `approval` or a `person` step. For an Allow action, none of them is a `review` or an `approval`. For a Block action, there are none.
 22. **Each standing approval lists its actions.** A line leads from each `approval` part straight to a `surface`.
+23. **No untrusted text reaches an outside action unstopped.** From each part with `untrusted: true`, follow every line that leads on, through any part, but stop at a `review`, a `person` step or a `code` step with `cleans: true`, which stops the text. Each line you follow into an `outside` part is a mistake, unless it comes from an `approval`, straight or through forks alone, which accepts the risk. Say which part the text came from, and that a review, a person's own step or a `cleans` step on the way would stop it, or a standing approval in front of the action would accept the risk. Where several files are given together, follow the text through the parts they share and from each `outside` part into the trigger its `ref` names.
 
 ## Warnings
 
 These are warnings, which `awml check` prints without failing. Tell the person of each one you find. A trigger's **run** is every part you reach from it by following `start` lines forward, through any kind of part. A `data` line never carries a run on, even from one step straight to another.
 
-23. **The file holds one workflow.** Put two triggers together when their runs share any part. If the triggers fall into more than one group, the file holds several workflows: split it at its triggers into files that refer to each other. A file with one trigger is one workflow.
-24. **Every part is linked to a trigger.** From the triggers, follow every line either way, through any part, leaving out comments and their ties. Each part you never reach has no line linking it to a trigger: connect it or remove it.
-25. **Every comment is tied to a part.** Each `comment` has a `tie` to a part. Tie it to what it explains, or remove it.
-26. **Every step is started by a trigger.** Each `ai`, `code` or `person` step, `review`, `approval` and `fork` is in some trigger's run, whether item 24 found it or not. For one that isn't, add the start line it's missing, or split its work into a workflow of its own that an outside action starts.
+24. **The file holds one workflow.** Put two triggers together when their runs share any part. If the triggers fall into more than one group, the file holds several workflows: split it at its triggers into files that refer to each other. A file with one trigger is one workflow.
+25. **Every part is linked to a trigger.** From the triggers, follow every line either way, through any part, leaving out comments and their ties. Each part you never reach has no line linking it to a trigger: connect it or remove it.
+26. **Every comment is tied to a part.** Each `comment` has a `tie` to a part. Tie it to what it explains, or remove it.
+27. **Every step is started by a trigger.** Each `ai`, `code` or `person` step, `review`, `approval` and `fork` is in some trigger's run, whether item 25 found it or not. For one that isn't, add the start line it's missing, or split its work into a workflow of its own that an outside action starts.
 
 ## Placement and fit fields
 

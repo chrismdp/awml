@@ -172,7 +172,7 @@ A workflow whose every step is green ⚙️ has no AI in it, even if AI helped b
 
 The solid lines are the path the work takes, from the trigger through each step to the next. A line into or out of a context, a connector or a surface is dotted, since it's information moving in and out. A line that publishes is thick either way, and a `refused` line keeps its cross.
 
-A line may carry a label. Words in square brackets are a **guard**, the condition the line is taken on. A line drawn red is a finding: see [The red line](#the-red-line).
+A line may carry a label. Words in square brackets are a **guard**, the condition the line is taken on. A line drawn red is a finding: see [The red line](#the-red-line). A part marked untrusted, which takes in text anyone can write, has a thick orange outline. A thick orange line carries that text on, and a thick green one leaves what stopped it: see [Untrusted text](#untrusted-text).
 
 A trigger's **run** is everything its `start` lines reach, through steps, reviews, standing approvals and forks alike. A `data` line says what a step reads, and never carries the run on, so a `start` line leads to each step from the one before. Triggers whose runs share a part start one workflow, and a file whose triggers start more than one is better split, as [the tour shows](#several-workflows-in-one-file).
 
@@ -344,13 +344,17 @@ Here Sam approved the morning renewals once, for renewals only and up to six a w
 
 ## Untrusted text
 
-Text that anyone can write, such as a web form or a public inbox, can try to steer the AI step that reads it. Mark the trigger, connector or context it comes in through with `untrusted: true`, and it's drawn with ⚠️ after its label. The text goes wherever the lines lead on, until a person's review, a person's own step or a code step marked `cleans: true` stops it. A `cleans` step promises to pass on only what's safe, such as an order number and a quantity, and its label says how. Only code can promise that, since strangers' text can steer AI however it's instructed. A standing approval never sees the text, so it doesn't stop it.
+Text that anyone can write, such as a web form or a public inbox, can try to steer the AI step that reads it. Mark the trigger, connector or context it comes in through with `untrusted: true`, and it's drawn with a thick orange outline. The text goes wherever the lines lead on, until a person's review, a person's own step or a code step marked `cleans: true` stops it. A `cleans` step promises to pass on only what's safe, such as an order number and a quantity, and its label says how. Only code can promise that, since strangers' text can steer AI however it's instructed. A standing approval never sees the text, so it doesn't stop it, but one in front of an outside action accepts the risk of the text reaching it, and its label says who accepted it and on what evidence.
 
-`awml check` warns of each outside action the text reaches, and `awml summary` lists what each untrusted part's text reaches. `awml draw --untrusted` draws the untrusted view: the security view with each part the text reaches tinted, 🛡️ on what stops it, and each outside action it reaches in red.
+The security view shows where the text goes. Each line it goes along is thick orange, up to and including the line into what stops it, and the line out of that is thick green. A line that brings the text into an outside action with nothing to stop it or accept the risk breaks a rule, so `awml check` reports it, and `awml draw` draws it and every line on the text's way there thick red, with the source's outline red too. `awml summary` lists what each untrusted part's text reaches, what stops it and the risks accepted.
 
-![A cake order from the website, in the untrusted view](examples/tour/14-untrusted-text-untrusted-view.svg)
+![A cake order from the website, showing where its text goes](examples/tour/14-untrusted-text.svg)
 
 Here anyone can type into the bakery's order form. A code step keeps only the cake, the quantity and the date, so the bake is booked from those alone, and the customer's note stops at Ana's yes to the exact reply.
+
+![The bakery's enquiries, labelled in the inbox from the enquiry's text](examples/live/untrusted-text.svg)
+
+Here an AI step sorts each enquiry from the bakery's website, and a code step labels it in the shared inbox with the kind the AI step chose. Nothing stops the enquiry's text on its way to the label, and nobody accepted the risk, so the lines from the form to the label are red. The reply waits for Ana's yes, so on that way the lines are orange, then green.
 
 ## Records
 
@@ -362,7 +366,7 @@ A drawing shows what each record should say, never what any record does say, so 
 
 ## The red line
 
-Where a live system does something its design doesn't allow, the line for it is drawn red, labelled with what is wrong. A red line is a finding about the live system, not part of the design. It usually comes from the records, set against the drawing.
+Where a live system does something its design doesn't allow, the line for it is drawn red, labelled with what is wrong. A red line is a finding about the live system, not part of the design. It usually comes from the records, set against the drawing. A design that lets untrusted text reach an outside action with nobody accepting the risk breaks a rule too, so its line is red in the same way, as [Untrusted text](#untrusted-text) shows.
 
 ![The club's Friday message, sent without a yes](examples/live/red-line.svg)
 
@@ -370,7 +374,7 @@ Here the design waits for Ella's yes to the exact message, but one week the live
 
 ## A tour of the gallery
 
-Each drawing here shows one idea, with fictional people and everyday cases, and their files are in [`examples/tour/`](examples/tour). Several are patterns, and the commonest are the first two: the draft for review and the do step. The rest of the gallery appears beside the idea it draws: [two scopes side by side](#boxes-inside-boxes-and-side-by-side), [operations](#operations), [a standing approval](#standing-approvals), [untrusted text](#untrusted-text) and [a red line](#the-red-line). The red line's file is in [`examples/live/`](examples/live), since a drawing of a live system fails the check by design.
+Each drawing here shows one idea, with fictional people and everyday cases, and their files are in [`examples/tour/`](examples/tour). Several are patterns, and the commonest are the first two: the draft for review and the do step. The rest of the gallery appears beside the idea it draws: [two scopes side by side](#boxes-inside-boxes-and-side-by-side), [operations](#operations), [a standing approval](#standing-approvals), [untrusted text](#untrusted-text) and [a red line](#the-red-line). The files of the drawings with red lines are in [`examples/live/`](examples/live), since a drawing that breaks a rule fails the check by design.
 
 ### Draft for review
 
@@ -442,6 +446,12 @@ Every 15 minutes, the bakery answers the questions about opening hours and aller
 
 ![Replies to customers under Ana's standing approval](examples/tour/16-accepted-risk.svg)
 
+### Untrusted text under an accepted risk
+
+Each evening, the bakery thanks the customers who left a review on its page that day. Anyone can write a review, and the AI step that drafts each thank-you reads it, so nothing stops the review's text. Ana read a month of drafted thanks and accepted the risk, so each thank-you goes under her standing approval, whose label says so. The lines the text goes along stay orange all the way to the post, and the check passes.
+
+![Thank-yous to reviewers under Ana's standing approval](examples/tour/17-untrusted-risk-accepted.svg)
+
 ## Improving one step at a time
 
 Once each step is a box with a known input and a known output, you can improve it on its own.
@@ -469,7 +479,6 @@ awml check examples/question.yaml        # report mistakes; exits 1 on any
 awml fit examples/client-email.yaml examples/platforms/*.yaml
 awml draw examples/question.yaml         # print the Mermaid
 awml draw --implementation home examples/dinners.yaml
-awml draw --untrusted examples/tour/14-untrusted-text.yaml
 awml page examples/dinners.yaml -o dinners.html
 awml summary examples/dinners.yaml --json
 awml draw examples/dinners.yaml examples/question.yaml   # the map of workflows that share parts
@@ -482,10 +491,10 @@ awml pull family/dinners@1 -o dinners
 - `check`, `draw`, `graph`, `summary` and `fit` take any number of files, and a folder stands for every `.yaml` file directly inside it, with a file named twice read once. Given several workflows, they follow each `ref` between them, as the next section says.
 - `awml check` checks the design and each implementation. It prints each warning before `ok` or the mistakes, and exits 1 only if it finds a mistake. `--json` lists every check it makes, passing ones included, each with a stable id and its result: `pass`, `fail`, `skipped` or `warn`.
 - `awml fit` judges the design against platform descriptions, telling the two apart by what each file holds. Given several workflows, it judges each platform as running them all, and names each part after its file, as `dinners#plan`, or `x/dinners#plan` where two files share a name. Add `--implementation ID` to judge one workflow's placement, and `--json` for the report's JSON form. An implementation can be given without descriptions, and then each block says it has no platform or that its platform wasn't described.
-- `awml draw` prints the security view's Mermaid, or the map of several workflows. Add `--implementation ID` for a platform view, or `--untrusted` for the untrusted view. It refuses a file with mistakes, and prints them instead.
+- `awml draw` prints the security view's Mermaid, or the map of several workflows. Add `--implementation ID` for a platform view. It refuses a file with mistakes, and prints them instead.
 - `awml graph` takes what `awml draw` takes, and prints what it would draw as JSON, with nothing laid out, for a tool that lays the drawing out itself. Each id is the one `awml draw` gives it, and the spec lists the fields. Its text isn't escaped and keeps its line breaks, so a tool that shows it must escape it and handle them.
-- `awml page` writes one standalone HTML page with the security view, the untrusted view if there is one, then every implementation, each with a heading. Several files appear in the order given. The page takes their shared title, or Workflows when they differ.
-- `awml summary` counts the scopes, platforms, parts and lines in one workflow, and lists every publish with what it adds or loosens. It includes platforms from every implementation and counts the design once, and lists what each untrusted part's text reaches. Given several workflows, it counts each part they share once, and lists those parts. `--json` prints the registry's JSON form.
+- `awml page` writes one standalone HTML page with the security view, then every implementation, each with a heading. Several files appear in the order given. The page takes their shared title, or Workflows when they differ.
+- `awml summary` counts the scopes, platforms, parts and lines in one workflow, and lists every publish with what it adds or loosens. It includes platforms from every implementation and counts the design once, and lists what each untrusted part's text reaches, what stops it and the risks accepted. Given several workflows, it counts each part they share once, and lists those parts. `--json` prints the registry's JSON form.
 - `awml convert old.yaml` upgrades a file of any older version to 0.8, printed to standard output, and every other command refuses an older file. A trigger of another workflow that only `do` steps lead into becomes their outside action, which starts that workflow, and convert says where any untrusted mark it drops belongs. A `publish` line becomes a `data` line, and a line marked red with `breaks` loses it, gaining a comment if the check doesn't find what it breaks. `awml convert security.yaml platform.yaml` joins a matching 0.3 or 0.2 pair into one file, turning platform groups into blocks of the `default` implementation. Add `--implementation ID` to name the implementation. YAML comments move to the top. If it notes something to do by hand, or the new version's rules find mistakes in the result, it lists them and exits 1.
 - `awml login` saves an API token for the registry. `awml push` checks and uploads one 0.8 file in the API's workflow field. `awml pull` downloads the latest or a numbered version as `<slug>.yaml`, and `awml pull owner/platforms/slug` does the same for a published platform description. It still downloads an older pair as `security.yaml` and `platform.yaml`. The commands use `https://awml.io` unless `--registry` or `AWML_REGISTRY_URL` says otherwise. Add `--private` to the first push of a private organisation workflow.
 
@@ -512,7 +521,7 @@ npx -y @mermaid-js/mermaid-cli@11.4.1 -b white -i my-workflow.mmd -o my-workflow
 
 ### Workflows that share parts
 
-Workflows hand work on through a context one writes and another reads, and may share connectors and surfaces too. The workflow that doesn't create the part keeps its own copy, with `ref` naming the other's, as `shopping.yaml#list` for a file alongside or `owner/slug#id` for a published one. One workflow starts another with an outside action, such as `Start the shopping: Allow`, whose `ref` names the other's trigger, the way it would call any outside service. A trigger only starts its own workflow, so it never has a `ref`, and no line but a tie or a hidden one goes into it. Where a platform starts a workflow by itself, as GitHub does when CI finishes, the trigger names that event and nothing links the two. Each file still checks alone. Given together, `awml check` reports a `ref` to a part that isn't there, a copy that differs from the part it names, an outside action whose `ref` names anything but a trigger, and refs that name their own workflow or go round in a circle, and warns of a context more than one writes and a connector more than one reads. It follows untrusted text through the parts they share and from an outside action into the workflow it starts, and warns of each outside action the text reaches there. The other commands refuse the files until those mistakes are fixed. `awml draw` draws their map, with each shared part once between the workflows, each trigger outside its workflow's box with a line into it, and a line from each outside action to the trigger it starts:
+Workflows hand work on through a context one writes and another reads, and may share connectors and surfaces too. The workflow that doesn't create the part keeps its own copy, with `ref` naming the other's, as `shopping.yaml#list` for a file alongside or `owner/slug#id` for a published one. One workflow starts another with an outside action, such as `Start the shopping: Allow`, whose `ref` names the other's trigger, the way it would call any outside service. A trigger only starts its own workflow, so it never has a `ref`, and no line but a tie or a hidden one goes into it. Where a platform starts a workflow by itself, as GitHub does when CI finishes, the trigger names that event and nothing links the two. Each file still checks alone. Given together, `awml check` reports a `ref` to a part that isn't there, a copy that differs from the part it names, an outside action whose `ref` names anything but a trigger, and refs that name their own workflow or go round in a circle, and warns of a context more than one writes and a connector more than one reads. It follows untrusted text through the parts they share and from an outside action into the workflow it starts, and reports each outside action the text reaches there with nothing to stop it or accept the risk. The other commands refuse the files until those mistakes are fixed, except that `draw`, `page` and `summary` go ahead past untrusted text, as they do past any line that breaks a rule. `awml draw` draws their map, with each shared part once between the workflows, each trigger outside its workflow's box with a line into it, and a line from each outside action to the trigger it starts:
 
 <img src="examples/family-map.svg" alt="The family's dinners, shopping, bills check, pickups and question, drawn together">
 
@@ -561,7 +570,7 @@ Every id, label, kind and reference to an id is text. `awml` reads YAML 1.2, whi
 
 ### What `awml check` reports
 
-`awml check` reports structural mistakes, invalid operations and tiers that disagree with the drawing. It also checks each implementation's block references, nesting and placement, and its comments' ties, and how each `ref` is written. It warns when AI decides a `do` step, when one `do` step leads to more than one change, when untrusted text reaches an outside action, when the file's triggers start more than one workflow, when no line links a part to a trigger, when a comment is tied to nothing, and when no trigger's run reaches a step, review, standing approval or fork. Warnings leave the exit status alone. A line that breaks a rule, such as one into a Block action, is still a mistake, but `awml draw` draws it red rather than refusing the file. [`SPEC.md`](SPEC.md) gives the exact rules.
+`awml check` reports structural mistakes, invalid operations, tiers that disagree with the drawing, and untrusted text that reaches an outside action with nothing to stop it or accept the risk. It also checks each implementation's block references, nesting and placement, and its comments' ties, and how each `ref` is written. It warns when AI decides a `do` step, when one `do` step leads to more than one change, when the file's triggers start more than one workflow, when no line links a part to a trigger, when a comment is tied to nothing, and when no trigger's run reaches a step, review, standing approval or fork. Warnings leave the exit status alone. A line that breaks a rule, such as one into a Block action, is still a mistake, but `awml draw` draws it red rather than refusing the file. [`SPEC.md`](SPEC.md) gives the exact rules.
 
 ### Examples to start from
 

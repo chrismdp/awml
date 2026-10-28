@@ -40,9 +40,24 @@ func TestThereAreExamples(t *testing.T) {
 		"tour/01-draft-and-send", "tour/02-fork", "tour/03-refused-read", "tour/04-publishing", "tour/05-side-by-side",
 		"tour/07-person-step", "tour/08-gap", "tour/09-platform-view", "tour/10-operations",
 		"tour/11-do", "tour/12-standing-approval", "tour/13-check-by-code", "tour/14-untrusted-text",
-		"tour/15-several-workflows", "tour/15-split-count", "tour/15-split-order", "tour/16-accepted-risk"}
+		"tour/15-several-workflows", "tour/15-split-count", "tour/15-split-order", "tour/16-accepted-risk", "tour/17-untrusted-risk-accepted"}
 	if !reflect.DeepEqual(names, want) {
 		t.Errorf("examples = %q\nwant %q", names, want)
+	}
+}
+
+// The security view shows where untrusted text goes, so no example keeps an untrusted view.
+func TestNoExampleHasAnUntrustedView(t *testing.T) {
+	var found []string
+	for _, pattern := range []string{"examples/*untrusted-view*", "examples/*/*untrusted-view*"} {
+		paths, err := filepath.Glob(pattern)
+		if err != nil {
+			t.Fatal(err)
+		}
+		found = append(found, paths...)
+	}
+	if found != nil {
+		t.Errorf("examples still has %q", found)
 	}
 }
 
@@ -58,7 +73,7 @@ func liveExamples(t *testing.T) []string {
 }
 
 func TestThereAreLiveExamples(t *testing.T) {
-	if got, want := liveExamples(t), []string{"examples/live/red-line.yaml"}; !reflect.DeepEqual(got, want) {
+	if got, want := liveExamples(t), []string{"examples/live/red-line.yaml", "examples/live/untrusted-text.yaml"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("live examples = %q\nwant %q", got, want)
 	}
 }
@@ -88,7 +103,7 @@ func TestEachExampleIsSoundAndItsDrawingsAreCurrent(t *testing.T) {
 			case "examples/legend.yaml":
 				// The legend is a key to the shapes, not a workflow, so nothing starts its parts and
 				// its hidden lines only lay them out. It's held to every warning but those of shape.
-				got = warningsOf(doc, "warn.do-by-code", "warn.one-change", "warn.untrusted-outside")
+				got = warningsOf(doc, "warn.do-by-code", "warn.one-change")
 			case "examples/tour/15-several-workflows.yaml":
 				// The tour shows this warning, and the split that answers it.
 				want = []string{`this file holds 2 workflows: the one started by "Every day 18:00" and the one started by "Every day 07:00": split it at its triggers into workflows that refer to each other`}
@@ -115,16 +130,6 @@ func TestEachExampleIsSoundAndItsDrawingsAreCurrent(t *testing.T) {
 				}
 				if _, err := os.Stat(stem + ".svg"); err != nil {
 					t.Error(err)
-				}
-			}
-			// No implementation id has a hyphen, so the untrusted view's name is never one's.
-			if untrusted, err := UntrustedView(file); err == nil {
-				stem := strings.TrimSuffix(path, ".yaml") + "-untrusted-view"
-				if mmd, err := os.ReadFile(stem + ".mmd"); err != nil || string(mmd) != Draw(untrusted)+"\n" {
-					t.Errorf("%s.mmd isn't what awml draw --untrusted draws now: run examples/render.sh", stem)
-				}
-				if svg, err := os.ReadFile(stem + ".svg"); err != nil || !strings.HasPrefix(string(svg), "<svg") {
-					t.Errorf("%s.svg isn't an SVG", stem)
 				}
 			}
 			stem := strings.TrimSuffix(path, ".yaml")
