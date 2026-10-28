@@ -1060,7 +1060,7 @@ func TestGitAfterASessionCannotBePoisoned(t *testing.T) {
 		if _, holds := patch.Env["CLAUDE_CODE_OAUTH_TOKEN"]; holds {
 			t.Errorf("%s's %s makes the patch beside Claude's token", at.file, at.job)
 		}
-		for _, want := range []string{`cmp -s .git/config "$HOST_DIR/baseline/git-config"`, "GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 command git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c diff.external=",
+		for _, want := range []string{`cmp -s .git/config "$HOST_DIR/baseline/git-config"`, "GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_NO_REPLACE_OBJECTS=1 command git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c diff.external=",
 			"--no-ext-diff --no-textconv"} {
 			if !strings.Contains(patch.Run, want) {
 				t.Errorf("%s's %s patch step lacks %s", at.file, at.job, want)
@@ -1069,7 +1069,7 @@ func TestGitAfterASessionCannotBePoisoned(t *testing.T) {
 	}
 
 	patch, _ := readFactoryWorkflow(t, "build.yml").Jobs["draft"].step(t, "patch")
-	for _, poison := range []string{"", "moved HEAD", "config", "moved .git", "nested .git", "nested .git in node_modules"} {
+	for _, poison := range []string{"", "moved HEAD", "replace ref", "grafts", "config", "moved .git", "nested .git", "nested .git in node_modules"} {
 		r := newRehearsal(t)
 		repo, _ := r.newRepo("repo", map[string]string{"recipes.md": "Bread\n", ".gitattributes": "*.md diff=bake filter=bake\n"})
 		r.write("host/baseline/git-config", readText(t, filepath.Join(repo, ".git/config")))
@@ -1083,6 +1083,27 @@ func TestGitAfterASessionCannotBePoisoned(t *testing.T) {
 		r.write(filepath.Join(repo, "recipes.md"), "Bread\nScones\n")
 		pwned := filepath.Join(r.root, "pwned")
 		switch poison {
+		case "replace ref", "grafts":
+			// A session may write refs/replace, which would have git read another commit for the
+			// one the session started from, or info/grafts, which would give it other parents.
+			base := gitIn(t, repo, "rev-parse", "HEAD")
+			if poison == "grafts" {
+				r.write(filepath.Join(repo, ".git", "info", "grafts"), base+"\n")
+				break
+			}
+			hash := func(stdin string, args ...string) string {
+				command := exec.Command("git", args...)
+				command.Dir, command.Stdin = repo, strings.NewReader(stdin)
+				out, err := command.Output()
+				if err != nil {
+					t.Fatal(err)
+				}
+				return strings.TrimSpace(string(out))
+			}
+			rye := hash("Rye\n", "hash-object", "-w", "--stdin")
+			tree := hash("100644 blob "+rye+"\trecipes.md\n", "mktree")
+			other := hash("Rye\n", "-c", "user.name=x", "-c", "user.email=x@example.invalid", "commit-tree", tree, "-p", base)
+			gitIn(t, repo, "replace", base, other)
 		case "moved HEAD":
 			// A session may write .git's refs, so it may commit its change: the patch is still made
 			// against the commit the session started from.
@@ -1113,12 +1134,13 @@ func TestGitAfterASessionCannotBePoisoned(t *testing.T) {
 		if _, err := os.Stat(pwned); err == nil {
 			t.Error("git after the session ran a command a session left in .git/config")
 		}
-		if poison != "" && poison != "moved HEAD" && (!r.failed || r.read("host/change/change.patch") != "") {
+		passes := poison == "" || poison == "moved HEAD" || poison == "replace ref"
+		if !passes && (!r.failed || r.read("host/change/change.patch") != "") {
 			t.Errorf("git ran on a tree a session changed by %s:\n%s", poison, r.printed)
 		}
-		if poison == "" || poison == "moved HEAD" {
+		if passes {
 			r.mustPass()
-			if !strings.Contains(r.read("host/change/change.patch"), "+Scones") {
+			if patch := r.read("host/change/change.patch"); !strings.Contains(patch, "+Scones") || strings.Contains(patch, "Rye") {
 				t.Errorf("the patch doesn't hold the change:\n%s", r.read("host/change/change.patch"))
 			}
 		}
@@ -1147,7 +1169,7 @@ func TestResolveRunsNoGitBesideClaudesToken(t *testing.T) {
 	if _, holds := check.Env["CLAUDE_CODE_OAUTH_TOKEN"]; holds {
 		t.Error("the bundles are checked beside Claude's token")
 	}
-	for _, want := range []string{"git init -q", "GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 command git"} {
+	for _, want := range []string{"git init -q", "GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_NO_REPLACE_OBJECTS=1 command git"} {
 		if !strings.Contains(check.Run, want) {
 			t.Errorf("the check step lacks %s", want)
 		}
@@ -1480,11 +1502,11 @@ func TestEverySessionDeniesWritesWithEditRules(t *testing.T) {
 }
 
 // When the tree's git config isn't the one the session started with, the patch step says which
-// part changed, a config.worktree that wasn't there or the names of the keys that differ, each name
-// JSON-escaped, so the next run shows what touched it and no name can be a workflow command.
+// part changed, a config.worktree that wasn't there or the names of the keys added, removed or set
+// to another value, so the next run shows what touched it. It names keys and never their values.
 func TestThePatchStepSaysHowTheGitConfigChanged(t *testing.T) {
 	patch, _ := readFactoryWorkflow(t, "build.yml").Jobs["draft"].step(t, "patch")
-	for _, change := range []string{"worktree", "key"} {
+	for _, change := range []string{"worktree", "added key", "changed value"} {
 		r := newRehearsal(t)
 		repo, _ := r.newRepo("repo", map[string]string{"recipes.md": "Bread\n"})
 		r.write("host/baseline/git-config", readText(t, filepath.Join(repo, ".git/config")))
@@ -1498,16 +1520,18 @@ func TestThePatchStepSaysHowTheGitConfigChanged(t *testing.T) {
 		switch change {
 		case "worktree":
 			r.write(filepath.Join(repo, ".git/config.worktree"), "")
-		case "key":
-			gitIn(t, repo, "config", "core.sshCommand", "::error::forged")
+		case "added key":
+			gitIn(t, repo, "config", "core.sshCommand", "touch pwned")
+		case "changed value":
+			gitIn(t, repo, "config", "core.filemode", map[bool]string{true: "false", false: "true"}[gitIn(t, repo, "config", "core.filemode") == "true"])
 		}
 		r.dir = repo
 		r.run(patch, map[string]string{"GITHUB_WORKSPACE": repo}, "")
 		if !r.failed || r.read("host/change/change.patch") != "" {
 			t.Errorf("with a changed %s, git ran on the tree:\n%s", change, r.printed)
 		}
-		want := map[string]string{"worktree": ".git/config.worktree", "key": `"core.sshcommand"`}[change]
-		if !strings.Contains(r.printed, want) || strings.Contains(r.printed, "\n::error::") {
+		want := map[string]string{"worktree": ".git/config.worktree", "added key": `"core.sshcommand"`, "changed value": `"core.filemode"`}[change]
+		if !strings.Contains(r.printed, want) {
 			t.Errorf("with a changed %s, the step said:\n%s\nwant it to name %s, escaped", change, r.printed, want)
 		}
 	}
@@ -1533,7 +1557,9 @@ func TestEverySettingsCallWorksWithMainsScriptToo(t *testing.T) {
 					r.write("sandbox-settings.sh", script)
 					r.write("host/sandbox-settings.sh", script)
 					workspace := filepath.Join(r.root, "workspace")
-					for _, dir := range []string{workspace + "/.git", r.temp + "/host/pr-5/work", r.temp + "/session/home"} {
+					// The call runs in a folder of its own, so anything it makes there is seen.
+					r.dir = filepath.Join(r.root, "here")
+					for _, dir := range []string{workspace + "/.git", r.temp + "/host/pr-5/work", r.temp + "/session/home", r.dir} {
 						if err := os.MkdirAll(dir, 0o755); err != nil {
 							t.Fatal(err)
 						}
@@ -1548,20 +1574,23 @@ others=()
 						t.Errorf("%s's %s calls %s sandbox-settings.sh in a form it refuses:\n%s\n%s", file, name, version, strings.TrimSpace(found), r.printed)
 						continue
 					}
-					// This branch's script reads the old form's tree and kind, and ignores them: it
-					// denies nothing in the workspace, and makes no folder of the kind's name.
+					// Each call names no tree or kind: this branch's script denies nothing in the
+					// workspace or a clone, and makes nothing where it runs.
 					homes, _ := filepath.Glob(filepath.Join(r.temp, "*", "home", ".claude", "settings.json"))
 					more, _ := filepath.Glob(filepath.Join(r.temp, "host", "pr-5", "home", ".claude", "settings.json"))
 					if len(homes)+len(more) != 1 {
 						t.Errorf("%s's %s call left %d settings files, want 1", file, name, len(homes)+len(more))
 					}
 					for _, settings := range append(homes, more...) {
-						text := readText(t, settings)
-						_, made := os.Stat(filepath.Join(r.root, "workspace", "workspace"))
-						_, madeToo := os.Stat(filepath.Join(r.root, "clone"))
-						if version == "this branch's" && (strings.Contains(text, workspace) || strings.Contains(text, "/pr-5/work") || made == nil || madeToo == nil) {
-							t.Errorf("%s's %s call has this branch's script deny the tree it was given: %s", file, name, text)
+						if text := readText(t, settings); version == "this branch's" && (strings.Contains(text, workspace) || strings.Contains(text, "/pr-5/work")) {
+							t.Errorf("%s's %s call has this branch's script deny a tree: %s", file, name, text)
 						}
+					}
+					if made, _ := os.ReadDir(r.dir); len(made) != 0 {
+						t.Errorf("%s's %s call made %v where it runs, with %s script", file, name, made, version)
+					}
+					if regexp.MustCompile(`" (workspace|clone) `).MatchString(found) {
+						t.Errorf("%s's %s calls sandbox-settings.sh in the old form, with a tree and kind: %s", file, name, strings.TrimSpace(found))
 					}
 				}
 			}
@@ -1578,5 +1607,26 @@ func TestAgentsSaysMainsScriptsKeepTheirOldForm(t *testing.T) {
 	if !strings.Contains(strings.Join(strings.Fields(readText(t, "AGENTS.md")), " "),
 		"A script the workflows copy from main is called by the pull request's own workflows, so a change to its arguments or output must keep the old form working until the change is on main.") {
 		t.Error("AGENTS.md doesn't say a script copied from main keeps its old form until the change is on main")
+	}
+}
+
+// A session may write .git's refs and info, so host git after it reads no replace refs, and refuses
+// a tree with grafts, which no setting turns off: neither may make git read another commit, or
+// other parents, for one the session started from.
+func TestHostGitReadsNoReplaceRefsOrGrafts(t *testing.T) {
+	eachJob(t, func(file, name string, job workflowJob) {
+		for _, step := range job.Steps {
+			for _, line := range strings.Split(step.Run, "\n") {
+				if strings.Contains(line, "GIT_CONFIG_GLOBAL=/dev/null") && strings.Contains(line, "command git") && !strings.Contains(line, "GIT_NO_REPLACE_OBJECTS=1") {
+					t.Errorf("%s's %s step %q runs git that reads replace refs: %s", file, name, step.Name, strings.TrimSpace(line))
+				}
+			}
+		}
+	})
+	for _, at := range []struct{ file, job string }{{"build.yml", "draft"}, {"fix.yml", "fix"}} {
+		patch, _ := readFactoryWorkflow(t, at.file).Jobs[at.job].step(t, "patch")
+		if !strings.Contains(patch.Run, "[ -e .git/info/grafts ]") {
+			t.Errorf("%s's %s patch step runs git on a tree with grafts", at.file, at.job)
+		}
 	}
 }

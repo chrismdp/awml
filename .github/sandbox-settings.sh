@@ -3,10 +3,9 @@
 # nothing in the tree can change, so the commands the session runs do so in Claude Code's sandbox
 # (#131). The workflows run main's copy, copied out of the tree before the session starts.
 #
-# Usage: sandbox-settings.sh HOME [TREE KIND] [PATH...], run before HOME is changed for the session,
-# where HOME is the session's own home and each PATH one more that no command may write, such as
-# another session's folder or the host's own. TREE and KIND, the working tree and workspace or
-# clone, are read and ignored.
+# Usage: sandbox-settings.sh HOME [PATH...], run before HOME is changed for the session, where HOME
+# is the session's own home and each PATH one more that no command may write, such as another
+# session's folder or the host's own.
 #
 # The sandbox is on, Claude Code refuses to start without it, and no command may retry outside it.
 # CLAUDE_CODE_SUBPROCESS_ENV_SCRUB, which every session sets, runs each command in a PID namespace
@@ -30,8 +29,6 @@ set -euo pipefail
 
 home="$1"
 shift
-# The old form's TREE and KIND are kept so callers on main still work.
-if [ "$#" -ge 2 ] && [ -d "$1" ] && { [ "$2" = workspace ] || [ "$2" = clone ]; }; then shift 2; fi
 extra=("$@")
 deny_write=()
 # A path inside a folder denied already is denied with it, and listing it again would only give

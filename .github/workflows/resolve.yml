@@ -232,7 +232,7 @@ jobs:
           fi
           id="$(gh api "users/awml-factory%5Bbot%5D" --jq .id)"
           case "$id" in ''|*[!0-9]*) echo "The app's bot has no user id: $id"; exit 1 ;; esac
-          git() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 command git -c core.hooksPath=/dev/null -c core.fsmonitor=false "$@"; }
+          git() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_NO_REPLACE_OBJECTS=1 command git -c core.hooksPath=/dev/null -c core.fsmonitor=false "$@"; }
           : > "$HOST_DIR/pulls.tsv"
           mkdir -p "$HOST_DIR/check" "$HOST_DIR/resolved" "$HOST_DIR/logs" "$HOST_DIR/baseline"
           # The workspace, which the check step fetches main and each branch from, must be the very
@@ -314,7 +314,7 @@ jobs:
               for other in "$HOST_DIR"/pr-*; do
                 if [ "$other" != "$root" ]; then others+=("$other"); fi
               done
-              bash "$HOST_DIR/sandbox-settings.sh" "$HOST_DIR/pr-$number/home" "$root/work" clone "$0" \
+              bash "$HOST_DIR/sandbox-settings.sh" "$HOST_DIR/pr-$number/home" "$0" \
                 "${others[@]}" "$HOST_DIR/main" "$HOST_DIR/sandbox-settings.sh" "$HOST_DIR/pulls.tsv" \
                 "$HOST_DIR/check" "$HOST_DIR/resolved" "$HOST_DIR/logs" "$HOST_DIR/baseline"
               prompt="$(sed -e "s|RESOLVE_DIR|$root/in|g" -e "s|OUT_DIR|$root/out|g" -e "s|MAIN_SHA|$MAIN_SHA|g" \
@@ -348,7 +348,7 @@ jobs:
           stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
           echo "::stop-commands::$stop"
           trap 'echo "::$stop::"' EXIT
-          git() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 command git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c diff.external= "$@"; }
+          git() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_NO_REPLACE_OBJECTS=1 command git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c diff.external= "$@"; }
           # The long runs go to a file of their own, read whole, and are searched there: no grep
           # stops early in a pipe, so nothing feeding it dies of SIGPIPE and reads as no token.
           looks_like_token() {
