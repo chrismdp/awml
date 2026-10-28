@@ -249,6 +249,8 @@ jobs:
       # workspace's .git (#131). It runs the rebase, git included, in its own clone, and bundles the
       # result. The scrub forces the permission mode to default, so every tool the session needs is
       # allowed by name. This step runs no git, and holds no GitHub token.
+      # The step is one { } group, which bash parses whole before it starts, and its sandbox can't
+      # write the step's own script, "$0", so nothing a command writes there runs after the session.
       - name: Resolve the conflicts
         id: resolve
         env:
@@ -262,31 +264,34 @@ jobs:
           GOSUMDB: "off"
           npm_config_offline: "true"
         run: |
-          stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
-          echo "::stop-commands::$stop"
-          trap 'echo "::$stop::"' EXIT
-          while IFS=$'\t' read -r number _; do
-            root="$RUNNER_TEMP/pr/$number"
-            others=()
-            for other in "$RUNNER_TEMP"/pr/*; do
-              if [ "$other" != "$root" ]; then others+=("$other"); fi
-            done
-            bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/pr/$number/home" "$root/work" clone \
-              "${others[@]}" "$RUNNER_TEMP/main" "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/pulls.tsv" \
-              "$RUNNER_TEMP/check" "$RUNNER_TEMP/resolved"
-            prompt="$(sed -e "s|RESOLVE_DIR|$root/in|g" -e "s|OUT_DIR|$root/out|g" -e "s|MAIN_SHA|$MAIN_SHA|g" \
-              "$RUNNER_TEMP/main/resolve-prompt.md")"
-            (cd "$root/work" && HOME="$RUNNER_TEMP/pr/$number/home" claude -p "$prompt" --model opus --max-turns 200 --permission-mode default \
-              --setting-sources user --strict-mcp-config --add-dir "$root/in" --add-dir "$root/out" \
-              --disallowedTools "Read(//proc/**)" "Edit(./.git/**)" "Write(./.git/**)" \
-              --allowedTools "Read(./**)" "Read(/$root/in/**)" "Read(/$root/out/**)" "Edit(./**)" "Edit(/$root/out/**)" "Glob" "Grep" \
-                "Bash(go:*)" "Bash(gofmt:*)" "Bash(make:*)" "Bash(node:*)" \
-                "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" "Bash(git show:*)" \
-                "Bash(git add:*)" "Bash(git rebase:*)" "Bash(git checkout:*)" "Bash(git bundle create:*)" \
-                "Bash(ls:*)" "Bash(cp:*)" "Bash(mkdir:*)" \
-              > "$root/session.log" 2>&1) || echo "The session on #$number ended with an error."
-            cat "$root/session.log"
-          done < "$RUNNER_TEMP/pulls.tsv"
+          {
+            stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+            echo "::stop-commands::$stop"
+            trap 'echo "::$stop::"' EXIT
+            while IFS=$'\t' read -r number _; do
+              root="$RUNNER_TEMP/pr/$number"
+              others=()
+              for other in "$RUNNER_TEMP"/pr/*; do
+                if [ "$other" != "$root" ]; then others+=("$other"); fi
+              done
+              bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/pr/$number/home" "$root/work" clone "$0" \
+                "${others[@]}" "$RUNNER_TEMP/main" "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/pulls.tsv" \
+                "$RUNNER_TEMP/check" "$RUNNER_TEMP/resolved"
+              prompt="$(sed -e "s|RESOLVE_DIR|$root/in|g" -e "s|OUT_DIR|$root/out|g" -e "s|MAIN_SHA|$MAIN_SHA|g" \
+                "$RUNNER_TEMP/main/resolve-prompt.md")"
+              (cd "$root/work" && HOME="$RUNNER_TEMP/pr/$number/home" claude -p "$prompt" --model opus --max-turns 200 --permission-mode default \
+                --setting-sources user --strict-mcp-config --add-dir "$root/in" --add-dir "$root/out" \
+                --disallowedTools "Read(//proc/**)" "Edit(./.git/**)" "Write(./.git/**)" \
+                --allowedTools "Read(./**)" "Read(/$root/in/**)" "Read(/$root/out/**)" "Edit(./**)" "Edit(/$root/out/**)" "Glob" "Grep" \
+                  "Bash(go:*)" "Bash(gofmt:*)" "Bash(make:*)" "Bash(node:*)" \
+                  "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" "Bash(git show:*)" \
+                  "Bash(git add:*)" "Bash(git rebase:*)" "Bash(git checkout:*)" "Bash(git bundle create:*)" \
+                  "Bash(ls:*)" "Bash(cp:*)" "Bash(mkdir:*)" \
+                > "$root/session.log" 2>&1) || echo "The session on #$number ended with an error."
+              cat "$root/session.log"
+            done < "$RUNNER_TEMP/pulls.tsv"
+            exit
+          }
 
       # Each session's bundle is read as data into a fresh repository, whose config no session ever
       # touched, with no global or system config, no hooks and no fsmonitor, beside no login token.

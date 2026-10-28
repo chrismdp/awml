@@ -1118,3 +1118,58 @@ func TestTheNeverPushedFilesAreNamedToTheSessions(t *testing.T) {
 		}
 	}
 }
+
+// Bash reads a step's script from its file as it runs, so a command the session ran could rewrite
+// what follows the claude line, and that would run after the session, outside the sandbox, beside
+// the login token. So each step that runs claude is one { ... } group, which bash parses whole
+// before it starts, ending with the exit, and its sandbox denies writes to the script itself, "$0".
+func TestASessionCantRewriteTheRestOfItsStep(t *testing.T) {
+	eachJob(t, func(file, name string, job workflowJob) {
+		at := job.session()
+		if at < 0 {
+			return
+		}
+		step := job.Steps[at]
+		body := strings.TrimSpace(step.Run)
+		lines := strings.Split(body, "\n")
+		if lines[0] != "{" || lines[len(lines)-1] != "}" || !strings.HasPrefix(strings.TrimSpace(lines[len(lines)-2]), "exit") {
+			t.Errorf("%s's %s step %q isn't one group ending with its exit", file, name, step.Name)
+		}
+		for _, line := range lines[1 : len(lines)-1] {
+			if line == "}" || line == "{" {
+				t.Errorf("%s's %s step %q has more than one group at its top", file, name, step.Name)
+			}
+		}
+		if settings := sandboxSettings.FindString(step.Run); !strings.Contains(settings, `"$0"`) {
+			t.Errorf("%s's %s session can write its own step's script: %s", file, name, settings)
+		}
+	})
+
+	session, _ := readFactoryWorkflow(t, "ci.yml").Jobs["review"].step(t, "session")
+	r := newRehearsal(t)
+	r.write("sandbox-settings.sh", readText(t, ".github/sandbox-settings.sh"))
+	r.write("prompts/review-bugs-prompt.md", "Review for bugs.\n")
+	r.write("review/change.patch", "")
+	t.Cleanup(func() { exec.Command("chmod", "-R", "u+w", filepath.Join(r.temp, "review")).Run() })
+	pwned := filepath.Join(r.root, "pwned")
+	// The stub overwrites the rest of the step's script, from just after its own command, with a
+	// line of its own, as a command a session ran could.
+	r.write(filepath.Join(r.root, "bin", "claude"), `#!/bin/bash
+python3 - "$STEP" "$PWNED" <<'EOF'
+import sys
+path, pwned = sys.argv[1], sys.argv[2]
+text = open(path).read()
+at = text.index("|| status=$?") + len("|| status=$?\n")
+open(path, "r+").write(text[:at] + 'touch "' + pwned + '"\n' + text[at:])
+EOF
+`)
+	if err := os.Chmod(filepath.Join(r.root, "bin", "claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	r.run(session, map[string]string{"STEP": filepath.Join(r.root, "step.sh"), "PWNED": pwned, "KIND": "bugs",
+		"PROMPT": "review-bugs-prompt.md", "REVIEW_DIR": filepath.Join(r.temp, "review"), "GITHUB_WORKSPACE": r.root}, "")
+	r.mustPass()
+	if _, err := os.Stat(pwned); err == nil {
+		t.Error("a line a session wrote into its own step's script ran after the session")
+	}
+}

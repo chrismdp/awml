@@ -28,7 +28,10 @@ func retryAnswersOn(attempt int, earlier, test, review, branchSha, edited string
 	return `
   "api repos/owner/repo/actions/runs/77"*) answer <<< '{"path": ".github/workflows/ci.yml", "event": "pull_request", "status": "completed",
     "head_sha": "` + head + `", "head_branch": "build/issue-120", "head_repository": {"full_name": "owner/repo"},
-    "id": 77, "run_attempt": ` + fmt.Sprint(attempt) + `, "created_at": "2026-10-27T13:30:00Z"}' ;;
+    "id": 77, "run_attempt": ` + fmt.Sprint(attempt) + `, "created_at": "2026-10-27T13:30:00Z", "pull_requests": [{"number": 8}]}' ;;
+  "api repos/owner/repo/pulls?head=owner:build/issue-120&base=main&state=open"*) answer <<< '[
+    {"number": 99, "head": {"repo": {"full_name": "owner/repo"}}, "user": {"login": "a-stranger", "type": "User"}},
+    {"number": 8, "head": {"repo": {"full_name": "owner/repo"}}, "user": {"login": "awml-factory[bot]", "type": "Bot"}}]' ;;
   "api --paginate repos/owner/repo/actions/workflows/ci.yml/runs"*) answer <<< '{"workflow_runs": [
     {"id": 77, "event": "pull_request", "conclusion": "failure", "created_at": "2026-10-27T13:30:00Z", "head_repository": {"full_name": "owner/repo"}}` +
 		strings.TrimPrefix(earlier, "[") + `
@@ -61,6 +64,8 @@ func TestRetryActsWhenTheTestsFailAndCountsTheBuilds(t *testing.T) {
 		{"a moved branch", retryAnswers("failure", "success", strings.Repeat("cd", 20), "", []string{"build"}, 1), "none"},
 		{"the label taken off", retryAnswers("failure", "success", head, "", []string{"tool"}, 1), "none"},
 		{"a fork's run", fromAFork(retryAnswers("failure", "success", head, "", []string{"build"}, 1)), "none"},
+		{"a run for a stranger's pull request from the branch", strings.Replace(retryAnswers("failure", "success", head, "", []string{"build"}, 1),
+			`"pull_requests": [{"number": 8}]`, `"pull_requests": [{"number": 99}]`, 1), "none"},
 		// After three builds, a person is told once: on the first run since the last build started
 		// whose tests failed, whatever commit it's on, a fix's or a rebase's, and never on a re-run.
 		{"an earlier run since the last build whose tests failed", retryAnswersOn(1, `[,

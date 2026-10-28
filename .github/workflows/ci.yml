@@ -168,6 +168,8 @@ jobs:
       # annotation of its own.
       # The session's home holds main's sandbox settings, from .github/sandbox-settings.sh, with no
       # host allowed, though the session runs no commands (#131).
+      # The step is one { } group, which bash parses whole before it starts, and its sandbox can't
+      # write the step's own script, "$0", so nothing a command writes there runs after the session.
       - name: Review the patch
         id: session
         if: steps.gate.outcome == 'success'
@@ -178,22 +180,24 @@ jobs:
           KIND: ${{ matrix.review.kind }}
           PROMPT: ${{ matrix.review.prompt }}
         run: |
-          stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
-          echo "::stop-commands::$stop"
-          trap 'echo "::$stop::"' EXIT
-          session="$RUNNER_TEMP/session"
-          chmod -R a-w "$REVIEW_DIR"
-          mkdir -p "$session/home" "$session/out"
-          bash "$RUNNER_TEMP/sandbox-settings.sh" "$session/home" "$GITHUB_WORKSPACE" workspace
-          prompt="$(sed -e "s|REVIEW_DIR|$REVIEW_DIR|g" -e "s|OUT_DIR|$session/out|g" "$RUNNER_TEMP/prompts/$PROMPT")"
-          status=0
-          HOME="$session/home" claude -p "$prompt" --model opus --max-turns 100 --permission-mode default \
-            --setting-sources user --strict-mcp-config --add-dir "$REVIEW_DIR" --add-dir "$session/out" \
-            --disallowedTools "Read(//proc/**)" "Bash" "Edit(./.git/**)" "Write(./.git/**)" \
-            --allowedTools "Read(./**)" "Read(/$REVIEW_DIR/**)" "Edit(/$session/out/$KIND.json)" \
-            > "$session/log" 2>&1 || status=$?
-          cat "$session/log"
-          exit "$status"
+          {
+            stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+            echo "::stop-commands::$stop"
+            trap 'echo "::$stop::"' EXIT
+            session="$RUNNER_TEMP/session"
+            chmod -R a-w "$REVIEW_DIR"
+            mkdir -p "$session/home" "$session/out"
+            bash "$RUNNER_TEMP/sandbox-settings.sh" "$session/home" "$GITHUB_WORKSPACE" workspace "$0"
+            prompt="$(sed -e "s|REVIEW_DIR|$REVIEW_DIR|g" -e "s|OUT_DIR|$session/out|g" "$RUNNER_TEMP/prompts/$PROMPT")"
+            status=0
+            HOME="$session/home" claude -p "$prompt" --model opus --max-turns 100 --permission-mode default \
+              --setting-sources user --strict-mcp-config --add-dir "$REVIEW_DIR" --add-dir "$session/out" \
+              --disallowedTools "Read(//proc/**)" "Bash" "Edit(./.git/**)" "Write(./.git/**)" \
+              --allowedTools "Read(./**)" "Read(/$REVIEW_DIR/**)" "Edit(/$session/out/$KIND.json)" \
+              > "$session/log" 2>&1 || status=$?
+            cat "$session/log"
+            exit "$status"
+          }
 
       # The findings must be a list, each ranked, or the check fails with none posted, and findings
       # that carry anything like the login token are refused. Each finding becomes an annotation on
@@ -320,6 +324,8 @@ jobs:
       # can't change, editing only its verdict, in a folder of its own, and running nothing.
       # The session's home holds main's sandbox settings, from .github/sandbox-settings.sh, with no
       # host allowed, though the session runs no commands (#131).
+      # The step is one { } group, which bash parses whole before it starts, and its sandbox can't
+      # write the step's own script, "$0", so nothing a command writes there runs after the session.
       - name: Sort the change by risk
         id: session
         if: steps.install.outcome == 'success'
@@ -329,22 +335,24 @@ jobs:
           CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
           REVIEW_DIR: ${{ runner.temp }}/review
         run: |
-          stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
-          echo "::stop-commands::$stop"
-          trap 'echo "::$stop::"' EXIT
-          session="$RUNNER_TEMP/session"
-          chmod -R a-w "$REVIEW_DIR"
-          mkdir -p "$session/home" "$session/out"
-          bash "$RUNNER_TEMP/sandbox-settings.sh" "$session/home" "$GITHUB_WORKSPACE" workspace
-          prompt="$(sed -e "s|REVIEW_DIR|$REVIEW_DIR|g" -e "s|OUT_DIR|$session/out|g" "$RUNNER_TEMP/prompts/classify-prompt.md")"
-          status=0
-          HOME="$session/home" claude -p "$prompt" --model opus --max-turns 100 --permission-mode default \
-            --setting-sources user --strict-mcp-config --add-dir "$REVIEW_DIR" --add-dir "$session/out" \
-            --disallowedTools "Read(//proc/**)" "Bash" "Edit(./.git/**)" "Write(./.git/**)" \
-            --allowedTools "Read(./**)" "Read(/$REVIEW_DIR/**)" "Edit(/$session/out/classification.json)" \
-            > "$session/log" 2>&1 || status=$?
-          cat "$session/log"
-          exit "$status"
+          {
+            stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+            echo "::stop-commands::$stop"
+            trap 'echo "::$stop::"' EXIT
+            session="$RUNNER_TEMP/session"
+            chmod -R a-w "$REVIEW_DIR"
+            mkdir -p "$session/home" "$session/out"
+            bash "$RUNNER_TEMP/sandbox-settings.sh" "$session/home" "$GITHUB_WORKSPACE" workspace "$0"
+            prompt="$(sed -e "s|REVIEW_DIR|$REVIEW_DIR|g" -e "s|OUT_DIR|$session/out|g" "$RUNNER_TEMP/prompts/classify-prompt.md")"
+            status=0
+            HOME="$session/home" claude -p "$prompt" --model opus --max-turns 100 --permission-mode default \
+              --setting-sources user --strict-mcp-config --add-dir "$REVIEW_DIR" --add-dir "$session/out" \
+              --disallowedTools "Read(//proc/**)" "Bash" "Edit(./.git/**)" "Write(./.git/**)" \
+              --allowedTools "Read(./**)" "Read(/$REVIEW_DIR/**)" "Edit(/$session/out/classification.json)" \
+              > "$session/log" 2>&1 || status=$?
+            cat "$session/log"
+            exit "$status"
+          }
 
       # The verdict must be ship, show or ask with one to five reasons, and carry nothing like the
       # login token. It becomes a notice titled Verdict, and each reason, cleaned as a review's

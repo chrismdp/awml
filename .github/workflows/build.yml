@@ -267,6 +267,8 @@ jobs:
       # Claude Code's environment through /proc, offline, and unable to write .git, the runner's files
       # or the baseline the tree is checked against after the session (#131). The scrub forces the
       # permission mode to default, so every tool the session needs is allowed by name.
+      # The step is one { } group, which bash parses whole before it starts, and its sandbox can't
+      # write the step's own script, "$0", so nothing a command writes there runs after the session.
       - name: Draft the change
         id: draft
         env:
@@ -281,26 +283,28 @@ jobs:
           GOSUMDB: "off"
           npm_config_offline: "true"
         run: |
-          stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
-          echo "::stop-commands::$stop"
-          trap 'echo "::$stop::"' EXIT
-          mkdir -p "$RUNNER_TEMP/baseline"
-          cp .git/config "$RUNNER_TEMP/baseline/git-config"
-          stat -c %d:%i "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.git" > "$RUNNER_TEMP/baseline/folders"
-          bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/session/home" "$GITHUB_WORKSPACE" workspace "$RUNNER_TEMP/baseline" "$RUNNER_TEMP/change"
-          prompt="$(sed "s|BUILD_DIR|$BUILD_DIR|g" "$RUNNER_TEMP/build-prompt.md")"
-          status=0
-          HOME="$RUNNER_TEMP/session/home" claude -p "$prompt" --model opus --max-turns 200 --permission-mode default \
-            --setting-sources user --strict-mcp-config --add-dir "$BUILD_DIR" \
-            --disallowedTools "Read(//proc/**)" "Edit(./.git/**)" "Write(./.git/**)" \
-            --allowedTools "Read(./**)" "Read(/$BUILD_DIR/**)" "Edit(./**)" "Edit(/$BUILD_DIR/**)" "Glob" "Grep" \
-              "Bash(go:*)" "Bash(gofmt:*)" "Bash(make:*)" "Bash(node:*)" \
-              "Bash(.github/picture-drawings.sh:*)" \
-              "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" \
-              "Bash(ls:*)" "Bash(cp:*)" "Bash(mkdir:*)" \
-            > "$RUNNER_TEMP/draft.log" 2>&1 || status=$?
-          cat "$RUNNER_TEMP/draft.log"
-          exit "$status"
+          {
+            stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+            echo "::stop-commands::$stop"
+            trap 'echo "::$stop::"' EXIT
+            mkdir -p "$RUNNER_TEMP/baseline"
+            cp .git/config "$RUNNER_TEMP/baseline/git-config"
+            stat -c %d:%i "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.git" > "$RUNNER_TEMP/baseline/folders"
+            bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/session/home" "$GITHUB_WORKSPACE" workspace "$RUNNER_TEMP/baseline" "$RUNNER_TEMP/change" "$0"
+            prompt="$(sed "s|BUILD_DIR|$BUILD_DIR|g" "$RUNNER_TEMP/build-prompt.md")"
+            status=0
+            HOME="$RUNNER_TEMP/session/home" claude -p "$prompt" --model opus --max-turns 200 --permission-mode default \
+              --setting-sources user --strict-mcp-config --add-dir "$BUILD_DIR" \
+              --disallowedTools "Read(//proc/**)" "Edit(./.git/**)" "Write(./.git/**)" \
+              --allowedTools "Read(./**)" "Read(/$BUILD_DIR/**)" "Edit(./**)" "Edit(/$BUILD_DIR/**)" "Glob" "Grep" \
+                "Bash(go:*)" "Bash(gofmt:*)" "Bash(make:*)" "Bash(node:*)" \
+                "Bash(.github/picture-drawings.sh:*)" \
+                "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" \
+                "Bash(ls:*)" "Bash(cp:*)" "Bash(mkdir:*)" \
+              > "$RUNNER_TEMP/draft.log" 2>&1 || status=$?
+            cat "$RUNNER_TEMP/draft.log"
+            exit "$status"
+          }
 
       # Git runs here, beside no login token, only if .git/config is the copy taken before the
       # session, with no global or system config, no hooks, no fsmonitor, no external diff and no

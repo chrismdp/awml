@@ -59,6 +59,17 @@ jobs:
           [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]] || leave "CI's commit isn't a commit id."
           [[ "$branch" =~ ^build/issue-[0-9]+$ ]] || leave "This isn't a build's branch."
           issue="${branch#build/issue-}"
+          # A stranger may open a pull request of their own from the build's branch, so CI's run must
+          # be for the app's own, by the run's own list of pull requests.
+          pr="$(gh api "repos/$GITHUB_REPOSITORY/pulls?head=$GITHUB_REPOSITORY_OWNER:$branch&base=main&state=open" |
+            jq -r --arg repository "$GITHUB_REPOSITORY" '[.[] | select(.user.login == "awml-factory[bot]" and .user.type == "Bot" and
+              .head.repo.full_name == $repository) | .number] | first // empty')"
+          case "$pr" in
+            '') leave "No open pull request of the app's is on $branch." ;;
+            *[!0-9]*) echo "The pull request's number isn't a number: $pr"; exit 1 ;;
+          esac
+          jq -e --argjson pr "$pr" '[.pull_requests[]?.number] | index($pr) != null' <<< "$run" > /dev/null ||
+            leave "CI's run isn't for the app's #$pr, so it's left alone."
 
           gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN/jobs?per_page=100" --jq '.jobs[]' |
             jq -s . > "$RUNNER_TEMP/jobs.json"
