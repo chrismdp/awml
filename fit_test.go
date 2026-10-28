@@ -167,3 +167,97 @@ parts:
 		t.Errorf("Fit gave %q", lines)
 	}
 }
+
+// Three platforms that each hold only some of the fit workflow's parts: the laptop is off too long
+// for the trigger, the server holds no notes and calls no model, and the agent can't run code.
+var splitPlatforms = []string{
+	`{awml: "0.8", platform: {id: laptop, label: Laptop}, off_for_up_to: P1D, steps: code, agents: [], calls: [anthropic], holds: [notes]}`,
+	`{awml: "0.8", platform: {id: server, label: Server}, off_for_up_to: PT0S, steps: code, agents: [], calls: [], holds: []}`,
+	`{awml: "0.8", platform: {id: cowork, label: Cowork}, off_for_up_to: PT0S, steps: agent, agents: [anthropic], calls: any, holds: [notes]}`,
+}
+
+func TestFitPartsSaysWhichPlatformsHoldEachPartAndTheFewestThatHoldThemAll(t *testing.T) {
+	docs := fitDocs(t, append([]string{fitSecurity}, splitPlatforms...)...)
+	report := JudgeParts([]Workflow{{Doc: docs[0]}}, docs[1:])
+	want := PartsReport{
+		Parts: []PartFit{
+			{Part: "hourly", Platforms: []string{"server", "cowork"}, Reasons: []PlatformReasons{{Platform: "laptop", Reasons: []string{"hourly may wait PT2H, but the platform may be off for P1D"}}}, Models: map[string][]string{}},
+			{Part: "bring", Platforms: []string{"laptop", "server"}, Reasons: []PlatformReasons{{Platform: "cowork", Reasons: []string{"bring is a code step, which anthropic's agent would carry out"}}}, Models: map[string][]string{}},
+			{Part: "mail", Platforms: []string{"laptop", "server", "cowork"}, Reasons: []PlatformReasons{}, Models: map[string][]string{}},
+			{Part: "notes", Platforms: []string{"laptop", "cowork"}, Reasons: []PlatformReasons{{Platform: "server", Reasons: []string{"notes is kept at notes/projects, which the platform doesn't hold"}}}, Models: map[string][]string{}},
+			{Part: "choose", Platforms: []string{"laptop", "cowork"}, Reasons: []PlatformReasons{{Platform: "server", Reasons: []string{"choose has no company it may use"}}}, Models: map[string][]string{"laptop": {"anthropic"}, "cowork": {"anthropic"}}},
+		},
+		Placements: [][]string{{"laptop", "server"}, {"laptop", "cowork"}, {"server", "cowork"}},
+		Gaps:       []string{},
+	}
+	if !reflect.DeepEqual(report, want) {
+		t.Errorf("JudgeParts gave\n%+v\nwant\n%+v", report, want)
+	}
+	wantLines := []string{
+		"hourly  held by server and cowork",
+		"        not by laptop: hourly may wait PT2H, but the platform may be off for P1D",
+		"bring   held by laptop and server",
+		"        not by cowork: bring is a code step, which anthropic's agent would carry out",
+		"mail    held by laptop, server and cowork",
+		"notes   held by laptop and cowork",
+		"        not by server: notes is kept at notes/projects, which the platform doesn't hold",
+		"choose  held by laptop and cowork",
+		"        not by server: choose has no company it may use",
+		"fewest platforms: laptop and server",
+		"                  laptop and cowork",
+		"                  server and cowork",
+		"a placement on several platforms is judged part by part only: whether its parts can reach each other isn't judged",
+	}
+	if lines := PartsLines(report); !reflect.DeepEqual(lines, wantLines) {
+		t.Errorf("PartsLines gave\n%q\nwant\n%q", lines, wantLines)
+	}
+}
+
+// Where one platform holds every part, it fits as a whole, and there's no placement across several.
+func TestFitPartsGivesNoPlacementWhereOnePlatformHoldsEveryPart(t *testing.T) {
+	fitting := `{awml: "0.8", platform: {id: fitting, label: Fitting}, off_for_up_to: PT1H, steps: code, agents: [], calls: [anthropic], holds: [notes]}`
+	docs := fitDocs(t, append([]string{fitSecurity, fitting}, splitPlatforms...)...)
+	report := JudgeParts([]Workflow{{Doc: docs[0]}}, docs[1:])
+	if len(report.Placements) != 0 || report.Placements == nil {
+		t.Errorf("JudgeParts gave placements %q", report.Placements)
+	}
+	if lines := PartsLines(report); lines[len(lines)-1] != "        not by server: choose has no company it may use" {
+		t.Errorf("PartsLines ended with %q", lines[len(lines)-1])
+	}
+}
+
+// A part no platform holds is named, and then there's no placement.
+func TestFitPartsNamesAPartNoPlatformHolds(t *testing.T) {
+	docs := fitDocs(t, fitSecurity, splitPlatforms[1])
+	report := JudgeParts([]Workflow{{Doc: docs[0]}}, docs[1:])
+	if len(report.Placements) != 0 {
+		t.Errorf("JudgeParts gave placements %q", report.Placements)
+	}
+	lines := PartsLines(report)
+	if lines[len(lines)-1] != "no placement: notes and choose are held by no platform given" {
+		t.Errorf("PartsLines gave %q", lines)
+	}
+	docs = fitDocs(t, fitSecurity, splitPlatforms[0], splitPlatforms[1])
+	lines = PartsLines(JudgeParts([]Workflow{{Doc: docs[0]}}, docs[1:]))
+	if !reflect.DeepEqual(lines[len(lines)-3:len(lines)-1], []string{"        not by server: choose has no company it may use", "fewest platforms: laptop and server"}) {
+		t.Errorf("PartsLines gave %q", lines)
+	}
+	docs = fitDocs(t, strings.Replace(fitSecurity, "at: notes/projects", "at: elsewhere", 1), splitPlatforms[0], splitPlatforms[1])
+	lines = PartsLines(JudgeParts([]Workflow{{Doc: docs[0]}}, docs[1:]))
+	if lines[len(lines)-1] != "no placement: notes is held by no platform given" {
+		t.Errorf("PartsLines gave %q", lines)
+	}
+}
+
+func TestFitPartsReportsGapsAndDuplicateDescriptions(t *testing.T) {
+	docs := fitDocs(t, fitSecurity, goodPlatform, goodPlatform)
+	report := JudgeParts([]Workflow{{Doc: docs[0]}}, docs[1:])
+	want := PartsReport{Parts: []PartFit{}, Placements: [][]string{}, Gaps: []string{`platform description "worker" was given twice`}}
+	if !reflect.DeepEqual(report, want) {
+		t.Errorf("JudgeParts gave %+v", report)
+	}
+	docs = fitDocs(t, strings.Replace(fitSecurity, "wait: PT2H, ", "", 1), goodPlatform)
+	if gaps := JudgeParts([]Workflow{{Doc: docs[0]}}, docs[1:]).Gaps; !reflect.DeepEqual(gaps, []string{`trigger "hourly" has no wait`}) {
+		t.Errorf("JudgeParts gave gaps %q", gaps)
+	}
+}

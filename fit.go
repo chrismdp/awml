@@ -53,31 +53,24 @@ func Judge(security, placement *Map, descriptions []*Map) FitReport {
 }
 
 func judge(security, placement *Map, descriptions []*Map) ([]FitResult, []string) {
+	return judgeModel(securityFitModel(security), placement, descriptions)
+}
+
+// securityFitModel gives what fit judges of one workflow, or of its security view.
+func securityFitModel(security *Map) fitModel {
 	if IsCanonical(security) {
 		security, _ = View(security, "")
 	}
-	return judgeModel(newFitModel(security), placement, descriptions)
+	return newFitModel(security)
 }
 
 func judgeModel(model fitModel, placement *Map, descriptions []*Map) (results []FitResult, gaps []string) {
-	if gaps = model.gaps(); len(gaps) != 0 {
-		return nil, gaps
-	}
-	described := map[string]fitPlatform{}
-	for _, description := range descriptions {
-		platform := readFitPlatform(description)
-		if _, exists := described[platform.id]; exists {
-			gaps = append(gaps, fmt.Sprintf(`platform description "%s" was given twice`, platform.id))
-			continue
-		}
-		described[platform.id] = platform
-	}
+	platforms, described, gaps := describe(model, descriptions)
 	if len(gaps) != 0 {
 		return nil, gaps
 	}
 	if placement == nil {
-		for _, description := range descriptions {
-			platform := readFitPlatform(description)
+		for _, platform := range platforms {
 			results = append(results, judgePlatform(platform.id, platform, model, model.parts, model.parts))
 		}
 		return results, nil
@@ -125,6 +118,27 @@ func judgeModel(model fitModel, placement *Map, descriptions []*Map) (results []
 		return nil, gaps
 	}
 	return results, nil
+}
+
+// describe reads the platform descriptions, in the order given and by id, or gives the gaps that
+// keep the workflow from being judged: its own, and a description given twice.
+func describe(model fitModel, descriptions []*Map) ([]fitPlatform, map[string]fitPlatform, []string) {
+	if gaps := model.gaps(); len(gaps) != 0 {
+		return nil, nil, gaps
+	}
+	var gaps []string
+	var platforms []fitPlatform
+	described := map[string]fitPlatform{}
+	for _, description := range descriptions {
+		platform := readFitPlatform(description)
+		if _, exists := described[platform.id]; exists {
+			gaps = append(gaps, fmt.Sprintf(`platform description "%s" was given twice`, platform.id))
+			continue
+		}
+		described[platform.id] = platform
+		platforms = append(platforms, platform)
+	}
+	return platforms, described, gaps
 }
 
 type fitModel struct {
@@ -439,4 +453,174 @@ func FitLines(results []FitResult) []string {
 		}
 	}
 	return lines
+}
+
+// PartsReport is the whole of `awml fit --parts --json`: for each part, the platforms that can hold
+// it alone; the fewest platforms that between them hold every part, where no one platform does; and
+// the gaps that kept the workflow from being judged.
+type PartsReport struct {
+	Parts      []PartFit  `json:"parts"`
+	Placements [][]string `json:"placements"`
+	Gaps       []string   `json:"gaps"`
+}
+
+// PartFit is the verdict on one part: the platforms that can hold it, in the order given, why each
+// of the others can't, and the companies an AI step may use on each platform that holds it.
+type PartFit struct {
+	Part      string              `json:"part"`
+	Platforms []string            `json:"platforms"`
+	Reasons   []PlatformReasons   `json:"reasons"`
+	Models    map[string][]string `json:"models"`
+}
+
+// PlatformReasons is every reason one platform can't hold a part.
+type PlatformReasons struct {
+	Platform string   `json:"platform"`
+	Reasons  []string `json:"reasons"`
+}
+
+// JudgeParts judges each trigger, step that runs on a platform, context and connector of the
+// workflows given on its own against each platform, by the same rules as Judge, and finds the fewest
+// platforms that between them hold them all. Whether parts on different platforms can reach each
+// other isn't judged.
+func JudgeParts(workflows []Workflow, descriptions []*Map) PartsReport {
+	model := securityFitModel(workflows[0].Doc)
+	if len(workflows) > 1 {
+		model = togetherFitModel(workflows)
+	}
+	report := PartsReport{Parts: []PartFit{}, Placements: [][]string{}, Gaps: []string{}}
+	platforms, _, gaps := describe(model, descriptions)
+	if len(gaps) != 0 {
+		report.Gaps = gaps
+		return report
+	}
+	var held [][]bool
+	for _, part := range model.parts {
+		if kind := str(part, "kind"); kind != "trigger" && !countsForAccess(kind) {
+			continue
+		}
+		name := model.name(str(part, "id"))
+		verdict := PartFit{Part: name, Platforms: []string{}, Reasons: []PlatformReasons{}, Models: map[string][]string{}}
+		holders := make([]bool, len(platforms))
+		for i, platform := range platforms {
+			result := judgePlatform(platform.id, platform, model, []*Map{part}, []*Map{part})
+			if !result.Fits {
+				verdict.Reasons = append(verdict.Reasons, PlatformReasons{Platform: platform.id, Reasons: result.Reasons})
+				continue
+			}
+			holders[i] = true
+			verdict.Platforms = append(verdict.Platforms, platform.id)
+			if companies, ok := result.Models[name]; ok {
+				verdict.Models[platform.id] = companies
+			}
+		}
+		report.Parts = append(report.Parts, verdict)
+		held = append(held, holders)
+	}
+	report.Placements = fewestPlatforms(platforms, held)
+	return report
+}
+
+// fewestPlatforms gives every smallest set of two or more platforms that between them hold every
+// part, each in the order the platforms were given, and the sets in that order too. It gives none
+// where one platform holds every part, or where some part no platform holds. Trying every
+// combination is fine for the handful of platforms a person describes.
+func fewestPlatforms(platforms []fitPlatform, held [][]bool) [][]string {
+	placements := [][]string{}
+	for _, holders := range held {
+		if !anyTrue(holders) {
+			return placements
+		}
+	}
+	var chosen []int
+	var choose func(from, size int)
+	choose = func(from, size int) {
+		if len(chosen) == size {
+			for _, holders := range held {
+				covered := false
+				for _, i := range chosen {
+					covered = covered || holders[i]
+				}
+				if !covered {
+					return
+				}
+			}
+			placement := make([]string, 0, size)
+			for _, i := range chosen {
+				placement = append(placement, platforms[i].id)
+			}
+			placements = append(placements, placement)
+			return
+		}
+		for i := from; i <= len(platforms)-(size-len(chosen)); i++ {
+			chosen = append(chosen, i)
+			choose(i+1, size)
+			chosen = chosen[:len(chosen)-1]
+		}
+	}
+	for size := 1; size <= len(platforms); size++ {
+		choose(0, size)
+		if size == 1 && len(placements) != 0 {
+			return [][]string{}
+		}
+		if len(placements) != 0 {
+			return placements
+		}
+	}
+	return placements
+}
+
+func anyTrue(values []bool) bool {
+	for _, value := range values {
+		if value {
+			return true
+		}
+	}
+	return false
+}
+
+// PartsLines gives the lines `awml fit --parts` prints: for each part, the platforms that hold it
+// and why each other one doesn't, then the fewest platforms that hold every part, or the parts that
+// no platform holds.
+func PartsLines(report PartsReport) []string {
+	width := 0
+	for _, part := range report.Parts {
+		if len(part.Part) > width {
+			width = len(part.Part)
+		}
+	}
+	var lines, unheld []string
+	for _, part := range report.Parts {
+		holders := "none"
+		if len(part.Platforms) != 0 {
+			holders = naturalList(part.Platforms)
+		} else {
+			unheld = append(unheld, part.Part)
+		}
+		lines = append(lines, fmt.Sprintf("%-*s  held by %s", width, part.Part, holders))
+		for _, platform := range part.Reasons {
+			for _, reason := range platform.Reasons {
+				lines = append(lines, fmt.Sprintf("%-*s  not by %s: %s", width, "", platform.Platform, reason))
+			}
+		}
+	}
+	if len(unheld) != 0 {
+		verb := "are"
+		if len(unheld) == 1 {
+			verb = "is"
+		}
+		return append(lines, fmt.Sprintf("no placement: %s %s held by no platform given", naturalList(unheld), verb))
+	}
+	if len(report.Placements) == 0 {
+		return lines
+	}
+	const fewest = "fewest platforms: "
+	for i, placement := range report.Placements {
+		lead := fewest
+		if i > 0 {
+			lead = strings.Repeat(" ", len(fewest))
+		}
+		lines = append(lines, lead+naturalList(placement))
+	}
+	return append(lines, "a placement on several platforms is judged part by part only: whether its parts can reach each other isn't judged")
 }

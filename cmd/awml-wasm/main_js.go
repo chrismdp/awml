@@ -59,6 +59,14 @@ func main() {
 		}
 		return encoded(awml.FitSources(sources, optionalImplementation(args)))
 	})
+	// __awmlFitParts judges each part alone against each platform described, as awml fit --parts does.
+	expose("__awmlFitParts", func(args []js.Value) string {
+		sources, err := given(args[0].String())
+		if err != nil {
+			return errorJSON(err.Error())
+		}
+		return encoded(awml.FitPartsSources(sources))
+	})
 	// __awmlConvert gives the 0.8 file awml convert writes, from one file or a legacy pair, what it
 	// notes it couldn't carry over, and the mistakes the current rules find in it.
 	expose("__awmlConvert", func(args []js.Value) string {

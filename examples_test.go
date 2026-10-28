@@ -324,4 +324,14 @@ worker            no: engagements is kept at notes/engagements, which the platfo
 	if !strings.Contains(string(spec), want) {
 		t.Error("SPEC.md doesn't contain the client email fit output")
 	}
+
+	// Without the scheduled scripts, the README shows each part's fit and the fewest platforms.
+	parts := PartsLines(JudgeParts([]Workflow{{Doc: security}}, []*Map{platforms[0], platforms[3]}))
+	readme, err := os.ReadFile("README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shown := "examples/platforms/worker.yaml\n" + strings.Join(parts, "\n") + "\n```"; !strings.Contains(string(readme), shown) {
+		t.Errorf("README.md doesn't contain the client email's fit of each part:\n%s", shown)
+	}
 }
