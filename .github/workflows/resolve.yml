@@ -282,10 +282,11 @@ jobs:
       # .mcp.json on the branch can't set its hooks or where it sends the login token. It reads only
       # its clone and its own folders, never /proc. Its commands run in Claude Code's sandbox, set in
       # the user settings of its own home by main's .github/sandbox-settings.sh: each in a PID
-      # namespace of its own, offline, and unable to write another pull request's folder or the
-      # workspace's .git (#131). It runs the rebase, git included, in its own clone, and bundles the
-      # result. The scrub forces the permission mode to default, so every tool the session needs is
-      # allowed by name. This step runs no git, and holds no GitHub token. Each session's log goes to
+      # namespace of its own, offline, and unable to write another pull request's folder or, through
+      # the scrub's own list, the workspace's .git hooks and config (#131). The check step reads each
+      # branch from the workspace by its commit. It runs the rebase, git included, in its own clone,
+      # and bundles the result. The scrub forces the permission mode to default, so every tool the
+      # session needs is allowed by name. This step runs no git, and holds no GitHub token. Each session's log goes to
       # the host's own folder, which no session can write, and its output folder is read only once it
       # holds nothing but plain files and folders.
       # The step is one { } group, which bash parses whole before it starts, and its sandbox can't
@@ -313,14 +314,14 @@ jobs:
               for other in "$HOST_DIR"/pr-*; do
                 if [ "$other" != "$root" ]; then others+=("$other"); fi
               done
-              bash "$HOST_DIR/sandbox-settings.sh" "$HOST_DIR/pr-$number/home" "$root/work" clone "$0" \
+              bash "$HOST_DIR/sandbox-settings.sh" "$HOST_DIR/pr-$number/home" "$0" \
                 "${others[@]}" "$HOST_DIR/main" "$HOST_DIR/sandbox-settings.sh" "$HOST_DIR/pulls.tsv" \
                 "$HOST_DIR/check" "$HOST_DIR/resolved" "$HOST_DIR/logs" "$HOST_DIR/baseline"
               prompt="$(sed -e "s|RESOLVE_DIR|$root/in|g" -e "s|OUT_DIR|$root/out|g" -e "s|MAIN_SHA|$MAIN_SHA|g" \
                 "$HOST_DIR/main/resolve-prompt.md")"
               (cd "$root/work" && HOME="$HOST_DIR/pr-$number/home" claude -p "$prompt" --model opus --max-turns 200 --permission-mode default \
                 --setting-sources user --strict-mcp-config --add-dir "$root/in" --add-dir "$root/out" \
-                --disallowedTools "Read(//proc/**)" "Edit(./.git/**)" "Write(./.git/**)" \
+                --disallowedTools "Read(//proc/**)" "Edit(./.git/**)" \
                 --allowedTools "Read(./**)" "Read(/$root/in/**)" "Read(/$root/out/**)" "Edit(./**)" "Edit(/$root/out/**)" "Glob" "Grep" \
                   "Bash(go:*)" "Bash(gofmt:*)" "Bash(make:*)" "Bash(node:*)" \
                   "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" "Bash(git show:*)" \
@@ -380,7 +381,8 @@ jobs:
             fi
             mkdir -p "$fresh"
             git init -q "$fresh"
-            git -C "$fresh" fetch -q --no-tags "$GITHUB_WORKSPACE" "$MAIN_SHA" "refs/heads/factory-rebase-$number"
+            # By commit, not by the branch's ref, which a session could have moved.
+            git -C "$fresh" fetch -q --no-tags "$GITHUB_WORKSPACE" "$MAIN_SHA" "$head_sha"
             if [ -f "$bundle" ] &&
               git -C "$fresh" bundle verify -q "$bundle" > /dev/null 2>&1 &&
               git -C "$fresh" fetch -q "$bundle" "HEAD:refs/rebased" &&

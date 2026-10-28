@@ -86,5 +86,5 @@ implementations:
       - { id: agent, label: "Claude Code, claude-opus-5-5, on the maintainer's subscription, a fresh session in each job", platform: actions-agent, in: reviewjob, parts: [review, secreview, classify] }
     comments:
       - { id: apart, label: "Each session has its own empty home folder and output folder, reads inputs made read-only, runs in --permission-mode default with one Edit(//dir/file.json) rule for its own findings, and has no Bash (#153, #160)", in: agent, ties: [review, secreview, classify] }
-      - { id: reads, label: "Read is limited to the workspace and the session's own input folder, with Read(//proc/**) denied, and Edit and Write are denied on .git/**. Each session keeps the login token from its commands (awml #121)", in: agent, ties: [review, secreview, classify] }
+      - { id: reads, label: "Read is limited to the workspace and the session's own input folder, with Read(//proc/**) denied, and Edit, which covers writing a file, is denied on .git/**. Each session keeps the login token from its commands (awml #121)", in: agent, ties: [review, secreview, classify] }
       - { id: ownjob, label: "Each job's own check carries its result and its summary, so no job needs a token that writes checks, and nothing passes between jobs: no artifact here (#160 rule 6)", in: reviewjob, ties: [post, postclass] }

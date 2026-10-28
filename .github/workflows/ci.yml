@@ -217,12 +217,12 @@ jobs:
             host="$HOST_DIR"
             chmod -R a-w "$REVIEW_DIR"
             mkdir -p "$session/home" "$session/out" "$host"
-            bash "$RUNNER_TEMP/sandbox-settings.sh" "$session/home" "$GITHUB_WORKSPACE" workspace "$0" "$host"
+            bash "$RUNNER_TEMP/sandbox-settings.sh" "$session/home" "$0" "$host"
             prompt="$(sed -e "s|REVIEW_DIR|$REVIEW_DIR|g" -e "s|OUT_DIR|$session/out|g" "$RUNNER_TEMP/prompts/$PROMPT")"
             status=0
             HOME="$session/home" claude -p "$prompt" --model opus --max-turns 100 --permission-mode default \
               --setting-sources user --strict-mcp-config --add-dir "$REVIEW_DIR" --add-dir "$session/out" \
-              --disallowedTools "Read(//proc/**)" "Bash" "Edit(./.git/**)" "Write(./.git/**)" \
+              --disallowedTools "Read(//proc/**)" "Bash" "Edit(./.git/**)" \
               --allowedTools "Read(./**)" "Read(/$REVIEW_DIR/**)" "Edit(/$session/out/$KIND.json)" \
               > "$host/session.log" 2>&1 || status=$?
             cat "$host/session.log"
@@ -402,12 +402,12 @@ jobs:
             host="$HOST_DIR"
             chmod -R a-w "$REVIEW_DIR"
             mkdir -p "$session/home" "$session/out" "$host"
-            bash "$RUNNER_TEMP/sandbox-settings.sh" "$session/home" "$GITHUB_WORKSPACE" workspace "$0" "$host"
+            bash "$RUNNER_TEMP/sandbox-settings.sh" "$session/home" "$0" "$host"
             prompt="$(sed -e "s|REVIEW_DIR|$REVIEW_DIR|g" -e "s|OUT_DIR|$session/out|g" "$RUNNER_TEMP/prompts/classify-prompt.md")"
             status=0
             HOME="$session/home" claude -p "$prompt" --model opus --max-turns 100 --permission-mode default \
               --setting-sources user --strict-mcp-config --add-dir "$REVIEW_DIR" --add-dir "$session/out" \
-              --disallowedTools "Read(//proc/**)" "Bash" "Edit(./.git/**)" "Write(./.git/**)" \
+              --disallowedTools "Read(//proc/**)" "Bash" "Edit(./.git/**)" \
               --allowedTools "Read(./**)" "Read(/$REVIEW_DIR/**)" "Edit(/$session/out/classification.json)" \
               > "$host/session.log" 2>&1 || status=$?
             cat "$host/session.log"
