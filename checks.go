@@ -17,7 +17,7 @@ func BuildVersion() string {
 	return "dev"
 }
 
-// Source is one file given to CheckSources: its name, its text, and why it couldn't be read, if it
+// Source is one file given to a command: its name, its text, and why it couldn't be read, if it
 // couldn't. Path is where it is, as a Workflow's Path is.
 type Source struct {
 	File       string
@@ -32,6 +32,22 @@ type CheckReport struct {
 	Engine string        `json:"engine"`
 	Files  []CheckedFile `json:"files"`
 	Checks []CheckResult `json:"checks"`
+	// found holds each file's mistakes and warnings, in the order they're found.
+	found []mistakeList
+}
+
+// Said gives the warnings and the mistakes found in the file at that place among the files read,
+// each in the order awml check prints them: the file's own, then those following each ref between
+// the workflows given finds.
+func (r CheckReport) Said(file int) (warnings, mistakes []string) {
+	for _, m := range r.found[file] {
+		if strings.HasPrefix(m.check, "warn.") {
+			warnings = append(warnings, m.message)
+		} else {
+			mistakes = append(mistakes, m.message)
+		}
+	}
+	return warnings, mistakes
 }
 
 // CheckedFile names a file and what kind of file it was read as: workflow or platform-description.
@@ -132,8 +148,10 @@ type checkedSource struct {
 }
 
 // CheckSources makes every check on the files given and reports each check's result, passing ones
-// included. engine names the release making the checks.
+// included. engine names the release making the checks. A file given twice is read once, where it's
+// first given.
 func CheckSources(engine string, sources []Source) CheckReport {
+	sources = once(sources)
 	report := CheckReport{Engine: engine, Files: []CheckedFile{}}
 	checked := make([]checkedSource, len(sources))
 	for i, source := range sources {
@@ -151,6 +169,9 @@ func CheckSources(engine string, sources []Source) CheckReport {
 	}
 	for n, found := range link(given).found {
 		checked[at[n]].mistakes = append(checked[at[n]].mistakes, found...)
+	}
+	for _, file := range checked {
+		report.found = append(report.found, file.mistakes)
 	}
 
 	for _, definition := range checkDefinitions {
@@ -192,7 +213,7 @@ func checkSource(source Source) checkedSource {
 	}
 	parsed, err := Parse(source.Text)
 	if err != nil {
-		return checkedSource{mistakes: mistakeList{{check: "file.yaml", message: "isn't YAML: " + strings.Join(strings.Fields(err.Error()), " ")}}, stopped: true}
+		return checkedSource{mistakes: mistakeList{{check: "file.yaml", message: notYAML(err)}}, stopped: true}
 	}
 	found, stopped := checkDoc(parsed)
 	file, ok := parsed.(*Map)

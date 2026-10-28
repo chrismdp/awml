@@ -72,24 +72,17 @@ func push(name string, paths []string, private bool, registry string, stdout, st
 		Workflow   string `json:"workflow"`
 		Visibility string `json:"visibility,omitempty"`
 	}{}
-	path := paths[0]
-	doc, errs := read(path)
-	for _, message := range errs {
-		fmt.Fprintf(stderr, "%s: %s\n", path, message)
-	}
-	if len(errs) != 0 {
+	given := sources(paths)
+	workflows, err := awml.ReadSources(given, false)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	if !awml.IsCanonical(doc) {
+	if !awml.IsCanonical(workflows[0].Doc) {
 		printConvertAdvice(stderr)
 		return 1
 	}
-	src, err := os.ReadFile(path)
-	if err != nil {
-		fmt.Fprintf(stderr, "%s: can't be read: %s\n", path, reason(err))
-		return 1
-	}
-	payload.Workflow = string(src)
+	payload.Workflow = string(given[0].Text)
 	if private {
 		payload.Visibility = "private"
 	}

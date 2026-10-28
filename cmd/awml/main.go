@@ -245,10 +245,6 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if command == "convert" && len(files) == 1 && implementation != "" {
 		return fail(commands[command].usage, "awml convert", "argument --implementation: only a legacy pair has an implementation to name")
 	}
-	several := map[string]string{"draw": "draws", "graph": "takes"}[command] + " one workflow, not several"
-	if drawing() && len(files) > 1 && implementation != "" {
-		return fail(commands[command].usage, "awml "+command, "argument --implementation: "+several)
-	}
 	if command == "login" && len(files) > 0 {
 		unknown = append(files, unknown...)
 	}
@@ -277,76 +273,54 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return pull(files[0], dir, registry, stdout, stderr)
 	}
 
+	if command == "convert" {
+		return convert(files, implementation, stdout, stderr)
+	}
+	given := sources(files)
 	if command == "check" && jsonOutput {
-		return checkJSON(files, stdout, stderr)
+		return checkJSON(given, stdout, stderr)
 	}
 	if command == "check" {
 		code := 0
-		docs := make([]*awml.Map, len(files))
-		errors := make([][]string, len(files))
-		var given []awml.Workflow
-		var at []int
-		for i, path := range files {
-			docs[i], errors[i] = read(path)
-			if awml.IsCanonical(docs[i]) {
-				given = append(given, workflowAt(path, docs[i]))
-				at = append(at, i)
+		report := awml.CheckSources(currentVersion(), given)
+		for i, file := range report.Files {
+			warnings, mistakes := report.Said(i)
+			for _, warning := range warnings {
+				fmt.Fprintf(stdout, "%s: warning: %s\n", file.File, warning)
 			}
-		}
-		// Each ref between the workflows given is followed.
-		warnings := make([][]string, len(files))
-		mistakes, shared := awml.TogetherMistakes(given), awml.TogetherWarnings(given)
-		for n, i := range at {
-			errors[i] = append(errors[i], mistakes[n]...)
-			warnings[i] = shared[n]
-		}
-		for i, path := range files {
-			doc, errs := docs[i], errors[i]
-			for _, warning := range append(awml.Warnings(doc), warnings[i]...) {
-				fmt.Fprintf(stdout, "%s: warning: %s\n", path, warning)
-			}
-			if len(errs) == 0 {
-				fmt.Fprintf(stdout, "%s: ok\n", path)
+			if len(mistakes) == 0 {
+				fmt.Fprintf(stdout, "%s: ok\n", file.File)
 				continue
 			}
-			for _, e := range errs {
-				fmt.Fprintf(stdout, "%s: %s\n", path, e)
+			for _, mistake := range mistakes {
+				fmt.Fprintf(stdout, "%s: %s\n", file.File, mistake)
 			}
 			code = 1
 		}
 		return code
 	}
-	if command == "convert" {
-		return convert(files, implementation, stdout, stderr)
-	}
-	docs, ok := sound(files, stderr, drawing() || command == "page" || command == "summary")
-	if !ok {
+	// refused prints why the package refused, as a mistake in the command when it refused what it
+	// was asked to do, and gives the exit code.
+	refused := func(err error) int {
+		var refusal awml.Refusal
+		if errors.As(err, &refusal) {
+			return fail(commands[command].usage, "awml "+command, refusal.Error())
+		}
+		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	if drawing() {
-		var graph awml.Graph
-		if len(docs) > 1 {
-			var given []awml.Workflow
-			for i, doc := range docs {
-				if !awml.IsCanonical(doc) {
-					_, err := awml.View(doc, "")
-					fmt.Fprintf(stderr, "%s: %s\n", files[i], err)
-					return 1
-				}
-				given = append(given, workflowAt(files[i], doc))
-			}
-			graph = awml.GraphMap(given)
-		} else {
-			view, err := awml.View(docs[0], implementation)
-			if err != nil {
-				fmt.Fprintln(stderr, err)
-				return 1
-			}
-			graph = awml.GraphOf(view)
+	if command == "draw" {
+		drawn, err := awml.DrawSources(given, implementation)
+		if err != nil {
+			return refused(err)
 		}
-		if command == "draw" {
-			fmt.Fprintln(stdout, graph.Mermaid())
-			return 0
+		fmt.Fprintln(stdout, drawn)
+		return 0
+	}
+	if command == "graph" {
+		graph, err := awml.GraphSources(given, implementation)
+		if err != nil {
+			return refused(err)
 		}
 		if err := json.NewEncoder(stdout).Encode(graph); err != nil {
 			fmt.Fprintf(stderr, "awml graph: can't write its output: %s\n", err)
@@ -355,34 +329,9 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 0
 	}
 	if command == "fit" {
-		// A file with platform is a platform description, and any other is a workflow.
-		var given []awml.Workflow
-		var descriptions []*awml.Map
-		for i, doc := range docs {
-			if _, ok := doc.Get("platform"); ok {
-				descriptions = append(descriptions, doc)
-			} else {
-				given = append(given, workflowAt(files[i], doc))
-			}
-		}
-		if len(given) == 0 {
-			return fail(commands[command].usage, "awml fit", "no workflow was given")
-		}
-		if implementation != "" && len(given) > 1 {
-			return fail(commands[command].usage, "awml fit", "argument --implementation: judges one workflow, not several")
-		}
-		var report awml.FitReport
-		if implementation != "" {
-			placement, err := awml.View(given[0].Doc, implementation)
-			if err != nil {
-				fmt.Fprintln(stderr, err)
-				return 1
-			}
-			report = awml.Judge(given[0].Doc, placement, descriptions)
-		} else if len(descriptions) == 0 {
-			return fail(commands[command].usage, "awml fit", "no platform descriptions were given")
-		} else {
-			report = awml.JudgeTogether(given, descriptions)
+		report, err := awml.FitSources(given, implementation)
+		if err != nil {
+			return refused(err)
 		}
 		output := awml.FitLines(report.Results)
 		code := 0
@@ -403,11 +352,10 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return code
 	}
 	if command == "summary" {
-		var given []awml.Workflow
-		for i, doc := range docs {
-			given = append(given, workflowAt(files[i], doc))
+		summary, err := awml.SummariseSources(given)
+		if err != nil {
+			return refused(err)
 		}
-		summary := awml.SummariseTogether(given)
 		if jsonOutput {
 			if err := json.NewEncoder(stdout).Encode(summary); err != nil {
 				fmt.Fprintf(stderr, "awml summary: can't write its output: %s\n", err)
@@ -415,8 +363,16 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			}
 			return 0
 		}
-		printSummary(stdout, summary, len(given) > 1)
+		printSummary(stdout, summary)
 		return 0
+	}
+	workflows, err := awml.ReadSources(given, true)
+	if err != nil {
+		return refused(err)
+	}
+	docs := make([]*awml.Map, len(workflows))
+	for i, w := range workflows {
+		docs[i] = w.Doc
 	}
 	if err := os.WriteFile(*out, []byte(awml.Page(docs)), 0o644); err != nil {
 		fmt.Fprintf(stderr, "%s: can't be written: %s\n", *out, reason(err))
@@ -425,18 +381,23 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// checkJSON prints every check and its result as JSON, and fails as the plain output does: when
-// any check finds a mistake.
-func checkJSON(files []string, stdout, stderr io.Writer) int {
-	sources := make([]awml.Source, 0, len(files))
+// sources reads each file named, saying why one can't be read.
+func sources(files []string) []awml.Source {
+	given := make([]awml.Source, 0, len(files))
 	for _, path := range files {
 		src, err := os.ReadFile(path)
 		if err != nil {
-			sources = append(sources, awml.Source{File: path, Unreadable: "can't be read: " + reason(err)})
+			given = append(given, awml.Source{File: path, Path: where(path), Unreadable: "can't be read: " + reason(err)})
 			continue
 		}
-		sources = append(sources, awml.Source{File: path, Path: where(path), Text: src})
+		given = append(given, awml.Source{File: path, Path: where(path), Text: src})
 	}
+	return given
+}
+
+// checkJSON prints every check and its result as JSON, and fails as the plain output does: when
+// any check finds a mistake.
+func checkJSON(sources []awml.Source, stdout, stderr io.Writer) int {
 	report := awml.CheckSources(currentVersion(), sources)
 	if err := json.NewEncoder(stdout).Encode(report); err != nil {
 		fmt.Fprintf(stderr, "awml check: can't write its output: %s\n", err)
@@ -496,32 +457,20 @@ func currentVersion() string {
 }
 
 // expandFolders gives the files named, with each folder standing for every .yaml file directly
-// inside it, in the order of their names. A path that can't be read as a folder is a file. A file
-// named twice is given once, where it's first named. It also gives the first folder that holds no
-// .yaml file, if there is one.
+// inside it, in the order of their names. A path that can't be read as a folder is a file. It also
+// gives the first folder that holds no .yaml file, if there is one.
 func expandFolders(paths []string) ([]string, string) {
 	var files []string
-	seen := map[string]bool{}
-	add := func(path string) {
-		at := where(path)
-		if at == "" {
-			at = path
-		}
-		if !seen[at] {
-			seen[at] = true
-			files = append(files, path)
-		}
-	}
 	for _, path := range paths {
 		entries, err := os.ReadDir(path)
 		if err != nil {
-			add(path)
+			files = append(files, path)
 			continue
 		}
 		held := false
 		for _, entry := range entries {
 			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".yaml") {
-				add(filepath.Join(path, entry.Name()))
+				files = append(files, filepath.Join(path, entry.Name()))
 				held = true
 			}
 		}
@@ -540,11 +489,6 @@ func where(path string) string {
 	return ""
 }
 
-// workflowAt gives a workflow given by path, which messages name it by, and where it is.
-func workflowAt(path string, doc *awml.Map) awml.Workflow {
-	return awml.Workflow{File: path, Path: where(path), Doc: doc}
-}
-
 func isOneOf(s string, choices ...string) bool {
 	for _, c := range choices {
 		if s == c {
@@ -555,7 +499,7 @@ func isOneOf(s string, choices ...string) bool {
 }
 
 // printSummary prints a summary. Workflows given together also have the parts they share.
-func printSummary(out io.Writer, s awml.Summary, together bool) {
+func printSummary(out io.Writer, s awml.Summary) {
 	fmt.Fprintf(out, "steps: AI %d, code %d, person %d\n", s.Steps.AI, s.Steps.Code, s.Steps.Person)
 	var operations []string
 	for op, count := range s.Operations {
@@ -598,65 +542,13 @@ func printSummary(out io.Writer, s awml.Summary, together bool) {
 			fmt.Fprintf(out, "      %s\n        under %s\n", risk.OutsideAction, risk.Approval)
 		}
 	}
-	if !together {
+	if s.Shared == nil {
 		return
 	}
 	fmt.Fprintf(out, "shared parts: %d\n", len(s.Shared))
 	for _, shared := range s.Shared {
 		fmt.Fprintf(out, "  %s (%s): %s\n", shared.Label, shared.Kind, strings.Join(shared.Workflows, ", "))
 	}
-}
-
-// read gives the document in a file, and every mistake awml check reports in it.
-func read(path string) (*awml.Map, []string) { return readWith(path, awml.Check) }
-
-// readWith gives the document in a file, and the mistakes find reports in it.
-func readWith(path string, find func(any) []string) (*awml.Map, []string) {
-	src, err := os.ReadFile(path)
-	if err != nil {
-		return nil, []string{"can't be read: " + reason(err)}
-	}
-	doc, err := awml.Parse(src)
-	if err != nil {
-		return nil, []string{"isn't YAML: " + strings.Join(strings.Fields(err.Error()), " ")}
-	}
-	if errs := find(doc); len(errs) > 0 {
-		file, _ := doc.(*awml.Map)
-		return file, errs
-	}
-	return doc.(*awml.Map), nil
-}
-
-// sound gives every file's document, or false once any file has mistakes, which are printed: its own,
-// then those following each ref between the workflows given finds. A command that draws or counts
-// red lines takes a file whose only mistakes are lines that break a rule.
-func sound(paths []string, stderr io.Writer, drawn bool) ([]*awml.Map, bool) {
-	find, together := awml.Check, awml.TogetherMistakes
-	if drawn {
-		find, together = awml.Unsound, awml.TogetherUnsound
-	}
-	docs := make([]*awml.Map, len(paths))
-	errs := make([][]string, len(paths))
-	var given []awml.Workflow
-	var at []int
-	for i, path := range paths {
-		docs[i], errs[i] = readWith(path, find)
-		if awml.IsCanonical(docs[i]) {
-			given = append(given, workflowAt(path, docs[i]))
-			at = append(at, i)
-		}
-	}
-	for n, mistakes := range together(given) {
-		errs[at[n]] = append(errs[at[n]], mistakes...)
-	}
-	ok := true
-	for i, path := range paths {
-		for _, e := range errs[i] {
-			fmt.Fprintf(stderr, "%s: %s\n", path, e)
-		}
-		ok = ok && len(errs[i]) == 0
-	}
-	return docs, ok
 }
 
 // reason is why a file couldn't be read or written, as the system words it, such as "No such file

@@ -290,7 +290,7 @@ func TestPartsWithTheSameIdAndNoRefAreNotLinked(t *testing.T) {
 		t.Errorf("TogetherWarnings gave %q", got)
 	}
 	summary := SummariseTogether(workflows)
-	if summary.Shared != nil {
+	if len(summary.Shared) != 0 {
 		t.Errorf("the shared parts are %+v, want none", summary.Shared)
 	}
 	if summary.Contexts != 2 {
