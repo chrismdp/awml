@@ -269,12 +269,14 @@ func TestLandShipsShowsOrAsks(t *testing.T) {
 	if !strings.Contains(readText(t, ".github/workflows/land.yml"), "group: land-pull-${{ needs.find.outputs.pr }}\n      cancel-in-progress: false") {
 		t.Error("a land job that has started merging can be cancelled")
 	}
-	// A stranger's pull request from the same branch starts a run too, so no run may cancel
-	// another's reading: each reads GitHub afresh and leaves quietly when there's nothing to do.
-	if !strings.Contains(readText(t, ".github/workflows/land.yml"), "-${{ github.event.workflow_run.head_branch }}\n      cancel-in-progress: false") {
-		t.Error("another run on the same branch can cancel land's reading job")
+	// A stranger's pull request from the same branch starts a run too, and GitHub keeps only one run
+	// waiting in a concurrency group, so a newer one would displace the real one's reading. The find
+	// job has no group: it only reads GitHub and leaves quietly when there's nothing to do.
+	if find := workflow.Jobs["find"]; find.Concurrency != nil {
+		t.Errorf("land's reading job takes turns in a group, where another run can displace it: %v", find.Concurrency)
 	}
 	if drawing := readText(t, ".github/drawings/land-a-pull-request.yaml"); strings.Contains(drawing, "cancelled by a newer CI result") ||
+		strings.Contains(drawing, "reading job's concurrency group") ||
 		!strings.Contains(drawing, "read with git into a worktree at its merge-base with main") {
 		t.Error("land's drawing doesn't say how its jobs take turns and where the commit is read, as land.yml does")
 	}

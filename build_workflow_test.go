@@ -36,9 +36,10 @@ type workflowJob struct {
 	Strategy    struct {
 		Matrix map[string]any `yaml:"matrix"`
 	} `yaml:"strategy"`
-	Outputs map[string]string `yaml:"outputs"`
-	Env     map[string]string `yaml:"env"`
-	Steps   []workflowStep    `yaml:"steps"`
+	Outputs     map[string]string `yaml:"outputs"`
+	Env         map[string]string `yaml:"env"`
+	Concurrency any               `yaml:"concurrency"`
+	Steps       []workflowStep    `yaml:"steps"`
 }
 
 // step finds a job's step by its id, which stays put when the step's name changes.
@@ -1228,15 +1229,15 @@ func TestARehearsalRunsAStepUnderPipefail(t *testing.T) {
 	}
 }
 
-// A workflow woken by another's run takes turns per branch of the repository the run came from, so a
-// fork's branch of the same name never queues behind, nor cancels, the real run. And no workflow
+// A workflow woken by another's run that takes turns does so per branch of the repository the run
+// came from, so a fork's branch of the same name never queues behind, nor cancels, the real run.
+// land.yml's reading job takes no turns at all. And no workflow
 // trusts a person by how GitHub associates them with the repository, only by their permission.
 func TestEachRunTakesTurnsByItsOwnRepositorysBranch(t *testing.T) {
 	branch := "${{ github.event.workflow_run.head_branch }}"
 	for file, group := range map[string]string{
 		"fix.yml":   "group: fix-${{ github.event.workflow_run.head_repository.full_name }}-" + branch,
 		"retry.yml": "group: retry-${{ github.event.workflow_run.head_repository.full_name }}-" + branch,
-		"land.yml":  "group: land-${{ github.event.workflow_run.event }}-${{ github.event.workflow_run.head_repository.full_name }}-" + branch,
 	} {
 		if !strings.Contains(readText(t, ".github/workflows/"+file), group) {
 			t.Errorf("%s doesn't take turns as %s", file, group)
