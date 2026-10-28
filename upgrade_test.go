@@ -1,9 +1,11 @@
 package awml
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The canonical workflow as a 0.4 file, which differs only in its version.
@@ -254,6 +256,89 @@ implementations:
 `
 	if got := upgraded(t, source); got != want {
 		t.Fatalf("Upgrade gave\n%s\nwant\n%s", got, want)
+	}
+}
+
+// A line out of a fork with no label of its own keeps the label of the line into it, so a review's
+// "[yes]" stays on each line its work goes ahead by. A line out's own label wins.
+func TestConvertKeepsTheLabelOfTheLineIntoAFork(t *testing.T) {
+	source := `awml: "0.7"
+title: Post
+parts:
+  - {id: draft, kind: ai, label: Draft}
+  - {id: look, kind: review, label: Look it over}
+  - {id: split, kind: fork}
+  - {id: send, kind: code, label: Send}
+  - {id: file, kind: code, label: File}
+lines:
+  - {from: draft, to: look, kind: start}
+  - {from: look, to: split, kind: start, label: "[yes]"}
+  - {from: split, to: send, kind: start}
+  - {from: split, to: file, kind: start, label: the post}
+`
+	want := `awml: "0.8"
+title: Post
+parts:
+  - { id: draft, kind: ai, label: "Draft" }
+  - { id: look, kind: review, label: "Look it over" }
+  - { id: send, kind: code, label: "Send" }
+  - { id: file, kind: code, label: "File" }
+lines:
+  - { from: draft, to: look, kind: start }
+  - { from: look, to: send, kind: start, label: "[yes]" }
+  - { from: look, to: file, kind: start, label: the post }
+`
+	if got := upgraded(t, source); got != want {
+		t.Fatalf("Upgrade gave\n%s\nwant\n%s", got, want)
+	}
+}
+
+// Each fork's parts are worked out once, so forks in a row, each with two lines into the one before,
+// convert at once rather than in a time that doubles with each fork.
+func TestConvertWorksOutEachForkOnce(t *testing.T) {
+	var source strings.Builder
+	source.WriteString(`awml: "0.7"
+title: Many
+parts:
+  - {id: go, kind: trigger, label: Go}
+  - {id: work, kind: code, label: Work}
+`)
+	for n := 1; n <= 40; n++ {
+		fmt.Fprintf(&source, "  - {id: f%d, kind: fork}\n", n)
+	}
+	source.WriteString(`lines:
+  - {from: go, to: f40, kind: start}
+  - {from: f1, to: work, kind: start}
+`)
+	for n := 1; n < 40; n++ {
+		fmt.Fprintf(&source, "  - {from: f%d, to: f%d, kind: start}\n", n+1, n)
+		fmt.Fprintf(&source, "  - {from: f%d, to: f%d, kind: start}\n", n+1, n)
+	}
+	source.WriteString(`implementations:
+  home:
+    label: Home
+    blocks:
+      - {id: desk, label: Desk, parts: [work]}
+    comments:
+      - {id: note, label: Once, in: desk, ties: [f1]}
+`)
+	doc := parseCanonical(t, source.String())
+	done := make(chan *Map, 1)
+	go func() {
+		file, _ := Upgrade(doc)
+		done <- file
+	}()
+	select {
+	case file := <-done:
+		data, err := Marshal(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(data), "ties: [go]") {
+			t.Errorf("Upgrade gave\n%s\nwant the note tied to go", data)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Upgrade took more than five seconds over forty forks in a row")
 	}
 }
 

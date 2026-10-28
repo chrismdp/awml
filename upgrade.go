@@ -46,8 +46,9 @@ func upgrade(doc any) (*Map, []string, error) {
 var rewrittenFormats = []string{"0.2", "0.3", "0.4", "0.5", "0.6"}
 
 // dropForks takes out each fork, in the order of the parts, and joins each line into it to each
-// line out of it, in the place of the line out, with that line's kind and label. A joined line the
-// file already has isn't added again. A tie between a comment and a fork ties the comment instead
+// line out of it, in the place of the line out, with that line's kind and label, or with the line
+// in's label where the line out has none, so a review's "[yes]" stays. A joined line the file
+// already has isn't added again. A tie between a comment and a fork ties the comment instead
 // to each part a line into the fork came from, as does an implementation comment's tie, and a
 // hidden line at a fork goes, with the fork's place in each block.
 func dropForks(file *Map) {
@@ -104,6 +105,9 @@ func dropForks(file *Map) {
 				for _, in := range into {
 					line := copyMap(l)
 					line.set("from", in.get("from"))
+					if !line.has("label") && in.has("label") {
+						line.set("label", in.get("label"))
+					}
 					if !has(line) {
 						joined = append(joined, line)
 					}
@@ -122,16 +126,29 @@ func dropForks(file *Map) {
 		return
 	}
 	// split gives the parts a fork's work split from, through any forks in a row, or the part itself.
-	// A fork's lines in come only from parts that weren't forks when it went, so this ends.
+	// A fork's lines in come only from parts that weren't forks when it went, so this ends. Each
+	// fork's parts are worked out once and kept, so forks in a row take no longer than their lines.
 	var split func(id any) []any
+	splits := map[string][]any{}
 	split = func(id any) []any {
-		if s, _ := id.(string); !forks[s] {
+		s, _ := id.(string)
+		if !forks[s] {
 			return []any{id}
 		}
-		var parts []any
-		for _, next := range from[id.(string)] {
-			parts = append(parts, split(next)...)
+		if parts, ok := splits[s]; ok {
+			return parts
 		}
+		var parts []any
+		seen := map[any]bool{}
+		for _, next := range from[s] {
+			for _, part := range split(next) {
+				if !seen[keyOf(part)] {
+					seen[keyOf(part)] = true
+					parts = append(parts, part)
+				}
+			}
+		}
+		splits[s] = parts
 		return parts
 	}
 	out := &Map{}
