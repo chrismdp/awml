@@ -141,6 +141,10 @@ jobs:
     if: needs.start.outputs.go == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # The host's own folder: what the host reads after a session, which no session can write, in a
+    # folder under root's /var/lib, so nothing running as the runner's user can rename it away.
+    env:
+      HOST_DIR: /var/lib/awml-host
     permissions:
       actions: read
       contents: read
@@ -295,6 +299,9 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y bubblewrap socat
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          # The host's own folder, made by root under root's /var/lib, so no command a session runs,
+          # as the runner's user, can rename it or a folder above it, and denied to every session.
+          sudo install -d -o "$(id -u)" -g "$(id -g)" -m 700 "$HOST_DIR"
           # The Docker socket would let a command start a root container outside the sandbox. It's
           # root's, so taking the group's access away leaves the runner user unable to reach it.
           if [ -e /var/run/docker.sock ]; then sudo chmod 600 /var/run/docker.sock; fi
@@ -335,10 +342,10 @@ jobs:
             stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
             echo "::stop-commands::$stop"
             trap 'echo "::$stop::"' EXIT
-            mkdir -p "$RUNNER_TEMP/baseline" "$RUNNER_TEMP/host"
-            cp .git/config "$RUNNER_TEMP/baseline/git-config"
-            stat -c %d:%i "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.git" > "$RUNNER_TEMP/baseline/folders"
-            bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/session/home" "$GITHUB_WORKSPACE" workspace "$RUNNER_TEMP/baseline" "$RUNNER_TEMP/change" "$RUNNER_TEMP/host" "$0"
+            mkdir -p "$HOST_DIR/baseline"
+            cp .git/config "$HOST_DIR/baseline/git-config"
+            stat -c %d:%i "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.git" > "$HOST_DIR/baseline/folders"
+            bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/session/home" "$GITHUB_WORKSPACE" workspace "$HOST_DIR" "$0"
             prompt="$(sed "s|BUILD_DIR|$BUILD_DIR|g" "$RUNNER_TEMP/build-prompt.md")"
             status=0
             HOME="$RUNNER_TEMP/session/home" claude -p "$prompt" --model opus --max-turns 200 --permission-mode default \
@@ -349,8 +356,8 @@ jobs:
                 "Bash(.github/picture-drawings.sh:*)" \
                 "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" \
                 "Bash(ls:*)" "Bash(cp:*)" "Bash(mkdir:*)" \
-              > "$RUNNER_TEMP/host/session.log" 2>&1 || status=$?
-            cat "$RUNNER_TEMP/host/session.log"
+              > "$HOST_DIR/session.log" 2>&1 || status=$?
+            cat "$HOST_DIR/session.log"
             exit "$status"
           }
 
@@ -361,11 +368,11 @@ jobs:
         id: patch
         run: |
           git() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 command git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c diff.external= "$@"; }
-          if ! cmp -s .git/config "$RUNNER_TEMP/baseline/git-config" || [ -e .git/config.worktree ]; then
+          if ! cmp -s .git/config "$HOST_DIR/baseline/git-config" || [ -e .git/config.worktree ]; then
             echo "The session's tree has a .git config other than the one it started with, so git isn't run on it."
             exit 1
           fi
-          if [ "$(stat -c %d:%i "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.git")" != "$(cat "$RUNNER_TEMP/baseline/folders")" ]; then
+          if [ "$(stat -c %d:%i "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.git")" != "$(cat "$HOST_DIR/baseline/folders")" ]; then
             echo "The workspace or its .git isn't the folder it was before the session, so git isn't run on it."
             exit 1
           fi
@@ -381,7 +388,7 @@ jobs:
             echo "The session's folder holds a link or something else that isn't a plain file or folder, so none of it is read."
             exit 1
           fi
-          change="$RUNNER_TEMP/change"
+          change="$HOST_DIR/change"
           rm -rf "$change"
           mkdir "$change"
           git add -A
@@ -404,7 +411,7 @@ jobs:
       - name: Keep the change, with its digest, if it carries no login token
         id: pack
         run: |
-          change="$RUNNER_TEMP/change"
+          change="$HOST_DIR/change"
           if [ -n "$(find "$change" ! -type f ! -type d -print -quit)" ]; then
             echo "The kept change holds a symbolic link or something else that isn't a plain file, so it isn't kept."
             exit 1
@@ -431,7 +438,7 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: change
-          path: ${{ runner.temp }}/change
+          path: ${{ env.HOST_DIR }}/change
           retention-days: 30
 
   # Pushes the branch and the pictures and opens the pull request, running none of the proposed

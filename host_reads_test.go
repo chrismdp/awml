@@ -1,6 +1,7 @@
 package awml
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -140,7 +141,7 @@ func TestNoHostReadFollowsALinkASessionLeft(t *testing.T) {
 		noSecretReached(t, c.file+"'s session", r)
 		r.write(filepath.Join(repo, "recipes.md"), "Bread\nScones\n")
 		r.run(patch, env, "")
-		noSecretReached(t, c.file+"'s patch step", r, "change", "fix/change")
+		noSecretReached(t, c.file+"'s patch step", r, "host/change", "host/fix")
 	}
 
 	job := readFactoryWorkflow(t, "resolve.yml").Jobs["draft"]
@@ -148,31 +149,40 @@ func TestNoHostReadFollowsALinkASessionLeft(t *testing.T) {
 	check, _ := job.step(t, "check")
 	r, env := hostileRehearsal(t)
 	head := strings.Repeat("ab", 20)
-	r.write("pulls.tsv", "5\t"+head+"\n")
-	r.write("main/resolve-prompt.md", "Rebase it.\n")
+	r.write("host/pulls.tsv", "5\t"+head+"\n")
+	r.write("host/main/resolve-prompt.md", "Rebase it.\n")
+	r.write("host/sandbox-settings.sh", readText(t, ".github/sandbox-settings.sh"))
 	for _, folder := range []string{"home", "work", "in", "out"} {
-		r.write(filepath.Join("pr", "5", folder, ".keep"), "")
+		r.write(filepath.Join("host", "pr-5", folder, ".keep"), "")
 	}
-	out := filepath.Join(r.temp, "pr", "5", "out")
-	env = with(env, map[string]string{"MAIN_SHA": head, "GITHUB_WORKSPACE": r.root,
+	for _, folder := range []string{"check", "resolved", "logs"} {
+		r.write(filepath.Join("host", folder, ".keep"), "")
+	}
+	workspace := keptWorkspace(t, r)
+	out := filepath.Join(r.temp, "host", "pr-5", "out")
+	env = with(env, map[string]string{"MAIN_SHA": head, "GITHUB_WORKSPACE": workspace,
 		"PLANT": filepath.Join(out, "rebased.bundle") + ":" + filepath.Join(out, "message.md")})
 	r.run(session, env, "")
 	noSecretReached(t, "resolve.yml's session", r)
 	r.run(check, env, "")
-	noSecretReached(t, "resolve.yml's check step", r, "resolved")
+	noSecretReached(t, "resolve.yml's check step", r, "host/resolved")
 }
 
-// Every path a step reads after a session, in the session's own step once Claude has finished and
-// in every later step of its job, is in a folder the session's sandbox denies writes to, or in the
-// session's own output folder, which that step first checks holds nothing but plain files and
-// folders, where it should be.
-func TestEveryHostReadAfterASessionIsInADeniedFolder(t *testing.T) {
+// Every path a step reads after a session, in the session's own step once Claude has finished, or
+// throughout it when it runs one session after another, and in every later step of its job, is in
+// the host's own folder, or in the session's own output folder, which that step first checks holds
+// nothing but plain files and folders where it should be, or in the checked-out workspace. The
+// host's folder is root's /var/lib/awml-host, made by root before anything is put there, so no
+// command a session runs, as the runner's user, can rename it or a folder above it away, and every
+// session's sandbox denies it, all but a rebase session's own pull request's folder.
+func TestEveryHostReadAfterASessionIsInTheHostsFolder(t *testing.T) {
 	outputs := map[string]string{
 		"ci.yml review": "$RUNNER_TEMP/session/out", "ci.yml classify": "$RUNNER_TEMP/session/out",
-		"build.yml draft": "$RUNNER_TEMP/build", "fix.yml fix": "$RUNNER_TEMP/fix/out", "resolve.yml draft": "$RUNNER_TEMP/pr/$number/out",
+		"build.yml draft": "$RUNNER_TEMP/build", "fix.yml fix": "$RUNNER_TEMP/fix/out", "resolve.yml draft": "$HOST_DIR/pr-$number/out",
 	}
-	assigned := regexp.MustCompile(`(?m)^\s*([a-z_]+)="(\$RUNNER_TEMP[^"]*|\$[a-z_]+/[^"]*)"\s*$`)
-	read := regexp.MustCompile(`\$RUNNER_TEMP(/[^"\s)]*)?`)
+	assigned := regexp.MustCompile(`(?m)^\s*([a-z_]+)="(\$(?:RUNNER_TEMP|HOST_DIR)[^"]*|\$[a-z_]+/[^"]*)"\s*$`)
+	read := regexp.MustCompile(`\$(RUNNER_TEMP|HOST_DIR)(/[^"\s)]*)?`)
+	made := regexp.MustCompile(`sudo install -d -o "\$\(id -u\)" -g "\$\(id -g\)" -m 700 "\$HOST_DIR"`)
 	expand := func(script string) string {
 		for _, m := range assigned.FindAllStringSubmatch(script, -1) {
 			value := m[2]
@@ -193,30 +203,62 @@ func TestEveryHostReadAfterASessionIsInADeniedFolder(t *testing.T) {
 			t.Errorf("%s's %s runs a session with no output folder named here", file, name)
 			return
 		}
+		if job.Env["HOST_DIR"] != "/var/lib/awml-host" {
+			t.Errorf("%s's %s keeps the host's folder at %q, not under root's /var/lib", file, name, job.Env["HOST_DIR"])
+		}
+		// Root makes the host's folder before any step puts anything there.
+		first := -1
+		for i, step := range job.Steps {
+			if strings.Contains(step.Run, "$HOST_DIR") || strings.Contains(fmt.Sprint(step.With), "HOST_DIR") {
+				first = i
+				break
+			}
+		}
+		if first < 0 || !made.MatchString(job.Steps[first].Run) ||
+			strings.Index(job.Steps[first].Run, "$HOST_DIR") < made.FindStringIndex(job.Steps[first].Run)[0] {
+			t.Errorf("%s's %s uses the host's folder before root makes it", file, name)
+		}
 		session := expand(job.Steps[at].Run)
-		// The settings' call, with its continued lines; its first path is the session's home.
-		call := regexp.MustCompile(`bash "\$RUNNER_TEMP/sandbox-settings\.sh"(?:[^\n]*\\\n)*[^\n]*\n`).FindString(session)
+		// The settings' call, with its continued lines; its first path is the session's home, and
+		// every other folder it denies is the host's.
+		call := regexp.MustCompile(`bash "\$(?:RUNNER_TEMP|HOST_DIR)/sandbox-settings\.sh"(?:[^\n]*\\\n)*[^\n]*\n`).FindString(session)
 		var denied []string
-		for _, arg := range regexp.MustCompile(`"(\$RUNNER_TEMP[^"]*)"`).FindAllStringSubmatch(call, -1) {
-			denied = append(denied, arg[1])
+		for _, arg := range regexp.MustCompile(`"(\$HOST_DIR[^"]*)"`).FindAllStringSubmatch(call, -1) {
+			if !strings.HasSuffix(arg[1], "/home") {
+				denied = append(denied, arg[1])
+			}
 		}
-		if len(denied) < 2 {
-			t.Errorf("%s's %s denies its session no folder of the host's", file, name)
-			return
+		loop := strings.Contains(session[strings.Index(session, "claude -p"):], "done <")
+		if loop {
+			// One session after another: each is denied every other pull request's folder, and all the
+			// host's own files and folders.
+			if !strings.Contains(call, `"${others[@]}"`) {
+				t.Errorf("%s's %s lets a session write another pull request's folder", file, name)
+			}
+		} else if !contains(denied, "$HOST_DIR") {
+			t.Errorf("%s's %s doesn't deny its session the host's folder: %s", file, name, call)
 		}
-		denied = denied[1:]
-		// What the host reads once Claude has finished: from the end of Claude's command on.
-		claude := strings.Index(session, "claude -p")
-		ends := claude + strings.Index(session[claude:], "2>&1")
-		later := []workflowStep{{Run: session[ends:]}}
+		// What the host reads once Claude has finished: from the end of Claude's command on, or the
+		// whole step when it runs sessions one after another.
+		later := []workflowStep{{Run: session}}
+		if !loop {
+			claude := strings.Index(session, "claude -p")
+			later[0].Run = session[claude+strings.Index(session[claude:], "2>&1"):]
+		}
 		later = append(later, job.Steps[at+1:]...)
-		for _, step := range later {
+		for i, step := range later {
 			script := assigned.ReplaceAllString(expand(step.Run), "")
+			// Within the step that runs one session after another, the next session's own folder
+			// is the host's until it starts, and every earlier session was denied it.
+			own := loop && i == 0
 			for _, value := range step.With {
-				script += "\n" + strings.ReplaceAll(value, "${{ runner.temp }}", "$RUNNER_TEMP")
+				script += "\n" + strings.NewReplacer("${{ runner.temp }}", "$RUNNER_TEMP", "${{ env.HOST_DIR }}", "$HOST_DIR").Replace(value)
 			}
 			for _, path := range read.FindAllString(script, -1) {
-				if path == "$RUNNER_TEMP" || path == "$RUNNER_TEMP/" {
+				if path == "$RUNNER_TEMP" || path == "$HOST_DIR" {
+					continue
+				}
+				if own && (path == "$HOST_DIR/pr-$number" || strings.HasPrefix(path, "$HOST_DIR/pr-$number/")) {
 					continue
 				}
 				safe := false
@@ -229,7 +271,7 @@ func TestEveryHostReadAfterASessionIsInADeniedFolder(t *testing.T) {
 					safe = strings.Contains(script, `find "`+out+`" ! -type f ! -type d`) && strings.Contains(script, `realpath -e "`+out+`"`)
 				}
 				if !safe {
-					t.Errorf("%s's %s reads %s after its session, which isn't in a folder the session can't write", file, name, path)
+					t.Errorf("%s's %s reads %s after a session, which isn't in the host's own folder", file, name, path)
 				}
 			}
 		}

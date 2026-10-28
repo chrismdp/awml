@@ -538,22 +538,22 @@ func TestTheReviewsTrustBranchesSayingWhy(t *testing.T) {
 	}
 }
 
-// After a session, the folder its draft or fix is kept in is made afresh, and the session's sandbox
-// denies it, so nothing the session planted there is uploaded. The pack step scans every file in it
-// for a token, and refuses a symbolic link or anything but a plain file.
+// After a session, the folder its draft or fix is kept in is made afresh, in the host's own folder,
+// which the session's sandbox denies, so nothing the session planted there is uploaded. The pack
+// step scans every file in it for a token, and refuses a symbolic link or anything but a plain file.
 func TestTheKeptChangeHoldsOnlyWhatThePatchStepPutThere(t *testing.T) {
-	for _, at := range []struct{ file, job, folder string }{{"build.yml", "draft", `"$RUNNER_TEMP/change"`}, {"fix.yml", "fix", `"$RUNNER_TEMP/fix/change"`}} {
+	for _, at := range []struct{ file, job, folder string }{{"build.yml", "draft", "host/change"}, {"fix.yml", "fix", "host/fix"}} {
 		job := readFactoryWorkflow(t, at.file).Jobs[at.job]
 		session := job.Steps[job.session()].Run
-		if settings := sandboxSettings.FindString(session); !strings.Contains(settings, at.folder) {
-			t.Errorf("%s's %s session can write %s: %s", at.file, at.job, at.folder, settings)
+		if settings := sandboxSettings.FindString(session); !strings.Contains(settings, `"$HOST_DIR"`) {
+			t.Errorf("%s's %s session can write the host's folder, where its change is kept: %s", at.file, at.job, settings)
 		}
 		patch, _ := job.step(t, "patch")
 		if !regexp.MustCompile(`rm -rf "\$[a-z]+"\n\s*mkdir "\$[a-z]+"`).MatchString(patch.Run) {
 			t.Errorf("%s's %s doesn't make its change folder afresh after the session", at.file, at.job)
 		}
 		pack, _ := job.step(t, "pack")
-		folder := strings.Trim(strings.ReplaceAll(at.folder, "$RUNNER_TEMP/", ""), `"`)
+		folder := at.folder
 		for name, plant := range map[string]func(r *rehearsal){
 			"a token in a planted file": func(r *rehearsal) { r.write(folder+"/notes.txt", "sk-ant-oat01-secret\n") },
 			"a symbolic link": func(r *rehearsal) {

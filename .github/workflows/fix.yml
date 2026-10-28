@@ -38,6 +38,10 @@ jobs:
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # The host's own folder: what the host reads after a session, which no session can write, in a
+    # folder under root's /var/lib, so nothing running as the runner's user can rename it away.
+    env:
+      HOST_DIR: /var/lib/awml-host
     permissions:
       actions: read
       checks: read
@@ -237,6 +241,9 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y bubblewrap socat
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          # The host's own folder, made by root under root's /var/lib, so no command a session runs,
+          # as the runner's user, can rename it or a folder above it, and denied to every session.
+          sudo install -d -o "$(id -u)" -g "$(id -g)" -m 700 "$HOST_DIR"
           # The Docker socket would let a command start a root container outside the sandbox. It's
           # root's, so taking the group's access away leaves the runner user unable to reach it.
           if [ -e /var/run/docker.sock ]; then sudo chmod 600 /var/run/docker.sock; fi
@@ -278,10 +285,10 @@ jobs:
             stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
             echo "::stop-commands::$stop"
             trap 'echo "::$stop::"' EXIT
-            mkdir -p "$RUNNER_TEMP/baseline" "$RUNNER_TEMP/host"
-            cp .git/config "$RUNNER_TEMP/baseline/git-config"
-            stat -c %d:%i "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.git" > "$RUNNER_TEMP/baseline/folders"
-            bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/session/home" "$GITHUB_WORKSPACE" workspace "$RUNNER_TEMP/baseline" "$RUNNER_TEMP/fix/change" "$RUNNER_TEMP/host" "$0"
+            mkdir -p "$HOST_DIR/baseline"
+            cp .git/config "$HOST_DIR/baseline/git-config"
+            stat -c %d:%i "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.git" > "$HOST_DIR/baseline/folders"
+            bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/session/home" "$GITHUB_WORKSPACE" workspace "$HOST_DIR" "$0"
             prompt="$(sed -e "s|FIX_DIR|$FIX_DIR|g" -e "s|OUT_DIR|$OUT_DIR|g" "$RUNNER_TEMP/fix-prompt.md")"
             status=0
             HOME="$RUNNER_TEMP/session/home" claude -p "$prompt" --model opus --max-turns 200 --permission-mode default \
@@ -292,8 +299,8 @@ jobs:
                 "Bash(.github/picture-drawings.sh:*)" \
                 "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" \
                 "Bash(ls:*)" "Bash(cp:*)" "Bash(mkdir:*)" \
-              > "$RUNNER_TEMP/host/session.log" 2>&1 || status=$?
-            cat "$RUNNER_TEMP/host/session.log"
+              > "$HOST_DIR/session.log" 2>&1 || status=$?
+            cat "$HOST_DIR/session.log"
             exit "$status"
           }
 
@@ -307,11 +314,11 @@ jobs:
           HEAD_SHA: ${{ steps.tries.outputs.head_sha }}
         run: |
           git() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 command git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c diff.external= "$@"; }
-          if ! cmp -s .git/config "$RUNNER_TEMP/baseline/git-config" || [ -e .git/config.worktree ]; then
+          if ! cmp -s .git/config "$HOST_DIR/baseline/git-config" || [ -e .git/config.worktree ]; then
             echo "The session's tree has a .git config other than the one it started with, so git isn't run on it."
             exit 1
           fi
-          if [ "$(stat -c %d:%i "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.git")" != "$(cat "$RUNNER_TEMP/baseline/folders")" ]; then
+          if [ "$(stat -c %d:%i "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.git")" != "$(cat "$HOST_DIR/baseline/folders")" ]; then
             echo "The workspace or its .git isn't the folder it was before the session, so git isn't run on it."
             exit 1
           fi
@@ -327,7 +334,7 @@ jobs:
             echo "The session's folder holds a link or something else that isn't a plain file or folder, so none of it is read."
             exit 1
           fi
-          fix="$RUNNER_TEMP/fix/change"
+          fix="$HOST_DIR/fix"
           rm -rf "$fix"
           mkdir "$fix"
           git add -A
@@ -346,7 +353,7 @@ jobs:
         id: pack
         if: steps.tries.outputs.decision == 'fix'
         run: |
-          fix="$RUNNER_TEMP/fix/change"
+          fix="$HOST_DIR/fix"
           looks_like_token() {
             LC_ALL=C sed -E 's#base64,[A-Za-z0-9+/]+=*##g; s#data-points="[A-Za-z0-9+/]+=*"##g' |
               LC_ALL=C grep -aoiE 'sk-ant-|[A-Za-z0-9_-]{80,}' | grep -iE 'sk-ant-|[0-9]' > /dev/null
@@ -374,7 +381,7 @@ jobs:
         if: steps.pack.outcome == 'success'
         with:
           name: fix
-          path: ${{ runner.temp }}/fix/change
+          path: ${{ env.HOST_DIR }}/fix
           retention-days: 30
 
   # Pushes the fix, offers it, or gives up, in new comments from fixed text. It checks out the

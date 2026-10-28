@@ -95,6 +95,10 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # The host's own folder: what the host reads after a session, which no session can write, in a
+    # folder under root's /var/lib, so nothing running as the runner's user can rename it away.
+    env:
+      HOST_DIR: /var/lib/awml-host
     permissions:
       contents: read
     strategy:
@@ -166,6 +170,9 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y bubblewrap socat
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          # The host's own folder, made by root under root's /var/lib, so no command a session runs,
+          # as the runner's user, can rename it or a folder above it, and denied to every session.
+          sudo install -d -o "$(id -u)" -g "$(id -g)" -m 700 "$HOST_DIR"
           # The Docker socket would let a command start a root container outside the sandbox. It's
           # root's, so taking the group's access away leaves the runner user unable to reach it.
           if [ -e /var/run/docker.sock ]; then sudo chmod 600 /var/run/docker.sock; fi
@@ -201,7 +208,7 @@ jobs:
             echo "::stop-commands::$stop"
             trap 'echo "::$stop::"' EXIT
             session="$RUNNER_TEMP/session"
-            host="$RUNNER_TEMP/host"
+            host="$HOST_DIR"
             chmod -R a-w "$REVIEW_DIR"
             mkdir -p "$session/home" "$session/out" "$host"
             bash "$RUNNER_TEMP/sandbox-settings.sh" "$session/home" "$GITHUB_WORKSPACE" workspace "$0" "$host"
@@ -305,6 +312,10 @@ jobs:
       github.event.pull_request.user.login == 'awml-factory[bot]' && github.event.pull_request.user.type == 'Bot'
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # The host's own folder: what the host reads after a session, which no session can write, in a
+    # folder under root's /var/lib, so nothing running as the runner's user can rename it away.
+    env:
+      HOST_DIR: /var/lib/awml-host
     permissions:
       actions: read
       checks: read
@@ -346,6 +357,9 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y bubblewrap socat
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          # The host's own folder, made by root under root's /var/lib, so no command a session runs,
+          # as the runner's user, can rename it or a folder above it, and denied to every session.
+          sudo install -d -o "$(id -u)" -g "$(id -g)" -m 700 "$HOST_DIR"
           # The Docker socket would let a command start a root container outside the sandbox. It's
           # root's, so taking the group's access away leaves the runner user unable to reach it.
           if [ -e /var/run/docker.sock ]; then sudo chmod 600 /var/run/docker.sock; fi
@@ -374,7 +388,7 @@ jobs:
             echo "::stop-commands::$stop"
             trap 'echo "::$stop::"' EXIT
             session="$RUNNER_TEMP/session"
-            host="$RUNNER_TEMP/host"
+            host="$HOST_DIR"
             chmod -R a-w "$REVIEW_DIR"
             mkdir -p "$session/home" "$session/out" "$host"
             bash "$RUNNER_TEMP/sandbox-settings.sh" "$session/home" "$GITHUB_WORKSPACE" workspace "$0" "$host"

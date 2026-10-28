@@ -167,6 +167,12 @@ jobs:
     if: needs.find.outputs.conflicts != '[]' && needs.find.outputs.conflicts != ''
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    # The host's own folder, under root's /var/lib, so nothing running as the runner's user can
+    # rename it away. It holds each pull request's folder, main's prompt and sandbox settings, the
+    # list of pull requests, the logs, the workspace's baseline and the checked rebases, and each
+    # session may write only its own pull request's folder there.
+    env:
+      HOST_DIR: /var/lib/awml-host
     permissions:
       contents: read
       pull-requests: read
@@ -187,11 +193,14 @@ jobs:
           node-version: 22
           package-manager-cache: false
 
-      - name: Keep main's prompt, AGENTS.md and sandbox settings
+      # The host's own folder is made by root under root's /var/lib, so no command a session runs, as
+      # the runner's user, can rename it or a folder above it.
+      - name: Keep main's prompt, AGENTS.md and sandbox settings in the host's own folder
         run: |
-          mkdir -p "$RUNNER_TEMP/main"
-          cp .github/resolve-prompt.md AGENTS.md "$RUNNER_TEMP/main/"
-          cp .github/sandbox-settings.sh "$RUNNER_TEMP/"
+          sudo install -d -o "$(id -u)" -g "$(id -g)" -m 700 "$HOST_DIR"
+          mkdir -p "$HOST_DIR/main"
+          cp .github/resolve-prompt.md AGENTS.md "$HOST_DIR/main/"
+          cp .github/sandbox-settings.sh "$HOST_DIR/"
 
       # Each pull request gets a folder of its own: a clone of the branch, its inputs, made
       # read-only, its session's output and its session's home. The clone commits as the app's bot,
@@ -215,12 +224,15 @@ jobs:
           id="$(gh api "users/awml-factory%5Bbot%5D" --jq .id)"
           case "$id" in ''|*[!0-9]*) echo "The app's bot has no user id: $id"; exit 1 ;; esac
           git() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 command git -c core.hooksPath=/dev/null -c core.fsmonitor=false "$@"; }
-          : > "$RUNNER_TEMP/pulls.tsv"
-          mkdir -p "$RUNNER_TEMP/check" "$RUNNER_TEMP/resolved"
+          : > "$HOST_DIR/pulls.tsv"
+          mkdir -p "$HOST_DIR/check" "$HOST_DIR/resolved" "$HOST_DIR/logs" "$HOST_DIR/baseline"
+          # The workspace, which the check step fetches main and each branch from, must be the very
+          # folder it is now, with the same .git, since a session could move a folder above it.
+          stat -c %d:%i "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.git" > "$HOST_DIR/baseline/folders"
           while IFS=$'\t' read -r number head_sha; do
             case "$number" in ''|*[!0-9]*) continue ;; esac
             [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]] || continue
-            root="$RUNNER_TEMP/pr/$number"
+            root="$HOST_DIR/pr-$number"
             mkdir -p "$root/in" "$root/out" "$root/home"
             git fetch -q --no-tags origin "$head_sha:refs/heads/factory-rebase-$number"
             git clone -q --no-hardlinks --no-checkout "$GITHUB_WORKSPACE" "$root/work"
@@ -233,12 +245,12 @@ jobs:
             base="$(git merge-base "$head_sha" "$MAIN_SHA")"
             git log --oneline "$base..$head_sha" > "$root/in/branch-log.txt"
             git log --oneline "$base..$MAIN_SHA" > "$root/in/main-log.txt"
-            cp "$RUNNER_TEMP/main/AGENTS.md" "$root/in/"
+            cp "$HOST_DIR/main/AGENTS.md" "$root/in/"
             gh api "repos/$GITHUB_REPOSITORY/pulls/$number" --jq '"# " + .title + "\n\n" + (.body // "")' > "$root/in/pull-request.md"
             chmod -R a-w "$root/in"
             (cd "$root/work" && HOME="$root/home" GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOVCS='*:off' go mod download)
             HOME="$root/home" GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOVCS='*:off' go mod download
-            printf '%s\t%s\n' "$number" "$head_sha" >> "$RUNNER_TEMP/pulls.tsv"
+            printf '%s\t%s\n' "$number" "$head_sha" >> "$HOST_DIR/pulls.tsv"
           done < <(jq -r '.[] | [.number, .head_sha] | @tsv' <<< "$CONFLICTS")
 
       # Claude Code runs its commands in a sandbox, bubblewrap with socat for its network, so that it
@@ -286,20 +298,18 @@ jobs:
             stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
             echo "::stop-commands::$stop"
             trap 'echo "::$stop::"' EXIT
-            host="$RUNNER_TEMP/host"
-            mkdir -p "$host"
             while IFS=$'\t' read -r number _; do
-              root="$RUNNER_TEMP/pr/$number"
+              root="$HOST_DIR/pr-$number"
               others=()
-              for other in "$RUNNER_TEMP"/pr/*; do
+              for other in "$HOST_DIR"/pr-*; do
                 if [ "$other" != "$root" ]; then others+=("$other"); fi
               done
-              bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/pr/$number/home" "$root/work" clone "$0" \
-                "${others[@]}" "$RUNNER_TEMP/main" "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/pulls.tsv" \
-                "$RUNNER_TEMP/check" "$RUNNER_TEMP/resolved" "$host"
+              bash "$HOST_DIR/sandbox-settings.sh" "$HOST_DIR/pr-$number/home" "$root/work" clone "$0" \
+                "${others[@]}" "$HOST_DIR/main" "$HOST_DIR/sandbox-settings.sh" "$HOST_DIR/pulls.tsv" \
+                "$HOST_DIR/check" "$HOST_DIR/resolved" "$HOST_DIR/logs" "$HOST_DIR/baseline"
               prompt="$(sed -e "s|RESOLVE_DIR|$root/in|g" -e "s|OUT_DIR|$root/out|g" -e "s|MAIN_SHA|$MAIN_SHA|g" \
-                "$RUNNER_TEMP/main/resolve-prompt.md")"
-              (cd "$root/work" && HOME="$RUNNER_TEMP/pr/$number/home" claude -p "$prompt" --model opus --max-turns 200 --permission-mode default \
+                "$HOST_DIR/main/resolve-prompt.md")"
+              (cd "$root/work" && HOME="$HOST_DIR/pr-$number/home" claude -p "$prompt" --model opus --max-turns 200 --permission-mode default \
                 --setting-sources user --strict-mcp-config --add-dir "$root/in" --add-dir "$root/out" \
                 --disallowedTools "Read(//proc/**)" "Edit(./.git/**)" "Write(./.git/**)" \
                 --allowedTools "Read(./**)" "Read(/$root/in/**)" "Read(/$root/out/**)" "Edit(./**)" "Edit(/$root/out/**)" "Glob" "Grep" \
@@ -307,9 +317,9 @@ jobs:
                   "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" "Bash(git show:*)" \
                   "Bash(git add:*)" "Bash(git rebase:*)" "Bash(git checkout:*)" "Bash(git bundle create:*)" \
                   "Bash(ls:*)" "Bash(cp:*)" "Bash(mkdir:*)" \
-                > "$host/$number.log" 2>&1) || echo "The session on #$number ended with an error."
-              cat "$host/$number.log"
-            done < "$RUNNER_TEMP/pulls.tsv"
+                > "$HOST_DIR/logs/$number.log" 2>&1) || echo "The session on #$number ended with an error."
+              cat "$HOST_DIR/logs/$number.log"
+            done < "$HOST_DIR/pulls.tsv"
             exit
           }
 
@@ -333,19 +343,23 @@ jobs:
             LC_ALL=C sed -E 's#base64,[A-Za-z0-9+/]+=*##g; s#data-points="[A-Za-z0-9+/]+=*"##g' |
               LC_ALL=C grep -aoiE 'sk-ant-|[A-Za-z0-9_-]{80,}' | grep -iE 'sk-ant-|[0-9]' > /dev/null
           }
-          resolved="$RUNNER_TEMP/resolved"
+          if [ "$(stat -c %d:%i "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.git")" != "$(cat "$HOST_DIR/baseline/folders")" ]; then
+            echo "The workspace or its .git isn't the folder it was before the sessions, so nothing is fetched from it."
+            exit 1
+          fi
+          resolved="$HOST_DIR/resolved"
           mkdir -p "$resolved"
           digests='{}'
           while IFS=$'\t' read -r number head_sha; do
             case "$number" in ''|*[!0-9]*) continue ;; esac
             [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]] || continue
-            root="$RUNNER_TEMP/pr/$number"
-            fresh="$RUNNER_TEMP/check/$number"
+            root="$HOST_DIR/pr-$number"
+            fresh="$HOST_DIR/check/$number"
             out="$root/out"
             bundle="$out/rebased.bundle"
             # Only the session's own folder is read, and only if it, and everything in it, is a plain
             # folder or file where it should be, so no link can lead the host's read anywhere else.
-            if [ "$(realpath -e "$out" 2> /dev/null)" != "$(realpath -e "$RUNNER_TEMP")/pr/$number/out" ] ||
+            if [ "$(realpath -e "$out" 2> /dev/null)" != "$(realpath -e "$HOST_DIR")/pr-$number/out" ] ||
               [ -n "$(find "$out" ! -type f ! -type d -print -quit)" ]; then
               echo "The session on #$number left a link or something else that isn't a plain file or folder in its folder, or none, so none of it is kept."
               continue
@@ -376,7 +390,7 @@ jobs:
                 cp "$out/message.md" "$resolved/$number.md"
               fi
             fi
-          done < "$RUNNER_TEMP/pulls.tsv"
+          done < "$HOST_DIR/pulls.tsv"
           for file in "$resolved"/*; do
             [ -f "$file" ] || continue
             digests="$(jq -c --arg name "$(basename "$file")" --arg digest "$(sha256sum < "$file" | cut -c 1-64)" \
@@ -388,7 +402,7 @@ jobs:
         if: ${{ !cancelled() && steps.check.outputs.digests != '{}' }}
         with:
           name: resolved
-          path: ${{ runner.temp }}/resolved
+          path: ${{ env.HOST_DIR }}/resolved
 
   # Guards, pushes and comments, one pull request after another, on a fresh runner that runs nothing
   # from the branches. Each bundle must have the digest the job that made it gave. The guards are

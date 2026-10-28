@@ -3,6 +3,7 @@ package awml
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -256,9 +257,9 @@ func holdsBack(t *testing.T, path string) {
 	}
 }
 
-// A session's bundle and note are read only from its own output folder: if that folder, or any
-// folder above it, has become a symbolic link, or it resolves anywhere but inside the pull request's
-// own folder, nothing of the session's is kept.
+// A session's bundle and note are read only from its own output folder: if that folder, or its pull
+// request's folder, has become a symbolic link, or it resolves anywhere but inside the pull
+// request's own folder in the host's, nothing of the session's is kept.
 func TestResolveReadsOnlyTheSessionsOwnFolder(t *testing.T) {
 	check, _ := readFactoryWorkflow(t, "resolve.yml").Jobs["draft"].step(t, "check")
 	head := strings.Repeat("ab", 20)
@@ -267,7 +268,7 @@ func TestResolveReadsOnlyTheSessionsOwnFolder(t *testing.T) {
 		elsewhere := filepath.Join(r.root, "elsewhere")
 		r.write(filepath.Join(elsewhere, "out", "message.md"), "Forged.\n")
 		r.write(filepath.Join(elsewhere, "out", "rebased.bundle"), "not a bundle\n")
-		root := filepath.Join(r.temp, "pr", "9")
+		root := filepath.Join(r.temp, "host", "pr-9")
 		switch how {
 		case "out":
 			if err := os.MkdirAll(root, 0o755); err != nil {
@@ -284,12 +285,45 @@ func TestResolveReadsOnlyTheSessionsOwnFolder(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		r.write("pulls.tsv", "9\t"+head+"\n")
-		r.run(check, map[string]string{"MAIN_SHA": strings.Repeat("cd", 20), "GITHUB_WORKSPACE": filepath.Join(r.root, "nowhere")}, "")
+		r.write("host/pulls.tsv", "9\t"+head+"\n")
+		workspace := keptWorkspace(t, r)
+		r.run(check, map[string]string{"MAIN_SHA": strings.Repeat("cd", 20), "GITHUB_WORKSPACE": workspace}, "")
 		r.mustPass()
-		if entries, _ := os.ReadDir(filepath.Join(r.temp, "resolved")); len(entries) != 0 {
+		if entries, _ := os.ReadDir(filepath.Join(r.temp, "host", "resolved")); len(entries) != 0 {
 			t.Errorf("with %s a symbolic link, the check kept %d of the session's files", how, len(entries))
 		}
+	}
+}
+
+// keptWorkspace makes a workspace with a .git, and the baseline of both the prepare step keeps.
+func keptWorkspace(t *testing.T, r *rehearsal) string {
+	t.Helper()
+	workspace, _ := r.newRepo("workspace", map[string]string{"recipes.md": "Bread\n"})
+	folders, err := exec.Command("stat", "-c", "%d:%i", workspace, filepath.Join(workspace, ".git")).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.write("host/baseline/folders", string(folders))
+	return workspace
+}
+
+// The check step fetches main and each branch from the workspace, so it does so only if the
+// workspace and its .git are the very folders they were before the sessions, since a session could
+// move a folder above them and leave another in their place.
+func TestResolveFetchesOnlyFromTheWorkspaceItKept(t *testing.T) {
+	check, _ := readFactoryWorkflow(t, "resolve.yml").Jobs["draft"].step(t, "check")
+	r := newRehearsal(t)
+	workspace := keptWorkspace(t, r)
+	r.write("host/pulls.tsv", "9\t"+strings.Repeat("ab", 20)+"\n")
+	if err := os.Rename(workspace, workspace+".moved"); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command("cp", "-a", workspace+".moved", workspace).CombinedOutput(); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	r.run(check, map[string]string{"MAIN_SHA": strings.Repeat("cd", 20), "GITHUB_WORKSPACE": workspace}, "")
+	if !r.failed || !strings.Contains(r.printed, "isn't the folder it was before the sessions") {
+		t.Errorf("the check fetched from a workspace that isn't the one kept:\n%s", r.printed)
 	}
 }
 

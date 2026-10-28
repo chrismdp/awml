@@ -318,10 +318,13 @@ func TestEverySessionIsSandboxedAndBounded(t *testing.T) {
 				t.Errorf("%s gives Claude its token without scrubbing it from Claude's commands", where)
 			}
 			for _, want := range []string{"--setting-sources user ", "--strict-mcp-config", `"Read(//proc/**)"`,
-				`"Edit(./.git/**)"`, `"Write(./.git/**)"`, `"Read(./**)"`, "::stop-commands::", `"$RUNNER_TEMP/`} {
+				`"Edit(./.git/**)"`, `"Write(./.git/**)"`, `"Read(./**)"`, "::stop-commands::"} {
 				if !strings.Contains(step.Run, want) {
 					t.Errorf("%s doesn't have %s", where, want)
 				}
+			}
+			if !regexp.MustCompile(`(?s)sed .{0,300}?"\$(RUNNER_TEMP|HOST_DIR)/[^"]*prompt[^"]*"`).MatchString(step.Run) {
+				t.Errorf("%s doesn't read main's prompt from outside the tree", where)
 			}
 			allowed := step.Run[strings.Index(step.Run, "--allowedTools"):]
 			for _, bare := range []string{`"Read"`, `"Edit"`, `"Write"`} {
@@ -665,6 +668,7 @@ func (r *rehearsal) run(step workflowStep, env map[string]string, answers string
 		"PATH":                    bin + string(os.PathListSeparator) + os.Getenv("PATH"),
 		"HOME":                    r.root,
 		"RUNNER_TEMP":             r.temp,
+		"HOST_DIR":                filepath.Join(r.temp, "host"),
 		"GITHUB_OUTPUT":           filepath.Join(r.root, "output"),
 		"GITHUB_STEP_SUMMARY":     filepath.Join(r.root, "summary"),
 		"GITHUB_REPOSITORY":       "owner/repo",
@@ -766,7 +770,7 @@ func (r *rehearsal) newRepo(name string, files map[string]string) (string, strin
 }
 
 var sessionHome = regexp.MustCompile(`HOME="([^"]+)" claude -p`)
-var sandboxSettings = regexp.MustCompile(`bash "\$RUNNER_TEMP/sandbox-settings\.sh" "([^"]+)" "([^"]+)" (workspace|clone)[^\n]*\n`)
+var sandboxSettings = regexp.MustCompile(`bash "\$(?:RUNNER_TEMP|HOST_DIR)/sandbox-settings\.sh" "([^"]+)" "([^"]+)" (workspace|clone)[^\n]*\n`)
 
 // Every Claude session runs its commands in Claude Code's own sandbox, set in the user settings of
 // a home of its own, the only settings --setting-sources user loads (#131). Every session's tree
@@ -806,7 +810,7 @@ func TestEverySessionRunsInItsOwnSandbox(t *testing.T) {
 		}
 		copied := false
 		for _, before := range job.Steps[:at+1] {
-			if regexp.MustCompile(`cp [^\n]*\.github/sandbox-settings\.sh[^\n]* "\$RUNNER_TEMP/"\n`).MatchString(before.Run) {
+			if regexp.MustCompile(`cp [^\n]*\.github/sandbox-settings\.sh[^\n]* "\$(RUNNER_TEMP|HOST_DIR)/"\n`).MatchString(before.Run) {
 				copied = true
 			}
 		}
@@ -998,20 +1002,20 @@ func TestGitAfterASessionCannotBePoisoned(t *testing.T) {
 		i := job.session()
 		session := job.Steps[i].Run
 		claude := strings.Index(session, "claude -p")
-		for _, kept := range []string{`cp .git/config "$RUNNER_TEMP/baseline/git-config"`,
-			`stat -c %d:%i "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.git" > "$RUNNER_TEMP/baseline/folders"`} {
+		for _, kept := range []string{`cp .git/config "$HOST_DIR/baseline/git-config"`,
+			`stat -c %d:%i "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.git" > "$HOST_DIR/baseline/folders"`} {
 			if c := strings.Index(session, kept); c < 0 || c > claude {
 				t.Errorf("%s's %s doesn't keep %s before its session", at.file, at.job, kept)
 			}
 		}
-		if settings := sandboxSettings.FindString(session); !strings.Contains(settings, `"$RUNNER_TEMP/baseline"`) {
+		if settings := sandboxSettings.FindString(session); !strings.Contains(settings, `"$HOST_DIR"`) {
 			t.Errorf("%s's %s session can write the baseline its tree is checked against: %s", at.file, at.job, settings)
 		}
 		patch, _ := job.step(t, "patch")
 		if _, holds := patch.Env["CLAUDE_CODE_OAUTH_TOKEN"]; holds {
 			t.Errorf("%s's %s makes the patch beside Claude's token", at.file, at.job)
 		}
-		for _, want := range []string{`cmp -s .git/config "$RUNNER_TEMP/baseline/git-config"`, "GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 command git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c diff.external=",
+		for _, want := range []string{`cmp -s .git/config "$HOST_DIR/baseline/git-config"`, "GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 command git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c diff.external=",
 			"--no-ext-diff --no-textconv"} {
 			if !strings.Contains(patch.Run, want) {
 				t.Errorf("%s's %s patch step lacks %s", at.file, at.job, want)
@@ -1023,12 +1027,12 @@ func TestGitAfterASessionCannotBePoisoned(t *testing.T) {
 	for _, poison := range []string{"", "config", "moved .git", "nested .git", "nested .git in node_modules"} {
 		r := newRehearsal(t)
 		repo, _ := r.newRepo("repo", map[string]string{"recipes.md": "Bread\n", ".gitattributes": "*.md diff=bake filter=bake\n"})
-		r.write("baseline/git-config", readText(t, filepath.Join(repo, ".git/config")))
+		r.write("host/baseline/git-config", readText(t, filepath.Join(repo, ".git/config")))
 		folders, err := exec.Command("stat", "-c", "%d:%i", repo, filepath.Join(repo, ".git")).Output()
 		if err != nil {
 			t.Fatal(err)
 		}
-		r.write("baseline/folders", string(folders))
+		r.write("host/baseline/folders", string(folders))
 		r.write("build/issue.md", "# Bake scones\n")
 		r.write(filepath.Join(repo, "recipes.md"), "Bread\nScones\n")
 		pwned := filepath.Join(r.root, "pwned")
@@ -1058,13 +1062,13 @@ func TestGitAfterASessionCannotBePoisoned(t *testing.T) {
 		if _, err := os.Stat(pwned); err == nil {
 			t.Error("git after the session ran a command a session left in .git/config")
 		}
-		if poison != "" && (!r.failed || r.read("change/change.patch") != "") {
+		if poison != "" && (!r.failed || r.read("host/change/change.patch") != "") {
 			t.Errorf("git ran on a tree a session changed by %s:\n%s", poison, r.printed)
 		}
 		if poison == "" {
 			r.mustPass()
-			if !strings.Contains(r.read("change/change.patch"), "+Scones") {
-				t.Errorf("the patch doesn't hold the change:\n%s", r.read("change/change.patch"))
+			if !strings.Contains(r.read("host/change/change.patch"), "+Scones") {
+				t.Errorf("the patch doesn't hold the change:\n%s", r.read("host/change/change.patch"))
 			}
 		}
 	}
