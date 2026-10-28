@@ -455,8 +455,9 @@ func commentRedLines(file *Map, red []*Map) {
 
 // ConvertSources writes the one file of the current version that awml convert prints, from one file
 // or from a legacy security view followed by its platform view, whose implementation is named
-// default unless it's given. A file of the current version comes back as it was. Otherwise each
-// YAML comment of the files moves to the top once, in the files' order. It also gives the mistakes
+// default unless it's given. A file of the current version comes back as it was. Otherwise the
+// comment block the first file starts with becomes the workflow's description, where it has none, and
+// each other YAML comment of the files moves to the top once, in the files' order. It also gives the mistakes
 // Check finds in the result, since newer rules can find mistakes in a file that older ones passed,
 // and before those its notes of what it couldn't carry over, for the author to do by hand. A
 // mistake in one of the files starts with its name, when it has one.
@@ -469,7 +470,8 @@ func ConvertSources(sources []Source, implementation string) (file []byte, notes
 	}
 	var docs []any
 	var comments []string
-	for _, source := range sources {
+	var top string
+	for n, source := range sources {
 		doc, err := Parse(source.Text)
 		if err != nil {
 			return nil, nil, nil, named(source, errors.New("isn't YAML: "+strings.Join(strings.Fields(err.Error()), " ")))
@@ -477,6 +479,9 @@ func ConvertSources(sources []Source, implementation string) (file []byte, notes
 		found, err := Comments(source.Text)
 		if err != nil {
 			return nil, nil, nil, named(source, err)
+		}
+		if n == 0 && len(found) > 0 && strings.HasPrefix(strings.TrimSpace(string(source.Text)), "#") {
+			top = found[0]
 		}
 		docs = append(docs, doc)
 		comments = append(comments, found...)
@@ -499,6 +504,10 @@ func ConvertSources(sources []Source, implementation string) (file []byte, notes
 			return nil, nil, nil, err
 		}
 	}
+	if top != "" && !converted.has("platform") && !converted.has("description") {
+		converted.set("description", describe(top))
+		comments = comments[1:]
+	}
 	dropComments(converted)
 	data, err := Marshal(converted)
 	if err != nil {
@@ -510,6 +519,17 @@ func ConvertSources(sources []Source, implementation string) (file []byte, notes
 	}
 	out.Write(data)
 	return out.Bytes(), notes, Check(converted), nil
+}
+
+// describe gives the comment block a file starts with as a description: each line without its # and
+// the one space after it.
+func describe(comment string) string {
+	var out strings.Builder
+	for _, line := range strings.Split(comment, "\n") {
+		line = strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(line), "#"), " ")
+		out.WriteString(line + "\n")
+	}
+	return out.String()
 }
 
 // named starts a mistake in one file with the file's name, when it has one.

@@ -185,7 +185,7 @@ func TestConvertUpgradesOneOlderFile(t *testing.T) {
 	old := "# Dinners at home.\n" + strings.Replace(strings.Replace(good, `awml: "0.8"`, `awml: "0.5"`, 1),
 		"kind: start }", "kind: start, breaks: false }", 1)
 	r := awmlRun("convert", write(t, "old.yaml", old))
-	if r != (result{0, "# Dinners at home.\n" + good, ""}) {
+	if r != (result{0, strings.Replace(good, "title: Dinners\n", "title: Dinners\ndescription: |\n  Dinners at home.\n", 1), ""}) {
 		t.Errorf("convert gave %+v\nwant stdout:\n%s", r, good)
 	}
 	security := awmlRun("convert", write(t, "security.yaml", legacySecurity))
@@ -219,8 +219,7 @@ func TestConvertGivesA07FileAsItWasWithItsComments(t *testing.T) {
 }
 
 func TestConvertMovesEachCommentOfAnOlderFileToTheTopOnce(t *testing.T) {
-	old := `# Dinners at home.
-awml: "0.5"
+	old := `awml: "0.5" # Dinners at home.
 title: Dinners
 scopes:
   - { id: family, label: "family" }
@@ -567,10 +566,11 @@ lines:
   - { from: key, to: plan, kind: tie }
 `)
 	r := awmlRun("convert", "--implementation", "office", security, platform)
-	want := `# A bakery plans tomorrow's loaves. The bakery is fictional.
-# It runs in the bakery office.
+	want := `# It runs in the bakery office.
 awml: "0.8"
 title: Tomorrow's loaves
+description: |
+  A bakery plans tomorrow's loaves. The bakery is fictional.
 scopes:
   - { id: bakery, label: "bakery: Jo, Kit", processing: { anthropic: any } }
 parts:
@@ -990,7 +990,7 @@ func TestConvertCommand(t *testing.T) {
 	security := write(t, "security.yaml", "# Keep this comment\n"+legacySecurity)
 	platform := write(t, "platform.yaml", legacyPlatform)
 	got := awmlRun("convert", security, platform)
-	if got.code != 0 || !strings.Contains(got.stdout, "# Keep this comment") || !strings.Contains(got.stdout, `awml: "0.8"`) {
+	if got.code != 0 || !strings.Contains(got.stdout, "\ndescription: |\n  Keep this comment\n") || !strings.Contains(got.stdout, `awml: "0.8"`) {
 		t.Fatalf("%+v", got)
 	}
 	parsed, err := awml.Parse([]byte(got.stdout))
