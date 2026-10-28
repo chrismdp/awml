@@ -22,15 +22,15 @@ on:
     types: [completed]
     branches: ["build/issue-*"]
 
-# A newer CI result on a branch replaces an older one, which no longer matches the branch's head. A
-# fork's pull request may name its branch build/issue-N too, so the group carries the head's
-# repository and CI's event, and no other run can cancel this one.
-concurrency:
-  group: land-${{ github.event.workflow_run.event }}-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
-  cancel-in-progress: true
-
 jobs:
+  # A newer CI result on a branch replaces an older one's reading, which no longer matches the
+  # branch's head. A fork's pull request may name its branch build/issue-N too, so the group carries
+  # the head's repository and CI's event. Only this reading job is cancelled: a land job that has
+  # started is never stopped between its merge and its comment.
   find:
+    concurrency:
+      group: land-${{ github.event.workflow_run.event }}-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -105,14 +105,14 @@ jobs:
             echo "classify=$classify"
           } | tee -a "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         if: steps.ready.outputs.ready == 'true'
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
       # The change's code ran in CI's jobs, so no Go cache is restored here.
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         if: steps.ready.outputs.ready == 'true'
         with:
           go-version: stable
@@ -233,7 +233,7 @@ jobs:
       - name: Make the app's token
         id: app
         if: env.OUTCOME == 'ship' || env.OUTCOME == 'show'
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
         with:
           app-id: ${{ secrets.FACTORY_APP_ID }}
           private-key: ${{ secrets.FACTORY_APP_KEY }}

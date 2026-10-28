@@ -4,8 +4,8 @@
 # description back: it carries no record, digest or marker.
 #
 # It's Claude's description of the change, what changed and the decisions the issue didn't settle,
-# escaped: < escaped, mentions broken and cut to 20,000 characters, so it can't hide the rest or
-# notify anyone. Then the pictures, and the issue it closes.
+# escaped: < escaped, mentions and closing keywords broken and cut to 20,000 characters, so it can't
+# hide the rest, notify anyone or close another issue. Then the pictures, and the issue it closes.
 #
 # It reads, from the environment:
 # - ISSUE, a number;
@@ -19,8 +19,11 @@ set -euo pipefail
 
 case "$ISSUE" in ''|*[!0-9]*) echo "The issue must be a number: $ISSUE" >&2; exit 1 ;; esac
 
+# A closing keyword before an issue's number would close that issue when the pull request merges, so
+# a zero-width space after its # breaks it, and only the build's own Closes #n closes anything.
 escape() {
-  jq -Rrs '.[0:20000] | gsub("<"; "&lt;") | gsub("@(?=[A-Za-z0-9])"; "@​")'
+  jq -Rrs '.[0:20000] | gsub("<"; "&lt;") | gsub("@(?=[A-Za-z0-9])"; "@​")
+    | gsub("(?<keyword>\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\\b[:\\s]+(?:[\\w.-]+/[\\w.-]+)?#)(?=[0-9])"; "\(.keyword)​"; "i")'
 }
 
 if [ -s "$CHANGE_DIR/pull-request.md" ]; then

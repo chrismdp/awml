@@ -15,7 +15,9 @@ run-name: ${{ (github.event_name == 'workflow_dispatch' || github.event.label.na
 
 # Before it works, a repository needs:
 # - a GitHub App with read and write access to contents, pull requests and issues, installed on the
-#   repository, with its app id in a FACTORY_APP_ID secret and a private key in FACTORY_APP_KEY;
+#   repository, with its app id in a FACTORY_APP_ID secret and a private key in FACTORY_APP_KEY. It
+#   must not have the workflows permission, so GitHub refuses any push of its that changes a
+#   workflow, whatever the factory's own guards miss;
 # - a CLAUDE_CODE_OAUTH_TOKEN secret, made with `claude setup-token`, so the runs come out of the
 #   maintainer's subscription rather than a metered API key;
 # - a build label.
@@ -129,14 +131,14 @@ jobs:
       changed: ${{ steps.patch.outputs.changed }}
       digest: ${{ steps.pack.outputs.digest }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version: stable
           cache: false
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
 
@@ -346,7 +348,7 @@ jobs:
           echo "digest=$(digest "$change")" >> "$GITHUB_OUTPUT"
 
       # Kept for 30 days, so a draft offered on the issue can be downloaded for that long.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: change
           path: ${{ runner.temp }}/change
@@ -370,12 +372,26 @@ jobs:
       contents: read
       issues: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           ref: main
           persist-credentials: false
 
-      - uses: actions/download-artifact@v4
+      # The issue's branch as it is when this job starts, which the push takes a lease on, so a push
+      # made meanwhile, by the fixer or a person, is never overwritten. Empty if there's no branch.
+      - name: Read the issue's branch's head
+        id: branch
+        run: |
+          case "$ISSUE" in ''|*[!0-9]*) echo "The issue must be a number: $ISSUE"; exit 1 ;; esac
+          remote="$(git ls-remote origin "refs/heads/build/issue-$ISSUE")"
+          head="${remote%%$'\t'*}"
+          if [ -n "$head" ] && ! [[ "$head" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "The branch's head isn't a commit id: $head"
+            exit 1
+          fi
+          echo "head=$head" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: change
           path: ${{ runner.temp }}/change
@@ -514,7 +530,7 @@ jobs:
       - name: Make the app's token
         id: app
         if: steps.guard.outputs.outcome == 'push'
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
         with:
           app-id: ${{ secrets.FACTORY_APP_ID }}
           private-key: ${{ secrets.FACTORY_APP_KEY }}
@@ -523,13 +539,14 @@ jobs:
 
       # The commit is the app's, as its push is. Its message is Claude's, with the issue it closes.
       # The branch is the issue's own, reused by every try, so a new try's push updates the open
-      # pull request.
+      # pull request. The push takes a lease on the head the job read when it started.
       - name: Commit the change as the app's bot and push the branch
         id: push
         if: steps.guard.outputs.outcome == 'push'
         env:
           APP_SLUG: ${{ steps.app.outputs.app-slug }}
           BRANCH: ${{ steps.guard.outputs.branch }}
+          BRANCH_HEAD: ${{ steps.branch.outputs.head }}
           GH_TOKEN: ${{ steps.app.outputs.token }}
         run: |
           if ! [[ "$APP_SLUG" =~ ^[a-z0-9-]+$ ]]; then
@@ -548,7 +565,7 @@ jobs:
           git -c core.hooksPath=/dev/null -c core.fsmonitor=false commit -q -F "$message"
           git -c core.hooksPath=/dev/null -c core.fsmonitor=false \
             -c http.https://github.com/.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" \
-            push --force origin "HEAD:refs/heads/$BRANCH"
+            push --force-with-lease="refs/heads/$BRANCH:$BRANCH_HEAD" origin "HEAD:refs/heads/$BRANCH"
 
       # The pictures go to the factory-media branch, which holds nothing else and shares no history
       # with main. Each run adds a commit with its own folder, so the links in older descriptions

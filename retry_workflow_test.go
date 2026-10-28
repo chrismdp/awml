@@ -6,6 +6,12 @@ import (
 )
 
 func retryAnswers(test, review, branchSha, edited string, labels []string, builds int, renamed ...string) string {
+	return retryAnswersOn(`{"commit": {"message": "Bake scones\n\nCloses #120", "committer": {"date": "2026-10-27T13:05:00Z"}}}`,
+		test, review, branchSha, edited, labels, builds, renamed...)
+}
+
+// retryAnswersOn answers as retryAnswers does, with the head commit given.
+func retryAnswersOn(commit, test, review, branchSha, edited string, labels []string, builds int, renamed ...string) string {
 	head := strings.Repeat("ab", 20)
 	runs := []string{
 		// A build of another issue, and one from before the label was last added.
@@ -21,6 +27,7 @@ func retryAnswers(test, review, branchSha, edited string, labels []string, build
   "api --paginate repos/owner/repo/actions/runs/77/jobs"*) answer <<< '{"jobs": [
     {"name": "test (1.22)", "conclusion": "` + test + `"}, {"name": "test (stable)", "conclusion": "success"},
     {"name": "Bug review", "conclusion": "` + review + `"}]}' ;;
+  "api repos/owner/repo/commits/` + head + `"*) answer <<< '` + commit + `' ;;
   "api repos/owner/repo/branches/build/issue-120"*) answer <<< '{"commit": {"sha": "` + branchSha + `"}}' ;;
   "api --paginate repos/owner/repo/actions/workflows/build.yml/runs"*) answer <<< '{"workflow_runs": [` + strings.Join(runs, ", ") + `]}' ;;` +
 		issueAnswer(edited, labels...) + labelEventsRenamed(strings.Join(renamed, ""))
@@ -46,6 +53,11 @@ func TestRetryActsWhenTheTestsFailAndCountsTheBuilds(t *testing.T) {
 		{"only a failed review", retryAnswers("success", "failure", head, "", []string{"build"}, 1), "none"},
 		{"a moved branch", retryAnswers("failure", "success", strings.Repeat("cd", 20), "", []string{"build"}, 1), "none"},
 		{"the label taken off", retryAnswers("failure", "success", head, "", []string{"tool"}, 1), "none"},
+		{"a fork's run", fromAFork(retryAnswers("failure", "success", head, "", []string{"build"}, 1)), "none"},
+		{"a fix commit after the third build", retryAnswersOn(`{"commit": {"message": "Fix\n\nFixed-by: fix-review-findings", "committer": {"date": "2026-10-27T13:30:00Z"}}}`,
+			"failure", "success", head, "", []string{"build"}, 3), "none"},
+		{"a commit from before the third build", retryAnswersOn(`{"commit": {"message": "Bake scones", "committer": {"date": "2026-10-27T12:30:00Z"}}}`,
+			"failure", "success", head, "", []string{"build"}, 3), "none"},
 	}
 	for _, tt := range tests {
 		r := newRehearsal(t)

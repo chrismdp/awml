@@ -97,10 +97,26 @@ jobs:
               '[.[] | select(.display_title == $title and .head_branch == "main" and
                 (.event | IN("issues", "workflow_dispatch")) and .created_at >= $since)] | length')"
           echo "Issue #$issue has had $builds builds since the label was added at $labelled."
-          if [ "$builds" -ge 3 ]; then
+          if [ "$builds" -lt 3 ]; then
+            echo "decision=again" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Said once: only when the failed run is on the commit the last build pushed, a build
+          # commit, not a fix, made since that build started. A later failure, of a fix commit or a
+          # rerun of an older commit, has been told already.
+          last="$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows/build.yml/runs?created=%3E%3D$labelled&per_page=100" \
+            --jq '.workflow_runs[]' |
+            jq -rs --arg title "Build of issue $issue" \
+              '[.[] | select(.display_title == $title and .head_branch == "main" and (.event | IN("issues", "workflow_dispatch")))]
+                | map(.created_at) | sort | last // ""')"
+          commit="$(gh api "repos/$GITHUB_REPOSITORY/commits/$head_sha")"
+          if jq -e --arg last "$last" '.commit.committer.date >= $last and
+              ([.commit.message | split("\n")[] | rtrimstr("\r")] | index("Fixed-by: fix-review-findings") | not)' \
+              <<< "$commit" > /dev/null; then
             echo "decision=report" >> "$GITHUB_OUTPUT"
           else
-            echo "decision=again" >> "$GITHUB_OUTPUT"
+            echo "The last build's own commit already failed, and a person was told."
+            echo "decision=none" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Start the build again, with only the issue's number

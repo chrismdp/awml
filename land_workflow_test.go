@@ -91,6 +91,7 @@ func TestLandExitsQuietlyUnlessEveryCheckPassedOnTheHead(t *testing.T) {
 		"a moved head":            landRun("pull_request", "build/issue-120") + passed + landPulls("awml-factory[bot]", strings.Repeat("cd", 20)),
 		"a person's pull request": landRun("pull_request", "build/issue-120") + passed + landPulls("someone", head),
 		"no open pull request":    landRun("pull_request", "build/issue-120") + passed + landPulls("", head),
+		"a fork's run":            fromAFork(landRun("pull_request", "build/issue-120")) + passed + landPulls("awml-factory[bot]", head),
 	}
 	for name, answers := range quiet {
 		q := newRehearsal(t)
@@ -185,6 +186,12 @@ func TestLandJudgesThePushedCommit(t *testing.T) {
 	}
 }
 
+// fromAFork makes a CI run's answer a fork's, whose branch carries the same name as one of this
+// repository's.
+func fromAFork(answers string) string {
+	return strings.Replace(answers, `"head_repository": {"full_name": "owner/repo"}`, `"head_repository": {"full_name": "a-stranger/repo"}`, 1)
+}
+
 func contains(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {
@@ -199,7 +206,14 @@ func contains(values []string, want string) bool {
 // comment. Ask requests their review in a new comment and doesn't merge. The rule's reasons are
 // cleaned, and Classify's are linked, never quoted.
 func TestLandShipsShowsOrAsks(t *testing.T) {
-	land := readFactoryWorkflow(t, "land.yml").Jobs["land"]
+	workflow := readFactoryWorkflow(t, "land.yml")
+	if strings.Contains(readText(t, ".github/workflows/land.yml"), "cancel-in-progress: true\n\njobs:") {
+		t.Error("land.yml cancels a whole run, which could stop it between the merge and its comment")
+	}
+	land := workflow.Jobs["land"]
+	if !strings.Contains(readText(t, ".github/workflows/land.yml"), "group: land-pull-${{ needs.find.outputs.pr }}\n      cancel-in-progress: false") {
+		t.Error("a land job that has started merging can be cancelled")
+	}
 	write, _ := land.step(t, "write")
 	merge, _ := land.step(t, "merge")
 	show, _ := land.step(t, "show")

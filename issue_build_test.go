@@ -2,8 +2,8 @@ package awml
 
 import (
 	"os"
-	"regexp"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -362,5 +362,61 @@ func TestABuildOpensItsPullRequestOnlyIfNoneIsOpen(t *testing.T) {
 		if !strings.Contains(r.calls, "--title Add scones for @\u200bsomeone") {
 			t.Errorf("the title isn't Claude's first line with its mention broken:\n%s", r.calls)
 		}
+	}
+}
+
+// The app pushes the issue's branch with a lease on the head the open job read when it started, so
+// a push made meanwhile, by a fix or a person, is never overwritten.
+func TestTheBuildPushesWithALease(t *testing.T) {
+	open := readBuildWorkflow(t)["open"]
+	read, at := open.step(t, "branch")
+	_, guard := open.step(t, "guard")
+	if at > guard {
+		t.Error("the open job reads the branch's head after it applies the change")
+	}
+	push, _ := open.step(t, "push")
+	if push.Env["BRANCH_HEAD"] != "${{ steps.branch.outputs.head }}" ||
+		!strings.Contains(push.Run, `--force-with-lease="refs/heads/$BRANCH:$BRANCH_HEAD"`) || strings.Contains(push.Run, "push --force ") {
+		t.Error("the app pushes the branch without a lease on the head the open job read")
+	}
+	for _, exists := range []bool{true, false} {
+		r := newRehearsal(t)
+		origin, base := r.newRepo("origin", map[string]string{"recipes.md": "Bread\n"})
+		if exists {
+			gitIn(t, origin, "branch", "build/issue-120")
+		}
+		work := filepath.Join(r.root, "work")
+		gitIn(t, r.root, "clone", "-q", origin, work)
+		r.dir = work
+		r.run(read, map[string]string{"ISSUE": "120"}, "")
+		r.mustPass()
+		want := ""
+		if exists {
+			want = base
+		}
+		if got, ok := r.outputs["head"]; !ok || got != want {
+			t.Errorf("with the branch there %v, the open job read its head as %q, want %q", exists, got, want)
+		}
+	}
+	if !strings.Contains(readText(t, ".github/workflows/build.yml"), "must not have the workflows permission") {
+		t.Error("build.yml's setup notes don't say the app must not have the workflows permission")
+	}
+}
+
+// Claude's description can't close an issue: a closing keyword before an issue's number in it is
+// broken, so the build's own Closes #n is the only one GitHub acts on.
+func TestTheDescriptionClosesOnlyItsIssue(t *testing.T) {
+	r := newRehearsal(t)
+	r.write("pull-request-body.sh", readText(t, ".github/pull-request-body.sh"))
+	r.write("change/pull-request.md", "Closes #7. This fixes owner/repo#8, and Resolved: #9, and fixed  #10. It mentions issue #11.\n")
+	r.run(workflowStep{Run: `bash "$RUNNER_TEMP/pull-request-body.sh"`}, map[string]string{"ISSUE": "120", "CHANGE_DIR": filepath.Join(r.temp, "change")}, "")
+	r.mustPass()
+	closing := regexp.MustCompile(`(?i)\b(close[sd]?|fix(e[sd])?|resolve[sd]?)\b[:\s]+(\S+/\S+)?#[0-9]`)
+	found := closing.FindAllString(r.printed, -1)
+	if len(found) != 1 || !strings.HasSuffix(strings.TrimSpace(r.printed), "Closes #120") {
+		t.Errorf("the description closes %q, want only Closes #120:\n%s", found, r.printed)
+	}
+	if !strings.Contains(r.printed, "issue #11") {
+		t.Errorf("the description broke a mention of an issue that closes nothing:\n%s", r.printed)
 	}
 }

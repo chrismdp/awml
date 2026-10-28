@@ -54,6 +54,7 @@ func TestFixActsOnlyWhenTheTestsPassedAndAReviewFailed(t *testing.T) {
 		{"a moved head", fixAnswers("success", "failure", "the-maintainer", strings.Repeat("cd", 20), 0, important), "none", ""},
 		{"a stranger's pull request", fixAnswers("success", "failure", "a-stranger", head, 0, important), "none", ""},
 		{"no open pull request", fixAnswers("success", "failure", "", head, 0, important), "none", ""},
+		{"a fork's run", fromAFork(fixAnswers("success", "failure", "the-maintainer", head, 0, important)), "none", ""},
 		{"two fix commits", fixAnswers("success", "failure", "the-maintainer", head, 2, important), "giveup", "tried"},
 		{"no Important finding", fixAnswers("success", "failure", "the-maintainer", head, 0, "[]"), "giveup", "unread"},
 	}

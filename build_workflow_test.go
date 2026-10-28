@@ -1028,3 +1028,16 @@ func TestResolveRunsNoGitBesideClaudesToken(t *testing.T) {
 		t.Error("the check step runs git in the session's clone")
 	}
 }
+
+// Every action the factory uses is pinned to a full commit, with its tag in a comment, so a moved tag
+// can't change what runs.
+func TestEveryActionIsPinnedToACommit(t *testing.T) {
+	pinned := regexp.MustCompile(`^\s*(- )?uses: [a-z0-9-]+/[a-z0-9-]+@[0-9a-f]{40} # v[0-9]+\.[0-9]+\.[0-9]+$`)
+	for _, file := range factoryFiles {
+		for _, line := range strings.Split(readText(t, ".github/workflows/"+file), "\n") {
+			if strings.Contains(line, "uses:") && !pinned.MatchString(line) {
+				t.Errorf("%s uses an action not pinned to a commit: %s", file, strings.TrimSpace(line))
+			}
+		}
+	}
+}
