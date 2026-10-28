@@ -304,6 +304,9 @@ jobs:
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
+          # Back to the start folder after every command, so a cd can't take the session's rights
+          # to its own tree with it.
+          CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR: "1"
           MAIN_SHA: ${{ needs.find.outputs.main_sha }}
           GIT_EDITOR: "true"
           GOPROXY: "off"
@@ -330,8 +333,8 @@ jobs:
                 "$HOST_DIR/main/resolve-prompt.md")"
               (cd "$root/work" && HOME="$HOST_DIR/pr-$number/home" claude -p "$prompt" --model sonnet --max-turns 200 --permission-mode default \
                 --setting-sources user --strict-mcp-config --add-dir "$root/in" --add-dir "$root/out" \
-                --disallowedTools "Read(//proc/**)" "Edit(./.git/**)" \
-                --allowedTools "Read(./**)" "Read(/$root/in/**)" "Read(/$root/out/**)" "Edit(./**)" "Edit(/$root/out/**)" "Glob" "Grep" \
+                --disallowedTools "Read(//proc/**)" "Edit(./.git/**)" "Edit(/$root/work/.git/**)" \
+                --allowedTools "Read(/$root/work/**)" "Read(/$root/in/**)" "Read(/$root/out/**)" "Edit(/$root/work/**)" "Edit(/$root/out/**)" "Glob" "Grep" \
                   "Bash(go:*)" "Bash(gofmt:*)" "Bash(make:*)" "Bash(node:*)" \
                   "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" "Bash(git show:*)" \
                   "Bash(git add:*)" "Bash(git rebase:*)" "Bash(git checkout:*)" "Bash(git bundle create:*)" \

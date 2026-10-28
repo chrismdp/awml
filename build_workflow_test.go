@@ -326,7 +326,7 @@ func TestEverySessionIsSandboxedAndBounded(t *testing.T) {
 				t.Errorf("%s gives Claude its token without scrubbing it from Claude's commands", where)
 			}
 			for _, want := range []string{"--setting-sources user ", "--strict-mcp-config", `"Read(//proc/**)"`,
-				`"Edit(./.git/**)"`, `"Read(./**)"`, "::stop-commands::"} {
+				`"Edit(./.git/**)"`, "::stop-commands::"} {
 				if !strings.Contains(step.Run, want) {
 					t.Errorf("%s doesn't have %s", where, want)
 				}
@@ -1684,6 +1684,37 @@ func TestSessionsMayRemoveTheirScratchFiles(t *testing.T) {
 	for _, prompt := range []string{"build-prompt.md", "fix-prompt.md"} {
 		if !strings.Contains(strings.Join(strings.Fields(readText(t, ".github/"+prompt)), " "), "Every untracked file left in the tree goes into the pull request") {
 			t.Errorf("%s doesn't say an untracked file goes into the pull request", prompt)
+		}
+	}
+}
+
+// A session whose Bash changes folder would have Claude Code resolve ./ rules against the new one,
+// and lose the right to write its own tree. So each session that writes returns to its start folder
+// after every command, and names its tree by its absolute path in every rule: reading and editing
+// it, and never editing its .git, beside the ./ deny kept as a twin.
+func TestWritingSessionsNameTheirTreeAbsolutely(t *testing.T) {
+	for _, at := range []struct{ file, job, tree string }{
+		{"build.yml", "draft", "$GITHUB_WORKSPACE"}, {"fix.yml", "fix", "$GITHUB_WORKSPACE"}, {"resolve.yml", "draft", "$root/work"},
+	} {
+		job := readFactoryWorkflow(t, at.file).Jobs[at.job]
+		step := job.Steps[job.session()]
+		if step.Env["CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR"] != "1" {
+			t.Errorf("%s's %s session doesn't return to its start folder after each command", at.file, at.job)
+		}
+		allowed := step.Run[strings.Index(step.Run, "--allowedTools"):]
+		allowed = allowed[:strings.Index(allowed, "\n")+1]
+		for _, want := range []string{`"Read(/` + at.tree + `/**)"`, `"Edit(/` + at.tree + `/**)"`} {
+			if !strings.Contains(allowed, want) {
+				t.Errorf("%s's %s session doesn't allow %s", at.file, at.job, want)
+			}
+		}
+		if strings.Contains(allowed, "(./") {
+			t.Errorf("%s's %s session allows a rule on ./, which follows a change of folder: %s", at.file, at.job, strings.TrimSpace(allowed))
+		}
+		for _, deny := range []string{`"Edit(./.git/**)"`, `"Edit(/` + at.tree + `/.git/**)"`} {
+			if !strings.Contains(step.Run, "--disallowedTools") || !strings.Contains(step.Run[strings.Index(step.Run, "--disallowedTools"):strings.Index(step.Run, "--allowedTools")], deny) {
+				t.Errorf("%s's %s session doesn't deny %s", at.file, at.job, deny)
+			}
 		}
 	}
 }

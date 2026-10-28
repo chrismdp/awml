@@ -302,6 +302,9 @@ jobs:
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
+          # Back to the start folder after every command, so a cd can't take the session's rights
+          # to its own tree with it.
+          CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR: "1"
           FIX_DIR: ${{ runner.temp }}/fix/in
           OUT_DIR: ${{ runner.temp }}/fix/out
           PUPPETEER_EXECUTABLE_PATH: /usr/bin/google-chrome
@@ -334,8 +337,8 @@ jobs:
             status=0
             HOME="$RUNNER_TEMP/session/home" claude -p "$prompt" --model opus --max-turns 200 --permission-mode default \
               --setting-sources user --strict-mcp-config --add-dir "$FIX_DIR" --add-dir "$OUT_DIR" \
-              --disallowedTools "Read(//proc/**)" "Edit(./.git/**)" \
-              --allowedTools "Read(./**)" "Read(/$FIX_DIR/**)" "Read(/$OUT_DIR/**)" "Edit(./**)" "Edit(/$OUT_DIR/**)" "Glob" "Grep" \
+              --disallowedTools "Read(//proc/**)" "Edit(./.git/**)" "Edit(/$GITHUB_WORKSPACE/.git/**)" \
+              --allowedTools "Read(/$GITHUB_WORKSPACE/**)" "Read(/$FIX_DIR/**)" "Read(/$OUT_DIR/**)" "Edit(/$GITHUB_WORKSPACE/**)" "Edit(/$OUT_DIR/**)" "Glob" "Grep" \
                 "Bash(go:*)" "Bash(gofmt:*)" "Bash(make:*)" "Bash(node:*)" \
                 "Bash(.github/picture-drawings.sh:*)" \
                 "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" \
