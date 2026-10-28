@@ -32,11 +32,11 @@ func upgrade(doc any) (*Map, []string, error) {
 	if err != nil || file == doc || file.has("platform") {
 		return file, nil, err
 	}
-	dropForks(file)
+	notes := dropForks(file)
 	if !isOneOf(doc.(*Map).get("awml"), rewrittenFormats...) {
-		return file, nil, nil
+		return file, notes, nil
 	}
-	notes := startOutsideActions(file)
+	notes = append(notes, startOutsideActions(file)...)
 	return file, notes, nil
 }
 
@@ -50,8 +50,9 @@ var rewrittenFormats = []string{"0.2", "0.3", "0.4", "0.5", "0.6"}
 // in's label where the line out has none, so a review's "[yes]" stays. A joined line the file
 // already has isn't added again. A tie between a comment and a fork ties the comment instead
 // to each part a line into the fork came from, as does an implementation comment's tie, and a
-// hidden line at a fork goes, with the fork's place in each block.
-func dropForks(file *Map) {
+// hidden line at a fork goes, with the fork's place in each block. A fork that nothing leads into
+// never ran, so it goes with every line out of it, and dropForks gives a note naming it.
+func dropForks(file *Map) (notes []string) {
 	parts, _ := file.get("parts").([]any)
 	lines, _ := file.get("lines").([]any)
 	var kept []any
@@ -70,6 +71,9 @@ func dropForks(file *Map) {
 				into = append(into, l)
 				from[fork] = append(from[fork], l.get("from"))
 			}
+		}
+		if into == nil {
+			notes = append(notes, fmt.Sprintf(`part "%s" was a fork that nothing led into, so it never ran: it went, with every line out of it`, fork))
 		}
 		var joined []any
 		has := func(line *Map) bool {
@@ -117,16 +121,18 @@ func dropForks(file *Map) {
 		lines = joined
 	}
 	if len(kept) == len(parts) {
-		return
+		return nil
 	}
 	file.set("parts", kept)
 	file.set("lines", lines)
 	implementations, ok := file.get("implementations").(*Map)
 	if !ok {
-		return
+		return notes
 	}
 	// split gives the parts a fork's work split from, through any forks in a row, or the part itself.
-	// A fork's lines in come only from parts that weren't forks when it went, so this ends. Each
+	// When a fork went, each fork before it in the parts had already been joined through, and its
+	// lines from itself didn't count, so its lines in came only from parts that aren't forks or from
+	// forks after it. Each step of split goes to a fork further down the parts, so it ends. Each
 	// fork's parts are worked out once and kept, so forks in a row take no longer than their lines.
 	var split func(id any) []any
 	splits := map[string][]any{}
@@ -197,6 +203,7 @@ func dropForks(file *Map) {
 		out.set(name, impl)
 	}
 	file.set("implementations", out)
+	return notes
 }
 
 func upgradeFile(doc any) (*Map, error) {

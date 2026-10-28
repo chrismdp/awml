@@ -159,14 +159,13 @@ func TestDrawingOneFileDrawsItsView(t *testing.T) {
 func TestDrawingOneFileSaysWhyItHasNoView(t *testing.T) {
 	for _, tc := range []struct{ name, text, implementation, want string }{
 		{"a platform description", soundDescription, "", "a platform description has no drawing"},
-		{"an unknown implementation", soundWorkflow, "office", ""},
+		{"an unknown implementation", soundWorkflow, "office", `unknown implementation "office"`},
 	} {
-		_, want := View(parsed(t, tc.text), tc.implementation)
-		if _, err := DrawSources([]Source{source("x.yaml", tc.text)}, tc.implementation); err == nil || err.Error() != want.Error() {
-			t.Errorf("%s: draw gave %v, want %v", tc.name, err, want)
+		if _, err := DrawSources([]Source{source("x.yaml", tc.text)}, tc.implementation); err == nil || err.Error() != tc.want {
+			t.Errorf("%s: draw gave %v, want %q", tc.name, err, tc.want)
 		}
-		if _, err := GraphSources([]Source{source("x.yaml", tc.text)}, tc.implementation); err == nil || err.Error() != want.Error() {
-			t.Errorf("%s: graph gave %v, want %v", tc.name, err, want)
+		if _, err := GraphSources([]Source{source("x.yaml", tc.text)}, tc.implementation); err == nil || err.Error() != tc.want {
+			t.Errorf("%s: graph gave %v, want %q", tc.name, err, tc.want)
 		}
 	}
 }
