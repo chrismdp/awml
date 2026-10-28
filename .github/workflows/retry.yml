@@ -74,8 +74,8 @@ jobs:
             leave "CI's run isn't for the app's #$pr, so it's left alone."
           may_write() {
             [[ "$1" =~ ^[A-Za-z0-9-]{1,39}$ ]] || return 1
-            gh api "repos/$GITHUB_REPOSITORY/collaborators/$1/permission" --jq '"\(.permission) \(.role_name // "")"' 2> /dev/null |
-              grep -wE 'admin|maintain|write' > /dev/null
+            [ "$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$1/permission" \
+              --jq '(.permission | IN("admin", "write")) or (.role_name | IN("admin", "maintain", "write"))' 2> /dev/null)" = true ]
           }
           # The run's list of pull requests holds the app's even when a stranger's pull request from
           # the same branch started it, so the person who started the run must be trusted too.

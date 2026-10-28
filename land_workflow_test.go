@@ -43,6 +43,11 @@ func landRun(event, branch string) string {
     "head_repository": {"full_name": "owner/repo"}}' ;;`
 }
 
+// reRun makes CI's run its second attempt.
+func reRun(run string) string {
+	return strings.Replace(run, `"status": "completed",`, `"status": "completed", "run_attempt": 2,`, 1)
+}
+
 func landJobs(jobs ...string) string {
 	return `
   "api --paginate repos/owner/repo/actions/runs/77/jobs"*) answer <<< '{"jobs": [` + strings.Join(jobs, ", ") + `]}' ;;`
@@ -97,6 +102,22 @@ func TestLandExitsQuietlyUnlessEveryCheckPassedOnTheHead(t *testing.T) {
 			strings.Replace(landPulls("awml-factory[bot]", head), `"type": "Bot"}}]`, `"type": "User"}}]`, 1),
 		"no open pull request": landRun("pull_request", "build/issue-120") + passed + landPulls("", head),
 		"a fork's run":         fromAFork(landRun("pull_request", "build/issue-120")) + passed + landPulls("awml-factory[bot]", head),
+		// A re-run of a run whose earlier attempt passed every required check, when land acted on it
+		// already, so it doesn't ask again.
+		"a re-run of a run that passed": reRun(landRun("pull_request", "build/issue-120")) + passed + landPulls("awml-factory[bot]", head) + `
+  "api --paginate repos/owner/repo/actions/runs/77/attempts/1/jobs"*) answer <<< '{"jobs": [
+    {"name": "test (1.22)", "conclusion": "success"}, {"name": "test (stable)", "conclusion": "success"},
+    {"name": "Bug review", "conclusion": "success"}, {"name": "Security review", "conclusion": "success"}]}' ;;`,
+	}
+	// A re-run of a run whose first attempt failed a check is the first that passed, so land acts.
+	again := newRehearsal(t)
+	again.run(ready, map[string]string{"CI_RUN": "77"}, reRun(landRun("pull_request", "build/issue-120"))+passed+landPulls("awml-factory[bot]", head)+`
+  "api --paginate repos/owner/repo/actions/runs/77/attempts/1/jobs"*) answer <<< '{"jobs": [
+    {"name": "test (1.22)", "conclusion": "failure"}, {"name": "test (stable)", "conclusion": "success"},
+    {"name": "Bug review", "conclusion": "success"}, {"name": "Security review", "conclusion": "success"}]}' ;;`)
+	again.mustPass()
+	if again.outputs["ready"] != "true" {
+		t.Errorf("a re-run after a failed first attempt left quietly: %v\n%s", again.outputs, again.printed)
 	}
 	for name, answers := range quiet {
 		q := newRehearsal(t)

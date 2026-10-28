@@ -473,6 +473,12 @@ func changedModes(repo repository) (map[string]modeChange, error) {
 // shown puts a path in a code span for a reason, escaped as JSON escapes it, with a backtick
 // escaped too, since the reasons reach the pull request's description: no name can end the span
 // or the line there.
+func shown(path string) string {
+	quoted, _ := json.Marshal(path)
+	inner := strings.ReplaceAll(string(quoted[1:len(quoted)-1]), "`", `\u0060`)
+	return "`" + inner + "`"
+}
+
 // underReview reports whether path is the review path given, or under it if it ends in a slash. A
 // review path that starts with **/ matches at any depth, from the root or after any slash.
 func underReview(path, protected string) bool {
@@ -490,12 +496,6 @@ func underReview(path, protected string) bool {
 		}
 		path = after
 	}
-}
-
-func shown(path string) string {
-	quoted, _ := json.Marshal(path)
-	inner := strings.ReplaceAll(string(quoted[1:len(quoted)-1]), "`", `\u0060`)
-	return "`" + inner + "`"
 }
 
 func changedPaths(repo repository) ([]string, error) {

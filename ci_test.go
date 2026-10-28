@@ -137,13 +137,12 @@ func TestEveryPullRequestIsReviewedOrFailsAtTheGate(t *testing.T) {
 	if !strings.Contains(classify.If, "github.event.pull_request.head.repo.full_name == github.repository") {
 		t.Errorf("Classify runs if %q, which lacks the head's repository", classify.If)
 	}
-	classifyGate, first := classify.step(t, "gate")
-	if first != 0 || classifyGate.Run != gate.Run {
-		t.Errorf("Classify's first step isn't the reviews' gate")
-	}
-	bring, _ := classify.step(t, "bring")
-	if bring.If != "steps.gate.outcome == 'success'" {
-		t.Errorf("Classify brings in the patch if %q, not only once its gate has passed", bring.If)
+	// Classify runs only once both reviews, each behind the gate, have passed, so it needs no gate
+	// of its own.
+	for _, step := range classify.Steps {
+		if step.ID == "gate" || strings.Contains(step.If, "steps.gate") {
+			t.Errorf("Classify has a gate of its own in step %q, though it runs only after the gated reviews", step.Name)
+		}
 	}
 	for _, file := range []string{"ci.yml", "fix.yml", "resolve.yml"} {
 		if strings.Contains(readText(t, ".github/workflows/"+file), "author_association") {
@@ -159,7 +158,8 @@ func TestClassifyRunsOnFactoryBranchesAfterBothReviewsAndAlwaysPasses(t *testing
 	if got := classify.needs(); len(got) != 1 || got[0] != "review" {
 		t.Errorf("Classify needs %v, want the reviews", got)
 	}
-	for _, want := range []string{"!cancelled()", "needs.review.result == 'success'", "startsWith(github.head_ref, 'build/issue-')"} {
+	for _, want := range []string{"!cancelled()", "needs.review.result == 'success'", "startsWith(github.head_ref, 'build/issue-')",
+		"github.event.pull_request.user.login == 'awml-factory[bot]'", "github.event.pull_request.user.type == 'Bot'"} {
 		if !strings.Contains(classify.If, want) {
 			t.Errorf("Classify runs if %q, which lacks %s", classify.If, want)
 		}
@@ -538,7 +538,9 @@ const permissions = `
   "api repos/owner/repo/collaborators/a-collaborator/permission"*) answer <<< '{"permission": "write", "role_name": "write"}' ;;
   "api repos/owner/repo/collaborators/a-keeper/permission"*) answer <<< '{"permission": "write", "role_name": "maintain"}' ;;
   "api repos/owner/repo/collaborators/a-member/permission"*) answer <<< '{"permission": "read", "role_name": "triage"}' ;;
-  "api repos/owner/repo/collaborators/a-stranger/permission"*) answer <<< '{"permission": "read", "role_name": "read"}' ;;`
+  "api repos/owner/repo/collaborators/a-stranger/permission"*) answer <<< '{"permission": "read", "role_name": "read"}' ;;
+  "api repos/owner/repo/collaborators/a-no-writer/permission"*) answer <<< '{"permission": "read", "role_name": "no-write"}' ;;
+  "api repos/owner/repo/collaborators/a-maintain-word/permission"*) answer <<< '{"permission": "read", "role_name": "maintainer-ish"}' ;;`
 
 // A symbolic link in the patch would reach the working tree the sessions read, which could follow
 // it anywhere, /proc included, so bring-patch.sh refuses a patch that adds or changes one.
@@ -566,5 +568,38 @@ func TestTheReportNamesTheCommitByItsFirstLine(t *testing.T) {
 	r.mustPass()
 	if title := strings.TrimSpace(r.read("report/title.txt")); title != "Main is failing: Bake the scones" {
 		t.Errorf("the report's title is %q, want the commit message's first line alone", title)
+	}
+}
+
+// Every workflow that trusts a person by their permission uses the same may_write, word for word,
+// which compares exactly: write access is a permission of admin or write, or a role of admin,
+// maintain or write, never a role that merely holds one of those words.
+func TestEveryTrustIsTheSameExactPermissionCheck(t *testing.T) {
+	block := regexp.MustCompile(`(?s)\n {10}may_write\(\) \{\n.*?\n {10}\}\n`)
+	var copies []string
+	for _, file := range factoryFiles {
+		for _, found := range block.FindAllString(readText(t, ".github/workflows/"+file), -1) {
+			copies = append(copies, strings.TrimPrefix(found, "\n"))
+		}
+	}
+	if len(copies) != 5 {
+		t.Fatalf("found %d copies of may_write, want 5", len(copies))
+	}
+	for _, other := range copies[1:] {
+		if other != copies[0] {
+			t.Errorf("may_write differs:\n%s\nfrom:\n%s", other, copies[0])
+		}
+	}
+	r := newRehearsal(t)
+	r.run(workflowStep{Run: copies[0] + `for login in the-owner a-writer a-keeper a-member a-stranger a-no-writer a-maintain-word a-ghost 'a writer'; do
+  if may_write "$login"; then echo "yes $login"; else echo "no $login"; fi
+done`}, nil, permissions+`
+  "api repos/owner/repo/collaborators/a-ghost/permission"*) echo "Not Found" >&2; exit 1 ;;`)
+	r.mustPass()
+	for _, want := range []string{"yes the-owner", "yes a-writer", "yes a-keeper", "no a-member", "no a-stranger",
+		"no a-no-writer", "no a-maintain-word", "no a-ghost", "no a writer"} {
+		if !strings.Contains(r.printed, want+"\n") {
+			t.Errorf("may_write didn't say %q:\n%s", want, r.printed)
+		}
 	}
 }

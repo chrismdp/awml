@@ -81,6 +81,16 @@ jobs:
             jq -e --arg name "$name" '[.[] | select(.name == $name and .conclusion == "success")] | length == 1' \
               "$RUNNER_TEMP/jobs.json" > /dev/null || leave "$name didn't pass on $head_sha, so it's left to retry-a-build or the fixer."
           done
+          # A re-run of a run an earlier attempt of which passed every required check: land acted on
+          # that attempt, so it doesn't merge or ask again.
+          attempt="$(jq -r '.run_attempt // 1' <<< "$run")"
+          [[ "$attempt" =~ ^[0-9]+$ ]] || leave "CI's run attempt isn't a number."
+          for ((earlier = 1; earlier < attempt; earlier++)); do
+            gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN/attempts/$earlier/jobs?per_page=100" --jq '.jobs[]' |
+              jq -se '[.[] | select((.name | IN("test (1.22)", "test (stable)", "Bug review", "Security review")) and
+                .conclusion == "success")] | length == 4' > /dev/null &&
+              leave "Attempt $earlier of this run passed every required check, and land acted on it then."
+          done
           # A Classify job that failed or was cancelled as a whole, by a timeout or a lost runner, gave
           # no verdict to trust, and its failure wakes neither the fixer nor retry, so it's read as no
           # verdict, which asks.

@@ -39,7 +39,7 @@ parts:
   - { id: norun, kind: comment, label: "The sessions read the patch as data and run none of the change's code. No job that holds the Claude token runs tests, make or go run, since the runner has sudo and its memory holds the job's secrets (#160)" }
   - { id: mains, kind: comment, label: "Main's prompts, AGENTS.md and REVIEW.md are copied out before a session starts, so the patch can't rewrite what it's held to. GitHub runs the pull request's own ci.yml, so a person with write access could change how their pull request is reviewed: they're trusted, and the app never pushes .github/ (#160)" }
   - { id: binaries, kind: comment, label: "The list of binary files is written by this step to a file of its own, which the prompts point at, so text in the patch or the description can't forge it (#153)" }
-  - { id: moved, kind: comment, label: "Classify moved here from the build, so land reads its verdict from a check on the commit rather than from the build's artifact. Its check always passes, so the verdict never wakes the fixer. Only a factory branch is classified (#160)" }
+  - { id: moved, kind: comment, label: "Classify moved here from the build, so land reads its verdict from a check on the commit rather than from the build's artifact. Its check always passes, so the verdict never wakes the fixer. Only the app's pull request from a factory branch is classified, and only once both gated reviews have passed, so it has no gate of its own (#160)" }
   - { id: findings, kind: comment, label: "The checks carry text from sessions that read a stranger's patch, so every workflow that reads them treats them as untrusted. Nothing here reaches an outside action: the checks are GitHub's record of this run" }
   - { id: escaped, kind: comment, label: "A session's text is escaped before it's posted: < escaped, mentions broken, length capped. It carries no marker for a workflow to parse, and is refused if it holds anything like a token (#160 rule 5)" }
 lines:
@@ -61,7 +61,7 @@ lines:
   - { from: review, to: post, kind: start, label: "its findings" }
   - { from: secreview, to: post, kind: start, label: "its findings" }
   - { from: post, to: checks, kind: data }
-  - { from: post, to: classify, kind: start, label: "[both reviews passed, on a factory branch]" }
+  - { from: post, to: classify, kind: start, label: "[both reviews passed, on the app's pull request from a factory branch]" }
   - { from: patch, to: classify, kind: data }
   - { from: repo, to: classify, kind: data }
   - { from: checks, to: classify, kind: data, label: "both reviews' findings" }

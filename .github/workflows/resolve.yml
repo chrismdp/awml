@@ -78,8 +78,8 @@ jobs:
           }
           may_write() {
             [[ "$1" =~ ^[A-Za-z0-9-]{1,39}$ ]] || return 1
-            gh api "repos/$GITHUB_REPOSITORY/collaborators/$1/permission" --jq '"\(.permission) \(.role_name // "")"' 2> /dev/null |
-              grep -wE 'admin|maintain|write' > /dev/null
+            [ "$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$1/permission" \
+              --jq '(.permission | IN("admin", "write")) or (.role_name | IN("admin", "maintain", "write"))' 2> /dev/null)" = true ]
           }
           pulls='[]'
           while read -r number; do
