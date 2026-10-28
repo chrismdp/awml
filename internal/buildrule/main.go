@@ -311,7 +311,8 @@ type branch struct {
 // on, and the head, from git's own record of it, so no message can pass for another commit's
 // header. A commit is the factory's only if the app's login is in both its author's and its
 // committer's noreply address: a person's commit that the app rebased is still the person's. Anyone
-// with write access could forge the address, and they're trusted to, so the email is enough here.
+// with write access could forge the address, and they're trusted not to, so the email is enough
+// here.
 func readBranch(repo repository, head string) (branch, error) {
 	var result branch
 	if !regexp.MustCompile(`^[0-9a-f]{40}$`).MatchString(head) {

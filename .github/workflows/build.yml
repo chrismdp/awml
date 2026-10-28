@@ -312,6 +312,9 @@ jobs:
       # Claude Code's environment through /proc, offline, and unable to write .git, the runner's files
       # or the baseline the tree is checked against after the session (#131). The scrub forces the
       # permission mode to default, so every tool the session needs is allowed by name.
+      # Everything the host reads once the session is done is in a folder the sandbox denies: the
+      # session's log goes to the host's own folder, opened before the session, and the session's
+      # output folder is read only once it holds nothing but plain files and folders.
       # The step is one { } group, which bash parses whole before it starts, and its sandbox can't
       # write the step's own script, "$0", so nothing a command writes there runs after the session.
       - name: Draft the change
@@ -332,10 +335,10 @@ jobs:
             stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
             echo "::stop-commands::$stop"
             trap 'echo "::$stop::"' EXIT
-            mkdir -p "$RUNNER_TEMP/baseline"
+            mkdir -p "$RUNNER_TEMP/baseline" "$RUNNER_TEMP/host"
             cp .git/config "$RUNNER_TEMP/baseline/git-config"
             stat -c %d:%i "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.git" > "$RUNNER_TEMP/baseline/folders"
-            bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/session/home" "$GITHUB_WORKSPACE" workspace "$RUNNER_TEMP/baseline" "$RUNNER_TEMP/change" "$0"
+            bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/session/home" "$GITHUB_WORKSPACE" workspace "$RUNNER_TEMP/baseline" "$RUNNER_TEMP/change" "$RUNNER_TEMP/host" "$0"
             prompt="$(sed "s|BUILD_DIR|$BUILD_DIR|g" "$RUNNER_TEMP/build-prompt.md")"
             status=0
             HOME="$RUNNER_TEMP/session/home" claude -p "$prompt" --model opus --max-turns 200 --permission-mode default \
@@ -346,8 +349,8 @@ jobs:
                 "Bash(.github/picture-drawings.sh:*)" \
                 "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" \
                 "Bash(ls:*)" "Bash(cp:*)" "Bash(mkdir:*)" \
-              > "$RUNNER_TEMP/draft.log" 2>&1 || status=$?
-            cat "$RUNNER_TEMP/draft.log"
+              > "$RUNNER_TEMP/host/session.log" 2>&1 || status=$?
+            cat "$RUNNER_TEMP/host/session.log"
             exit "$status"
           }
 
@@ -370,15 +373,23 @@ jobs:
             echo "The session left a .git below the top of the tree, which git would take as a submodule, so git isn't run on it."
             exit 1
           fi
+          # The session's own folder is read only if it, and everything in it, is a plain folder or
+          # file where it should be, so no link can lead the host's read anywhere else.
+          out="$RUNNER_TEMP/build"
+          if [ "$(realpath -e "$out" 2> /dev/null)" != "$(realpath -e "$RUNNER_TEMP")/build" ] ||
+            [ -n "$(find "$out" ! -type f ! -type d -print -quit)" ]; then
+            echo "The session's folder holds a link or something else that isn't a plain file or folder, so none of it is read."
+            exit 1
+          fi
           change="$RUNNER_TEMP/change"
           rm -rf "$change"
           mkdir "$change"
           git add -A
           git diff --cached --binary --no-ext-diff --no-textconv > "$change/change.patch"
           for file in message.md pull-request.md; do
-            if [ -f "$RUNNER_TEMP/build/$file" ]; then cp "$RUNNER_TEMP/build/$file" "$change/"; fi
+            if [ -f "$out/$file" ]; then cp "$out/$file" "$change/"; fi
           done
-          if [ -d "$RUNNER_TEMP/build/pictures" ]; then cp -R "$RUNNER_TEMP/build/pictures" "$change/"; fi
+          if [ -d "$out/pictures" ]; then cp -R "$out/pictures" "$change/"; fi
           if [ -s "$change/change.patch" ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else

@@ -1029,6 +1029,7 @@ func TestGitAfterASessionCannotBePoisoned(t *testing.T) {
 			t.Fatal(err)
 		}
 		r.write("baseline/folders", string(folders))
+		r.write("build/issue.md", "# Bake scones\n")
 		r.write(filepath.Join(repo, "recipes.md"), "Bread\nScones\n")
 		pwned := filepath.Join(r.root, "pwned")
 		switch poison {

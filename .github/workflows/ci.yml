@@ -181,7 +181,9 @@ jobs:
       # holds. Its log is shown with workflow commands stopped, so nothing it says can make an
       # annotation of its own.
       # The session's home holds main's sandbox settings, from .github/sandbox-settings.sh, with no
-      # host allowed, though the session runs no commands (#131).
+      # host allowed, though the session runs no commands (#131). Its log goes to the host's own
+      # folder, which the sandbox denies, and its output folder is read only once it holds nothing
+      # but plain files and folders.
       # The step is one { } group, which bash parses whole before it starts, and its sandbox can't
       # write the step's own script, "$0", so nothing a command writes there runs after the session.
       - name: Review the patch
@@ -199,17 +201,18 @@ jobs:
             echo "::stop-commands::$stop"
             trap 'echo "::$stop::"' EXIT
             session="$RUNNER_TEMP/session"
+            host="$RUNNER_TEMP/host"
             chmod -R a-w "$REVIEW_DIR"
-            mkdir -p "$session/home" "$session/out"
-            bash "$RUNNER_TEMP/sandbox-settings.sh" "$session/home" "$GITHUB_WORKSPACE" workspace "$0"
+            mkdir -p "$session/home" "$session/out" "$host"
+            bash "$RUNNER_TEMP/sandbox-settings.sh" "$session/home" "$GITHUB_WORKSPACE" workspace "$0" "$host"
             prompt="$(sed -e "s|REVIEW_DIR|$REVIEW_DIR|g" -e "s|OUT_DIR|$session/out|g" "$RUNNER_TEMP/prompts/$PROMPT")"
             status=0
             HOME="$session/home" claude -p "$prompt" --model opus --max-turns 100 --permission-mode default \
               --setting-sources user --strict-mcp-config --add-dir "$REVIEW_DIR" --add-dir "$session/out" \
               --disallowedTools "Read(//proc/**)" "Bash" "Edit(./.git/**)" "Write(./.git/**)" \
               --allowedTools "Read(./**)" "Read(/$REVIEW_DIR/**)" "Edit(/$session/out/$KIND.json)" \
-              > "$session/log" 2>&1 || status=$?
-            cat "$session/log"
+              > "$host/session.log" 2>&1 || status=$?
+            cat "$host/session.log"
             exit "$status"
           }
 
@@ -228,7 +231,15 @@ jobs:
           KIND: ${{ matrix.review.kind }}
           UNREAD: ${{ steps.bring.outputs.unread }}
         run: |
-          file="$RUNNER_TEMP/session/out/$KIND.json"
+          # The session's own folder is read only if it, and everything in it, is a plain folder or
+          # file where it should be, so no link can lead the host's read anywhere else.
+          out="$RUNNER_TEMP/session/out"
+          if [ "$(realpath -e "$out" 2> /dev/null)" != "$(realpath -e "$RUNNER_TEMP")/session/out" ] ||
+            [ -n "$(find "$out" ! -type f ! -type d -print -quit)" ]; then
+            echo "::error title=No findings::The review's folder holds a link or something else that isn't a plain file or folder, so none of it is read."
+            exit 1
+          fi
+          file="$out/$KIND.json"
           looks_like_token() {
             LC_ALL=C sed -E 's#base64,[A-Za-z0-9+/]+=*##g; s#data-points="[A-Za-z0-9+/]+=*"##g' |
               LC_ALL=C grep -aoiE 'sk-ant-|[A-Za-z0-9_-]{80,}' | grep -iE 'sk-ant-|[0-9]' > /dev/null
@@ -344,7 +355,9 @@ jobs:
       # The session starts as each review's does: in an empty home of its own, reading inputs it
       # can't change, editing only its verdict, in a folder of its own, and running nothing.
       # The session's home holds main's sandbox settings, from .github/sandbox-settings.sh, with no
-      # host allowed, though the session runs no commands (#131).
+      # host allowed, though the session runs no commands (#131). Its log goes to the host's own
+      # folder, which the sandbox denies, and its output folder is read only once it holds nothing
+      # but plain files and folders.
       # The step is one { } group, which bash parses whole before it starts, and its sandbox can't
       # write the step's own script, "$0", so nothing a command writes there runs after the session.
       - name: Sort the change by risk
@@ -361,17 +374,18 @@ jobs:
             echo "::stop-commands::$stop"
             trap 'echo "::$stop::"' EXIT
             session="$RUNNER_TEMP/session"
+            host="$RUNNER_TEMP/host"
             chmod -R a-w "$REVIEW_DIR"
-            mkdir -p "$session/home" "$session/out"
-            bash "$RUNNER_TEMP/sandbox-settings.sh" "$session/home" "$GITHUB_WORKSPACE" workspace "$0"
+            mkdir -p "$session/home" "$session/out" "$host"
+            bash "$RUNNER_TEMP/sandbox-settings.sh" "$session/home" "$GITHUB_WORKSPACE" workspace "$0" "$host"
             prompt="$(sed -e "s|REVIEW_DIR|$REVIEW_DIR|g" -e "s|OUT_DIR|$session/out|g" "$RUNNER_TEMP/prompts/classify-prompt.md")"
             status=0
             HOME="$session/home" claude -p "$prompt" --model opus --max-turns 100 --permission-mode default \
               --setting-sources user --strict-mcp-config --add-dir "$REVIEW_DIR" --add-dir "$session/out" \
               --disallowedTools "Read(//proc/**)" "Bash" "Edit(./.git/**)" "Write(./.git/**)" \
               --allowedTools "Read(./**)" "Read(/$REVIEW_DIR/**)" "Edit(/$session/out/classification.json)" \
-              > "$session/log" 2>&1 || status=$?
-            cat "$session/log"
+              > "$host/session.log" 2>&1 || status=$?
+            cat "$host/session.log"
             exit "$status"
           }
 
@@ -384,7 +398,15 @@ jobs:
         if: always()
         continue-on-error: true
         run: |
-          file="$RUNNER_TEMP/session/out/classification.json"
+          # The session's own folder is read only if it, and everything in it, is a plain folder or
+          # file where it should be, so no link can lead the host's read anywhere else.
+          out="$RUNNER_TEMP/session/out"
+          if [ "$(realpath -e "$out" 2> /dev/null)" != "$(realpath -e "$RUNNER_TEMP")/session/out" ] ||
+            [ -n "$(find "$out" ! -type f ! -type d -print -quit)" ]; then
+            echo "::warning title=No verdict::Classify's folder holds a link or something else that isn't a plain file or folder, so land.yml asks for a review."
+            exit 0
+          fi
+          file="$out/classification.json"
           looks_like_token() {
             LC_ALL=C sed -E 's#base64,[A-Za-z0-9+/]+=*##g; s#data-points="[A-Za-z0-9+/]+=*"##g' |
               LC_ALL=C grep -aoiE 'sk-ant-|[A-Za-z0-9_-]{80,}' | grep -iE 'sk-ant-|[0-9]' > /dev/null

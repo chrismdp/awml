@@ -264,7 +264,9 @@ jobs:
       # namespace of its own, offline, and unable to write another pull request's folder or the
       # workspace's .git (#131). It runs the rebase, git included, in its own clone, and bundles the
       # result. The scrub forces the permission mode to default, so every tool the session needs is
-      # allowed by name. This step runs no git, and holds no GitHub token.
+      # allowed by name. This step runs no git, and holds no GitHub token. Each session's log goes to
+      # the host's own folder, which no session can write, and its output folder is read only once it
+      # holds nothing but plain files and folders.
       # The step is one { } group, which bash parses whole before it starts, and its sandbox can't
       # write the step's own script, "$0", so nothing a command writes there runs after the session.
       - name: Resolve the conflicts
@@ -284,6 +286,8 @@ jobs:
             stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
             echo "::stop-commands::$stop"
             trap 'echo "::$stop::"' EXIT
+            host="$RUNNER_TEMP/host"
+            mkdir -p "$host"
             while IFS=$'\t' read -r number _; do
               root="$RUNNER_TEMP/pr/$number"
               others=()
@@ -292,7 +296,7 @@ jobs:
               done
               bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/pr/$number/home" "$root/work" clone "$0" \
                 "${others[@]}" "$RUNNER_TEMP/main" "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/pulls.tsv" \
-                "$RUNNER_TEMP/check" "$RUNNER_TEMP/resolved"
+                "$RUNNER_TEMP/check" "$RUNNER_TEMP/resolved" "$host"
               prompt="$(sed -e "s|RESOLVE_DIR|$root/in|g" -e "s|OUT_DIR|$root/out|g" -e "s|MAIN_SHA|$MAIN_SHA|g" \
                 "$RUNNER_TEMP/main/resolve-prompt.md")"
               (cd "$root/work" && HOME="$RUNNER_TEMP/pr/$number/home" claude -p "$prompt" --model opus --max-turns 200 --permission-mode default \
@@ -303,8 +307,8 @@ jobs:
                   "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" "Bash(git show:*)" \
                   "Bash(git add:*)" "Bash(git rebase:*)" "Bash(git checkout:*)" "Bash(git bundle create:*)" \
                   "Bash(ls:*)" "Bash(cp:*)" "Bash(mkdir:*)" \
-                > "$root/session.log" 2>&1) || echo "The session on #$number ended with an error."
-              cat "$root/session.log"
+                > "$host/$number.log" 2>&1) || echo "The session on #$number ended with an error."
+              cat "$host/$number.log"
             done < "$RUNNER_TEMP/pulls.tsv"
             exit
           }
@@ -337,18 +341,19 @@ jobs:
             [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]] || continue
             root="$RUNNER_TEMP/pr/$number"
             fresh="$RUNNER_TEMP/check/$number"
-            bundle="$root/out/rebased.bundle"
-            # Only the session's own folder is read: none of the folders on its way may be a link,
-            # and it must resolve inside the pull request's own folder.
-            if [ -L "$RUNNER_TEMP/pr" ] || [ -L "$root" ] || [ -L "$root/out" ] || [ ! -d "$root/out" ] ||
-              [ "$(realpath -e "$root/out")" != "$(realpath -e "$RUNNER_TEMP")/pr/$number/out" ]; then
-              echo "The session on #$number left its output somewhere other than its own folder, so none of it is kept."
+            out="$root/out"
+            bundle="$out/rebased.bundle"
+            # Only the session's own folder is read, and only if it, and everything in it, is a plain
+            # folder or file where it should be, so no link can lead the host's read anywhere else.
+            if [ "$(realpath -e "$out" 2> /dev/null)" != "$(realpath -e "$RUNNER_TEMP")/pr/$number/out" ] ||
+              [ -n "$(find "$out" ! -type f ! -type d -print -quit)" ]; then
+              echo "The session on #$number left a link or something else that isn't a plain file or folder in its folder, or none, so none of it is kept."
               continue
             fi
             mkdir -p "$fresh"
             git init -q "$fresh"
             git -C "$fresh" fetch -q --no-tags "$GITHUB_WORKSPACE" "$MAIN_SHA" "refs/heads/factory-rebase-$number"
-            if [ -f "$bundle" ] && [ ! -L "$bundle" ] &&
+            if [ -f "$bundle" ] &&
               git -C "$fresh" bundle verify -q "$bundle" > /dev/null 2>&1 &&
               git -C "$fresh" fetch -q "$bundle" "HEAD:refs/rebased" &&
               git -C "$fresh" merge-base --is-ancestor "$MAIN_SHA" refs/rebased &&
@@ -364,11 +369,11 @@ jobs:
             else
               echo "The session on #$number left no rebase that sits on main without conflict markers."
             fi
-            if [ -f "$root/out/message.md" ] && [ ! -L "$root/out/message.md" ]; then
-              if looks_like_token < "$root/out/message.md"; then
+            if [ -f "$out/message.md" ]; then
+              if looks_like_token < "$out/message.md"; then
                 echo "Claude's note on #$number carries what looks like a login token, so it isn't kept."
               else
-                cp "$root/out/message.md" "$resolved/$number.md"
+                cp "$out/message.md" "$resolved/$number.md"
               fi
             fi
           done < "$RUNNER_TEMP/pulls.tsv"
