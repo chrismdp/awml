@@ -107,6 +107,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
+          stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+          echo "::stop-commands::$stop"
+          trap 'echo "::$stop::"' EXIT
           cp .github/bring-patch.sh .github/sandbox-settings.sh "$RUNNER_TEMP/"
           bash "$RUNNER_TEMP/bring-patch.sh"
 
@@ -142,6 +145,9 @@ jobs:
           KIND: ${{ matrix.review.kind }}
           PROMPT: ${{ matrix.review.prompt }}
         run: |
+          stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+          echo "::stop-commands::$stop"
+          trap 'echo "::$stop::"' EXIT
           session="$RUNNER_TEMP/session"
           chmod -R a-w "$REVIEW_DIR"
           mkdir -p "$session/home" "$session/out"
@@ -153,10 +159,7 @@ jobs:
             --disallowedTools "Read(//proc/**)" "Bash" "Edit(./.git/**)" "Write(./.git/**)" \
             --allowedTools "Read(./**)" "Read(/$REVIEW_DIR/**)" "Edit(/$session/out/$KIND.json)" \
             > "$session/log" 2>&1 || status=$?
-          stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
-          echo "::stop-commands::$stop"
           cat "$session/log"
-          echo "::$stop::"
           exit "$status"
 
       # The findings must be a list, each ranked, or the check fails with none posted, and findings
@@ -256,6 +259,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
+          stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+          echo "::stop-commands::$stop"
+          trap 'echo "::$stop::"' EXIT
           cp .github/bring-patch.sh .github/read-findings.sh .github/sandbox-settings.sh "$RUNNER_TEMP/"
           bash "$RUNNER_TEMP/bring-patch.sh"
           bash "$RUNNER_TEMP/read-findings.sh" "$GITHUB_RUN_ID" "$RUNNER_TEMP/checks"
@@ -285,6 +291,9 @@ jobs:
           CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
           REVIEW_DIR: ${{ runner.temp }}/review
         run: |
+          stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+          echo "::stop-commands::$stop"
+          trap 'echo "::$stop::"' EXIT
           session="$RUNNER_TEMP/session"
           chmod -R a-w "$REVIEW_DIR"
           mkdir -p "$session/home" "$session/out"
@@ -296,10 +305,7 @@ jobs:
             --disallowedTools "Read(//proc/**)" "Bash" "Edit(./.git/**)" "Write(./.git/**)" \
             --allowedTools "Read(./**)" "Read(/$REVIEW_DIR/**)" "Edit(/$session/out/classification.json)" \
             > "$session/log" 2>&1 || status=$?
-          stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
-          echo "::stop-commands::$stop"
           cat "$session/log"
-          echo "::$stop::"
           exit "$status"
 
       # The verdict must be ship, show or ask with one to five reasons, and carry nothing like the

@@ -256,6 +256,9 @@ jobs:
           PUPPETEER_EXECUTABLE_PATH: /usr/bin/google-chrome
           PUPPETEER_SKIP_DOWNLOAD: "true"
         run: |
+          stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+          echo "::stop-commands::$stop"
+          trap 'echo "::$stop::"' EXIT
           bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/session/home" "$GITHUB_WORKSPACE" builds
           prompt="$(sed "s|BUILD_DIR|$BUILD_DIR|g" "$RUNNER_TEMP/build-prompt.md")"
           status=0
@@ -268,10 +271,7 @@ jobs:
               "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" \
               "Bash(ls:*)" "Bash(cp:*)" "Bash(mkdir:*)" \
             > "$RUNNER_TEMP/draft.log" 2>&1 || status=$?
-          stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
-          echo "::stop-commands::$stop"
           cat "$RUNNER_TEMP/draft.log"
-          echo "::$stop::"
           exit "$status"
 
       # Git runs here with no hooks and no fsmonitor, so nothing the session left in the tree runs.
@@ -378,6 +378,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           CHANGED: ${{ needs.draft.outputs.changed }}
         run: |
+          stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+          echo "::stop-commands::$stop"
+          trap 'echo "::$stop::"' EXIT
           case "$ISSUE" in ''|*[!0-9]*) echo "The issue must be a number: $ISSUE"; exit 1 ;; esac
           cp .github/pull-request-body.sh "$RUNNER_TEMP/pull-request-body.sh"
           run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
@@ -407,7 +410,7 @@ jobs:
           claudes='(^|/)\.claude(/|$)|(^|/)\.mcp\.json$|(^|/)CLAUDE(\.local)?\.md$'
           if git diff --cached --name-only --no-renames -z | grep -zqE "^\.github/|$claudes"; then
             echo "The draft changes files the app never pushes:"
-            git diff --cached --name-only --no-renames -z | grep -zE "^\.github/|$claudes" | tr '\0' '\n'
+            git diff --cached --name-only --no-renames -z | grep -zE "^\.github/|$claudes" | tr '\0' '\n' | jq -R .
             {
               printf '**The draft changes `.github/` or Claude Code'"'"'s own files** (`.claude/`, `.mcp.json` or a `CLAUDE.md`), which the app never pushes, so the build stops here. [The run](%s)\n' "$run_url"
               echo

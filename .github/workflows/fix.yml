@@ -202,6 +202,9 @@ jobs:
           PUPPETEER_EXECUTABLE_PATH: /usr/bin/google-chrome
           PUPPETEER_SKIP_DOWNLOAD: "true"
         run: |
+          stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+          echo "::stop-commands::$stop"
+          trap 'echo "::$stop::"' EXIT
           bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/session/home" "$GITHUB_WORKSPACE" builds
           prompt="$(sed -e "s|FIX_DIR|$FIX_DIR|g" -e "s|OUT_DIR|$OUT_DIR|g" "$RUNNER_TEMP/fix-prompt.md")"
           status=0
@@ -214,10 +217,7 @@ jobs:
               "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" \
               "Bash(ls:*)" "Bash(cp:*)" "Bash(mkdir:*)" \
             > "$RUNNER_TEMP/session.log" 2>&1 || status=$?
-          stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
-          echo "::stop-commands::$stop"
           cat "$RUNNER_TEMP/session.log"
-          echo "::$stop::"
           exit "$status"
 
       # The patch is made against the reviewed commit, with git's hooks and fsmonitor off, so it holds
@@ -309,6 +309,9 @@ jobs:
           CHANGE_DIGEST: ${{ needs.fix.outputs.digest }}
           STOPPED: ${{ needs.fix.outputs.reason }}
         run: |
+          stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+          echo "::stop-commands::$stop"
+          trap 'echo "::$stop::"' EXIT
           case "$PR_NUMBER" in ''|*[!0-9]*) echo "The pull request must be a number: $PR_NUMBER"; exit 1 ;; esac
           if ! [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || ! [[ "$BRANCH" =~ ^[A-Za-z0-9._/-]+$ ]]; then
             echo "The reviewed commit, or its branch, isn't one this workflow handles."
@@ -341,7 +344,7 @@ jobs:
           claudes='(^|/)\.claude(/|$)|(^|/)\.mcp\.json$|(^|/)CLAUDE(\.local)?\.md$'
           if git diff --cached --name-only --no-renames -z | grep -zqE "^\.github/|$claudes"; then
             echo "The fix changes files the app never pushes:"
-            git diff --cached --name-only --no-renames -z | grep -zE "^\.github/|$claudes" | tr '\0' '\n'
+            git diff --cached --name-only --no-renames -z | grep -zE "^\.github/|$claudes" | tr '\0' '\n' | jq -R .
             echo "outcome=offer" >> "$GITHUB_OUTPUT"
             exit 0
           fi

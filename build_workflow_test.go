@@ -848,3 +848,34 @@ func TestTheSandboxSettingsAreExplicit(t *testing.T) {
 		}
 	}
 }
+
+// GitHub runs any line a step prints that starts with ::, so a step that prints text from a patch, a
+// branch or a session, a file's name included, prints it inside ::stop-commands::. Such a step is one
+// that brings in a patch, rebases a branch, starts Claude, or lists a change's files; and a list of
+// names is printed JSON-escaped, so even the end of the stop can't be forged.
+func TestUntrustedTextIsPrintedWithWorkflowCommandsStopped(t *testing.T) {
+	prints := regexp.MustCompile(`bring-patch\.sh"|\brebase\b|claude -p|--name-only`)
+	steps := 0
+	eachJob(t, func(file, name string, job workflowJob) {
+		for _, step := range job.Steps {
+			script := quotedRule.ReplaceAllString(step.Run, "")
+			for _, line := range strings.Split(script, "\n") {
+				if strings.Contains(line, `tr '\0' '\n'`) && !strings.Contains(line, "jq -R") && !strings.Contains(line, "> ") {
+					t.Errorf("%s's %s step %q prints a list of names raw: %s", file, name, step.Name, strings.TrimSpace(line))
+				}
+			}
+			at := prints.FindStringIndex(script)
+			if at == nil {
+				continue
+			}
+			steps++
+			stop := strings.Index(script, `echo "::stop-commands::$stop"`)
+			if stop < 0 || stop > at[0] {
+				t.Errorf("%s's %s step %q prints untrusted text before it stops workflow commands", file, name, step.Name)
+			}
+		}
+	})
+	if steps < 8 {
+		t.Errorf("found %d steps that print untrusted text, fewer than the factory has", steps)
+	}
+}

@@ -15,6 +15,10 @@
 # count of binary files the sessions can't read as `unread` to GITHUB_OUTPUT. Needs gh and jq.
 set -euo pipefail
 
+# A file's name comes from the patch, so it's printed JSON-escaped, where a line break in it can't
+# start a workflow command of its own.
+named() { jq -nr --arg name "$1" '$name | @json'; }
+
 if ! [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
   echo "The head commit isn't a commit id: $HEAD_SHA"
   exit 1
@@ -51,7 +55,7 @@ done < "$review/numstat"
 changed="${#binaries[@]}"
 while IFS=$'\t' read -r kind old; do
   if [[ "$old" == \"* ]]; then
-    echo "The patch renames or copies a file whose name git quotes, which the review can't check: $old"
+    echo "The patch renames or copies a file whose name git quotes, which the review can't check: $(named "$old")"
     exit 1
   fi
   paths+=("$old")
@@ -64,7 +68,7 @@ done < <(awk 'function flush() { for (i = 1; i <= n; i++) print (binary ? "binar
 claudes='(^|/)\.claude(/|$)|(^|/)\.mcp\.json$|(^|/)CLAUDE(\.local)?\.md$'
 refuse() {
   echo "The patch changes Claude Code's own settings, servers or instructions, which a review session would load, so it isn't reviewed:"
-  grep -zE "$claudes" | tr '\0' '\n'
+  grep -zE "$claudes" | jq -Rs 'split("\u0000")[] | select(. != "")'
   exit 1
 }
 if [ "${#paths[@]}" -gt 0 ] && printf '%s\0' "${paths[@]}" | grep -zqE "$claudes"; then
@@ -83,7 +87,7 @@ for binary in "${binaries[@]}"; do
     exit 1
   fi
   if [[ "$binary" == .github/* ]] || ! [[ "$binary" =~ $readable ]]; then
-    echo "The patch changes $binary, which GitHub's diff shows only as binary, so the reviews couldn't read it."
+    echo "The patch changes $(named "$binary"), which GitHub's diff shows only as binary, so the reviews couldn't read it."
     exit 1
   fi
 done
@@ -104,7 +108,7 @@ for path in "${paths[@]}"; do
     [ "$path" = "$binary" ] && continue 2
   done
   if ! grep -qxF -- "$path" <<< "$staged"; then
-    echo "The patch touches $path, but it wasn't applied, so the reviews wouldn't see it."
+    echo "The patch touches $(named "$path"), but it wasn't applied, so the reviews wouldn't see it."
     exit 1
   fi
 done
