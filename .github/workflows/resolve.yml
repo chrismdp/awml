@@ -209,7 +209,7 @@ jobs:
           sudo install -d -o "$(id -u)" -g "$(id -g)" -m 700 "$HOST_DIR"
           mkdir -p "$HOST_DIR/main"
           cp .github/resolve-prompt.md AGENTS.md "$HOST_DIR/main/"
-          cp .github/sandbox-settings.sh "$HOST_DIR/"
+          cp .github/sandbox-settings.sh .github/scrub-placeholders.sh "$HOST_DIR/"
 
       # Each pull request gets a folder of its own: a clone of the branch, its inputs, made
       # read-only, its session's output and its session's home. The clone commits as the app's bot,
@@ -232,12 +232,16 @@ jobs:
           fi
           id="$(gh api "users/awml-factory%5Bbot%5D" --jq .id)"
           case "$id" in ''|*[!0-9]*) echo "The app's bot has no user id: $id"; exit 1 ;; esac
-          git() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 command git -c core.hooksPath=/dev/null -c core.fsmonitor=false "$@"; }
+          git() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_NO_REPLACE_OBJECTS=1 command git -c core.hooksPath=/dev/null -c core.fsmonitor=false "$@"; }
           : > "$HOST_DIR/pulls.tsv"
           mkdir -p "$HOST_DIR/check" "$HOST_DIR/resolved" "$HOST_DIR/logs" "$HOST_DIR/baseline"
           # The workspace, which the check step fetches main and each branch from, must be the very
           # folder it is now, with the same .git, since a session could move a folder above it.
           stat -c %d:%i "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.git" > "$HOST_DIR/baseline/folders"
+          # The sandbox leaves a placeholder for each path its scrub protects that isn't there, in
+          # each session's clone and in the workspace's .git, so which the workspace lacks is
+          # recorded, for the check step to clean before it fetches from it.
+          bash "$HOST_DIR/scrub-placeholders.sh" before "$GITHUB_WORKSPACE" "$HOST_DIR/baseline/absent"
           while IFS=$'\t' read -r number head_sha; do
             case "$number" in ''|*[!0-9]*) continue ;; esac
             [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]] || continue
@@ -251,6 +255,10 @@ jobs:
             git -C "$root/work" config core.hooksPath /dev/null
             git -C "$root/work" config core.fsmonitor false
             git -C "$root/work" config core.editor true
+            # The clone gets the stand-ins node and git need, and its info/exclude names every path
+            # the sandbox may leave a placeholder at, so the session's git add commits none.
+            bash "$HOST_DIR/scrub-placeholders.sh" exclude "$root/work"
+            bash "$HOST_DIR/scrub-placeholders.sh" before "$root/work" "$root/absent" standin
             base="$(git merge-base "$head_sha" "$MAIN_SHA")"
             git log --oneline "$base..$head_sha" > "$root/in/branch-log.txt"
             git log --oneline "$base..$MAIN_SHA" > "$root/in/main-log.txt"
@@ -314,9 +322,10 @@ jobs:
               for other in "$HOST_DIR"/pr-*; do
                 if [ "$other" != "$root" ]; then others+=("$other"); fi
               done
-              bash "$HOST_DIR/sandbox-settings.sh" "$HOST_DIR/pr-$number/home" "$root/work" clone "$0" \
+              bash "$HOST_DIR/sandbox-settings.sh" "$HOST_DIR/pr-$number/home" "$0" \
                 "${others[@]}" "$HOST_DIR/main" "$HOST_DIR/sandbox-settings.sh" "$HOST_DIR/pulls.tsv" \
-                "$HOST_DIR/check" "$HOST_DIR/resolved" "$HOST_DIR/logs" "$HOST_DIR/baseline"
+                "$HOST_DIR/check" "$HOST_DIR/resolved" "$HOST_DIR/logs" "$HOST_DIR/baseline" \
+                "$HOST_DIR/scrub-placeholders.sh"
               prompt="$(sed -e "s|RESOLVE_DIR|$root/in|g" -e "s|OUT_DIR|$root/out|g" -e "s|MAIN_SHA|$MAIN_SHA|g" \
                 "$HOST_DIR/main/resolve-prompt.md")"
               (cd "$root/work" && HOME="$HOST_DIR/pr-$number/home" claude -p "$prompt" --model opus --max-turns 200 --permission-mode default \
@@ -348,7 +357,7 @@ jobs:
           stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
           echo "::stop-commands::$stop"
           trap 'echo "::$stop::"' EXIT
-          git() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 command git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c diff.external= "$@"; }
+          git() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_NO_REPLACE_OBJECTS=1 command git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c diff.external= "$@"; }
           # The long runs go to a file of their own, read whole, and are searched there: no grep
           # stops early in a pipe, so nothing feeding it dies of SIGPIPE and reads as no token.
           looks_like_token() {
@@ -362,6 +371,8 @@ jobs:
             echo "The workspace or its .git isn't the folder it was before the sessions, so nothing is fetched from it."
             exit 1
           fi
+          # The sandbox's placeholders in the workspace's .git go before git reads it.
+          bash "$HOST_DIR/scrub-placeholders.sh" after "$GITHUB_WORKSPACE" "$HOST_DIR/baseline/absent"
           resolved="$HOST_DIR/resolved"
           mkdir -p "$resolved"
           digests='{}'
