@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 // land.yml runs main's code when CI finishes, never the branch's: its find job reads with a token
@@ -274,6 +276,22 @@ func TestLandShipsShowsOrAsks(t *testing.T) {
 		b.run(write, broken, "")
 		if !b.failed {
 			t.Errorf("the land job took %v from the find job", bad)
+		}
+	}
+}
+
+// npm's and yarn's settings and a committed node_modules change what npm runs, so the build rule
+// asks a person about a change to any of them.
+func TestTheBuildRuleAsksAboutNpmsOwnFiles(t *testing.T) {
+	var rules struct {
+		ReviewPaths []string `yaml:"review_paths"`
+	}
+	if err := yaml.Unmarshal([]byte(readText(t, ".github/build-rules.yml")), &rules); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{".npmrc", ".yarnrc", ".yarnrc.yml", "node_modules/"} {
+		if !contains(rules.ReviewPaths, path) {
+			t.Errorf("the build rule doesn't ask about %s", path)
 		}
 	}
 }

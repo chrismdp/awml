@@ -231,13 +231,18 @@ func TestNothingInTheFactoryUsesAutoMerge(t *testing.T) {
 }
 
 // Installing Claude Code, at an exact version, and filling a session's caches before it starts, by
-// fetching alone: go mod download runs no module's code, and npx with npm's scripts off runs only
-// true. Neither runs anything from the change.
+// fetching alone: go mod download from the module proxy alone, with no version control to fall back
+// on, runs no module's code, and npx with npm's scripts off, from an empty folder, reading no npm
+// config but its own and naming npm's registry, runs only true. So nothing in the tree, an .npmrc or
+// a node_modules of its own, can make either run anything.
 var claudeInstall = regexp.MustCompile(`npm install -g @anthropic-ai/claude-code@[0-9]+\.[0-9]+\.[0-9]+\n`)
-var moduleFetch = regexp.MustCompile(`(?m)^.*(go mod download|npm_config_ignore_scripts=true npx --yes (-p \S+ )+-- true)$`)
+var moduleFetch = regexp.MustCompile(`(?m)^.*HOME="[^"]+" GOTOOLCHAIN=local GOPROXY=https://proxy\.golang\.org GOVCS='\*:off' go mod download\)?$|` +
+	`^\s*\(cd "\$\(mktemp -d\)" && HOME="[^"]+" npm_config_userconfig=/dev/null npm_config_globalconfig=/dev/null ` +
+	`npm_config_registry=https://registry\.npmjs\.org/ PUPPETEER_SKIP_DOWNLOAD=true npm_config_ignore_scripts=true npx --yes (-p \S+ )+-- true\)$`)
 
 // A command a script runs, at the start of a line or after ;, &&, || or a pipe.
-var commandWord = regexp.MustCompile(`(?m)(?:^|[;&|(]\s*|\$\(\s*)(go|make|node|npx|npm)\s`)
+// Variables set in front of the command don't hide it.
+var commandWord = regexp.MustCompile(`(?m)(?:^|[;&|(]\s*|\$\(\s*)(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*(go|make|node|npx|npm)\s`)
 
 // No job that holds Claude's login token runs anything outside Claude's sandbox: the runner has
 // sudo, and its memory holds the job's secrets, so the change's code, its tests among them, runs
@@ -828,8 +833,11 @@ func TestTheSandboxSettingsAreExplicit(t *testing.T) {
 			}
 		}
 		home := filepath.Join(r.temp, "session", "home")
+		onPath := filepath.Join(r.root, "tools", "bin")
+		gopath := filepath.Join(r.root, "gopath")
 		r.run(workflowStep{Run: `bash "$RUNNER_TEMP/sandbox-settings.sh" "$SESSION" "$TREE" ` + kind + ` "$OTHER"` + "\n"},
-			map[string]string{"SESSION": home, "TREE": tree, "GITHUB_WORKSPACE": workspace, "RUNNER_TOOL_CACHE": tools, "OTHER": other}, "")
+			map[string]string{"SESSION": home, "TREE": tree, "GITHUB_WORKSPACE": workspace, "RUNNER_TOOL_CACHE": tools, "OTHER": other,
+				"PATH": onPath + ":" + os.Getenv("PATH"), "GOPATH": gopath}, "")
 		r.mustPass()
 		var settings struct {
 			Sandbox struct {
@@ -861,7 +869,8 @@ func TestTheSandboxSettingsAreExplicit(t *testing.T) {
 		if box.Network.AllowedDomains == nil || len(box.Network.AllowedDomains) != 0 {
 			t.Errorf("%s: the sandbox allows hosts %v, want none", kind, box.Network.AllowedDomains)
 		}
-		for _, denied := range []string{workspace + "/.git", r.root + "/runners", tools, r.root + "/.gitconfig", r.root + "/.config", other} {
+		for _, denied := range []string{workspace + "/.git", r.root + "/runners", tools, r.root + "/.gitconfig", r.root + "/.config", other,
+			onPath, gopath + "/bin"} {
 			if !contains(box.Filesystem.DenyWrite, denied) {
 				t.Errorf("%s: the sandbox lets commands write %s: %v", kind, denied, box.Filesystem.DenyWrite)
 			}
@@ -933,10 +942,10 @@ func TestTheBuildingSessionsRunOffline(t *testing.T) {
 			if _, holds := step.Env["CLAUDE_CODE_OAUTH_TOKEN"]; holds {
 				continue
 			}
-			if regexp.MustCompile(`HOME="[^"]+" GOTOOLCHAIN=local go mod download`).MatchString(step.Run) {
+			if regexp.MustCompile(`HOME="[^"]+" GOTOOLCHAIN=local GOPROXY=https://proxy\.golang\.org GOVCS='\*:off' go mod download`).MatchString(step.Run) {
 				fetched = true
 			}
-			if strings.Contains(step.Run, "npm_config_ignore_scripts=true npx --yes "+render[1]+"-- true") {
+			if strings.Contains(step.Run, `(cd "$(mktemp -d)" && `) && strings.Contains(step.Run, "npm_config_ignore_scripts=true npx --yes "+render[1]+"-- true)") {
 				rendered = true
 			}
 		}
@@ -955,22 +964,31 @@ func TestTheBuildingSessionsRunOffline(t *testing.T) {
 }
 
 // After a session, git runs on its tree only if .git/config is byte for byte the copy taken before
-// the session, with no global or system config, no hooks, no fsmonitor, no external diff and no
-// textconv, in a step that doesn't hold Claude's token. So nothing a session's commands left in .git
-// can make the host's git run it.
+// the session, the workspace and its .git are the very folders they were, and no .git is nested
+// below the top, which git add -A would take as a gitlink. The copy and the folders' identities are
+// kept in a folder the sandbox denies. Git runs with no global or system config, no hooks, no
+// fsmonitor, no external diff and no textconv, in a step that doesn't hold Claude's token. So
+// nothing a session's commands left in .git can make the host's git run it.
 func TestGitAfterASessionCannotBePoisoned(t *testing.T) {
 	for _, at := range []struct{ file, job string }{{"build.yml", "draft"}, {"fix.yml", "fix"}} {
 		job := readFactoryWorkflow(t, at.file).Jobs[at.job]
 		i := job.session()
 		session := job.Steps[i].Run
-		if c := strings.Index(session, `cp .git/config "$RUNNER_TEMP/git-config"`); c < 0 || c > strings.Index(session, "claude -p") {
-			t.Errorf("%s's %s doesn't keep .git/config before its session", at.file, at.job)
+		claude := strings.Index(session, "claude -p")
+		for _, kept := range []string{`cp .git/config "$RUNNER_TEMP/baseline/git-config"`,
+			`stat -c %d:%i "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.git" > "$RUNNER_TEMP/baseline/folders"`} {
+			if c := strings.Index(session, kept); c < 0 || c > claude {
+				t.Errorf("%s's %s doesn't keep %s before its session", at.file, at.job, kept)
+			}
+		}
+		if settings := sandboxSettings.FindString(session); !strings.Contains(settings, `"$RUNNER_TEMP/baseline"`) {
+			t.Errorf("%s's %s session can write the baseline its tree is checked against: %s", at.file, at.job, settings)
 		}
 		patch, _ := job.step(t, "patch")
 		if _, holds := patch.Env["CLAUDE_CODE_OAUTH_TOKEN"]; holds {
 			t.Errorf("%s's %s makes the patch beside Claude's token", at.file, at.job)
 		}
-		for _, want := range []string{`cmp -s .git/config "$RUNNER_TEMP/git-config"`, "GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 command git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c diff.external=",
+		for _, want := range []string{`cmp -s .git/config "$RUNNER_TEMP/baseline/git-config"`, "GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 command git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c diff.external=",
 			"--no-ext-diff --no-textconv"} {
 			if !strings.Contains(patch.Run, want) {
 				t.Errorf("%s's %s patch step lacks %s", at.file, at.job, want)
@@ -979,25 +997,44 @@ func TestGitAfterASessionCannotBePoisoned(t *testing.T) {
 	}
 
 	patch, _ := readFactoryWorkflow(t, "build.yml").Jobs["draft"].step(t, "patch")
-	for _, poisoned := range []bool{false, true} {
+	for _, poison := range []string{"", "config", "moved .git", "nested .git"} {
 		r := newRehearsal(t)
 		repo, _ := r.newRepo("repo", map[string]string{"recipes.md": "Bread\n", ".gitattributes": "*.md diff=bake filter=bake\n"})
-		r.write("git-config", readText(t, filepath.Join(repo, ".git/config")))
+		r.write("baseline/git-config", readText(t, filepath.Join(repo, ".git/config")))
+		folders, err := exec.Command("stat", "-c", "%d:%i", repo, filepath.Join(repo, ".git")).Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		r.write("baseline/folders", string(folders))
 		r.write(filepath.Join(repo, "recipes.md"), "Bread\nScones\n")
 		pwned := filepath.Join(r.root, "pwned")
-		if poisoned {
+		switch poison {
+		case "config":
 			gitIn(t, repo, "config", "diff.external", "touch "+pwned+";")
 			gitIn(t, repo, "config", "filter.bake.clean", "touch "+pwned+"; cat")
+		case "moved .git":
+			if err := os.Rename(filepath.Join(repo, ".git"), filepath.Join(r.root, "old.git")); err != nil {
+				t.Fatal(err)
+			}
+			if out, err := exec.Command("cp", "-a", filepath.Join(r.root, "old.git"), filepath.Join(repo, ".git")).CombinedOutput(); err != nil {
+				t.Fatalf("%v: %s", err, out)
+			}
+		case "nested .git":
+			inner := filepath.Join(repo, "examples", "inner")
+			gitIn(t, r.root, "init", "-q", inner)
+			r.write(filepath.Join(inner, "notes.md"), "Inner\n")
+			gitIn(t, inner, "add", "-A")
+			gitIn(t, inner, "commit", "-qm", "An inner repository")
 		}
 		r.dir = repo
-		r.run(patch, nil, "")
+		r.run(patch, map[string]string{"GITHUB_WORKSPACE": repo}, "")
 		if _, err := os.Stat(pwned); err == nil {
 			t.Error("git after the session ran a command a session left in .git/config")
 		}
-		if poisoned && (!r.failed || r.read("change/change.patch") != "") {
-			t.Errorf("git ran on a tree whose .git/config the session changed:\n%s", r.printed)
+		if poison != "" && (!r.failed || r.read("change/change.patch") != "") {
+			t.Errorf("git ran on a tree a session changed by %s:\n%s", poison, r.printed)
 		}
-		if !poisoned {
+		if poison == "" {
 			r.mustPass()
 			if !strings.Contains(r.read("change/change.patch"), "+Scones") {
 				t.Errorf("the patch doesn't hold the change:\n%s", r.read("change/change.patch"))
@@ -1042,7 +1079,7 @@ func TestResolveRunsNoGitBesideClaudesToken(t *testing.T) {
 // can't change what runs.
 func TestEveryActionIsPinnedToACommit(t *testing.T) {
 	pinned := regexp.MustCompile(`^\s*(- )?uses: [a-z0-9-]+/[a-z0-9-]+@[0-9a-f]{40} # v[0-9]+\.[0-9]+\.[0-9]+$`)
-	for _, file := range factoryFiles {
+	for _, file := range append(append([]string{}, factoryFiles...), "release.yml") {
 		for _, line := range strings.Split(readText(t, ".github/workflows/"+file), "\n") {
 			if strings.Contains(line, "uses:") && !pinned.MatchString(line) {
 				t.Errorf("%s uses an action not pinned to a commit: %s", file, strings.TrimSpace(line))

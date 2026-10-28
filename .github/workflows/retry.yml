@@ -102,15 +102,16 @@ jobs:
             exit 0
           fi
           # Said once: only when the failed run is on the commit the last build pushed, a build
-          # commit, not a fix, made since that build started. A later failure, of a fix commit or a
-          # rerun of an older commit, has been told already.
+          # commit, not a fix, written since that build started, by its author date, which resolve.yml
+          # keeps when it moves the branch. A later failure, of a fix commit or a rerun of an older
+          # commit, has been told already.
           last="$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows/build.yml/runs?created=%3E%3D$labelled&per_page=100" \
             --jq '.workflow_runs[]' |
             jq -rs --arg title "Build of issue $issue" \
               '[.[] | select(.display_title == $title and .head_branch == "main" and (.event | IN("issues", "workflow_dispatch")))]
                 | map(.created_at) | sort | last // ""')"
           commit="$(gh api "repos/$GITHUB_REPOSITORY/commits/$head_sha")"
-          if jq -e --arg last "$last" '.commit.committer.date >= $last and
+          if jq -e --arg last "$last" '.commit.author.date >= $last and
               ([.commit.message | split("\n")[] | rtrimstr("\r")] | index("Fixed-by: fix-review-findings") | not)' \
               <<< "$commit" > /dev/null; then
             echo "decision=report" >> "$GITHUB_OUTPUT"

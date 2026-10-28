@@ -279,7 +279,8 @@ func openGuard(t *testing.T, changed bool, message string, change func(r *rehear
 // stops. A draft that changed nothing posts Claude's message, cleaned, and one that no longer
 // applies to main says so. Anything else goes on to the push, with no comment.
 func TestTheBuildOffersAChangeToGithubAndStops(t *testing.T) {
-	for _, path := range []string{".github/workflows/ci.yml", ".github/build-prompt.md", "CLAUDE.md", "docs/.claude/settings.json"} {
+	for _, path := range []string{".github/workflows/ci.yml", ".github/build-prompt.md", "CLAUDE.md", "docs/.claude/settings.json",
+		".npmrc", "examples/.yarnrc.yml", "node_modules/@mermaid-js/mermaid-cli/index.js"} {
 		r := openGuard(t, true, "Change the workflow\n", func(r *rehearsal, repo string) {
 			r.write(filepath.Join(repo, path), "changed\n")
 		})
@@ -408,15 +409,35 @@ func TestTheBuildPushesWithALease(t *testing.T) {
 func TestTheDescriptionClosesOnlyItsIssue(t *testing.T) {
 	r := newRehearsal(t)
 	r.write("pull-request-body.sh", readText(t, ".github/pull-request-body.sh"))
-	r.write("change/pull-request.md", "Closes #7. This fixes owner/repo#8, and Resolved: #9, and fixed  #10. It mentions issue #11.\n")
+	r.write("change/pull-request.md", "Closes #7. This fixes owner/repo#8, and Resolved: #9, and fixed  #10. It mentions issue #11. "+
+		"Closes https://github.com/owner/repo/issues/12, fixes https://github.com/owner/repo/pull/13.\n")
 	r.run(workflowStep{Run: `bash "$RUNNER_TEMP/pull-request-body.sh"`}, map[string]string{"ISSUE": "120", "CHANGE_DIR": filepath.Join(r.temp, "change")}, "")
 	r.mustPass()
-	closing := regexp.MustCompile(`(?i)\b(close[sd]?|fix(e[sd])?|resolve[sd]?)\b[:\s]+(\S+/\S+)?#[0-9]`)
+	closing := regexp.MustCompile(`(?i)\b(close[sd]?|fix(e[sd])?|resolve[sd]?)\b[:\s]+((\S+/\S+)?#|https?://\S+/(issues|pull)/)[0-9]`)
 	found := closing.FindAllString(r.printed, -1)
 	if len(found) != 1 || !strings.HasSuffix(strings.TrimSpace(r.printed), "Closes #120") {
 		t.Errorf("the description closes %q, want only Closes #120:\n%s", found, r.printed)
 	}
 	if !strings.Contains(r.printed, "issue #11") {
 		t.Errorf("the description broke a mention of an issue that closes nothing:\n%s", r.printed)
+	}
+}
+
+// The pull request's title is Claude's first line, and a squash makes it the subject of the commit on
+// main, so a closing keyword in it is broken as the description's are, and so is a mention.
+func TestTheTitleClosesNothing(t *testing.T) {
+	r := newRehearsal(t)
+	r.write("pull-request-body.sh", readText(t, ".github/pull-request-body.sh"))
+	r.write("change/message.md", "Closes #7 and fixes https://github.com/owner/repo/issues/8 for @someone\n\nWhy.\n")
+	r.run(workflowStep{Run: `bash "$RUNNER_TEMP/pull-request-body.sh" title`}, map[string]string{"ISSUE": "120", "CHANGE_DIR": filepath.Join(r.temp, "change")}, "")
+	r.mustPass()
+	title := strings.TrimSpace(r.printed)
+	closing := regexp.MustCompile(`(?i)\b(close[sd]?|fix(e[sd])?|resolve[sd]?)\b[:\s]+((\S+/\S+)?#|https?://\S+/(issues|pull)/)[0-9]`)
+	if strings.Contains(title, "\n") || closing.MatchString(title) || strings.Contains(title, "@someone") || !strings.HasPrefix(title, "Closes #") {
+		t.Errorf("the title is %q, which can close an issue or mention someone", title)
+	}
+	pull, _ := readBuildWorkflow(t)["open"].step(t, "pull")
+	if !strings.Contains(pull.Run, `title="$("$RUNNER_TEMP/pull-request-body.sh" title)"`) {
+		t.Error("the open job doesn't take the title from main's pull-request-body.sh")
 	}
 }

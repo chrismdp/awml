@@ -193,6 +193,9 @@ func gitRebase(dir, onto string) error {
 // the find job holds it back before any rebase, Claude's included, and the push job says so in the
 // pull request's one comment.
 func TestResolveHoldsBackABranchThatTouchesGithub(t *testing.T) {
+	for _, path := range []string{".npmrc", "node_modules/x/index.js"} {
+		holdsBack(t, path)
+	}
 	find, _ := readFactoryWorkflow(t, "resolve.yml").Jobs["find"].step(t, "find")
 	r := newRehearsal(t)
 	origin, main, _, _ := resolveRepo(t, r)
@@ -223,5 +226,69 @@ func TestResolveHoldsBackABranchThatTouchesGithub(t *testing.T) {
 		`  "pr comment "*) ;;`)
 	if bodies := p.bodies(); len(bodies) != 1 || !strings.Contains(bodies[0], "never pushes") {
 		t.Errorf("the push job said %q, want that the app never pushes .github/", bodies)
+	}
+}
+
+// holdsBack checks that the find job holds back a branch that changes the path given, which the app
+// never pushes.
+func holdsBack(t *testing.T, path string) {
+	t.Helper()
+	find, _ := readFactoryWorkflow(t, "resolve.yml").Jobs["find"].step(t, "find")
+	r := newRehearsal(t)
+	origin, main, _, _ := resolveRepo(t, r)
+	gitIn(t, origin, "switch", "-q", "-c", "npm", main+"^")
+	r.write(filepath.Join(origin, path), "registry=https://example.com/\n")
+	r.write(filepath.Join(origin, "recipes.md"), "Muffins\n")
+	gitIn(t, origin, "add", "-A")
+	gitIn(t, origin, "commit", "-qm", "npm's settings and muffins")
+	head := gitIn(t, origin, "rev-parse", "HEAD")
+	gitIn(t, origin, "switch", "-q", "main")
+	work := filepath.Join(r.root, "work")
+	gitIn(t, r.root, "clone", "-q", "--branch", "main", origin, work)
+	r.dir = work
+	r.run(find, map[string]string{"GITHUB_SHA": main}, `
+  "api users/awml-factory%5Bbot%5D --jq .id") echo 41 ;;
+  "api --paginate repos/owner/repo/pulls?state=open&per_page=100 --jq .[].number") printf '9\n' ;;`+
+		resolvePull("9", "npm", head))
+	r.mustPass()
+	if !strings.Contains(r.outputs["pulls"], `"held":true`) {
+		t.Errorf("the find job didn't hold back a branch that changes %s: %v", path, r.outputs)
+	}
+}
+
+// A session's bundle and note are read only from its own output folder: if that folder, or any
+// folder above it, has become a symbolic link, or it resolves anywhere but inside the pull request's
+// own folder, nothing of the session's is kept.
+func TestResolveReadsOnlyTheSessionsOwnFolder(t *testing.T) {
+	check, _ := readFactoryWorkflow(t, "resolve.yml").Jobs["draft"].step(t, "check")
+	head := strings.Repeat("ab", 20)
+	for _, how := range []string{"out", "root"} {
+		r := newRehearsal(t)
+		elsewhere := filepath.Join(r.root, "elsewhere")
+		r.write(filepath.Join(elsewhere, "out", "message.md"), "Forged.\n")
+		r.write(filepath.Join(elsewhere, "out", "rebased.bundle"), "not a bundle\n")
+		root := filepath.Join(r.temp, "pr", "9")
+		switch how {
+		case "out":
+			if err := os.MkdirAll(root, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(filepath.Join(elsewhere, "out"), filepath.Join(root, "out")); err != nil {
+				t.Fatal(err)
+			}
+		case "root":
+			if err := os.MkdirAll(filepath.Dir(root), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(elsewhere, root); err != nil {
+				t.Fatal(err)
+			}
+		}
+		r.write("pulls.tsv", "9\t"+head+"\n")
+		r.run(check, map[string]string{"MAIN_SHA": strings.Repeat("cd", 20), "GITHUB_WORKSPACE": filepath.Join(r.root, "nowhere")}, "")
+		r.mustPass()
+		if entries, _ := os.ReadDir(filepath.Join(r.temp, "resolved")); len(entries) != 0 {
+			t.Errorf("with %s a symbolic link, the check kept %d of the session's files", how, len(entries))
+		}
 	}
 }

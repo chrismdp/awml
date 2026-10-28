@@ -225,17 +225,20 @@ jobs:
           done | tail -n 300 > "$RUNNER_TEMP/build/failed.md"
 
       # The session runs offline, so nothing it runs can carry data out through a proxy. Its home's
-      # Go module cache is filled here, before it starts, by fetching alone: go mod download runs no
-      # module's code. The renderer's packages, at the versions examples/render.sh asks for, go into
-      # npm's cache the same way, with their scripts off, so npx runs only true. A draft that needs
-      # a module or package not fetched here fails, which the prompt says.
+      # Go module cache is filled here, before it starts, by fetching alone: go mod download, from the
+      # module proxy alone with no version control to fall back on, runs no module's code. The
+      # renderer's packages, at the versions examples/render.sh asks for, go into npm's cache the
+      # same way, with their scripts off, from an empty folder, reading no npm config but naming
+      # npm's registry, so nothing in the tree, an .npmrc or a node_modules, changes what npx runs,
+      # which is only true. A draft that needs a module or package not fetched here fails, which the
+      # prompt says.
       - name: Fill the session's Go module and npm caches, by fetching alone
         id: caches
         run: |
           home="$RUNNER_TEMP/session/home"
           mkdir -p "$home"
-          HOME="$home" GOTOOLCHAIN=local go mod download
-          HOME="$home" PUPPETEER_SKIP_DOWNLOAD=true npm_config_ignore_scripts=true npx --yes -p @mermaid-js/mermaid-cli@11.4.1 -p mermaid@11.17.2 -- true
+          HOME="$home" GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOVCS='*:off' go mod download
+          (cd "$(mktemp -d)" && HOME="$home" npm_config_userconfig=/dev/null npm_config_globalconfig=/dev/null npm_config_registry=https://registry.npmjs.org/ PUPPETEER_SKIP_DOWNLOAD=true npm_config_ignore_scripts=true npx --yes -p @mermaid-js/mermaid-cli@11.4.1 -p mermaid@11.17.2 -- true)
 
       # Claude Code runs its commands in a sandbox, bubblewrap with socat for its network, so that it
       # can scrub its login token from them, and they can't start without both. Ubuntu's runners
@@ -258,10 +261,9 @@ jobs:
       # shown with workflow commands stopped.
       # Its commands run in Claude Code's sandbox, set in the user settings of a home of its own by
       # main's .github/sandbox-settings.sh: each in a PID namespace of its own, where it can't read
-      # Claude Code's environment through /proc, with no route out but to the Go module proxy, its
-      # checksum database and npm's registry, and no write to .git or the runner's files (#131). The
-      # scrub forces the permission mode to default, so every tool the session needs is allowed by
-      # name.
+      # Claude Code's environment through /proc, offline, and unable to write .git, the runner's files
+      # or the baseline the tree is checked against after the session (#131). The scrub forces the
+      # permission mode to default, so every tool the session needs is allowed by name.
       - name: Draft the change
         id: draft
         env:
@@ -279,8 +281,10 @@ jobs:
           stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
           echo "::stop-commands::$stop"
           trap 'echo "::$stop::"' EXIT
-          bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/session/home" "$GITHUB_WORKSPACE" workspace
-          cp .git/config "$RUNNER_TEMP/git-config"
+          mkdir -p "$RUNNER_TEMP/baseline"
+          cp .git/config "$RUNNER_TEMP/baseline/git-config"
+          stat -c %d:%i "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.git" > "$RUNNER_TEMP/baseline/folders"
+          bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/session/home" "$GITHUB_WORKSPACE" workspace "$RUNNER_TEMP/baseline"
           prompt="$(sed "s|BUILD_DIR|$BUILD_DIR|g" "$RUNNER_TEMP/build-prompt.md")"
           status=0
           HOME="$RUNNER_TEMP/session/home" claude -p "$prompt" --model opus --max-turns 200 --permission-mode default \
@@ -302,8 +306,16 @@ jobs:
         id: patch
         run: |
           git() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 command git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c diff.external= "$@"; }
-          if ! cmp -s .git/config "$RUNNER_TEMP/git-config" || [ -e .git/config.worktree ]; then
+          if ! cmp -s .git/config "$RUNNER_TEMP/baseline/git-config" || [ -e .git/config.worktree ]; then
             echo "The session's tree has a .git config other than the one it started with, so git isn't run on it."
+            exit 1
+          fi
+          if [ "$(stat -c %d:%i "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.git")" != "$(cat "$RUNNER_TEMP/baseline/folders")" ]; then
+            echo "The workspace or its .git isn't the folder it was before the session, so git isn't run on it."
+            exit 1
+          fi
+          if [ -n "$(find . -path ./.git -prune -o -name .git -print -quit)" ]; then
+            echo "The session left a .git below the top of the tree, which git would take as a submodule, so git isn't run on it."
             exit 1
           fi
           change="$RUNNER_TEMP/change"
@@ -449,12 +461,12 @@ jobs:
               "$run_url" > "$RUNNER_TEMP/said.md"
             say stale
           fi
-          claudes='(^|/)\.claude(/|$)|(^|/)\.mcp\.json$|(^|/)CLAUDE(\.local)?\.md$'
+          claudes='(^|/)\.claude(/|$)|(^|/)\.mcp\.json$|(^|/)CLAUDE(\.local)?\.md$|(^|/)\.npmrc$|(^|/)\.yarnrc(\.yml)?$|(^|/)node_modules(/|$)'
           if git diff --cached --name-only --no-renames -z | grep -zqE "^\.github/|$claudes"; then
             echo "The draft changes files the app never pushes:"
             git diff --cached --name-only --no-renames -z | grep -zE "^\.github/|$claudes" | tr '\0' '\n' | jq -R .
             {
-              printf '**The draft changes `.github/` or Claude Code'"'"'s own files** (`.claude/`, `.mcp.json` or a `CLAUDE.md`), which the app never pushes, so the build stops here. [The run](%s)\n' "$run_url"
+              printf '**The draft changes `.github/`, Claude Code'"'"'s own files** (`.claude/`, `.mcp.json` or a `CLAUDE.md`) **or npm'"'"'s** (`.npmrc`, `.yarnrc` or `node_modules/`), which the app never pushes, so the build stops here. [The run](%s)\n' "$run_url"
               echo
               echo "To look at it and apply it, in a checkout of \`main\` at $GITHUB_SHA, the commit it was drafted on:"
               echo
@@ -622,7 +634,6 @@ jobs:
           fi
           export MEDIA_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/raw/factory-media/issue-$ISSUE/run-$GITHUB_RUN_ID"
           "$RUNNER_TEMP/pull-request-body.sh" > "$RUNNER_TEMP/pull-request.md"
-          title="$(head -n 1 "$CHANGE_DIR/message.md" 2> /dev/null | cut -c 1-200 | sed 's/@\([A-Za-z0-9]\)/@\xe2\x80\x8b\1/g' || true)"
-          [ -n "$title" ] || title="Build #$ISSUE"
+          title="$("$RUNNER_TEMP/pull-request-body.sh" title)"
           gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$BRANCH" \
             --title "$title" --body-file "$RUNNER_TEMP/pull-request.md"

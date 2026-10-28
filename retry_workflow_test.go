@@ -6,7 +6,7 @@ import (
 )
 
 func retryAnswers(test, review, branchSha, edited string, labels []string, builds int, renamed ...string) string {
-	return retryAnswersOn(`{"commit": {"message": "Bake scones\n\nCloses #120", "committer": {"date": "2026-10-27T13:05:00Z"}}}`,
+	return retryAnswersOn(`{"commit": {"message": "Bake scones\n\nCloses #120", "author": {"date": "2026-10-27T13:05:00Z"}, "committer": {"date": "2026-10-27T13:05:00Z"}}}`,
 		test, review, branchSha, edited, labels, builds, renamed...)
 }
 
@@ -54,9 +54,11 @@ func TestRetryActsWhenTheTestsFailAndCountsTheBuilds(t *testing.T) {
 		{"a moved branch", retryAnswers("failure", "success", strings.Repeat("cd", 20), "", []string{"build"}, 1), "none"},
 		{"the label taken off", retryAnswers("failure", "success", head, "", []string{"tool"}, 1), "none"},
 		{"a fork's run", fromAFork(retryAnswers("failure", "success", head, "", []string{"build"}, 1)), "none"},
-		{"a fix commit after the third build", retryAnswersOn(`{"commit": {"message": "Fix\n\nFixed-by: fix-review-findings", "committer": {"date": "2026-10-27T13:30:00Z"}}}`,
+		{"a fix commit after the third build", retryAnswersOn(`{"commit": {"message": "Fix\n\nFixed-by: fix-review-findings", "author": {"date": "2026-10-27T13:30:00Z"}, "committer": {"date": "2026-10-27T13:30:00Z"}}}`,
 			"failure", "success", head, "", []string{"build"}, 3), "none"},
-		{"a commit from before the third build", retryAnswersOn(`{"commit": {"message": "Bake scones", "committer": {"date": "2026-10-27T12:30:00Z"}}}`,
+		{"a commit from before the third build", retryAnswersOn(`{"commit": {"message": "Bake scones", "author": {"date": "2026-10-27T12:30:00Z"}, "committer": {"date": "2026-10-27T12:30:00Z"}}}`,
+			"failure", "success", head, "", []string{"build"}, 3), "none"},
+		{"an older commit the rebase recommitted", retryAnswersOn(`{"commit": {"message": "Bake scones", "author": {"date": "2026-10-27T12:30:00Z"}, "committer": {"date": "2026-10-27T15:00:00Z"}}}`,
 			"failure", "success", head, "", []string{"build"}, 3), "none"},
 	}
 	for _, tt := range tests {

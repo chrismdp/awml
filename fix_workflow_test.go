@@ -138,7 +138,8 @@ func TestTheFixIsPushedOfferedOrLeft(t *testing.T) {
 	if pushed.outputs["outcome"] != "push" {
 		t.Errorf("a plain fix ended %q, want push:\n%s", pushed.outputs["outcome"], pushed.printed)
 	}
-	for _, path := range []string{".github/workflows/ci.yml", "CLAUDE.md", ".claude/settings.json", "docs/.mcp.json"} {
+	for _, path := range []string{".github/workflows/ci.yml", "CLAUDE.md", ".claude/settings.json", "docs/.mcp.json",
+		".npmrc", ".yarnrc", "node_modules/x/index.js"} {
 		r := fixGuard(t, nil, func(r *rehearsal, repo string) { r.write(filepath.Join(repo, path), "changed\n") }, false)
 		r.mustPass()
 		if r.outputs["outcome"] != "offer" {

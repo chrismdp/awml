@@ -15,7 +15,8 @@
 # paths no command may write, beside writes allowed anywhere under /home, /tmp, /opt and the like,
 # which no setting can narrow. So on top of the scrub's list, no command may write the workspace's
 # .git, nor the tree's for KIND workspace, the runner's own files, its actions, its tool cache, where
-# Claude Code itself is installed, or the git and shell settings of the runner's own home, and none
+# Claude Code itself is installed, any folder on PATH or Go's bin, or the git and shell settings of
+# the runner's own home, and none
 # may read the runner's files: the scrub keys its own list to HOME, which is the session's here. No
 # host is allowed, and no prompt is given for one: a session's Go modules and packages are fetched
 # before it starts.
@@ -45,6 +46,19 @@ fi
 for file in .gitconfig .config .bashrc .bash_profile .profile .local .npmrc .ssh; do
   deny_write+=("$HOME/$file")
 done
+# Every folder on PATH, and Go's own bin, so a command can't put a program where a later step would
+# find it, whatever list of its own the scrub keeps.
+IFS=: read -r -a path_dirs <<< "${PATH:-}"
+for dir in "${path_dirs[@]}"; do
+  case "$dir" in /*) deny_write+=("${dir%/}") ;; esac
+done
+if command -v go > /dev/null; then
+  gopath="$(go env GOPATH 2> /dev/null || true)"
+  IFS=: read -r -a gopaths <<< "$gopath"
+  for dir in "${gopaths[@]}"; do
+    case "$dir" in /*) deny_write+=("$dir/bin") ;; esac
+  done
+fi
 
 # The runner's own files: the folder of the Runner.Worker this step runs under, found by walking up
 # the processes, and where hosted runners keep it under the runner's home.

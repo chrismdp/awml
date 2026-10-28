@@ -19,12 +19,23 @@ set -euo pipefail
 
 case "$ISSUE" in ''|*[!0-9]*) echo "The issue must be a number: $ISSUE" >&2; exit 1 ;; esac
 
-# A closing keyword before an issue's number would close that issue when the pull request merges, so
-# a zero-width space after its # breaks it, and only the build's own Closes #n closes anything.
+# A closing keyword before an issue's number or link would close that issue when the pull request
+# merges, so a zero-width space before the number breaks it, and only the build's own Closes #n
+# closes anything. A mention is broken the same way.
+neutralise='gsub("@(?=[A-Za-z0-9])"; "@​")
+  | gsub("(?<keyword>\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\\b[:\\s]+(?:(?:[\\w.-]+/[\\w.-]+)?#|https?://[^\\s/]+/[\\w.-]+/[\\w.-]+/(?:issues|pull)/))(?=[0-9])"; "\(.keyword)​"; "i")'
 escape() {
-  jq -Rrs '.[0:20000] | gsub("<"; "&lt;") | gsub("@(?=[A-Za-z0-9])"; "@​")
-    | gsub("(?<keyword>\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\\b[:\\s]+(?:[\\w.-]+/[\\w.-]+)?#)(?=[0-9])"; "\(.keyword)​"; "i")'
+  jq -Rrs '.[0:20000] | gsub("<"; "&lt;") | '"$neutralise"
 }
+
+# With the argument title, it writes the pull request's title instead: Claude's first line, cut to
+# 200 characters, neutralised the same way, since a squash makes it the subject of main's commit.
+if [ "${1:-}" = title ]; then
+  title="$(head -n 1 "$CHANGE_DIR/message.md" 2> /dev/null || true)"
+  [ -n "$title" ] || title="Build #$ISSUE"
+  jq -Rr '.[0:200] | '"$neutralise" <<< "$title"
+  exit 0
+fi
 
 if [ -s "$CHANGE_DIR/pull-request.md" ]; then
   escape < "$CHANGE_DIR/pull-request.md"
