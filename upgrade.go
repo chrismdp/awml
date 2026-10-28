@@ -504,8 +504,8 @@ func ConvertSources(sources []Source, implementation string) (file []byte, notes
 			return nil, nil, nil, err
 		}
 	}
-	if top != "" && !converted.has("platform") && !converted.has("description") {
-		converted.set("description", describe(top))
+	if d := describe(top); strings.TrimSpace(d) != "" && !converted.has("platform") && !converted.has("description") {
+		converted.set("description", d)
 		comments = comments[1:]
 	}
 	dropComments(converted)
