@@ -522,14 +522,14 @@ func ConvertSources(sources []Source, implementation string) (file []byte, notes
 }
 
 // describe gives the comment block a file starts with as a description: each line without its # and
-// the one space after it.
+// the one space after it, ending in one newline so it's written as a literal block.
 func describe(comment string) string {
 	var out strings.Builder
 	for _, line := range strings.Split(comment, "\n") {
 		line = strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(line), "#"), " ")
 		out.WriteString(line + "\n")
 	}
-	return out.String()
+	return strings.TrimRight(out.String(), "\n") + "\n"
 }
 
 // named starts a mistake in one file with the file's name, when it has one.

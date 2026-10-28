@@ -515,6 +515,12 @@ parts:
 	if err != nil || !strings.HasPrefix(string(data), "# The server in the hall.\nawml: \"0.8\"\n") {
 		t.Errorf("convert gave %v\n%s", err, data)
 	}
+	// Empty # lines that end the comment are dropped, so the description is still a literal block.
+	trailing := "# Dinners.\n#\n#\nawml: \"0.5\"\ntitle: Dinners\nparts: []\n"
+	data, _, _, err = ConvertSources([]Source{{Text: []byte(trailing)}}, "")
+	if err != nil || string(data) != "awml: \"0.8\"\ntitle: Dinners\ndescription: |\n  Dinners.\nparts: []\n" {
+		t.Errorf("convert gave %v\n%s", err, data)
+	}
 	// A file that starts with its fields, not a comment, has no description to take.
 	late := "awml: \"0.5\"\n# Dinners.\ntitle: Dinners\nparts: []\n"
 	data, _, _, err = ConvertSources([]Source{{Text: []byte(late)}}, "")
