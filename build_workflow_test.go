@@ -1508,9 +1508,17 @@ func TestEverySessionDeniesWritesWithEditRules(t *testing.T) {
 // to another value, so the next run shows what touched it. It names keys and never their values.
 func TestThePatchStepSaysHowTheGitConfigChanged(t *testing.T) {
 	patch, _ := readFactoryWorkflow(t, "build.yml").Jobs["draft"].step(t, "patch")
-	for _, change := range []string{"worktree", "added key", "changed value"} {
+	// actions/checkout runs git sparse-checkout disable, which leaves a .git/config.worktree, so the
+	// tree may start with one: it must end with the very same, and a tree that started without one
+	// must end without.
+	const checkouts = "[core]\n\tsparseCheckout = false\n\tsparseCheckoutCone = false\n[index]\n\tsparse = false\n"
+	for _, change := range []string{"worktree kept", "worktree", "worktree changed", "added key", "changed value"} {
 		r := newRehearsal(t)
 		repo, _ := r.newRepo("repo", map[string]string{"recipes.md": "Bread\n"})
+		if strings.HasPrefix(change, "worktree ") {
+			r.write(filepath.Join(repo, ".git/config.worktree"), checkouts)
+			r.write("host/baseline/config-worktree", checkouts)
+		}
 		r.write("host/baseline/git-config", readText(t, filepath.Join(repo, ".git/config")))
 		folders, err := exec.Command("stat", "-c", "%d:%i", repo, filepath.Join(repo, ".git")).Output()
 		if err != nil {
@@ -1524,17 +1532,28 @@ func TestThePatchStepSaysHowTheGitConfigChanged(t *testing.T) {
 		switch change {
 		case "worktree":
 			r.write(filepath.Join(repo, ".git/config.worktree"), "")
+		case "worktree changed":
+			r.write(filepath.Join(repo, ".git/config.worktree"), checkouts+"[core]\n\thooksPath = elsewhere\n")
 		case "added key":
 			gitIn(t, repo, "config", "core.sshCommand", "touch pwned")
 		case "changed value":
 			gitIn(t, repo, "config", "core.filemode", map[bool]string{true: "false", false: "true"}[gitIn(t, repo, "config", "core.filemode") == "true"])
 		}
 		r.dir = repo
+		r.write(filepath.Join(repo, "recipes.md"), "Bread\nScones\n")
 		r.run(patch, map[string]string{"GITHUB_WORKSPACE": repo}, "")
+		if change == "worktree kept" {
+			r.mustPass()
+			if !strings.Contains(r.read("host/change/change.patch"), "+Scones") {
+				t.Errorf("with the checkout's own config.worktree, the patch doesn't hold the change:\n%s", r.printed)
+			}
+			continue
+		}
 		if !r.failed || r.read("host/change/change.patch") != "" {
 			t.Errorf("with a changed %s, git ran on the tree:\n%s", change, r.printed)
 		}
-		want := map[string]string{"worktree": ".git/config.worktree", "added key": `"core.sshcommand"`, "changed value": `"core.filemode"`}[change]
+		want := map[string]string{"worktree": ".git/config.worktree", "worktree changed": `"core.hookspath"`,
+			"added key": `"core.sshcommand"`, "changed value": `"core.filemode"`}[change]
 		if !strings.Contains(r.printed, want) {
 			t.Errorf("with a changed %s, the step said:\n%s\nwant it to name %s, escaped", change, r.printed, want)
 		}
@@ -1631,6 +1650,19 @@ func TestHostGitReadsNoReplaceRefsOrGrafts(t *testing.T) {
 		patch, _ := readFactoryWorkflow(t, at.file).Jobs[at.job].step(t, "patch")
 		if !strings.Contains(patch.Run, "[ -e .git/info/grafts ]") {
 			t.Errorf("%s's %s patch step runs git on a tree with grafts", at.file, at.job)
+		}
+	}
+}
+
+// The build and the fix keep a copy of the tree's .git/config.worktree, which actions/checkout
+// leaves, before the session, beside the config's, so the patch step can tell it's the same.
+func TestTheSessionKeepsTheTreesConfigWorktree(t *testing.T) {
+	for _, at := range []struct{ file, job string }{{"build.yml", "draft"}, {"fix.yml", "fix"}} {
+		job := readFactoryWorkflow(t, at.file).Jobs[at.job]
+		session := job.Steps[job.session()].Run
+		kept := strings.Index(session, `cp .git/config.worktree "$HOST_DIR/baseline/config-worktree"`)
+		if kept < 0 || kept > strings.Index(session, "claude -p") {
+			t.Errorf("%s's %s doesn't keep the tree's config.worktree before its session", at.file, at.job)
 		}
 	}
 }
