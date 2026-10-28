@@ -256,8 +256,10 @@ func bringPatch(t *testing.T, files map[string]string, change func(r *rehearsal,
 	r.run(workflowStep{Run: `cp .github/bring-patch.sh "$RUNNER_TEMP/bring-patch.sh"
 bash "$RUNNER_TEMP/bring-patch.sh"`}, map[string]string{
 		"HEAD_SHA": strings.Repeat("cd", 20), "BASE": base, "PATCH": patch,
-		"GITHUB_EVENT_PATH": r.write("event.json", `{"pull_request": {"title": "Add scones", "body": "A new recipe."}}`),
+		"PR_NUMBER":         "8",
+		"GITHUB_EVENT_PATH": r.write("event.json", `{"pull_request": {"title": "An older title", "body": "The last try's description."}}`),
 	}, `
+  "api repos/owner/repo/pulls/8 --jq"*) answer <<< '{"title": "Add scones", "body": "A new recipe."}' ;;
   *"vnd.github.diff"*) cat "$PATCH" ;;
   "api repos/owner/repo/compare/"*) answer <<< "{\"merge_base_commit\": {\"sha\": \"$BASE\"}}" ;;`)
 	return r
@@ -401,5 +403,27 @@ func TestBringPatchPrintsNoNameThatCouldBeAWorkflowCommand(t *testing.T) {
 	}
 	if !strings.Contains(r.printed, `"docs\n::notice title=Verdict::ship`) {
 		t.Errorf("bring-patch.sh doesn't name the refused file, escaped:\n%s", r.printed)
+	}
+}
+
+// The reviews read the pull request's title and description from GitHub when they run, not from the
+// event that started CI, which holds them as they were when the push was made: a retried build edits
+// them first, so its new commit is judged against what it says now.
+func TestTheReviewsReadThePullRequestAsItIsNow(t *testing.T) {
+	r := bringPatch(t, nil, func(r *rehearsal, repo string) {
+		r.write(filepath.Join(repo, "recipes.md"), "Bread\nScones\n")
+	})
+	r.mustPass()
+	if told := r.read("review/pull-request.md"); told != "# Add scones\n\nA new recipe.\n" {
+		t.Errorf("the reviews were told %q, want the pull request as it is now", told)
+	}
+	if strings.Contains(readText(t, ".github/bring-patch.sh"), "GITHUB_EVENT_PATH") {
+		t.Error("bring-patch.sh reads the event's copy of the pull request")
+	}
+	for _, name := range []string{"review", "classify"} {
+		bring, _ := readFactoryWorkflow(t, "ci.yml").Jobs[name].step(t, "bring")
+		if bring.Env["PR_NUMBER"] != "${{ github.event.pull_request.number }}" {
+			t.Errorf("ci.yml's %s doesn't give bring-patch.sh the pull request's number", name)
+		}
 	}
 }

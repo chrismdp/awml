@@ -557,6 +557,33 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
 
+      # The title and description come from main's pull-request-body.sh. gh pr view finds a branch's
+      # closed or merged pull request when it has no open one, so only GitHub's list of the branch's
+      # open pull requests decides whether there's one already. If there is, it's given this try's
+      # title and description before the push, since the push starts CI, whose reviews and Classify
+      # read them, and a squash keeps the new title. Its number is the step's output.
+      - name: Give the open pull request this try's title and description, before the push
+        id: describe
+        if: steps.guard.outputs.outcome == 'push'
+        env:
+          BRANCH: ${{ steps.guard.outputs.branch }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          CHANGE_DIR: ${{ runner.temp }}/change
+          PICTURES: ${{ runner.temp }}/pictures.txt
+          PICTURES_LEFT_OUT: ${{ runner.temp }}/pictures-left-out.txt
+        run: |
+          export MEDIA_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/raw/factory-media/issue-$ISSUE/run-$GITHUB_RUN_ID"
+          "$RUNNER_TEMP/pull-request-body.sh" > "$RUNNER_TEMP/pull-request.md"
+          "$RUNNER_TEMP/pull-request-body.sh" title > "$RUNNER_TEMP/title.txt"
+          number="$(gh api "repos/$GITHUB_REPOSITORY/pulls?head=$GITHUB_REPOSITORY_OWNER:$BRANCH&base=main&state=open" \
+            --jq '[.[] | .number] | first // empty')"
+          case "$number" in *[!0-9]*) echo "The open pull request's number isn't a number: $number"; exit 1 ;; esac
+          if [ -n "$number" ]; then
+            gh pr edit "$number" --repo "$GITHUB_REPOSITORY" --title "$(cat "$RUNNER_TEMP/title.txt")" \
+              --body-file "$RUNNER_TEMP/pull-request.md"
+          fi
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+
       # The commit is the app's, as its push is. Its message is Claude's, with mentions and closing
       # keywords broken by main's pull-request-body.sh, since a person's squash keeps it, and then the
       # issue it closes.
@@ -621,30 +648,18 @@ jobs:
           git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c http.https://github.com/.extraheader="$auth" \
             push origin "$commit:refs/heads/factory-media"
 
-      # gh pr view finds a branch's closed or merged pull request when it has no open one, so only
-      # GitHub's list of the branch's open pull requests decides whether there's one already. If
-      # there is, the push has updated its commits, and it's given this try's title and description,
-      # so the reviews and Classify judge the new commit against what it says it does, and a squash
-      # keeps the new title.
-      - name: Open a pull request that says Closes #n, or give the open one this try's title and description
+      # A new one opens once the branch is pushed, with this try's title and description.
+      - name: Open a pull request that says Closes #n, unless one is open from the branch already
         id: pull
-        if: steps.guard.outputs.outcome == 'push'
+        if: steps.guard.outputs.outcome == 'push' && steps.describe.outputs.number == ''
         env:
           BRANCH: ${{ steps.guard.outputs.branch }}
           GH_TOKEN: ${{ steps.app.outputs.token }}
-          CHANGE_DIR: ${{ runner.temp }}/change
-          PICTURES: ${{ runner.temp }}/pictures.txt
-          PICTURES_LEFT_OUT: ${{ runner.temp }}/pictures-left-out.txt
+          OPEN_NUMBER: ${{ steps.describe.outputs.number }}
         run: |
-          export MEDIA_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/raw/factory-media/issue-$ISSUE/run-$GITHUB_RUN_ID"
-          "$RUNNER_TEMP/pull-request-body.sh" > "$RUNNER_TEMP/pull-request.md"
-          title="$("$RUNNER_TEMP/pull-request-body.sh" title)"
-          number="$(gh api "repos/$GITHUB_REPOSITORY/pulls?head=$GITHUB_REPOSITORY_OWNER:$BRANCH&base=main&state=open" \
-            --jq '[.[] | .number] | first // empty')"
-          case "$number" in *[!0-9]*) echo "The open pull request's number isn't a number: $number"; exit 1 ;; esac
-          if [ -n "$number" ]; then
-            gh pr edit "$number" --repo "$GITHUB_REPOSITORY" --title "$title" --body-file "$RUNNER_TEMP/pull-request.md"
+          if [ -n "$OPEN_NUMBER" ]; then
+            echo "#$OPEN_NUMBER is open from $BRANCH already, and has this try's title and description."
             exit 0
           fi
           gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$BRANCH" \
-            --title "$title" --body-file "$RUNNER_TEMP/pull-request.md"
+            --title "$(cat "$RUNNER_TEMP/title.txt")" --body-file "$RUNNER_TEMP/pull-request.md"

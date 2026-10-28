@@ -14,7 +14,7 @@
 # that touches Claude Code's own settings, .claude/, .mcp.json or a CLAUDE.md, is refused before
 # any session starts, and no session loads settings or servers from the tree.
 #
-# It reads HEAD_SHA, GH_TOKEN and GitHub's own variables from the environment, and writes the
+# It reads HEAD_SHA, PR_NUMBER, GH_TOKEN and GitHub's own variables from the environment, and writes the
 # count of binary files the sessions can't read as `unread` to GITHUB_OUTPUT. Needs gh and jq.
 set -euo pipefail
 
@@ -22,6 +22,7 @@ set -euo pipefail
 # start a workflow command of its own.
 named() { jq -nr --arg name "$1" '$name | @json'; }
 
+case "${PR_NUMBER:-}" in ''|*[!0-9]*) echo "The pull request's number must be a number: ${PR_NUMBER:-}"; exit 1 ;; esac
 if ! [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
   echo "The head commit isn't a commit id: $HEAD_SHA"
   exit 1
@@ -38,8 +39,9 @@ if ! [[ "$base" =~ ^[0-9a-f]{40}$ ]] || ! git merge-base --is-ancestor "$base" "
   exit 1
 fi
 gh api "$compare" -H "Accept: application/vnd.github.diff" > "$review/change.patch"
-jq -r '"# \(.pull_request.title)\n\n\(.pull_request.body // "")"' "$GITHUB_EVENT_PATH" \
-  > "$review/pull-request.md"
+# The pull request's title and description as they are now, read from GitHub, not the event that
+# started CI, which holds them as they were when the push was made.
+gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '"# \(.title)\n\n\(.body // "")"' > "$review/pull-request.md"
 git checkout -q --detach "$base"
 # Every path the patch touches: git's numstat gives each file's name, the new one for a
 # rename or copy, and the old names come from the patch's own rename and copy lines.

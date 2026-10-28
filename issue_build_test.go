@@ -339,12 +339,26 @@ func TestTheBuildOffersAChangeToGithubAndStops(t *testing.T) {
 }
 
 // The pull request opens only if none is open from the issue's branch, since the branch is reused
-// and the push updates an open one. Then the open one is given this try's title and description, so
-// the reviews and Classify judge the new commit against what it says it does, and a squash keeps
-// the new title. The description is Claude's, escaped, and says Closes #n.
+// and the push updates an open one. An open one is given this try's title and description before
+// the push, since the push starts CI, whose reviews and Classify read them, and a squash keeps the
+// new title. One that's new opens after the push. The description is Claude's, escaped, and says
+// Closes #n.
 func TestABuildOpensItsPullRequestOnlyIfNoneIsOpen(t *testing.T) {
-	pull, _ := readBuildWorkflow(t)["open"].step(t, "pull")
-	for _, open := range []bool{true, false} {
+	open := readBuildWorkflow(t)["open"]
+	describe, before := open.step(t, "describe")
+	_, push := open.step(t, "push")
+	pull, after := open.step(t, "pull")
+	if before > push || after < push {
+		t.Error("the open pull request isn't described before the push, or a new one opened before it")
+	}
+	if pull.Env["OPEN_NUMBER"] != "${{ steps.describe.outputs.number }}" {
+		t.Errorf("the pull step reads the open pull request from %q, want the describe step", pull.Env["OPEN_NUMBER"])
+	}
+	bashed := func(step workflowStep) workflowStep {
+		step.Run = strings.ReplaceAll(step.Run, `"$RUNNER_TEMP/pull-request-body.sh"`, `bash "$RUNNER_TEMP/pull-request-body.sh"`)
+		return step
+	}
+	for _, isOpen := range []bool{true, false} {
 		r := newRehearsal(t)
 		r.write("pull-request-body.sh", readText(t, ".github/pull-request-body.sh"))
 		r.write("change/message.md", "Add scones for @someone\n\nWhy.\n")
@@ -352,22 +366,26 @@ func TestABuildOpensItsPullRequestOnlyIfNoneIsOpen(t *testing.T) {
 		r.write("pictures.txt", "")
 		r.write("pictures-left-out.txt", "")
 		listed := "[]"
-		if open {
+		if isOpen {
 			listed = `[{"number": 7}]`
 		}
-		r.run(workflowStep{Run: strings.ReplaceAll(pull.Run, `"$RUNNER_TEMP/pull-request-body.sh"`, `bash "$RUNNER_TEMP/pull-request-body.sh"`)},
-			map[string]string{"ISSUE": "120", "BRANCH": "build/issue-120", "CHANGE_DIR": filepath.Join(r.temp, "change"),
-				"PICTURES": filepath.Join(r.temp, "pictures.txt"), "PICTURES_LEFT_OUT": filepath.Join(r.temp, "pictures-left-out.txt")}, `
-  "api repos/owner/repo/pulls?head=owner:build/issue-120&base=main&state=open"*) answer <<< '`+listed+`' ;;
+		env := map[string]string{"ISSUE": "120", "BRANCH": "build/issue-120", "CHANGE_DIR": filepath.Join(r.temp, "change"),
+			"PICTURES": filepath.Join(r.temp, "pictures.txt"), "PICTURES_LEFT_OUT": filepath.Join(r.temp, "pictures-left-out.txt")}
+		answers := `
+  "api repos/owner/repo/pulls?head=owner:build/issue-120&base=main&state=open"*) answer <<< '` + listed + `' ;;
   "pr create"*) echo "https://github.com/owner/repo/pull/8" ;;
-  "pr edit 7 --repo owner/repo --title"*) ;;`)
+  "pr edit 7 --repo owner/repo --title"*) ;;`
+		r.run(bashed(describe), env, answers)
 		r.mustPass()
-		created := strings.Contains(r.calls, "pr create")
-		if created == open {
-			t.Errorf("with a pull request open %v, the build opened one: %v", open, created)
+		edited := strings.Contains(r.calls, "pr edit 7 --repo owner/repo --title Add scones for @\u200bsomeone --body-file")
+		if edited != isOpen || r.outputs["number"] != map[bool]string{true: "7", false: ""}[isOpen] {
+			t.Errorf("with a pull request open %v, the describe step edited %v and passed on %q\n%s", isOpen, edited, r.outputs["number"], r.calls)
 		}
-		if edited := strings.Contains(r.calls, "pr edit 7 --repo owner/repo --title Add scones for @\u200bsomeone --body-file"); edited != open {
-			t.Errorf("with a pull request open %v, the build gave it this try's title and description: %v\n%s", open, edited, r.calls)
+		env["OPEN_NUMBER"] = r.outputs["number"]
+		r.run(bashed(pull), env, answers)
+		r.mustPass()
+		if created := strings.Contains(r.calls, "pr create"); created == isOpen {
+			t.Errorf("with a pull request open %v, the build opened one: %v", isOpen, created)
 		}
 		body := r.bodies()[0]
 		if !strings.Contains(body, "Closes #120") || strings.Contains(body, "<!--") || !strings.Contains(body, "@\u200bsomeone") {
@@ -449,8 +467,8 @@ func TestTheTitleClosesNothing(t *testing.T) {
 	if strings.Contains(title, "\n") || closing.MatchString(title) || strings.Contains(title, "@someone") || !strings.HasPrefix(title, "Closes #") {
 		t.Errorf("the title is %q, which can close an issue or mention someone", title)
 	}
-	pull, _ := readBuildWorkflow(t)["open"].step(t, "pull")
-	if !strings.Contains(pull.Run, `title="$("$RUNNER_TEMP/pull-request-body.sh" title)"`) {
+	describe, _ := readBuildWorkflow(t)["open"].step(t, "describe")
+	if !strings.Contains(describe.Run, `"$RUNNER_TEMP/pull-request-body.sh" title > "$RUNNER_TEMP/title.txt"`) {
 		t.Error("the open job doesn't take the title from main's pull-request-body.sh")
 	}
 }
