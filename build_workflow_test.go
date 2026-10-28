@@ -1179,11 +1179,15 @@ EOF
 	}
 }
 
-// Under pipefail, a quiet grep at the end of a pipe exits at its first match, and the command
-// feeding it can then die of SIGPIPE, which fails the whole pipe: a match reads as none. So no
-// factory step or script pipes into grep -q; each reads all its input and throws the output away.
-func TestNoPipeEndsInAQuietGrep(t *testing.T) {
+// Under pipefail, a command in a pipe that stops reading before its input ends, such as a quiet
+// grep at its first match, head at its last line or an awk that exits before END, can kill the
+// command feeding it with SIGPIPE, which fails the whole pipe: a match reads as none, or a step
+// fails. So no factory step or script pipes into one; each reads all its input. No input is
+// excepted, fixed text or not. An awk that exits only in its END block has read everything first.
+func TestNoPipeEndsEarly(t *testing.T) {
 	quiet := regexp.MustCompile(`\|\s*grep\s+-[A-Za-z]*q`)
+	head := regexp.MustCompile(`\|\s*head\b`)
+	awk := regexp.MustCompile(`\|\s*awk\b(.*)`)
 	files := []string{".github/bring-patch.sh", ".github/read-findings.sh", ".github/sandbox-settings.sh",
 		".github/pull-request-body.sh", ".github/picture-drawings.sh"}
 	for _, file := range factoryFiles {
@@ -1191,9 +1195,27 @@ func TestNoPipeEndsInAQuietGrep(t *testing.T) {
 	}
 	for _, file := range files {
 		for at, line := range strings.Split(readText(t, file), "\n") {
+			if head.MatchString(line) {
+				t.Errorf("%s:%d pipes into head: %s", file, at+1, strings.TrimSpace(line))
+			}
+			if m := awk.FindStringSubmatch(line); m != nil {
+				if exit, end := strings.Index(m[1], "exit"), strings.Index(m[1], "END"); exit >= 0 && (end < 0 || exit < end) {
+					t.Errorf("%s:%d pipes into an awk that exits before END: %s", file, at+1, strings.TrimSpace(line))
+				}
+			}
 			if quiet.MatchString(line) {
 				t.Errorf("%s:%d pipes into a quiet grep: %s", file, at+1, strings.TrimSpace(line))
 			}
 		}
+	}
+}
+
+// A rehearsal runs a step as GitHub runs a bash step, bash --noprofile --norc -eo pipefail, so a
+// pipe whose first command fails fails the step, as it would on GitHub.
+func TestARehearsalRunsAStepUnderPipefail(t *testing.T) {
+	r := newRehearsal(t)
+	r.run(workflowStep{Run: "false | true\necho reached"}, nil, "")
+	if !r.failed || strings.Contains(r.printed, "reached") {
+		t.Errorf("a step whose pipe's first command failed went on: %q", r.printed)
 	}
 }

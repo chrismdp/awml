@@ -536,3 +536,19 @@ func TestTheReviewsRefuseASymbolicLink(t *testing.T) {
 		t.Errorf("bring-patch.sh let a symbolic link through, or didn't say why:\n%s", r.printed)
 	}
 }
+
+// The report names main's failing commit by its message's first line alone, read to the end so the
+// pipe can't fail under pipefail.
+func TestTheReportNamesTheCommitByItsFirstLine(t *testing.T) {
+	report, _ := readFactoryWorkflow(t, "ci.yml").Jobs["report"].step(t, "report")
+	r := newRehearsal(t)
+	r.run(report, nil, `
+  "api repos/owner/repo/actions/runs/"*"/jobs --paginate"*) answer <<< '{"jobs": [{"id": 5, "name": "test (1.22)", "conclusion": "failure"}]}' ;;
+  "run view "*) echo "FAIL fit_test.go" ;;
+  "api repos/owner/repo/commits/"*) answer <<< '{"commit": {"message": "Bake the scones\n\nAt two hundred degrees, for twelve minutes."}}' ;;
+  "issue list "*) answer <<< '[]' ;;`)
+	r.mustPass()
+	if title := strings.TrimSpace(r.read("report/title.txt")); title != "Main is failing: Bake the scones" {
+		t.Errorf("the report's title is %q, want the commit message's first line alone", title)
+	}
+}
