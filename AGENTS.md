@@ -22,8 +22,8 @@ Work through the open issues one at a time. Their labels say what kind of work e
 
 - **`spec` issues are design decisions, and they belong to the maintainer.** Read the issue and the parts of the spec it touches. Then reply on the issue with the options, what each would change in the spec and the CLI, how each weighs against the principles in "How AWML is designed", and your recommendation, and wait for an answer before writing the change. Several decided issues can go in one pull request.
 - **`tool` and `guide` issues** that follow from what the spec already says can be built straight away.
-- **Build `tool` and `guide` issues, and decided `spec` ones, by adding the `build` label.** The build workflow drafts, checks and opens the pull request. Build by hand only a change the workflow can't push, which is a change under `.github/workflows/`.
-- **A change to a workflow under `.github/workflows/` starts as an AWML drawing,** published to awml.io. Build it only after the maintainer has checked the drawing and said so.
+- **Build `tool` and `guide` issues, and decided `spec` ones, by adding the `build` label.** The build workflow drafts and opens the pull request, and CI judges it, as it judges every pull request: the tests, a Bug review and a Security review. On a factory branch, Classify then sorts it as ship, show or ask, and land.yml merges what ships or shows and asks the person who added the label to review the rest. A failed review goes to fix.yml, and failed tests to retry.yml, which starts the build again, up to three times. Nothing in the factory sets a pull request to merge by itself. Build by hand only a change the app can't push, which is a change under `.github/` or to Claude Code's own files, `.claude/`, `.mcp.json` or a `CLAUDE.md`: the build offers such a draft on the issue instead.
+- **A change to a workflow under `.github/workflows/` starts as an AWML drawing** in `.github/drawings/`, and the workflow's header names its drawing. Build it only after the maintainer has checked the drawing and said so.
 - **Each pull request says which issues it closes,** with `Closes #n`.
 - **A pull request that another replaces is closed,** with a comment naming the pull request or rebuild that replaces it.
 - **Something new turns up while you work:** open an issue for it, rather than widening the change.
@@ -52,6 +52,8 @@ go vet ./...
 go run ./cmd/awml check examples/*.yaml examples/tour/*.yaml examples/platforms/*.yaml
 make test-wasm
 ```
+
+CI runs them on every pull request into main and on every commit that lands on main. Main's ruleset requires `test (1.22)`, `test (stable)`, `Bug review` and `Security review` to pass on a pull request's head commit before it merges, so keep those job names. The reviews run only on a pull request from a branch of this repository, opened by its own people or the app, and read main's prompts, `AGENTS.md` and `REVIEW.md`, never the branch's. Check the factory's drawings with `go run ./cmd/awml check .github/drawings/*.yaml` too.
 
 The build rule's tests need git 2.40 or later, for `--attr-source`; the git that comes with Xcode is older.
 
