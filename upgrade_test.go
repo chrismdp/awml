@@ -133,7 +133,7 @@ func TestUpgradeFrom08ChangesOnlyTheVersion(t *testing.T) {
 	if err != nil || notes != nil || string(data) != upgraded(t, signedOff) {
 		t.Fatalf("convert of a 0.8 file gave\n%s\nnotes %q, %v, want\n%s", data, notes, err, upgraded(t, signedOff))
 	}
-	if want := []string{`the line from "send" to "drafts" goes from outside action "send" into context "drafts": only a step writes to a context, so draw a recorded sign-off as a review whose [yes] leads to a code do step that writes it, or, where it's given outside the system, as a connector that a bring-in step reads`}; !reflect.DeepEqual(found, want) {
+	if want := []string{`the line from "send" to "drafts" goes from outside action "send" into context "drafts": an outside action changes only what's outside the system, so draw a recorded sign-off as a review whose [yes] leads to a code do step that writes it, or, where it's given outside the system, as a connector that a bring-in step reads`}; !reflect.DeepEqual(found, want) {
 		t.Errorf("convert of a 0.8 file found %q, want %q", found, want)
 	}
 }
@@ -697,7 +697,7 @@ lines:
 }
 
 func TestUpgradeMovesAPlatformDescriptionToTheCurrentVersion(t *testing.T) {
-	for _, version := range []string{"0.3", "0.4", "0.5", "0.6", "0.7"} {
+	for _, version := range []string{"0.3", "0.4", "0.5", "0.6", "0.7", "0.8"} {
 		source := strings.Replace(description09, `awml: "0.9"`, `awml: "`+version+`"`, 1)
 		want := `awml: "0.9"
 platform: { id: scripts, label: "Scripts on a server" }

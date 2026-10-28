@@ -417,13 +417,13 @@ func TestNoLineButATieOrAHiddenOneGoesIntoATrigger(t *testing.T) {
 	mistakes(t, changed(t, "lines.4.kind", "tie"))
 }
 
-// Only a step writes to a context, so an outside action leads on to a connector, a step or a
+// An outside action changes only what's outside the system, so it leads on to a connector, a step or a
 // review, but never into a context.
 func TestNoLineButATieOrAHiddenOneGoesFromAnOutsideActionIntoAContext(t *testing.T) {
 	for _, kind := range []string{"start", "data", "refused"} {
 		t.Run(kind, func(t *testing.T) {
 			mistakes(t, withLines(t, "{ from: send, to: drafts, kind: "+kind+" }"),
-				`the line from "send" to "drafts" goes from outside action "send" into context "drafts": only a step writes to a context, so draw a recorded sign-off as a review whose [yes] leads to a code do step that writes it, or, where it's given outside the system, as a connector that a bring-in step reads`)
+				`the line from "send" to "drafts" goes from outside action "send" into context "drafts": an outside action changes only what's outside the system, so draw a recorded sign-off as a review whose [yes] leads to a code do step that writes it, or, where it's given outside the system, as a connector that a bring-in step reads`)
 		})
 	}
 	mistakes(t, withLines(t, "{ from: send, to: drafts, kind: hidden }"))

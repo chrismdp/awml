@@ -271,9 +271,9 @@ func checkView(file *Map, projected bool) (mistakeList, bool) {
 		if k != "tie" && k != "hidden" && kinds[keyOf(l.get("to"))] == "trigger" {
 			errors.add("triggers.no-line-in", fmt.Sprintf(`%s goes into trigger "%s": a trigger only starts its own workflow, so start another workflow with an outside action whose ref names its trigger`, name, show(l.get("to"))))
 		}
-		// Only a step writes to a context, so its operation says what was written and who decided it.
+		// An outside action changes only what's outside the system, so a step writes to a context.
 		if k != "tie" && k != "hidden" && kinds[keyOf(l.get("from"))] == "outside" && kinds[keyOf(l.get("to"))] == "context" {
-			errors.add("contexts.written-by-steps", fmt.Sprintf(`%s goes from outside action "%s" into context "%s": only a step writes to a context, so draw a recorded sign-off as a review whose [yes] leads to a code do step that writes it, or, where it's given outside the system, as a connector that a bring-in step reads`, name, show(l.get("from")), show(l.get("to"))))
+			errors.add("contexts.written-by-steps", fmt.Sprintf(`%s goes from outside action "%s" into context "%s": an outside action changes only what's outside the system, so draw a recorded sign-off as a review whose [yes] leads to a code do step that writes it, or, where it's given outside the system, as a connector that a bring-in step reads`, name, show(l.get("from")), show(l.get("to"))))
 		}
 	}
 	errors = append(errors, operations(parts, lines)...)
