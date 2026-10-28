@@ -224,7 +224,7 @@ func TestTheGraphOfAMapSaysWhichWayALinePoints(t *testing.T) {
 	if l := g.Lines[3]; l.From != "w2" || l.To != "s1" || l.Points != "both" || !reflect.DeepEqual(l.Joins, []string{"w2_fill"}) {
 		t.Errorf("a two-way line is %+v", l)
 	}
-	has(t, g.Mermaid(), "\n  w2 <-.-> s1\n")
+	has(t, g.Mermaid(), "\n  s1 <-.-> w2\n")
 	neither := strings.Replace(shopWorkflow, "  - { from: list, to: fill, kind: data }\n", "  - { from: list, to: fill, kind: hidden }\n", 1)
 	g = GraphMap(together(t, "plan.yaml", planWorkflow, "shop.yaml", neither))
 	if l := g.Lines[3]; l.From != "w2" || l.To != "s1" || l.Points != "none" || l.Joins != nil {
