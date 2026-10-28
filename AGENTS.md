@@ -22,8 +22,8 @@ Work through the open issues one at a time. Their labels say what kind of work e
 
 - **`spec` issues are design decisions, and they belong to the maintainer.** Read the issue and the parts of the spec it touches. Then reply on the issue with the options, what each would change in the spec and the CLI, how each weighs against the principles in "How AWML is designed", and your recommendation, and wait for an answer before writing the change. Several decided issues can go in one pull request.
 - **`tool` and `guide` issues** that follow from what the spec already says can be built straight away.
-- **Build `tool` and `guide` issues, and decided `spec` ones, by adding the `build` label.** The build workflow drafts, checks and opens the pull request. Build by hand only a change the workflow can't push, which is a change under `.github/workflows/`.
-- **A change to a workflow under `.github/workflows/` starts as an AWML drawing,** published to awml.io. Build it only after the maintainer has checked the drawing and said so.
+- **Build `tool` and `guide` issues, and decided `spec` ones, by adding the `build` label.** The build workflow drafts and opens the pull request, and CI judges it, as it judges every pull request: the tests, a Bug review and a Security review. On a factory branch, Classify then sorts it as ship, show or ask, and land.yml merges what ships or shows and asks the person who added the label to review the rest. A failed review goes to fix.yml, and failed tests to retry.yml, which starts the build again, up to three builds in all. Nothing in the factory sets a pull request to merge by itself. The factory tells its own commits apart from a person's by their author's and committer's email, the app's noreply address, which anyone with write access could forge; they're trusted not to. Build by hand only a change the app can't push, which is a change under `.github/`, to Claude Code's own files, `.claude/`, `.mcp.json` or a `CLAUDE.md`, or to npm's, `.npmrc`, `.yarnrc`, `.yarnrc.yml` or a `node_modules/`: the build offers such a draft on the issue instead.
+- **A change to a workflow under `.github/workflows/` starts as an AWML drawing** in `.github/drawings/`, and the workflow's header names its drawing. Build it only after the maintainer has checked the drawing and said so.
 - **Each pull request says which issues it closes,** with `Closes #n`.
 - **A pull request that another replaces is closed,** with a comment naming the pull request or rebuild that replaces it.
 - **Something new turns up while you work:** open an issue for it, rather than widening the change.
@@ -50,8 +50,11 @@ Test first: write a failing test for each behaviour before the code that passes 
 go test ./...
 go vet ./...
 go run ./cmd/awml check examples/*.yaml examples/tour/*.yaml examples/platforms/*.yaml
+go run ./cmd/awml check .github/drawings/*.yaml
 make test-wasm
 ```
+
+CI runs them on every pull request into main and on every commit that lands on main. Main's ruleset requires `test (1.22)`, `test (stable)`, `Bug review` and `Security review` to pass on a pull request's head commit before it merges, so keep those job names. The reviews run on every pull request, but fail at their first step, before any secret is given, unless it's from a branch of this repository, opened by its own people or the app, since GitHub counts a skipped required check as passed. The reviews read main's prompts, `AGENTS.md` and `REVIEW.md`, which the patch can't change. A fork's own ci.yml runs on its pull request, though, and could add passing jobs with those names, so a fork's checks prove nothing when its diff touches `.github/workflows/`: a person must look at such a pull request. GitHub's required workflows, which would pin main's, need an organisation. On a pull request GitHub runs the pull request's own ci.yml, not main's, so a person with write access could change how their own pull request is reviewed, or skip a review. That's accepted: they're trusted, the app never pushes a change to `.github/`, and a fork's pull request gets no secrets.
 
 The build rule's tests need git 2.40 or later, for `--attr-source`; the git that comes with Xcode is older.
 

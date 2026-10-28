@@ -1,30 +1,54 @@
-# Runs every check from AGENTS.md on every push: it vets and tests the code, checks every example,
-# and checks that the WebAssembly build gives the same answers as the CLI. It runs on the oldest Go
-# that go.mod allows, and on the newest. The build and rebase workflows push and merge with the
-# repository's GitHub App, so their pushes start it as a person's would.
+# Every pull request into main is checked each time it's opened or pushed to, and every commit that
+# lands on main is checked, so each commit has one CI run. The tests run every check from AGENTS.md
+# on the oldest Go that go.mod allows and on the newest. A pull request from a branch of this
+# repository, opened by its own people or the app, is also reviewed, as jobs of the same run: two
+# fresh Claude sessions read its patch against main, one for bugs and one for security, and on a
+# factory branch, once both have passed, a third classifies the change: ship, show or ask. None of
+# them runs any of the change's code. Each job's result is its own check on the commit, so the
+# commit as pushed has one judge, and land.yml, fix.yml and retry.yml read its verdict from GitHub.
+# A fork's pull request, or one a stranger opened, gets no review: its review jobs fail at a gate
+# that holds no secret, rather than being skipped, which GitHub would count as passed, so a person
+# reviews and merges it. But on pull_request a fork's own ci.yml runs, and it could add jobs named
+# Bug review and Security review that pass: a fork's checks prove nothing when its diff touches
+# .github/workflows/, and a person must look at such a pull request. GitHub's required workflows,
+# which would pin main's, need an organisation, which this repository isn't in.
+#
+# On pull_request GitHub runs the pull request's own ci.yml, not main's, so a person with write
+# access could change how their own pull request is reviewed, or skip a review. That's accepted:
+# only people with write access can push a branch here, and they're trusted, the app never pushes
+# a change to .github/, and a fork's pull request is given no secrets.
+# Drawn in .github/drawings/ci-a-commit.yaml
 #
 # When a check fails on main, a last job reports it. If an issue labelled failing-main is already
 # open, it adds this run to that issue and starts nothing, so a main that fails on several pushes
 # starts one build. Otherwise the app opens an issue with the end of the failing output, labelled
-# build, and GitHub starts the build from that label as it would from a person's. The build retries
-# and merges by the same rules as any other. The report job checks out nothing and runs none of the
-# code it reports on: it reads the failed jobs' log with gh. It mints the app's token only to open
-# the issue, and comments with the Actions token.
+# build, and GitHub starts the build from that label as it would from a person's. The report job
+# checks out nothing and runs none of the code it reports on: it reads the failed jobs' log with gh.
+# It mints the app's token only to open the issue, and comments with the Actions token.
 #
-# Before it works, a repository needs the GitHub App and its two secrets that build.yml lists, and:
+# Before it works, a repository needs the GitHub App and its secrets that build.yml lists, and:
 # - failing-main and tool labels, which the report job puts on its issue beside build;
-# - a ruleset on main that requires both test jobs to pass, so that nothing merges, by hand or by
-#   itself, until CI has passed on the branch.
+# - a ruleset on main that requires test (1.22), test (stable), Bug review and Security review to
+#   pass, so that nothing merges until CI has passed on the head commit.
 name: CI
 
 on:
+  pull_request:
+    branches: [main]
   push:
-    # The factory-media branch holds only the build's pictures.
-    branches-ignore: [factory-media]
+    branches: [main]
   # For running the checks by hand.
   workflow_dispatch:
 
+# A push to a pull request replaces the run on the commit before it. Each commit on main keeps its
+# own run.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  # The tests hold no secret and a token that only reads. They run the change's code, so they
+  # neither save Go's cache nor restore one.
   test:
     runs-on: ubuntu-latest
     permissions:
@@ -33,21 +57,397 @@ jobs:
       matrix:
         go: ["1.22", stable]
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version: ${{ matrix.go }}
-      - uses: actions/setup-node@v5
+          cache: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
+          package-manager-cache: false
       - run: go vet ./...
       - run: go test ./...
       - run: go run ./cmd/awml check examples/*.yaml examples/tour/*.yaml examples/platforms/*.yaml
+      - run: go run ./cmd/awml check .github/drawings/*.yaml
       - run: make test-wasm
+
+  # Bug review and Security review, side by side, each a fresh Claude session in a job of its own,
+  # with a token that only reads. They run on every pull request, since GitHub counts a required
+  # check that was skipped as passed. A fork's pull request, or one opened by anyone without write
+  # access, fails at the first step, the gate, which checks out nothing and holds no secret: its
+  # author could steer the sessions, which hold the maintainer's login token. Anyone who can read the
+  # repository can open a pull request between two of its branches, so the opener must be someone
+  # with write access to this repository, or the build's app. Only the session step, which runs only
+  # once the gate has passed, holds the token.
+  #
+  # Each job checks out main, never the head, and brings in the patch as data with main's
+  # .github/bring-patch.sh, so the sessions follow main's prompts, AGENTS.md and REVIEW.md, which the
+  # patch can't change, though the pull request's own ci.yml, which runs here, could. The job's
+  # own check is the review's result: it fails on an Important finding, and its annotations carry
+  # the first ten findings of each rank, in the order the review wrote them, ranked by level and
+  # title, for Classify, fix.yml and land.yml to read, since GitHub keeps ten of each level a step.
+  # Nothing passes between jobs, so there's no artifact.
+  review:
+    name: ${{ matrix.review.name }}
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # The host's own folder: what the host reads after a session, which no session can write, in a
+    # folder under root's /var/lib, so nothing running as the runner's user can rename it away.
+    env:
+      HOST_DIR: /var/lib/awml-host
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        review:
+          - { name: Bug review, kind: bugs, prompt: review-bugs-prompt.md }
+          - { name: Security review, kind: security, prompt: review-security-prompt.md }
+    steps:
+      - name: Check that the pull request is from this repository and its own people or the app
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          AUTHOR_TYPE: ${{ github.event.pull_request.user.type }}
+        run: |
+          if [ "$HEAD_REPOSITORY" != "$GITHUB_REPOSITORY" ]; then
+            echo "This pull request is from a fork, so it isn't reviewed: a session that read it would hold the maintainer's login token. A person with write access must review and merge it."
+            exit 1
+          fi
+          if [ "$AUTHOR" = "awml-factory[bot]" ] && [ "$AUTHOR_TYPE" = Bot ]; then
+            exit 0
+          fi
+          # Trust is by the opener's permission on this repository, read from GitHub, not their
+          # association, which a member of an organisation could have without write access.
+          may_write() {
+            [[ "$1" =~ ^[A-Za-z0-9-]{1,39}$ ]] || return 1
+            [ "$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$1/permission" \
+              --jq '(.permission | IN("admin", "write")) or (.role_name | IN("admin", "maintain", "write"))' 2> /dev/null)" = true ]
+          }
+          if may_write "$AUTHOR"; then
+            exit 0
+          fi
+          echo "This pull request wasn't opened by someone with write access or by the app, so it isn't reviewed: a session that read it would hold the maintainer's login token. A person with write access must review and merge it."
+          exit 1
+
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      # The script is copied out of the tree before it runs, since the patch it applies may change it.
+      - name: Bring in the pull request's patch against main, and main's prompts, AGENTS.md and REVIEW.md
+        id: bring
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+          echo "::stop-commands::$stop"
+          trap 'echo "::$stop::"' EXIT
+          cp .github/bring-patch.sh .github/sandbox-settings.sh "$RUNNER_TEMP/"
+          bash "$RUNNER_TEMP/bring-patch.sh"
+
+      # Claude Code runs its commands in a sandbox, bubblewrap with socat for its network, so that it
+      # can scrub its login token from them, and they can't start without both. Ubuntu's runners
+      # restrict the user namespaces bubblewrap needs, so allow them on this throwaway machine, and
+      # check bubblewrap works before Claude starts. Installing Claude Code runs nothing from the
+      # change.
+      - name: Install Claude Code and bubblewrap
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y bubblewrap socat
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          # The host's own folder, made by root under root's /var/lib, so no command a session runs,
+          # as the runner's user, can rename it or a folder above it, and denied to every session.
+          sudo install -d -o "$(id -u)" -g "$(id -g)" -m 700 "$HOST_DIR"
+          # The Docker socket would let a command start a root container outside the sandbox. It's
+          # root's, so taking the group's access away leaves the runner user unable to reach it.
+          if [ -e /var/run/docker.sock ]; then sudo chmod 600 /var/run/docker.sock; fi
+          bwrap --dev-bind / / --unshare-pid true
+          npm install -g @anthropic-ai/claude-code@2.1.312
+
+      # The session keeps the login token from the commands it runs (awml #121), and loads only the
+      # user's settings and no MCP servers, so nothing in the tree can set its hooks or where it sends
+      # the token. It starts in an empty home of its own, reads only the working tree and its inputs,
+      # made read-only, never /proc, where its own environment holds the token, may edit only its
+      # own findings, in a folder of its own, and runs nothing, git included. Claude Code ignores a
+      # Write rule for one path, so the Edit rule, which covers writing a file too, is the one that
+      # holds. Its log is shown with workflow commands stopped, so nothing it says can make an
+      # annotation of its own.
+      # The session's home holds main's sandbox settings, from .github/sandbox-settings.sh, with no
+      # host allowed, though the session runs no commands (#131). Its log goes to the host's own
+      # folder, which the sandbox denies, and its output folder is read only once it holds nothing
+      # but plain files and folders.
+      # The step is one { } group, which bash parses whole before it starts, and its sandbox can't
+      # write the step's own script, "$0", so nothing a command writes there runs after the session.
+      - name: Review the patch
+        id: session
+        if: steps.gate.outcome == 'success'
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
+          REVIEW_DIR: ${{ runner.temp }}/review
+          KIND: ${{ matrix.review.kind }}
+          PROMPT: ${{ matrix.review.prompt }}
+        run: |
+          {
+            stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+            echo "::stop-commands::$stop"
+            trap 'echo "::$stop::"' EXIT
+            session="$RUNNER_TEMP/session"
+            host="$HOST_DIR"
+            chmod -R a-w "$REVIEW_DIR"
+            mkdir -p "$session/home" "$session/out" "$host"
+            bash "$RUNNER_TEMP/sandbox-settings.sh" "$session/home" "$GITHUB_WORKSPACE" workspace "$0" "$host"
+            prompt="$(sed -e "s|REVIEW_DIR|$REVIEW_DIR|g" -e "s|OUT_DIR|$session/out|g" "$RUNNER_TEMP/prompts/$PROMPT")"
+            status=0
+            HOME="$session/home" claude -p "$prompt" --model opus --max-turns 100 --permission-mode default \
+              --setting-sources user --strict-mcp-config --add-dir "$REVIEW_DIR" --add-dir "$session/out" \
+              --disallowedTools "Read(//proc/**)" "Bash" "Edit(./.git/**)" "Write(./.git/**)" \
+              --allowedTools "Read(./**)" "Read(/$REVIEW_DIR/**)" "Edit(/$session/out/$KIND.json)" \
+              > "$host/session.log" 2>&1 || status=$?
+            cat "$host/session.log"
+            exit "$status"
+          }
+
+      # The findings must be a list, each ranked, or the check fails with none posted, and findings
+      # that carry anything like the login token are refused. Each finding becomes an annotation on
+      # the job's check: an error for an Important one, a warning for a Nit and a notice for a
+      # Pre-existing one, its title starting with its rank, and every finding goes in the job's
+      # summary. GitHub keeps ten of each level a step, so the first ten of each rank are annotated,
+      # or nine Pre-existing ones beside the notice of binary files the review couldn't read.
+      # Text the review wrote is cleaned first: < escaped, mentions broken, a line break made a
+      # space, each title cut to 200 characters and each detail to 2,000, and escaped as GitHub's
+      # workflow commands need, so it can't add an annotation or a property of its own.
+      - name: Make the findings the check's own, failed on an Important one
+        id: post
+        env:
+          KIND: ${{ matrix.review.kind }}
+          UNREAD: ${{ steps.bring.outputs.unread }}
+        run: |
+          # The session's own folder is read only if it, and everything in it, is a plain folder or
+          # file where it should be, so no link can lead the host's read anywhere else.
+          out="$RUNNER_TEMP/session/out"
+          if [ "$(realpath -e "$out" 2> /dev/null)" != "$(realpath -e "$RUNNER_TEMP")/session/out" ] ||
+            [ -n "$(find "$out" ! -type f ! -type d -print -quit)" ]; then
+            echo "::error title=No findings::The review's folder holds a link or something else that isn't a plain file or folder, so none of it is read."
+            exit 1
+          fi
+          file="$out/$KIND.json"
+          looks_like_token() {
+            LC_ALL=C sed -E 's#base64,[A-Za-z0-9+/]+=*##g; s#data-points="[A-Za-z0-9+/]+=*"##g' |
+              LC_ALL=C grep -aoiE 'sk-ant-|[A-Za-z0-9_-]{80,}' | grep -iE 'sk-ant-|[0-9]' > /dev/null
+          }
+          if ! [[ "$UNREAD" =~ ^[0-9]{1,4}$ ]]; then
+            echo "The patch left no readable count of the binary files the review couldn't read."
+            exit 1
+          fi
+          if ! jq -e 'type == "array" and length <= 50 and all(.[];
+              type == "object" and
+              (.severity | IN("Important", "Nit", "Pre-existing")) and
+              (.file | type == "string") and (.line | type == "number" and . >= 0) and
+              (.title | type == "string") and (.detail | type == "string"))' "$file" > /dev/null 2>&1; then
+            echo "::error title=No findings::The review left no readable record of its findings."
+            exit 1
+          fi
+          if looks_like_token < "$file"; then
+            echo "::error title=Refused::The review's findings carry what looks like a login token, so none is posted."
+            exit 1
+          fi
+          clean='def clean: gsub("[\r\n]+"; " ") | gsub("<"; "&lt;") | gsub("@(?=[A-Za-z0-9])"; "@​");
+            def data: gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A");
+            def prop: data | gsub(":"; "%3A") | gsub(","; "%2C");
+            def place: (.file | gsub("`"; "") | clean | .[0:300]);'
+          # First, and with room kept for it among the step's ten notices, so it's never one GitHub
+          # drops: when it's posted, nine Pre-existing findings are annotated, not ten.
+          if [ "$UNREAD" -gt 0 ]; then
+            echo "::notice title=Unread binary files::The pull request changes $UNREAD binary images or fonts, which the review couldn't read. A person should look at them."
+          fi
+          jq -r --argjson notices "$(( UNREAD > 0 ? 9 : 10 ))" "$clean"'
+            {"Important": "error", "Nit": "warning", "Pre-existing": "notice"} as $level
+            | . as $all | ["Important", "Nit", "Pre-existing"][] as $rank
+            | [$all[] | select(.severity == $rank)][0:(if $rank == "Pre-existing" then $notices else 10 end)][]
+            | "::\($level[$rank]) "
+              + ([(if place != "" then "file=\(place | prop)" else empty end),
+                  (if .line >= 1 then "line=\(.line | floor)" else empty end),
+                  "title=\("\($rank): \(.title | clean | .[0:200])" | prop)"] | join(","))
+              + "::\(.detail | clean | .[0:2000] | data)"' "$file"
+          jq -r "$clean"'
+            if length == 0 then "The review found nothing that survived a second look."
+            else . as $all | [["Important", "Nit", "Pre-existing"][] as $rank
+              | [$all[] | select(.severity == $rank)] | select(length > 0)
+              | "## \($rank)\n\n" + ([.[] | "- In `\(place)\(if .line > 0 then ":\(.line | floor)" else "" end)`: **\(.title | clean | .[0:200])** \(.detail | clean | .[0:2000])"] | join("\n"))]
+              | join("\n\n") end' "$file" >> "$GITHUB_STEP_SUMMARY"
+          important="$(jq '[.[] | select(.severity == "Important")] | length' "$file")"
+          if [ "$important" -gt 0 ]; then
+            echo "The review found $important Important findings."
+            exit 1
+          fi
+
+  # On the app's pull request from a factory branch, once both reviews have passed, a third fresh
+  # Claude session reads the patch and both reviews' findings, from their checks, and sorts the change by risk:
+  # ship, show or ask. Its verdict and reasons are annotations on its own check, which always
+  # passes, so the verdict never wakes the fixer; land.yml reads it from there. A check that gave no
+  # verdict asks. It has no gate of its own: it runs only once both reviews, each behind the gate,
+  # have passed.
+  classify:
+    name: Classify
+    needs: review
+    if: >-
+      !cancelled() && needs.review.result == 'success' && startsWith(github.head_ref, 'build/issue-') &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login == 'awml-factory[bot]' && github.event.pull_request.user.type == 'Bot'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # The host's own folder: what the host reads after a session, which no session can write, in a
+    # folder under root's /var/lib, so nothing running as the runner's user can rename it away.
+    env:
+      HOST_DIR: /var/lib/awml-host
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        continue-on-error: true
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        continue-on-error: true
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Bring in the patch against main, main's prompts, AGENTS.md and REVIEW.md, and both reviews' findings
+        id: bring
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+          echo "::stop-commands::$stop"
+          trap 'echo "::$stop::"' EXIT
+          cp .github/bring-patch.sh .github/read-findings.sh .github/sandbox-settings.sh "$RUNNER_TEMP/"
+          bash "$RUNNER_TEMP/bring-patch.sh"
+          bash "$RUNNER_TEMP/read-findings.sh" "$GITHUB_RUN_ID" "$RUNNER_TEMP/checks"
+          cp "$RUNNER_TEMP/checks/findings.json" "$RUNNER_TEMP/review/findings.json"
+
+      - name: Install Claude Code and bubblewrap
+        id: install
+        if: steps.bring.outcome == 'success'
+        continue-on-error: true
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y bubblewrap socat
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          # The host's own folder, made by root under root's /var/lib, so no command a session runs,
+          # as the runner's user, can rename it or a folder above it, and denied to every session.
+          sudo install -d -o "$(id -u)" -g "$(id -g)" -m 700 "$HOST_DIR"
+          # The Docker socket would let a command start a root container outside the sandbox. It's
+          # root's, so taking the group's access away leaves the runner user unable to reach it.
+          if [ -e /var/run/docker.sock ]; then sudo chmod 600 /var/run/docker.sock; fi
+          bwrap --dev-bind / / --unshare-pid true
+          npm install -g @anthropic-ai/claude-code@2.1.312
+
+      # The session starts as each review's does: in an empty home of its own, reading inputs it
+      # can't change, editing only its verdict, in a folder of its own, and running nothing.
+      # The session's home holds main's sandbox settings, from .github/sandbox-settings.sh, with no
+      # host allowed, though the session runs no commands (#131). Its log goes to the host's own
+      # folder, which the sandbox denies, and its output folder is read only once it holds nothing
+      # but plain files and folders.
+      # The step is one { } group, which bash parses whole before it starts, and its sandbox can't
+      # write the step's own script, "$0", so nothing a command writes there runs after the session.
+      - name: Sort the change by risk
+        id: session
+        if: steps.install.outcome == 'success'
+        continue-on-error: true
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
+          REVIEW_DIR: ${{ runner.temp }}/review
+        run: |
+          {
+            stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+            echo "::stop-commands::$stop"
+            trap 'echo "::$stop::"' EXIT
+            session="$RUNNER_TEMP/session"
+            host="$HOST_DIR"
+            chmod -R a-w "$REVIEW_DIR"
+            mkdir -p "$session/home" "$session/out" "$host"
+            bash "$RUNNER_TEMP/sandbox-settings.sh" "$session/home" "$GITHUB_WORKSPACE" workspace "$0" "$host"
+            prompt="$(sed -e "s|REVIEW_DIR|$REVIEW_DIR|g" -e "s|OUT_DIR|$session/out|g" "$RUNNER_TEMP/prompts/classify-prompt.md")"
+            status=0
+            HOME="$session/home" claude -p "$prompt" --model opus --max-turns 100 --permission-mode default \
+              --setting-sources user --strict-mcp-config --add-dir "$REVIEW_DIR" --add-dir "$session/out" \
+              --disallowedTools "Read(//proc/**)" "Bash" "Edit(./.git/**)" "Write(./.git/**)" \
+              --allowedTools "Read(./**)" "Read(/$REVIEW_DIR/**)" "Edit(/$session/out/classification.json)" \
+              > "$host/session.log" 2>&1 || status=$?
+            cat "$host/session.log"
+            exit "$status"
+          }
+
+      # The verdict must be ship, show or ask with one to five reasons, and carry nothing like the
+      # login token. It becomes a notice titled Verdict, and each reason, cleaned as a review's
+      # findings are, a notice titled Reason. Anything else posts no verdict, which land.yml reads as
+      # ask. This step never fails, so the check always passes.
+      - name: Make the verdict and its reasons the check's own
+        id: post
+        if: always()
+        continue-on-error: true
+        run: |
+          # The session's own folder is read only if it, and everything in it, is a plain folder or
+          # file where it should be, so no link can lead the host's read anywhere else.
+          out="$RUNNER_TEMP/session/out"
+          if [ ! -e "$out" ] && [ ! -L "$out" ]; then
+            echo "::warning title=No verdict::Classify's session didn't run, so land asks for a review."
+            exit 0
+          fi
+          if [ "$(realpath -e "$out" 2> /dev/null)" != "$(realpath -e "$RUNNER_TEMP")/session/out" ] ||
+            [ -n "$(find "$out" ! -type f ! -type d -print -quit)" ]; then
+            echo "::warning title=No verdict::Classify's folder holds a link or something else that isn't a plain file or folder, so land.yml asks for a review."
+            exit 0
+          fi
+          file="$out/classification.json"
+          looks_like_token() {
+            LC_ALL=C sed -E 's#base64,[A-Za-z0-9+/]+=*##g; s#data-points="[A-Za-z0-9+/]+=*"##g' |
+              LC_ALL=C grep -aoiE 'sk-ant-|[A-Za-z0-9_-]{80,}' | grep -iE 'sk-ant-|[0-9]' > /dev/null
+          }
+          if ! jq -e '(.verdict | IN("ship", "show", "ask")) and
+              (.reasons | type == "array" and length >= 1 and length <= 5 and all(.[]; type == "string"))' \
+              "$file" > /dev/null 2>&1; then
+            echo "::warning title=No verdict::Classify left no readable verdict, so land.yml asks for a review."
+            exit 0
+          fi
+          if looks_like_token < "$file"; then
+            echo "::warning title=No verdict::Classify's verdict carries what looks like a login token, so land.yml asks for a review."
+            exit 0
+          fi
+          jq -r 'def clean: gsub("[\r\n]+"; " ") | gsub("<"; "&lt;") | gsub("@(?=[A-Za-z0-9])"; "@​");
+            def data: gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A");
+            "::notice title=Verdict::\(.verdict)", (.reasons[] | "::notice title=Reason::\(clean | .[0:1000] | data)")' "$file"
+          jq -r 'def clean: gsub("[\r\n]+"; " ") | gsub("<"; "&lt;") | gsub("@(?=[A-Za-z0-9])"; "@​");
+            "Classify says **\(.verdict)**, because:\n", (.reasons[] | "- \(clean | .[0:1000])")' "$file" >> "$GITHUB_STEP_SUMMARY"
 
   report:
     needs: test
-    if: failure() && github.ref == 'refs/heads/main'
+    if: failure() && github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -55,6 +455,8 @@ jobs:
       contents: read
       issues: write
     steps:
+      # The failing output is the code's own, so in the comment it stays inside its fence, with its <
+      # escaped and its mentions broken, and only its last 150 lines.
       - name: Report the failure on the open issue, or write a new one
         id: report
         env:
@@ -72,11 +474,12 @@ jobs:
             gh run view --repo "$GITHUB_REPOSITORY" --job "$job" --log-failed \
               || gh api "repos/$GITHUB_REPOSITORY/actions/jobs/$job/logs"
           done < "$here/jobs.txt" > "$here/log.txt"
-          tail -n 150 "$here/log.txt" > "$here/output.txt"
+          tail -n 150 "$here/log.txt" | sed -e 's/</\&lt;/g' -e 's/@\([A-Za-z0-9]\)/@\xe2\x80\x8b\1/g' > "$here/output.txt"
 
           longest="$(grep -o '`*' "$here/output.txt" | awk '{ if (length($0) > m) m = length($0) } END { print m + 0 }')"
           fence="$(printf '%*s' "$(( longest >= 3 ? longest + 1 : 3 ))" '' | tr ' ' '`')"
-          subject="$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA" --jq .commit.message | head -n 1)"
+          subject="$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA" --jq '.commit.message | split("\n")[0]' |
+            cut -c 1-200 | sed -e 's/</\&lt;/g' -e 's/@\([A-Za-z0-9]\)/@\xe2\x80\x8b\1/g')"
           {
             echo "**The checks failed on main at $GITHUB_SHA, \"$subject\".**"
             echo
@@ -113,7 +516,7 @@ jobs:
           {
             cat "$here/failure.md"
             echo
-            echo "The build label starts a build of this issue. A fix the build rule finds straightforward merges by itself once CI passes."
+            echo "The build label starts a build of this issue. CI judges its pull request, and the build rule decides whether it ships, shows or asks for a review."
             echo
             echo "[The run]($run_url)"
           } > "$here/issue.md"
@@ -122,10 +525,13 @@ jobs:
       - name: Make the app's token
         id: app
         if: steps.report.outputs.new == 'true'
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
         with:
           app-id: ${{ secrets.FACTORY_APP_ID }}
           private-key: ${{ secrets.FACTORY_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-issues: write
 
       - name: Open an issue labelled build
         if: steps.report.outputs.new == 'true'

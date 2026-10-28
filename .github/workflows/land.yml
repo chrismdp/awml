@@ -1,337 +1,326 @@
-# A pull request the app opened lands once CI has run on it. GitHub starts this when CI finishes
-# on it, since the app pushed the branch. If CI fails, it starts retry-a-build. If CI passes, a code rule decides whether the change is straightforward, by rules
-# the maintainer wrote down, reading the reviews' findings and the classifier's verdict, which can
-# send a change to review but never skip one. A straightforward change the app sets to merge by
-# itself. Otherwise the person who added the label is asked to review it, and merges it from their
-# own account, which is their yes. Main's own rule holds every merge until CI has passed.
-# Drawn at https://awml.io/chrismdp/land-a-pull-request
+# A factory pull request lands once CI has judged its head commit. GitHub starts this when CI's
+# pull_request run finishes on a build/issue-* branch. People merge their own pull requests. It reads
+# everything from GitHub and git at that moment: the head commit's checks, the reviews' findings and
+# Classify's verdict among them, the branch's commits since main, and the build rule run on that
+# commit. The rule can only move Classify's verdict towards ask. Ship merges, pinned to the commit
+# judged. Show merges the same way, then tells the person who added the label what to look at. Ask
+# requests their review and doesn't merge: they merge from their own account, which is their yes.
+# Nothing sets a pull request to merge by itself later, and main's own rule holds every merge until
+# CI has passed.
+# Drawn in .github/drawings/land-a-pull-request.yaml
 name: Land a build's pull request
 
 # GitHub runs this from main's copy, whatever the branch holds, and no job here checks out the
-# branch or runs anything from it. The find job reads, with a token that can't write: it reads CI's
-# result and applies the rule. The land job runs only gh: it starts retry-a-build, or writes the
-# verdict into the description and sets the merge or asks for review, and edits the build's status
-# comment. The app's token edits the description and sets the merge, so the merge starts CI on main
-# and the rebase workflow. Review requests, comments and the retry's dispatch use the Actions
-# token. It needs what build.yml lists.
+# branch or runs anything from it: the find job reads the head commit with git as data. The find
+# job reads with a token that can't write, and passes on only the commit's sha, the outcome, the
+# labeller's login and the rule's own reasons. The land job runs only gh. The app's token, for this
+# repository alone, merges, so the merge starts CI on main and the rebase workflow. Review requests
+# and comments use the Actions token. It needs what build.yml lists.
 on:
   workflow_run:
     workflows: [CI]
     types: [completed]
     branches: ["build/issue-*"]
 
-# A newer CI result on a branch replaces an older one, which no longer matches the branch's head.
-concurrency:
-  group: land-${{ github.event.workflow_run.head_branch }}
-  cancel-in-progress: true
-
 jobs:
-  # Reads, and holds no token that can write. It finds the open pull request the app opened from
-  # the branch, whose head is the commit CI ran on, and the build that opened it, named in the first
-  # line of its description. Only the app and people with write access can edit that description,
-  # and the run it names must be this repository's build workflow, which pushed exactly this commit.
-  # Everything else comes from that build's own records. If CI passed, it applies Claude's patch to
-  # the commit of main the build pushed it onto and judges it with the rule as it is on main now.
+  # The reading job takes no turns in a concurrency group: a stranger's pull request from the same
+  # branch starts a run too, and GitHub keeps only one run waiting in a group, so a newer one would
+  # displace the real one's. It only reads GitHub, afresh, and leaves quietly when there's nothing to
+  # do. The land job takes turns per pull request, and is never stopped between its merge and its
+  # comment.
   find:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       actions: read
+      checks: read
       contents: read
+      issues: read
       pull-requests: read
     outputs:
-      ci: ${{ steps.find.outputs.ci }}
-      issue: ${{ steps.find.outputs.issue }}
-      attempt: ${{ steps.find.outputs.attempt }}
-      requested_by: ${{ steps.find.outputs.requested_by }}
-      pr: ${{ steps.find.outputs.pr }}
-      head_sha: ${{ steps.find.outputs.head_sha }}
-      verdict: ${{ steps.judge.outputs.verdict }}
+      outcome: ${{ steps.judge.outputs.outcome }}
+      reasons: ${{ steps.judge.outputs.reasons }}
+      pr: ${{ steps.ready.outputs.pr }}
+      head_sha: ${{ steps.ready.outputs.head_sha }}
+      labeller: ${{ steps.ready.outputs.labeller }}
+      classify: ${{ steps.ready.outputs.classify }}
     steps:
-      - name: Find the build's pull request
-        id: find
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BRANCH: ${{ github.event.workflow_run.head_branch }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
-          HEAD_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
-          CI_EVENT: ${{ github.event.workflow_run.event }}
-          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
-        run: |
-          leave() { echo "$1"; echo "ci=none" >> "$GITHUB_OUTPUT"; exit 0; }
-          [ "$HEAD_REPOSITORY" = "$GITHUB_REPOSITORY" ] && [ "$CI_EVENT" = push ] ||
-            leave "CI didn't run on a push to this repository."
-          case "$BRANCH" in build/issue-*) issue="${BRANCH#build/issue-}" ;; *) leave "This isn't a build's branch." ;; esac
-          case "$issue" in ''|*[!0-9]*) leave "This isn't a build's branch." ;; esac
-          case "$HEAD_SHA" in *[!0-9a-f]*) leave "CI's commit isn't a commit id." ;; esac
-          [ "${#HEAD_SHA}" -eq 40 ] || leave "CI's commit isn't a commit id."
-          case "$CONCLUSION" in
-            success) ci=passed ;;
-            failure) ci=failed ;;
-            *) leave "CI ended as $CONCLUSION, so there's nothing to do." ;;
-          esac
-
-          pull="$(gh api "repos/$GITHUB_REPOSITORY/pulls?head=$GITHUB_REPOSITORY_OWNER:$BRANCH&state=open" |
-            jq -c --arg repository "$GITHUB_REPOSITORY" --arg branch "$BRANCH" \
-              '[.[] | select(.base.ref == "main" and .head.ref == $branch and
-                .head.repo.full_name == $repository and .user.type == "Bot")] | first // empty')"
-          # Any bot can open a pull request; the app's own login, from the build's record, is
-          # checked once the record is read.
-          [ -n "$pull" ] || leave "No open pull request of the app's is on $BRANCH."
-          [ "$(jq -r .head.sha <<< "$pull")" = "$HEAD_SHA" ] ||
-            leave "The pull request has moved on since CI ran, so a newer CI result decides."
-          pr="$(jq -r .number <<< "$pull")"
-          build_run="$(jq -r '(.body // "") | (split("\n")[0] // "") | rtrimstr("\r") |
-            (capture("^<!-- factory-build run=(?<run>[0-9]+) -->$") | .run) // empty' <<< "$pull")"
-          [ -n "$build_run" ] || leave "The description of #$pr names no build."
-          # The run must be this repository's build, run from main for a label or a dispatch. GitHub
-          # names each build run for its issue and try, from its own inputs.
-          workflow="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/build.yml" --jq .id)"
-          named="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$build_run" || true)"
-          [ -n "$workflow" ] && [ -n "$named" ] &&
-            jq -e --argjson workflow "$workflow" '.workflow_id == $workflow and .head_branch == "main" and
-              (.event | IN("issues", "workflow_dispatch"))' <<< "$named" > /dev/null ||
-            leave "The run that #$pr names isn't this repository's build from main."
-
-          record="$RUNNER_TEMP/pull-request"
-          gh run download "$build_run" --repo "$GITHUB_REPOSITORY" -n pull-request -D "$record" ||
-            leave "The build that opened #$pr left no record."
-          jq -e --argjson issue "$issue" '
-              .issue == $issue and (.attempt | IN(1, 2, 3)) and
-              (.requested_by | type == "string" and test("^[A-Za-z0-9._\\[\\]-]{0,64}$")) and
-              (.commit | type == "string" and test("^[0-9a-f]{40}$")) and
-              (.base | type == "string" and test("^[0-9a-f]{40}$")) and
-              (.bot | type == "string" and test("^[a-z0-9-]+\\[bot\\]$"))' "$record/build.json" > /dev/null ||
-            leave "The record of the build that opened #$pr isn't one."
-          [ "$(jq -r .display_title <<< "$named")" = "Build of issue $issue, try $(jq -r .attempt "$record/build.json")" ] ||
-            leave "The run that #$pr names is the build of another issue or try."
-          [ "$(jq -r .user.login <<< "$pull")" = "$(jq -r .bot "$record/build.json")" ] ||
-            leave "#$pr wasn't opened by the app that pushed the build."
-          [ "$(jq -r .commit "$record/build.json")" = "$HEAD_SHA" ] ||
-            leave "The branch has moved since the build pushed it, so it's left to whoever moved it."
-
-          {
-            echo "ci=$ci"
-            echo "issue=$issue"
-            echo "attempt=$(jq -r .attempt "$record/build.json")"
-            echo "requested_by=$(jq -r .requested_by "$record/build.json")"
-            echo "base=$(jq -r .base "$record/build.json")"
-            echo "pr=$pr"
-            echo "head_sha=$HEAD_SHA"
-            echo "build_run=$build_run"
-          } | tee -a "$GITHUB_OUTPUT"
-
-      - uses: actions/checkout@v5
-        if: steps.find.outputs.ci == 'passed'
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-      # The change's code ran in the build's jobs, so no Go cache is restored here.
-      - uses: actions/setup-go@v5
-        if: steps.find.outputs.ci == 'passed'
-        with:
-          go-version: stable
-          cache: false
-
-      # The rule, its settings and the description's script come from main as it is now, and the
-      # patch is judged against the commit of main the build pushed it onto, which must be on main.
-      # This job builds and runs nothing else.
-      - name: Apply the rule
-        id: judge
-        if: steps.find.outputs.ci == 'passed'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BASE: ${{ steps.find.outputs.base }}
-          BUILD_RUN: ${{ steps.find.outputs.build_run }}
-        run: |
-          go build -o "$RUNNER_TEMP/build-rule" ./internal/buildrule
-          for name in change review; do
-            gh run download "$BUILD_RUN" --repo "$GITHUB_REPOSITORY" -n "$name" -D "$RUNNER_TEMP/$name"
-          done
-          git merge-base --is-ancestor "$BASE" HEAD
-          git worktree add --detach "$RUNNER_TEMP/judged" "$BASE"
-          git -C "$RUNNER_TEMP/judged" apply --index "$RUNNER_TEMP/change/change.patch"
-          classification=()
-          if [ -f "$RUNNER_TEMP/review/classification.json" ]; then
-            classification=(-classification "$RUNNER_TEMP/review/classification.json")
-          fi
-          "$RUNNER_TEMP/build-rule" -repo "$RUNNER_TEMP/judged" -rules .github/build-rules.yml \
-            -findings "$RUNNER_TEMP/review/findings.json" "${classification[@]}" > "$RUNNER_TEMP/verdict.txt"
-          verdict="$(head -n 1 "$RUNNER_TEMP/verdict.txt")"
-          case "$verdict" in
-            review|straightforward) echo "verdict=$verdict" >> "$GITHUB_OUTPUT" ;;
-            *) echo "The build rule gave an unknown verdict: $verdict"; exit 1 ;;
-          esac
-          cat "$RUNNER_TEMP/verdict.txt"
-
-      # The pictures' rows were checked by the job that opened the pull request, and are checked
-      # again here, since they come from an artifact.
-      - name: Write the pull request's description and the merge's message
-        if: steps.find.outputs.ci == 'passed'
-        env:
-          ATTEMPT: ${{ steps.find.outputs.attempt }}
-          BUILD_RUN: ${{ steps.find.outputs.build_run }}
-          CHANGE_DIR: ${{ runner.temp }}/change
-          ISSUE: ${{ steps.find.outputs.issue }}
-          REVIEW_DIR: ${{ runner.temp }}/review
-          PICTURES: ${{ runner.temp }}/pull-request/pictures.txt
-          PICTURES_LEFT_OUT: ${{ runner.temp }}/pull-request/pictures-left-out.txt
-          VERDICT: ${{ runner.temp }}/verdict.txt
-        run: |
-          if grep -qvE '^[A-Za-z0-9._/-]+\|[A-Za-z0-9._/-]*\|[A-Za-z0-9._/-]+$' "$PICTURES"; then
-            echo "The pictures' rows aren't plain paths."
-            exit 1
-          fi
-          judged="$RUNNER_TEMP/judged-record"
-          mkdir -p "$judged"
-          export MEDIA_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/raw/factory-media/issue-$ISSUE/attempt-$ATTEMPT"
-          .github/pull-request-body.sh > "$judged/pull-request.md"
-          cat "$judged/pull-request.md"
-          {
-            echo "Merges by itself, because the build rule found it straightforward."
-            echo
-            echo "The build rule called it straightforward because:"
-            echo
-            tail -n +2 "$RUNNER_TEMP/verdict.txt" | while IFS= read -r line; do
-              [ -n "$line" ] && printf -- '- %s\n' "$line"
-            done
-            echo
-            echo "To undo it, use the Revert button on this pull request."
-          } > "$judged/merge.md"
-      - uses: actions/upload-artifact@v4
-        if: steps.find.outputs.ci == 'passed'
-        with:
-          name: judged
-          path: ${{ runner.temp }}/judged-record
-
-  # Acts on CI's result. If CI failed, it starts retry-a-build with CI's run, whose failed log
-  # retry.yml reads. If CI passed, the app writes the verdict into the description and sets a
-  # straightforward change to merge, or the person who added the label is asked to review it, and
-  # the status comment says which. If the rule couldn't be applied, it says so on the issue. It
-  # checks out nothing and runs only gh.
-  land:
-    needs: find
-    if: ${{ !cancelled() && (needs.find.outputs.ci == 'passed' || needs.find.outputs.ci == 'failed') }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    concurrency:
-      group: build-auto-merge
-      cancel-in-progress: false
-    # The Actions token starts the retry, asks for reviews and edits the status comment. The app's
-    # token edits the description and sets the merge.
-    permissions:
-      actions: write
-      issues: write
-      pull-requests: write
-    env:
-      CI: ${{ needs.find.outputs.ci }}
-      ISSUE: ${{ needs.find.outputs.issue }}
-      ATTEMPT: ${{ needs.find.outputs.attempt }}
-      PR_NUMBER: ${{ needs.find.outputs.pr }}
-      HEAD_SHA: ${{ needs.find.outputs.head_sha }}
-      REQUESTED_BY: ${{ needs.find.outputs.requested_by }}
-      VERDICT: ${{ needs.find.outputs.verdict }}
-      JUDGED: ${{ needs.find.result }}
-    steps:
-      - name: Start retry-a-build with CI's failed log as why
-        if: env.CI == 'failed'
+      # GitHub matches the run by its workflow's name, which another workflow could share, so the run
+      # is read back from the API. A required check that failed or hasn't finished, a pull request
+      # that isn't the app's or isn't open, or a head that moved, means it exits quietly: a failed
+      # check is retry-a-build's or the fixer's, and a newer CI result decides a moved head. The
+      # person who last added the issue's build label is the one to tell or ask, if they can write
+      # here, or else the owner, and a label taken off since means the rule asks. Classify isn't
+      # required: once every job has finished, one that didn't pass is read as giving no verdict.
+      - name: "Sort by GitHub's record: is the pull request open at CI's commit, with every check passed?"
+        id: ready
         env:
           GH_TOKEN: ${{ github.token }}
           CI_RUN: ${{ github.event.workflow_run.id }}
         run: |
-          case "$ISSUE" in ''|*[!0-9]*) echo "The issue must be a number: $ISSUE"; exit 1 ;; esac
-          case "$ATTEMPT" in [1-3]) ;; *) echo "The attempt must be 1, 2 or 3: $ATTEMPT"; exit 1 ;; esac
-          case "$CI_RUN" in ''|*[!0-9]*) echo "CI's run must be a number: $CI_RUN"; exit 1 ;; esac
-          gh workflow run retry.yml --repo "$GITHUB_REPOSITORY" --ref main \
-            -f issue="$ISSUE" -f attempt="$ATTEMPT" -f requested_by="$REQUESTED_BY" -f run="$CI_RUN"
+          leave() { echo "$1"; echo "ready=false" >> "$GITHUB_OUTPUT"; exit 0; }
+          case "$CI_RUN" in ''|*[!0-9]*) echo "CI's run isn't a number: $CI_RUN"; exit 1 ;; esac
+          run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN")"
+          jq -e --arg repository "$GITHUB_REPOSITORY" '.path == ".github/workflows/ci.yml" and
+              .event == "pull_request" and .status == "completed" and
+              .head_repository.full_name == $repository' <<< "$run" > /dev/null ||
+            leave "Run $CI_RUN isn't CI's finished run on a pull request from this repository."
+          head_sha="$(jq -r .head_sha <<< "$run")"
+          branch="$(jq -r .head_branch <<< "$run")"
+          [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]] || leave "CI's commit isn't a commit id."
+          [[ "$branch" =~ ^build/issue-[0-9]+$ ]] || leave "This isn't a build's branch."
+          issue="${branch#build/issue-}"
 
-      - uses: actions/download-artifact@v4
-        if: env.CI == 'passed' && env.JUDGED == 'success'
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN/jobs?per_page=100" --jq '.jobs[]' |
+            jq -s . > "$RUNNER_TEMP/jobs.json"
+          jq -e 'all(.[]; .status == "completed")' "$RUNNER_TEMP/jobs.json" > /dev/null ||
+            leave "A check on $head_sha hasn't finished, so a later run decides."
+          for name in "test (1.22)" "test (stable)" "Bug review" "Security review"; do
+            jq -e --arg name "$name" '[.[] | select(.name == $name and .conclusion == "success")] | length == 1' \
+              "$RUNNER_TEMP/jobs.json" > /dev/null || leave "$name didn't pass on $head_sha, so it's left to retry-a-build or the fixer."
+          done
+          # A re-run of a run an earlier attempt of which passed every required check: land acted on
+          # that attempt, so it doesn't merge or ask again.
+          attempt="$(jq -r '.run_attempt // 1' <<< "$run")"
+          [[ "$attempt" =~ ^[0-9]+$ ]] || leave "CI's run attempt isn't a number."
+          for ((earlier = 1; earlier < attempt; earlier++)); do
+            gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN/attempts/$earlier/jobs?per_page=100" --jq '.jobs[]' |
+              jq -se '[.[] | select((.name | IN("test (1.22)", "test (stable)", "Bug review", "Security review")) and
+                .conclusion == "success")] | length == 4' > /dev/null &&
+              leave "Attempt $earlier of this run passed every required check, and land acted on it then."
+          done
+          # A Classify job that failed or was cancelled as a whole, by a timeout or a lost runner, gave
+          # no verdict to trust, and its failure wakes neither the fixer nor retry, so it's read as no
+          # verdict, which asks.
+          if jq -e '[.[] | select(.name == "Classify" and .conclusion == "success")] | length == 1' "$RUNNER_TEMP/jobs.json" > /dev/null; then
+            classify_passed=true
+          else
+            classify_passed=false
+          fi
+          classify="$(jq -r '[.[] | select(.name == "Classify")] | first | .html_url // ""' "$RUNNER_TEMP/jobs.json")"
+          [[ "$classify" =~ ^https://github\.com/[A-Za-z0-9._/-]+$ ]] || classify="$(jq -r .html_url <<< "$run")"
+
+          pull="$(gh api "repos/$GITHUB_REPOSITORY/pulls?head=$GITHUB_REPOSITORY_OWNER:$branch&base=main&state=open" |
+            jq -c --arg repository "$GITHUB_REPOSITORY" --arg branch "$branch" \
+              '[.[] | select(.base.ref == "main" and .head.ref == $branch and
+                .head.repo.full_name == $repository and .user.login == "awml-factory[bot]" and .user.type == "Bot")] | first // empty')"
+          [ -n "$pull" ] || leave "No open pull request of the app's is on $branch."
+          [ "$(jq -r .head.sha <<< "$pull")" = "$head_sha" ] ||
+            leave "The pull request has moved on since CI ran, so a newer CI result decides."
+          pr="$(jq -r .number <<< "$pull")"
+          case "$pr" in ''|*[!0-9]*) echo "The pull request's number isn't a number: $pr"; exit 1 ;; esac
+
+          # The last build label's adder, by the same labelled event the build checks, if they can
+          # write here: the owner when that was the app's bot, or someone who can't, such as a
+          # triager who added it again.
+          may_write() {
+            [[ "$1" =~ ^[A-Za-z0-9-]{1,39}$ ]] || return 1
+            [ "$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$1/permission" \
+              --jq '(.permission | IN("admin", "write")) or (.role_name | IN("admin", "maintain", "write"))' 2> /dev/null)" = true ]
+          }
+          labeller="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$issue/events?per_page=100" \
+            --jq '.[] | select(.event == "labeled" and .label.name == "build") | .actor' |
+            jq -rs 'last // {} | if .type == "User" then .login // "" else "" end')"
+          may_write "$labeller" || labeller="$GITHUB_REPOSITORY_OWNER"
+          # A build label taken off the issue means a person has stepped in, so the rule asks. The
+          # labels are read from GitHub, as retry reads them.
+          state="$(gh api graphql -F owner="${GITHUB_REPOSITORY%%/*}" -F name="${GITHUB_REPOSITORY#*/}" -F number="$issue" -f query='
+            query($owner: String!, $name: String!, $number: Int!) {
+              repository(owner: $owner, name: $name) {
+                issue(number: $number) { labels(first: 100) { nodes { name } } }
+              }
+            }' --jq .data.repository.issue)"
+          if jq -e '[.labels.nodes[].name] | index("build")' <<< "$state" > /dev/null; then
+            labelled=true
+          else
+            labelled=false
+          fi
+          {
+            echo "ready=true"
+            echo "pr=$pr"
+            echo "head_sha=$head_sha"
+            echo "labeller=$labeller"
+            echo "classify=$classify"
+            echo "classify_passed=$classify_passed"
+            echo "labelled=$labelled"
+          } | tee -a "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        if: steps.ready.outputs.ready == 'true'
         with:
-          name: judged
-          path: ${{ runner.temp }}/judged
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      # The change's code ran in CI's jobs, so no Go cache is restored here.
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        if: steps.ready.outputs.ready == 'true'
+        with:
+          go-version: stable
+          cache: false
+
+      # The rule, its settings and the script that reads the checks come from main as it is now,
+      # built and copied out before the head is fetched.
+      - name: Build the rule from main
+        id: rule
+        if: steps.ready.outputs.ready == 'true'
+        run: |
+          go build -o "$RUNNER_TEMP/build-rule" ./internal/buildrule
+          cp .github/build-rules.yml .github/read-findings.sh "$RUNNER_TEMP/"
+
+      # The rule judges the head commit itself, not a patch: it's fetched into git's store, never
+      # checked out, and its tree is read into the index of a tree of its own at the commit of main
+      # it sits on, so the files on disk stay main's. The rule reads the branch's commits since then
+      # with git, the reviews' findings and Classify's verdict from their checks, and asks when
+      # Classify gave none. Only the outcome and the rule's own fixed reasons pass on, so
+      # Classify's reasons are linked, never quoted.
+      - name: "Sort by rule: ship, show or ask?"
+        id: judge
+        if: steps.ready.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_RUN: ${{ github.event.workflow_run.id }}
+          HEAD_SHA: ${{ steps.ready.outputs.head_sha }}
+          CLASSIFY_PASSED: ${{ steps.ready.outputs.classify_passed }}
+          LABELLED: ${{ steps.ready.outputs.labelled }}
+        run: |
+          if ! [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "The commit to judge isn't a commit id: $HEAD_SHA"
+            exit 1
+          fi
+          git -c core.hooksPath=/dev/null -c core.fsmonitor=false \
+            -c http.https://github.com/.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" \
+            fetch --no-tags origin "$HEAD_SHA"
+          base="$(git merge-base HEAD "$HEAD_SHA")"
+          git -c core.hooksPath=/dev/null -c core.fsmonitor=false worktree add -q --detach "$RUNNER_TEMP/judged" "$base"
+          git -C "$RUNNER_TEMP/judged" read-tree "$HEAD_SHA"
+          bash "$RUNNER_TEMP/read-findings.sh" "$CI_RUN" "$RUNNER_TEMP/checks"
+          [ "$CLASSIFY_PASSED" = true ] || echo missing > "$RUNNER_TEMP/checks/verdict.txt"
+          "$RUNNER_TEMP/build-rule" -repo "$RUNNER_TEMP/judged" -rules "$RUNNER_TEMP/build-rules.yml" \
+            -findings "$RUNNER_TEMP/checks/findings.json" -classify "$(cat "$RUNNER_TEMP/checks/verdict.txt")" \
+            -head "$HEAD_SHA" > "$RUNNER_TEMP/rule.txt"
+          cat "$RUNNER_TEMP/rule.txt"
+          outcome="$(head -n 1 "$RUNNER_TEMP/rule.txt")"
+          case "$outcome" in
+            ship|show|ask) ;;
+            *) echo "The build rule gave an unknown outcome: $outcome"; exit 1 ;;
+          esac
+          reasons="$(tail -n +2 "$RUNNER_TEMP/rule.txt" | jq -Rsc 'split("\n") | map(select(. != ""))')"
+          # With the build label taken off, a person decides: ship or show becomes ask, for that reason
+          # alone, and an ask gives it too.
+          if [ "$LABELLED" != true ]; then
+            off="The build label was taken off the issue, so a person decides."
+            if [ "$outcome" = ask ]; then
+              reasons="$(jq -c --arg off "$off" '[$off] + .' <<< "$reasons")"
+            else
+              reasons="$(jq -nc --arg off "$off" '[$off]')"
+            fi
+            outcome=ask
+          fi
+          echo "outcome=$outcome" >> "$GITHUB_OUTPUT"
+          echo "reasons=$reasons" >> "$GITHUB_OUTPUT"
+
+  # Ships, shows or asks. It checks out nothing and runs only gh. The merge names the commit judged,
+  # so GitHub refuses it if anyone pushed since. Comments are new ones, for the person who added
+  # the label, from fixed text, the rule's reasons, cleaned, and links.
+  land:
+    needs: find
+    if: contains(fromJSON('["ship", "show", "ask"]'), needs.find.outputs.outcome)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: land-pull-${{ needs.find.outputs.pr }}
+      cancel-in-progress: false
+    # The Actions token asks for reviews and comments. The app's token merges.
+    permissions:
+      issues: write
+      pull-requests: write
+    env:
+      OUTCOME: ${{ needs.find.outputs.outcome }}
+      REASONS: ${{ needs.find.outputs.reasons }}
+      PR_NUMBER: ${{ needs.find.outputs.pr }}
+      HEAD_SHA: ${{ needs.find.outputs.head_sha }}
+      LABELLER: ${{ needs.find.outputs.labeller }}
+      CLASSIFY: ${{ needs.find.outputs.classify }}
+    steps:
+      # Everything the find job passed on is checked before it's used. The reasons are the rule's
+      # own text, but a path in one came from the branch, so each is cleaned as a session's text
+      # is: < escaped, mentions broken, length capped.
+      - name: Check what the find job passed on, and write the message and comments
+        id: write
+        run: |
+          case "$OUTCOME" in ship|show|ask) ;; *) echo "The outcome must be ship, show or ask: $OUTCOME"; exit 1 ;; esac
+          case "$PR_NUMBER" in ''|*[!0-9]*) echo "The pull request must be a number: $PR_NUMBER"; exit 1 ;; esac
+          if ! [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || ! [[ "$LABELLER" =~ ^[A-Za-z0-9-]{1,39}$ ]] ||
+            ! [[ "$CLASSIFY" =~ ^https://github\.com/[A-Za-z0-9._/-]+$ ]]; then
+            echo "The commit, the labeller or the link to Classify isn't one this workflow handles."
+            exit 1
+          fi
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          jq -r 'def clean: gsub("[\r\n]+"; " ") | gsub("<"; "&lt;") | gsub("@(?=[A-Za-z0-9])"; "@​") | .[0:500];
+            .[0:20][] | "- \(clean)"' <<< "$REASONS" > "$RUNNER_TEMP/reasons.md"
+          case "$OUTCOME" in
+            ship) said="Shipped" ;;
+            show) said="Shown" ;;
+            ask) said="Asked" ;;
+          esac
+          {
+            echo "$said by land.yml, once CI passed on $HEAD_SHA, because:"
+            echo
+            cat "$RUNNER_TEMP/reasons.md"
+            echo
+            echo "To undo it, use the Revert button on this pull request."
+          } > "$RUNNER_TEMP/merge.md"
+          {
+            printf '@%s, this merged once CI passed on %s, and the build rule says it'"'"'s worth a look:\n\n' "$LABELLER" "$HEAD_SHA"
+            cat "$RUNNER_TEMP/reasons.md"
+            echo
+            printf '[Classify'"'"'s reasons](%s) · [The run](%s)\n' "$CLASSIFY" "$run_url"
+          } > "$RUNNER_TEMP/show.md"
+          {
+            printf '@%s, CI passed on %s, but the build rule says this needs your review before it merges:\n\n' "$LABELLER" "$HEAD_SHA"
+            cat "$RUNNER_TEMP/reasons.md"
+            echo
+            echo "Merge it from your own account if you agree."
+            echo
+            printf '[Classify'"'"'s reasons](%s) · [The run](%s)\n' "$CLASSIFY" "$run_url"
+          } > "$RUNNER_TEMP/ask.md"
 
       - name: Make the app's token
         id: app
-        if: env.CI == 'passed' && env.JUDGED == 'success'
-        uses: actions/create-github-app-token@v1
+        if: env.OUTCOME == 'ship' || env.OUTCOME == 'show'
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
         with:
           app-id: ${{ secrets.FACTORY_APP_ID }}
           private-key: ${{ secrets.FACTORY_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
 
-      - name: Write the verdict into the description
-        if: env.CI == 'passed' && env.JUDGED == 'success'
+      - name: Merge, pinned to the commit judged
+        id: merge
+        if: env.OUTCOME == 'ship' || env.OUTCOME == 'show'
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
         run: |
-          case "$PR_NUMBER" in ''|*[!0-9]*) echo "The pull request must be a number: $PR_NUMBER"; exit 1 ;; esac
-          gh pr edit "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/judged/pull-request.md"
+          gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --squash \
+            --match-head-commit "$HEAD_SHA" --body-file "$RUNNER_TEMP/merge.md"
 
-      - name: Ask for a review
-        if: env.CI == 'passed' && env.JUDGED == 'success' && env.VERDICT == 'review'
+      - name: Tell the person who added the label what to look at
+        id: show
+        if: env.OUTCOME == 'show'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/show.md"
+
+      # Asking doesn't merge: the person merges from their own account, which is their yes.
+      - name: Ask the person who added the label to review it
+        id: ask
+        if: env.OUTCOME == 'ask'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          reviewer="$REQUESTED_BY"
-          case "$reviewer" in
-            ''|*[!A-Za-z0-9-]*) reviewer="$GITHUB_REPOSITORY_OWNER" ;;
-          esac
-          if ! gh pr edit "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --add-reviewer "$reviewer"; then
-            echo "::warning::Could not ask $reviewer to review the pull request."
+          if ! gh pr edit "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --add-reviewer "$LABELLER"; then
+            echo "::warning::Could not ask $LABELLER to review the pull request."
           fi
-
-      # CI has already passed, so GitHub may refuse to set a merge that could happen now. Then it
-      # merges now instead. Either way it's only the commit that CI and the rule saw, and main's
-      # rule still holds it.
-      - name: Set the pull request to merge
-        if: env.CI == 'passed' && env.JUDGED == 'success' && env.VERDICT == 'straightforward'
-        env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
-        run: |
-          gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --auto --squash \
-            --match-head-commit "$HEAD_SHA" --body-file "$RUNNER_TEMP/judged/merge.md" ||
-            gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --squash \
-              --match-head-commit "$HEAD_SHA" --body-file "$RUNNER_TEMP/judged/merge.md"
-
-      - name: Edit the status comment
-        if: ${{ !cancelled() && env.CI == 'passed' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          JOB_STATUS: ${{ job.status }}
-        run: |
-          case "$ISSUE" in ''|*[!0-9]*) echo "The issue must be a number: $ISSUE"; exit 1 ;; esac
-          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          here="$RUNNER_TEMP/status"
-          mkdir -p "$here"
-          {
-            echo "<!-- factory-status -->"
-            [ "$JUDGED" = success ] || JOB_STATUS=failure
-            if [ "$JOB_STATUS" = success ] && [ "$VERDICT" = straightforward ]; then
-              printf '**Built** in #%s, whose CI passed, and which merges by itself. [The run](%s)\n' "$PR_NUMBER" "$run_url"
-            elif [ "$JOB_STATUS" = success ]; then
-              printf '**Built** in #%s, whose CI passed, and which waits for a review. [The run](%s)\n' "$PR_NUMBER" "$run_url"
-            else
-              printf '**The build failed** after CI passed on #%s. [The run](%s)\n' "$PR_NUMBER" "$run_url"
-            fi
-          } > "$here/comment.md"
-          id="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$ISSUE/comments" \
-            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- factory-status -->"))) | .id' |
-            tail -n 1)"
-          if [ -n "$id" ]; then
-            jq -n --rawfile body "$here/comment.md" '{body: $body}' |
-              gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" --input - > /dev/null
-          else
-            gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body-file "$here/comment.md"
-          fi
-          if [ "$JOB_STATUS" != success ]; then
-            {
-              printf '**The build failed after CI passed on #%s, before it set the merge or asked for a review.**\n' "$PR_NUMBER"
-              echo
-              echo "- The run says which step failed."
-              echo "- To try again, remove the build label and add it again."
-              echo
-              echo "[The run]($run_url)"
-            } > "$here/failure.md"
-            gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body-file "$here/failure.md"
-          fi
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/ask.md"

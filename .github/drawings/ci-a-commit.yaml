@@ -1,0 +1,90 @@
+# Every pull request into main is checked each time it's opened or pushed to, and every commit
+# that lands on main is checked, so each commit has one CI run. A pull request from a branch of this
+# repository, opened by its own people or the app, is also reviewed, as jobs of the same run. The tests run on the
+# oldest Go that go.mod allows and on the newest. Beside them, three fresh Claude sessions read the
+# pull request's patch against main, one reviewing it for bugs and one for security. On a factory
+# branch, once both reviews have passed, a third session classifies the change: ship, show or ask.
+# None of them runs any of the change's code. Each job's result is its check on the commit, so the
+# commit as pushed has one judge, and every other workflow reads that judge's verdict from GitHub.
+# A fork's pull request, or one a stranger opened, gets no review: its review jobs fail at a gate
+# that holds no secret, so a person reviews and merges it, and a hand merge never sees green
+# reviews that didn't run, as it would if they were skipped.
+awml: "0.8"
+title: A commit is checked
+description: |
+  CI for the factory: the tests, Bug review and Security review side by side, then Classify on a
+  factory branch, all on the commit as pushed. Their checks on the commit are what landing and
+  fixing read.
+scopes:
+  - { id: public, label: "public: anyone who reads the repository", processing: any }
+parts:
+  - { id: pushed, kind: trigger, label: "A pull request from any branch but main is opened or pushed to, or a commit is pushed to main", wait: PT1H }
+  - { id: token, kind: connector, label: "The repository, through its own Actions token", in: public, ref: issue-to-pull-request.yaml#token }
+  - { id: commit, kind: context, label: "The commit as pushed, and its pull request's title and description, if it has one", in: public, untrusted: true }
+  - { id: tests, kind: code, op: check, label: "Run the tests, vet, the examples and wasm parity, on Go 1.22 and on the newest Go", in: public }
+  - { id: record, kind: code, op: do, label: "Record each test job's result as its check on the commit", in: public }
+  - { id: whose, kind: code, op: sort, label: "Sort by rule, in a gate that holds no secret: is this a pull_request run from a branch of this repository, opened by its own people or the app? If not, the review fails here. A push to main runs the tests only", in: public }
+  - { id: bring, kind: code, op: bring-in, label: "Bring in the pull request's patch against main as data, and list the binary files it changes in a file of the job's own", in: public }
+  - { id: patch, kind: context, label: "The patch applied to the commit of main the branch starts from, made read-only, with the list of binary files", in: public }
+  - { id: repo, kind: context, label: "Main's review prompts, AGENTS.md and REVIEW.md, copied out before any session starts", in: public }
+  - { id: review, kind: ai, op: check, label: "Review the patch for bugs, with fresh context, keeping only the findings that survive a second look", in: public }
+  - { id: secreview, kind: ai, op: check, label: "Review the patch for security, in a session of its own", in: public }
+  - { id: post, kind: code, op: do, label: "Once a review is done, make its findings the job's own check on the commit, failed on an Important finding", in: public }
+  - { id: classify, kind: ai, op: sort, label: "Sort by risk, reading the patch and both reviews' findings: ship, show or ask?", in: public }
+  - { id: postclass, kind: code, op: do, label: "Make Classify's verdict and its reasons the job's own check, which always passes", in: public }
+  - { id: checks, kind: context, label: "The head commit's checks: test (1.22), test (stable), Bug review, Security review and Classify", in: public, untrusted: true }
+  - { id: onejudge, kind: comment, label: "One judge: these checks on the commit as pushed. Nothing merges without the tests and both reviews passing on the head commit, and land and fix read only these, never a record a workflow passed on (#160 rules 1 and 2)" }
+  - { id: forks, kind: comment, label: "A fork's pull request, or one a stranger opened between two branches here, gets no review: its author could steer the sessions, which hold the maintainer's login token. Its review jobs still run, and fail at the gate before any secret is given, since GitHub counts a skipped required check as passed. The test jobs hold no secret and a token that only reads. Keeping the check on who opened it was agreed in #160's follow-up" }
+  - { id: onerun, kind: comment, label: "Decided in #160's follow-up: CI runs on pull_request for every branch but main, and on push only for main, so each commit has one run. The build pushes, then opens its pull request, so CI first runs when it opens" }
+  - { id: norun, kind: comment, label: "The sessions read the patch as data and run none of the change's code. No job that holds the Claude token runs tests, make or go run, since the runner has sudo and its memory holds the job's secrets (#160)" }
+  - { id: mains, kind: comment, label: "Main's prompts, AGENTS.md and REVIEW.md are copied out before a session starts, so the patch can't rewrite what it's held to. GitHub runs the pull request's own ci.yml, so a person with write access could change how their pull request is reviewed: they're trusted, and the app never pushes .github/ (#160)" }
+  - { id: binaries, kind: comment, label: "The list of binary files is written by this step to a file of its own, which the prompts point at, so text in the patch or the description can't forge it (#153)" }
+  - { id: moved, kind: comment, label: "Classify moved here from the build, so land reads its verdict from a check on the commit rather than from the build's artifact. Its check always passes, so the verdict never wakes the fixer. Only the app's pull request from a factory branch is classified, and only once both gated reviews have passed, so it has no gate of its own (#160)" }
+  - { id: findings, kind: comment, label: "The checks carry text from sessions that read a stranger's patch, so every workflow that reads them treats them as untrusted. Nothing here reaches an outside action: the checks are GitHub's record of this run" }
+  - { id: escaped, kind: comment, label: "A session's text is escaped before it's posted: < escaped, mentions broken, length capped. It carries no marker for a workflow to parse, and is refused if it holds anything like a token (#160 rule 5)" }
+lines:
+  - { from: pushed, to: tests, kind: start, label: "the commit" }
+  - { from: pushed, to: whose, kind: start, label: "the commit" }
+  - { from: commit, to: tests, kind: data, label: "the commit's code" }
+  - { from: tests, to: record, kind: start, label: "[pass or fail]" }
+  - { from: record, to: checks, kind: data }
+  - { from: whose, to: bring, kind: start, label: "[its own people's]" }
+  - { from: token, to: bring, kind: data, label: "the patch and the pull request's text" }
+  - { from: commit, to: bring, kind: data }
+  - { from: bring, to: patch, kind: data }
+  - { from: bring, to: review, kind: start }
+  - { from: bring, to: secreview, kind: start }
+  - { from: patch, to: review, kind: data }
+  - { from: repo, to: review, kind: data }
+  - { from: patch, to: secreview, kind: data }
+  - { from: repo, to: secreview, kind: data }
+  - { from: review, to: post, kind: start, label: "its findings" }
+  - { from: secreview, to: post, kind: start, label: "its findings" }
+  - { from: post, to: checks, kind: data }
+  - { from: post, to: classify, kind: start, label: "[both reviews passed, on the app's pull request from a factory branch]" }
+  - { from: patch, to: classify, kind: data }
+  - { from: repo, to: classify, kind: data }
+  - { from: checks, to: classify, kind: data, label: "both reviews' findings" }
+  - { from: classify, to: postclass, kind: start, label: "ship, show or ask, with its reasons" }
+  - { from: postclass, to: checks, kind: data }
+  - { from: onejudge, to: checks, kind: tie }
+  - { from: forks, to: tests, kind: tie }
+  - { from: onerun, to: pushed, kind: tie }
+  - { from: norun, to: review, kind: tie }
+  - { from: mains, to: repo, kind: tie }
+  - { from: binaries, to: bring, kind: tie }
+  - { from: moved, to: classify, kind: tie }
+  - { from: findings, to: checks, kind: tie }
+  - { from: escaped, to: post, kind: tie }
+implementations:
+  actions:
+    label: "GitHub Actions, ci.yml"
+    blocks:
+      - { id: github, label: "GitHub: commits, pull requests and checks", parts: [pushed, token, commit, record, checks] }
+      - { id: testjob, label: "Actions jobs test (1.22) and test (stable): run the commit's code, with no secret and a token that only reads", platform: actions-code, parts: [tests] }
+      - { id: reviewjob, label: "Actions jobs Bug review, Security review and Classify, one session each, with a token that only reads, running nothing from the change", platform: actions-code, parts: [whose, bring, patch, repo, post, postclass] }
+      - { id: agent, label: "Claude Code, claude-opus-5-5, on the maintainer's subscription, a fresh session in each job", platform: actions-agent, in: reviewjob, parts: [review, secreview, classify] }
+    comments:
+      - { id: apart, label: "Each session has its own empty home folder and output folder, reads inputs made read-only, runs in --permission-mode default with one Edit(//dir/file.json) rule for its own findings, and has no Bash (#153, #160)", in: agent, ties: [review, secreview, classify] }
+      - { id: reads, label: "Read is limited to the workspace and the session's own input folder, with Read(//proc/**) denied, and Edit and Write are denied on .git/**. Each session keeps the login token from its commands (awml #121)", in: agent, ties: [review, secreview, classify] }
+      - { id: ownjob, label: "Each job's own check carries its result and its summary, so no job needs a token that writes checks, and nothing passes between jobs: no artifact here (#160 rule 6)", in: reviewjob, ties: [post, postclass] }

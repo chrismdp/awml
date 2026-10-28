@@ -24,9 +24,11 @@ var removedGoTest = regexp.MustCompile(`(?m)^-[[:space:]]*func[[:space:]]+Test`)
 // examples/fonts/Inter-Regular.ttf, is a fifteenth of that.
 const maxBinaryBytes = 1 << 20
 
-// A symbolic link's mode in git, and the mode git gives a path the change deletes.
+// The modes git gives a symbolic link, a gitlink, which points at a submodule's commit, and a path
+// the change deletes.
 const (
 	symbolicLink = "120000"
+	gitlink      = "160000"
 	noFile       = "000000"
 )
 
@@ -50,38 +52,48 @@ type config struct {
 	MaxChangedLines int      `yaml:"max_changed_lines"`
 }
 
-// The reviews' record and the classifier's verdict, as files the review job wrote. Either may be
-// left out: the classifier doesn't run when the reviews leave an Important finding open.
+// What land.yml read from GitHub about the commit it judges: the reviews' findings, as a file of
+// their severities, Classify's verdict, and the commit, whose commits since main the rule reads from
+// git. Each may be left out, as the tests do; land.yml gives
+// them all, and "missing" for a Classify check that gave no verdict.
 type inputs struct {
-	Findings       string
-	Classification string
+	Findings string
+	Classify string
+	Head     string
 }
 
+// The outcomes, from the one that merges with no person to the one that waits for a person. The
+// rule can only move a verdict towards ask.
+var outcomes = []string{"ship", "show", "ask"}
+
 type verdict struct {
-	Review  bool
+	Outcome string
 	Reasons []string
 }
 
+// The line each fix commit's message carries, which fix.yml writes and counts its tries by.
+const fixLine = "Fixed-by: fix-review-findings"
+
+// The login of the factory's app, whose noreply address the factory's own commits carry.
+const factoryApp = "awml-factory[bot]"
+
 func main() {
-	repo := flag.String("repo", ".", "repository containing the staged patch")
+	repo := flag.String("repo", ".", "repository with the judged commit's tree in its index, at its base on main")
 	rules := flag.String("rules", ".github/build-rules.yml", "build rules file")
 	findings := flag.String("findings", "", "the reviews' findings, as JSON")
-	classification := flag.String("classification", "", "the classifier's verdict, as JSON")
+	classify := flag.String("classify", "", "Classify's verdict: ship, show, ask or missing")
+	head := flag.String("head", "", "the commit judged, whose commits since the repository's HEAD are read")
 	flag.Parse()
 
 	cfg, err := loadConfig(*rules)
 	if err != nil {
 		fatal(err)
 	}
-	result, err := evaluate(*repo, cfg, inputs{Findings: *findings, Classification: *classification})
+	result, err := evaluate(*repo, cfg, inputs{Findings: *findings, Classify: *classify, Head: *head})
 	if err != nil {
 		fatal(err)
 	}
-	if result.Review {
-		fmt.Println("review")
-	} else {
-		fmt.Println("straightforward")
-	}
+	fmt.Println(result.Outcome)
 	for _, reason := range result.Reasons {
 		fmt.Println(reason)
 	}
@@ -109,7 +121,7 @@ func loadConfig(path string) (config, error) {
 		return config{}, errors.New("max_changed_lines must not be negative")
 	}
 	for _, path := range cfg.ReviewPaths {
-		if strings.TrimSpace(path) == "" {
+		if strings.TrimSpace(strings.TrimPrefix(path, "**/")) == "" {
 			return config{}, errors.New("review_paths must not contain an empty path")
 		}
 	}
@@ -117,27 +129,39 @@ func loadConfig(path string) (config, error) {
 }
 
 func evaluate(repoDir string, cfg config, in inputs) (verdict, error) {
+	outcome := "ship"
 	var reasons []string
+	// towards moves the outcome to at least the one given, with the reason why.
+	towards := func(at, reason string) {
+		if rank(at) > rank(outcome) {
+			outcome = at
+		}
+		reasons = append(reasons, reason)
+	}
+	ask := func(reason string) { towards("ask", reason) }
 
-	if in.Findings != "" {
-		open, err := openFindings(in.Findings)
-		if err != nil {
-			return verdict{}, err
-		}
-		if open == 1 {
-			reasons = append(reasons, "The reviews left 1 finding open.")
-		} else if open > 1 {
-			reasons = append(reasons, fmt.Sprintf("The reviews left %d findings open.", open))
-		}
+	switch in.Classify {
+	case "", "ship":
+	case "show":
+		towards("show", "Classify said to show it.")
+	case "ask":
+		ask("Classify asked for a review.")
+	case "missing":
+		ask("Classify gave no verdict, so the change waits for review.")
+	default:
+		return verdict{}, fmt.Errorf("Classify's verdict %q is none of ship, show, ask or missing", in.Classify)
 	}
 
-	if in.Classification != "" {
-		asked, err := classifierAsked(in.Classification)
+	if in.Findings != "" {
+		important, nits, err := countFindings(in.Findings)
 		if err != nil {
 			return verdict{}, err
 		}
-		if asked {
-			reasons = append(reasons, "The classifier asked for a review.")
+		if important > 0 {
+			ask(fmt.Sprintf("The reviews left %s.", count(important, "Important finding", "Important findings")))
+		}
+		if nits > 0 {
+			towards("show", fmt.Sprintf("The reviews left %s unfixed.", count(nits, "Nit", "Nits")))
 		}
 	}
 
@@ -152,15 +176,15 @@ func evaluate(repoDir string, cfg config, in inputs) (verdict, error) {
 	}
 	for _, path := range paths {
 		for _, protected := range cfg.ReviewPaths {
-			if path == protected || (strings.HasSuffix(protected, "/") && strings.HasPrefix(path, protected)) {
-				reasons = append(reasons, fmt.Sprintf("%s is a path that always needs review.", shown(path)))
+			if underReview(path, protected) {
+				ask(fmt.Sprintf("%s is a path that always needs review.", shown(path)))
 				break
 			}
 		}
 	}
 	for _, path := range paths {
 		if path == ".gitattributes" || strings.HasSuffix(path, "/.gitattributes") {
-			reasons = append(reasons, fmt.Sprintf("%s changes how git reads files.", shown(path)))
+			ask(fmt.Sprintf("%s changes how git reads files.", shown(path)))
 		}
 	}
 
@@ -170,7 +194,7 @@ func evaluate(repoDir string, cfg config, in inputs) (verdict, error) {
 	}
 	for _, path := range deleted {
 		if strings.HasSuffix(path, "_test.go") || strings.HasSuffix(path, ".test.mjs") {
-			reasons = append(reasons, fmt.Sprintf("%s deletes a test file.", shown(path)))
+			ask(fmt.Sprintf("%s deletes a test file.", shown(path)))
 		}
 	}
 
@@ -184,7 +208,7 @@ func evaluate(repoDir string, cfg config, in inputs) (verdict, error) {
 			return verdict{}, err
 		}
 		if removedGoTest.Match(diff) {
-			reasons = append(reasons, fmt.Sprintf("%s removes a test function.", shown(path)))
+			ask(fmt.Sprintf("%s removes a test function.", shown(path)))
 		}
 	}
 
@@ -196,7 +220,15 @@ func evaluate(repoDir string, cfg config, in inputs) (verdict, error) {
 	}
 	for _, path := range paths {
 		if modes[path].after == symbolicLink {
-			reasons = append(reasons, fmt.Sprintf("%s is a symbolic link, so it always needs review.", shown(path)))
+			ask(fmt.Sprintf("%s is a symbolic link, so it always needs review.", shown(path)))
+		}
+	}
+
+	// A gitlink pins another repository's commit, whose contents no diff here shows, so a new or
+	// changed one always needs review.
+	for _, path := range paths {
+		if modes[path].after == gitlink {
+			ask(fmt.Sprintf("%s pins another repository's commit, so it always needs review.", shown(path)))
 		}
 	}
 
@@ -209,7 +241,7 @@ func evaluate(repoDir string, cfg config, in inputs) (verdict, error) {
 	}
 	for _, path := range binary {
 		if !allowedBinary(path) {
-			reasons = append(reasons, fmt.Sprintf("%s is a binary file.", shown(path)))
+			ask(fmt.Sprintf("%s is a binary file.", shown(path)))
 			continue
 		}
 		mode := modes[path]
@@ -221,76 +253,158 @@ func evaluate(repoDir string, cfg config, in inputs) (verdict, error) {
 			return verdict{}, err
 		}
 		if !startsAsNamed(path, start) {
-			reasons = append(reasons, fmt.Sprintf("%s is binary, and doesn't start as its name says, so the rule can't read it.", shown(path)))
+			ask(fmt.Sprintf("%s is binary, and doesn't start as its name says, so the rule can't read it.", shown(path)))
 		}
 		if mode.before != noFile {
-			reasons = append(reasons, fmt.Sprintf("%s replaces a binary file on main, which only a person can compare.", shown(path)))
+			ask(fmt.Sprintf("%s replaces a binary file on main, which only a person can compare.", shown(path)))
 		}
 		if size > maxBinaryBytes {
-			reasons = append(reasons, fmt.Sprintf("%s is binary and larger than 1 MiB, the most an image or font may be without review.", shown(path)))
+			ask(fmt.Sprintf("%s is binary and larger than 1 MiB, the most an image or font may be without review.", shown(path)))
 		}
 	}
 	if changedLines > cfg.MaxChangedLines {
-		reasons = append(reasons, fmt.Sprintf(
-			"The patch changes %d lines, more than the limit of %d.",
-			changedLines, cfg.MaxChangedLines,
-		))
+		ask(fmt.Sprintf("The patch changes %d lines, more than the limit of %d.", changedLines, cfg.MaxChangedLines))
+	}
+
+	if in.Head != "" {
+		branch, err := readBranch(repo, in.Head)
+		if err != nil {
+			return verdict{}, err
+		}
+		if branch.merges > 0 {
+			ask("The branch since main holds a merge commit.")
+		}
+		if branch.others > 0 {
+			ask("A commit since main isn't the factory's.")
+		}
+		if branch.fixes > 0 {
+			towards("show", fmt.Sprintf("The branch carries %s.", count(branch.fixes, "fix commit", "fix commits")))
+		}
 	}
 
 	if len(reasons) == 0 {
-		return verdict{Reasons: []string{"No review rule matched this change."}}, nil
+		reasons = []string{"No rule moved the verdict towards ask."}
 	}
-	return verdict{Review: true, Reasons: reasons}, nil
+	return verdict{Outcome: outcome, Reasons: reasons}, nil
 }
 
-// openFindings counts the findings about the change itself. A pre-existing one is about code the
-// change didn't write, so it's shown but leaves the change straightforward.
-func openFindings(path string) (int, error) {
+func rank(outcome string) int {
+	for at, known := range outcomes {
+		if known == outcome {
+			return at
+		}
+	}
+	return len(outcomes)
+}
+
+func count(n int, one, many string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+	return fmt.Sprintf("%d %s", n, many)
+}
+
+type branch struct {
+	fixes, others, merges int
+}
+
+// readBranch reads each commit between the repository's HEAD, the commit of main the branch sits
+// on, and the head, from git's own record of it, so no message can pass for another commit's
+// header. A commit is the factory's only if the app's login is in both its author's and its
+// committer's noreply address: a person's commit that the app rebased is still the person's. Anyone
+// with write access could forge the address, and they're trusted not to, so the email is enough
+// here.
+func readBranch(repo repository, head string) (branch, error) {
+	var result branch
+	if !regexp.MustCompile(`^[0-9a-f]{40}$`).MatchString(head) {
+		return result, fmt.Errorf("the head %q isn't a commit id", head)
+	}
+	output, err := repo.git("rev-list", "HEAD.."+head)
+	if err != nil {
+		return result, err
+	}
+	for _, id := range strings.Fields(string(output)) {
+		raw, err := repo.git("cat-file", "commit", id)
+		if err != nil {
+			return result, err
+		}
+		header, message, _ := strings.Cut(string(raw), "\n\n")
+		parents, author, committer := 0, "", ""
+		for _, line := range strings.Split(header, "\n") {
+			field, value, _ := strings.Cut(line, " ")
+			switch field {
+			case "parent":
+				parents++
+			case "author":
+				author = value
+			case "committer":
+				committer = value
+			}
+		}
+		if parents != 1 {
+			result.merges++
+		}
+		if !byApp(author) || !byApp(committer) {
+			result.others++
+		}
+		for _, line := range strings.Split(message, "\n") {
+			if strings.TrimRight(line, "\r") == fixLine {
+				result.fixes++
+				break
+			}
+		}
+	}
+	return result, nil
+}
+
+// byApp says whether an author or committer line names the app's noreply address, with or
+// without the bot's user id before it.
+func byApp(line string) bool {
+	start := strings.LastIndex(line, "<")
+	end := strings.LastIndex(line, ">")
+	if start < 0 || end < start {
+		return false
+	}
+	email := line[start+1 : end]
+	address := factoryApp + "@users.noreply.github.com"
+	if email == address {
+		return true
+	}
+	id, rest, ok := strings.Cut(email, "+")
+	return ok && rest == address && id != "" && strings.Trim(id, "0123456789") == ""
+}
+
+// countFindings counts the Important findings and the Nits. A pre-existing one is about code the
+// change didn't write, so it's shown but moves nothing.
+func countFindings(path string) (int, int, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return 0, fmt.Errorf("read the reviews' findings: %w", err)
+		return 0, 0, fmt.Errorf("read the reviews' findings: %w", err)
 	}
 	var findings []struct {
 		Severity string `json:"severity"`
 	}
 	if err := json.Unmarshal(data, &findings); err != nil {
-		return 0, fmt.Errorf("read the reviews' findings: %w", err)
+		return 0, 0, fmt.Errorf("read the reviews' findings: %w", err)
 	}
-	open := 0
+	important, nits := 0, 0
 	for _, finding := range findings {
 		switch finding.Severity {
-		case "Important", "Nit":
-			open++
+		case "Important":
+			important++
+		case "Nit":
+			nits++
 		case "Pre-existing":
 		default:
-			return 0, fmt.Errorf("a finding has an unknown severity %q", finding.Severity)
+			return 0, 0, fmt.Errorf("a finding has an unknown severity %q", finding.Severity)
 		}
 	}
-	return open, nil
-}
-
-// classifierAsked reads whether the classifier asked for a review. It can only add a review, so
-// its answer of no changes nothing.
-func classifierAsked(path string) (bool, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return false, fmt.Errorf("read the classifier's verdict: %w", err)
-	}
-	var classification struct {
-		NeedsReview *bool `json:"needs_review"`
-	}
-	if err := json.Unmarshal(data, &classification); err != nil {
-		return false, fmt.Errorf("read the classifier's verdict: %w", err)
-	}
-	if classification.NeedsReview == nil {
-		return false, errors.New("the classifier's verdict has no needs_review")
-	}
-	return *classification.NeedsReview, nil
+	return important, nits, nil
 }
 
 // allowedBinary says whether a binary file is an image or a font, which a diff can't show anyway.
 // Under .github/ even those need review. It matches the extension's case exactly, as the list in
-// .github/workflows/review.yml does, so the two agree.
+// .github/bring-patch.sh does, so the two agree.
 func allowedBinary(path string) bool {
 	if strings.HasPrefix(path, ".github/") {
 		return false
@@ -366,6 +480,25 @@ func shown(path string) string {
 	quoted, _ := json.Marshal(path)
 	inner := strings.ReplaceAll(string(quoted[1:len(quoted)-1]), "`", `\u0060`)
 	return "`" + inner + "`"
+}
+
+// underReview reports whether path is the review path given, or under it if it ends in a slash. A
+// review path that starts with **/ matches at any depth, from the root or after any slash.
+func underReview(path, protected string) bool {
+	rest, anywhere := strings.CutPrefix(protected, "**/")
+	if !anywhere {
+		return path == protected || (strings.HasSuffix(protected, "/") && strings.HasPrefix(path, protected))
+	}
+	for {
+		if underReview(path, rest) {
+			return true
+		}
+		_, after, found := strings.Cut(path, "/")
+		if !found {
+			return false
+		}
+		path = after
+	}
 }
 
 func changedPaths(repo repository) ([]string, error) {
