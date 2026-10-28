@@ -578,3 +578,16 @@ func TestTheBuildDescribesOnlyItsOwnPullRequest(t *testing.T) {
 		}
 	}
 }
+
+// The other workflows know the factory's commits by the app's login, awml-factory[bot], so the build
+// and the fixer commit as it and refuse to commit as any other app.
+func TestTheBuildAndTheFixerCommitAsTheFactorysApp(t *testing.T) {
+	for _, at := range []struct{ file, job string }{{"build.yml", "open"}, {"fix.yml", "write"}} {
+		push, _ := readFactoryWorkflow(t, at.file).Jobs[at.job].step(t, "push")
+		r := newRehearsal(t)
+		r.run(push, map[string]string{"APP_SLUG": "another-app", "ISSUE": "120", "HEAD_SHA": strings.Repeat("ab", 20)}, "")
+		if !r.failed || r.calls != "" || !strings.Contains(r.printed, "awml-factory") {
+			t.Errorf("%s's push went on as another-app, or didn't say why:\n%s%s", at.file, r.printed, r.calls)
+		}
+	}
+}

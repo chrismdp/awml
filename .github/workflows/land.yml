@@ -167,15 +167,14 @@ jobs:
           "$RUNNER_TEMP/build-rule" -repo "$RUNNER_TEMP/judged" -rules "$RUNNER_TEMP/build-rules.yml" \
             -findings "$RUNNER_TEMP/checks/findings.json" -classify "$(cat "$RUNNER_TEMP/checks/verdict.txt")" \
             -head "$HEAD_SHA" -factory "awml-factory[bot]" > "$RUNNER_TEMP/rule.txt"
-          # The pull request's checks ran from its branch's own ci.yml, which may be older than main's,
-          # so a branch whose ci.yml isn't main's, blob for blob, is asked about.
-          branch_ci="$(git rev-parse -q --verify "$HEAD_SHA:.github/workflows/ci.yml" || true)"
-          main_ci="$(git rev-parse -q --verify "HEAD:.github/workflows/ci.yml" || true)"
-          if [ "$branch_ci" != "$main_ci" ]; then
+          # On pull_request GitHub runs ci.yml from the merge with main, so a branch that leaves ci.yml
+          # alone was checked by main's. One that changes it since main was checked by its own, so it's
+          # asked about.
+          if ! git diff --quiet "$base" "$HEAD_SHA" -- .github/workflows/ci.yml; then
             {
               echo ask
               tail -n +2 "$RUNNER_TEMP/rule.txt" | grep -vxF "No rule moved the verdict towards ask." || true
-              echo "This branch's CI is older than main's, so its checks may not be main's."
+              echo "This branch changes ci.yml, so its checks may not be main's."
             } > "$RUNNER_TEMP/judged.txt"
             mv "$RUNNER_TEMP/judged.txt" "$RUNNER_TEMP/rule.txt"
           fi

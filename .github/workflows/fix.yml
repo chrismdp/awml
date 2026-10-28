@@ -424,8 +424,9 @@ jobs:
           APP_SLUG: ${{ steps.app.outputs.app-slug }}
           GH_TOKEN: ${{ steps.app.outputs.token }}
         run: |
-          if ! [[ "$APP_SLUG" =~ ^[a-z0-9-]+$ ]]; then
-            echo "The app's name isn't a plain slug: $APP_SLUG"
+          # The other workflows know the factory's commits by awml-factory[bot], so no other app commits.
+          if [ "$APP_SLUG" != awml-factory ]; then
+            echo "The app is $APP_SLUG, but the factory's commits are known as awml-factory[bot]'s, so nothing is committed."
             exit 1
           fi
           id="$(gh api "users/$APP_SLUG%5Bbot%5D" --jq .id)"

@@ -114,12 +114,13 @@ func TestLandExitsQuietlyUnlessEveryCheckPassedOnTheHead(t *testing.T) {
 // main's rule built from this repository.
 func rehearseJudge(t *testing.T, commits []struct{ author, message string }, annotations, verdict string, classifyPassed ...string) *rehearsal {
 	t.Helper()
-	return rehearseJudgeWith(t, nil, nil, commits, annotations, verdict, classifyPassed...)
+	return rehearseJudgeWith(t, nil, nil, nil, commits, annotations, verdict, classifyPassed...)
 }
 
 // rehearseJudgeWith rehearses the judge step as rehearseJudge does, with main starting from the
-// files given and moved on by mainMoves, if it's given, once the branch has been made.
-func rehearseJudgeWith(t *testing.T, files map[string]string, mainMoves func(origin string), commits []struct{ author, message string },
+// files given, the branch's last commit also making branchChanges, if it's given, and main moved on
+// by mainMoves, if it's given, once the branch has been made.
+func rehearseJudgeWith(t *testing.T, files map[string]string, branchChanges, mainMoves func(origin string), commits []struct{ author, message string },
 	annotations, verdict string, classifyPassed ...string) *rehearsal {
 	t.Helper()
 	find := readFactoryWorkflow(t, "land.yml").Jobs["find"]
@@ -139,6 +140,9 @@ func rehearseJudgeWith(t *testing.T, files map[string]string, mainMoves func(ori
 	gitIn(t, origin, "switch", "-q", "-c", "build/issue-120")
 	for at, c := range commits {
 		r.write(filepath.Join(origin, "recipes.md"), "Bread\n"+strings.Repeat("Scones\n", at+1))
+		if at == len(commits)-1 && branchChanges != nil {
+			branchChanges(origin)
+		}
 		gitIn(t, origin, "add", "-A")
 		gitIn(t, origin, "-c", "user.name=x", "-c", "user.email="+c.author, "commit", "-q", "--author", "Someone <"+c.author+">", "-m", c.message)
 	}
@@ -350,25 +354,33 @@ func TestLandAsksWhenClassifyEndedBadly(t *testing.T) {
 	}
 }
 
-// A pull request's checks come from its branch's own ci.yml, which can be older than main's, so a
-// branch whose ci.yml isn't main's is asked about: its checks may not be the ones main would run.
-func TestLandAsksWhenTheBranchsCIIsntMains(t *testing.T) {
+// On pull_request GitHub runs ci.yml from the merge with main, so a branch that hasn't touched
+// ci.yml is checked by main's, however main's has changed since. Only a branch that changes ci.yml
+// itself had checks other than main's, and is asked about.
+func TestLandAsksWhenTheBranchChangesItsCI(t *testing.T) {
 	const app = "41+awml-factory[bot]@users.noreply.github.com"
 	ship := `{"annotation_level": "notice", "title": "Verdict", "message": "ship"}`
 	commits := []struct{ author, message string }{{app, "Add scones"}}
 	ci := map[string]string{".github/workflows/ci.yml": "name: CI\n"}
-	same := rehearseJudgeWith(t, ci, nil, commits, "[]", ship)
+	write := func(origin string) {
+		if err := os.WriteFile(filepath.Join(origin, ".github/workflows/ci.yml"), []byte("name: CI\n# Another check\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	same := rehearseJudgeWith(t, ci, nil, nil, commits, "[]", ship)
 	if same.outputs["outcome"] != "ship" {
 		t.Errorf("a branch with main's ci.yml judged %s for %s, want ship", same.outputs["outcome"], same.outputs["reasons"])
 	}
-	moved := rehearseJudgeWith(t, ci, func(origin string) {
-		if err := os.WriteFile(filepath.Join(origin, ".github/workflows/ci.yml"), []byte("name: CI\n# A newer check\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
+	moved := rehearseJudgeWith(t, ci, nil, func(origin string) {
+		write(origin)
 		gitIn(t, origin, "commit", "-qam", "Main's CI changes")
 	}, commits, "[]", ship)
-	if moved.outputs["outcome"] != "ask" || !strings.Contains(moved.outputs["reasons"], "This branch's CI is older than main's, so its checks may not be main's.") {
-		t.Errorf("a branch whose ci.yml is older than main's judged %s for %s, want ask", moved.outputs["outcome"], moved.outputs["reasons"])
+	if moved.outputs["outcome"] != "ship" {
+		t.Errorf("a branch older than main's ci.yml, which CI runs from the merge, judged %s for %s, want ship", moved.outputs["outcome"], moved.outputs["reasons"])
+	}
+	changed := rehearseJudgeWith(t, ci, write, nil, commits, "[]", ship)
+	if changed.outputs["outcome"] != "ask" || !strings.Contains(changed.outputs["reasons"], "This branch changes ci.yml, so its checks may not be main's.") {
+		t.Errorf("a branch that changes ci.yml judged %s for %s, want ask", changed.outputs["outcome"], changed.outputs["reasons"])
 	}
 }
 
