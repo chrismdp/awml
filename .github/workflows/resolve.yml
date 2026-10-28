@@ -335,7 +335,7 @@ jobs:
                   "Bash(go:*)" "Bash(gofmt:*)" "Bash(make:*)" "Bash(node:*)" \
                   "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" "Bash(git show:*)" \
                   "Bash(git add:*)" "Bash(git rebase:*)" "Bash(git checkout:*)" "Bash(git bundle create:*)" \
-                  "Bash(ls:*)" "Bash(cp:*)" "Bash(mkdir:*)" \
+                  "Bash(ls:*)" "Bash(cp:*)" "Bash(mkdir:*)" "Bash(rm:*)" "Bash(mv:*)" \
                 > "$HOST_DIR/logs/$number.log" 2>&1) || echo "The session on #$number ended with an error."
               cat "$HOST_DIR/logs/$number.log"
             done < "$HOST_DIR/pulls.tsv"

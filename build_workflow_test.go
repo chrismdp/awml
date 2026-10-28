@@ -1666,3 +1666,24 @@ func TestTheSessionKeepsTheTreesConfigWorktree(t *testing.T) {
 		}
 	}
 }
+
+// A session's commands write only where its sandbox lets them, so removing or moving a file adds no
+// reach; without rm and mv, a session that makes a scratch file can't take it away, and git add -A
+// puts it in the change. So each session that runs commands may remove and move files, and the
+// build's and the fixer's prompts say every untracked file is part of the change.
+func TestSessionsMayRemoveTheirScratchFiles(t *testing.T) {
+	for _, at := range []struct{ file, job string }{{"build.yml", "draft"}, {"fix.yml", "fix"}, {"resolve.yml", "draft"}} {
+		job := readFactoryWorkflow(t, at.file).Jobs[at.job]
+		session := job.Steps[job.session()].Run
+		for _, want := range []string{`"Bash(rm:*)"`, `"Bash(mv:*)"`} {
+			if !strings.Contains(session[strings.Index(session, "--allowedTools"):], want) {
+				t.Errorf("%s's %s session doesn't allow %s", at.file, at.job, want)
+			}
+		}
+	}
+	for _, prompt := range []string{"build-prompt.md", "fix-prompt.md"} {
+		if !strings.Contains(strings.Join(strings.Fields(readText(t, ".github/"+prompt)), " "), "Every untracked file left in the tree goes into the pull request") {
+			t.Errorf("%s doesn't say an untracked file goes into the pull request", prompt)
+		}
+	}
+}

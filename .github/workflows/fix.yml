@@ -339,7 +339,7 @@ jobs:
                 "Bash(go:*)" "Bash(gofmt:*)" "Bash(make:*)" "Bash(node:*)" \
                 "Bash(.github/picture-drawings.sh:*)" \
                 "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" \
-                "Bash(ls:*)" "Bash(cp:*)" "Bash(mkdir:*)" \
+                "Bash(ls:*)" "Bash(cp:*)" "Bash(mkdir:*)" "Bash(rm:*)" "Bash(mv:*)" \
               > "$HOST_DIR/session.log" 2>&1 || status=$?
             cat "$HOST_DIR/session.log"
             exit "$status"
