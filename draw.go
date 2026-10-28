@@ -32,12 +32,11 @@ var shapes = map[string]string{
 	"person":    `("%s")`,
 	"review":    `("%s")`,                              // an action too, since its one way out is [yes]
 	"approval":  `("%s")`,                              // a standing approval: an action, like a review
-	"fork":      `@{ shape: fork, label: "" }%.0s`,     // fork node, which shows no label
 	"comment":   `@{ shape: notch-rect, label: "%s" }`, // comment
 }
 
 var classes = map[string]string{"trigger": "trig", "context": "ctx", "connector": "con", "surface": "surf", "outside": "out",
-	"ai": "ai", "code": "code", "person": "person", "review": "person", "approval": "person", "fork": "uml", "comment": "gap"}
+	"ai": "ai", "code": "code", "person": "person", "review": "person", "approval": "person", "comment": "gap"}
 
 var arrows = map[string]string{"start": "-->", "data": "-->", "publish": "==>", "refused": "--x", "tie": "-.-", "hidden": "~~~"}
 
@@ -60,7 +59,6 @@ const defs = `  classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ai fill:#cdd3fb,stroke:#3b4bb0,color:#16171b
   classDef code fill:#c4e3d1,stroke:#2b7a4f,color:#16171b
   classDef person fill:#f7d79a,stroke:#9a6100,color:#16171b
-  classDef uml fill:#16171b,stroke:#16171b,color:#16171b
   classDef gap fill:#ffffff,stroke:#8a93a3,stroke-dasharray:4 3,color:#6b7280`
 
 const scope = "fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f"

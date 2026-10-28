@@ -53,7 +53,7 @@ type linked struct {
 // kindNames names a part by its kind, as a message says what a ref names.
 var kindNames = map[string]string{
 	"trigger": "a trigger", "ai": "an AI step", "code": "a code step", "person": "a person's step", "review": "a review",
-	"approval": "a standing approval", "fork": "a fork", "context": "a context", "connector": "a connector",
+	"approval": "a standing approval", "context": "a context", "connector": "a connector",
 	"surface": "a surface", "outside": "an outside action", "comment": "a comment",
 }
 

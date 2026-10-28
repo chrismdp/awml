@@ -139,7 +139,6 @@ The operating model has little to do with AI: it's how work is organised, whoeve
 - A **step** is a rounded box: one piece of work, with the colour and emoji of who decides it.
 - A **review** is an amber rounded box, like a step, with `👤 ✅ review` above its label: a person's yes to exact content before it goes ahead. Its one way out is a line with the guard `[yes]`.
 - A **standing approval** is an amber rounded box too, with `👤 📜 standing approval` above its label: a person's yes given once, in advance, to each action of named kinds that a scheduled task takes, within limits.
-- A **fork** is a black bar, where work splits to run side by side.
 - A **context** is a pale blue cylinder: the notes a step may read or write, kept as one folder.
 - A **connector** is a grey hexagon: someone's access to an outside service, such as a calendar, a mailbox or a bank account.
 - A **surface** is a white window box: where people meet the system's work, such as a chat, a list on their phone or a screen on a wall.
@@ -174,7 +173,7 @@ The solid lines are the path the work takes, from the trigger through each step 
 
 A line may carry a label. Words in square brackets are a **guard**, the condition the line is taken on. A line drawn red is a finding: see [The red line](#the-red-line). A part marked untrusted, which takes in text anyone can write, has a thick orange outline. A thick orange line carries that text on, and a thick green one leaves what stopped it: see [Untrusted text](#untrusted-text).
 
-A trigger's **run** is everything its `start` lines reach, through steps, reviews, standing approvals and forks alike. A `data` line says what a step reads, and never carries the run on, so a `start` line leads to each step from the one before. Triggers whose runs share a part start one workflow, and a file whose triggers start more than one is better split, as [the tour shows](#several-workflows-in-one-file).
+Several `start` lines out of one part start work that runs side by side. A trigger's **run** is everything its `start` lines reach, through steps, reviews and standing approvals alike. A `data` line says what a step reads, and never carries the run on, so a `start` line leads to each step from the one before. Triggers whose runs share a part start one workflow, and a file whose triggers start more than one is better split, as [the tour shows](#several-workflows-in-one-file).
 
 ## Operations
 
@@ -199,7 +198,7 @@ A `do` step should be code acting on what an earlier step decided. An AI or a ru
 
 A drawing can show some of these limits, and `awml check` holds every step to them:
 
-- **Only a `do` step leads to an outside action**, by a line straight to it or through a review, a standing approval or a fork. A draft step never leads to an outside action, even through a review: a draft goes to a `do` step that asks to send it, or to a person's own `do` step.
+- **Only a `do` step leads to an outside action**, by a line straight to it or through a review or a standing approval. A draft step never leads to an outside action, even through a review: a draft goes to a `do` step that asks to send it, or to a person's own `do` step.
 - **An `answer` step and a `check` step never write to a context.** They read contexts, and speak on surfaces. Within one run, a check's verdict travels on its lines out as the branch taken, such as `[all pass]` or `[a check fails]`. For a later run, a step after the check writes the verdict as ordinary state, which that run reads as a context.
 - **An `op` names one of the ten,** and only a step names one.
 
@@ -406,11 +405,11 @@ The week's school pickups are copied into the parents' notes, and the thick line
 
 ![The week's pickups published to Grandma Rose's tablet](examples/tour/04-publishing.svg)
 
-### A fork
+### Two start lines out of one part
 
-The school's newsletter arrives, and the bar splits the work so two steps take it side by side: one takes the term dates into the family notes, and one looks for anything that needs a reply.
+The school's newsletter arrives, and two `start` lines out of it have two steps take it side by side: one takes the term dates into the family notes, and one looks for anything that needs a reply.
 
-![The school newsletter, split between two steps](examples/tour/02-fork.svg)
+![The school newsletter, taken by two steps side by side](examples/tour/02-two-start-lines.svg)
 
 ### A step a person does
 
@@ -495,7 +494,7 @@ awml pull family/dinners@1 -o dinners
 - `awml graph` takes what `awml draw` takes, and prints what it would draw as JSON, with nothing laid out, for a tool that lays the drawing out itself. Each id is the one `awml draw` gives it, and the spec lists the fields. Its text isn't escaped and keeps its line breaks, so a tool that shows it must escape it and handle them.
 - `awml page` writes one standalone HTML page with the security view, then every implementation, each with a heading. Several files appear in the order given. The page takes their shared title, or Workflows when they differ.
 - `awml summary` counts the scopes, platforms, parts and lines in one workflow, and lists every publish with what it adds or loosens. It includes platforms from every implementation and counts the design once, and lists what each untrusted part's text reaches, what stops it and the risks accepted. Given several workflows, it counts each part they share once, and lists those parts. `--json` prints the registry's JSON form.
-- `awml convert old.yaml` upgrades a file of any older version to 0.8, printed to standard output, and every other command refuses an older file. A trigger of another workflow that only `do` steps lead into becomes their outside action, which starts that workflow, and convert says where any untrusted mark it drops belongs. A `publish` line becomes a `data` line, and a line marked red with `breaks` loses it, gaining a comment if the check doesn't find what it breaks. `awml convert security.yaml platform.yaml` joins a matching 0.3 or 0.2 pair into one file, turning platform groups into blocks of the `default` implementation. Add `--implementation ID` to name the implementation. YAML comments move to the top. If it notes something to do by hand, or the new version's rules find mistakes in the result, it lists them and exits 1.
+- `awml convert old.yaml` upgrades a file of any older version to 0.8, printed to standard output, and every other command refuses an older file. Each fork goes, and each line into it joins each line out of it, with the line out's kind and label, or the label of the line in where the line out has none. A trigger of another workflow that only `do` steps lead into becomes their outside action, which starts that workflow, and convert says where any untrusted mark it drops belongs. A `publish` line becomes a `data` line, and a line marked red with `breaks` loses it, gaining a comment if the check doesn't find what it breaks. `awml convert security.yaml platform.yaml` joins a matching 0.3 or 0.2 pair into one file, turning platform groups into blocks of the `default` implementation. Add `--implementation ID` to name the implementation. YAML comments move to the top. If it notes something to do by hand, or the new version's rules find mistakes in the result, it lists them and exits 1.
 - `awml login` saves an API token for the registry. `awml push` checks and uploads one 0.8 file in the API's workflow field. `awml pull` downloads the latest or a numbered version as `<slug>.yaml`, and `awml pull owner/platforms/slug` does the same for a published platform description. It still downloads an older pair as `security.yaml` and `platform.yaml`. The commands use `https://awml.io` unless `--registry` or `AWML_REGISTRY_URL` says otherwise. Add `--private` to the first push of a private organisation workflow.
 
 For example, the client email workflow can run on the scheduled scripts platform, while the other descriptions show why they don't fit:
@@ -558,11 +557,11 @@ implementations:
 
 - The file needs `awml`, the version `"0.8"`; `title`, the workflow's name; and `parts`. It may have `description`, what the workflow is for in Markdown, and `scopes`, `lines` and `implementations`. Upgrade a file of an older version with `awml convert`.
 - A **scope** has an `id` and a `label`, and may have `in`, the id of its parent scope, and `processing`, the companies it allows.
-- A **part** has an `id`, a `kind` and a `label`, which a fork doesn't need. Its `in` names its scope. A step may have `op`, a trigger `wait`, and a context `at`. A trigger, connector or context may have `untrusted`, and a code step `cleans`. A context, connector or surface may have `ref`, the part of another workflow it is, and an outside action `ref`, the trigger of the workflow it starts.
+- A **part** has an `id`, a `kind` and a `label`. Its `in` names its scope. A step may have `op`, a trigger `wait`, and a context `at`. A trigger, connector or context may have `untrusted`, and a code step `cleans`. A context, connector or surface may have `ref`, the part of another workflow it is, and an outside action `ref`, the trigger of the workflow it starts.
 - An **implementation** has an id in the `implementations` map, a `label` and `blocks`. Each block has an `id`, a `label` and `parts`, the ids it holds. It may have `in`, its parent block, and `platform`, a platform description id: a bare id for your own, or `owner/platforms/slug` for one published to the registry. Every part except a trigger or comment needs exactly one block per implementation.
 - An implementation may have **comments**, each with `id`, `label`, `in`, its block, and `ties`, a list of design part ids. These comments appear only in its platform view.
 - A **line** has `from` and `to`, the ids of two parts, and a `kind`. It may have a `label`.
-- The part kinds are `trigger`, `ai`, `code`, `person`, `review`, `approval`, `fork`, `context`, `connector`, `surface`, `outside` and `comment`. The line kinds are `start`, `data`, `refused`, `tie` and `hidden`.
+- The part kinds are `trigger`, `ai`, `code`, `person`, `review`, `approval`, `context`, `connector`, `surface`, `outside` and `comment`. The line kinds are `start`, `data`, `refused`, `tie` and `hidden`.
 - An id is letters, digits and underscores, starting with a letter, and scope, part, block and comment ids are unique across the file. Implementation ids have their own namespace.
 - Parts are drawn in the design's order, each comment after the other parts beside it, and each scope or block after those. Unplaced triggers and design comments are drawn beside the other end of their first visible line. A `hidden` line steers the layout when Mermaid puts something in an awkward place.
 
@@ -570,7 +569,7 @@ Every id, label, kind and reference to an id is text. `awml` reads YAML 1.2, whi
 
 ### What `awml check` reports
 
-`awml check` reports structural mistakes, invalid operations, tiers that disagree with the drawing, and untrusted text that reaches an outside action with nothing to stop it or accept the risk. It also checks each implementation's block references, nesting and placement, and its comments' ties, and how each `ref` is written. It warns when AI decides a `do` step, when one `do` step leads to more than one change, when the file's triggers start more than one workflow, when no line links a part to a trigger, when a comment is tied to nothing, and when no trigger's run reaches a step, review, standing approval or fork. Warnings leave the exit status alone. A line that breaks a rule, such as one into a Block action, is still a mistake, but `awml draw` draws it red rather than refusing the file. [`SPEC.md`](SPEC.md) gives the exact rules.
+`awml check` reports structural mistakes, invalid operations, tiers that disagree with the drawing, and untrusted text that reaches an outside action with nothing to stop it or accept the risk. It also checks each implementation's block references, nesting and placement, and its comments' ties, and how each `ref` is written. It warns when AI decides a `do` step, when one `do` step leads to more than one change, when the file's triggers start more than one workflow, when no line links a part to a trigger, when a comment is tied to nothing, and when no trigger's run reaches a step, review or standing approval. Warnings leave the exit status alone. A line that breaks a rule, such as one into a Block action, is still a mistake, but `awml draw` draws it red rather than refusing the file. [`SPEC.md`](SPEC.md) gives the exact rules.
 
 ### Examples to start from
 

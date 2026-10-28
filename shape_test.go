@@ -86,14 +86,12 @@ func TestAStepThatOnlyReadsWhatAnotherWroteIsStartedByNoTrigger(t *testing.T) {
 	warnings(t, shaped(t, src, "{from: count, to: order, kind: start}"))
 }
 
-func TestAReviewOrForkReachedOnlyByDataIsStartedByNoTrigger(t *testing.T) {
+func TestAReviewReachedOnlyByDataIsStartedByNoTrigger(t *testing.T) {
 	src := strings.Replace(twoTriggers, "  - {id: morning, kind: trigger, label: \"Every day 07:00\"}\n", "", 1)
-	src = strings.Replace(src, "lines:\n", "  - {id: split, kind: fork}\n  - {id: approve, kind: review, label: Ana's yes}\nlines:\n", 1)
+	src = strings.Replace(src, "lines:\n", "  - {id: approve, kind: review, label: Ana's yes}\nlines:\n", 1)
 	warnings(t, shaped(t, src,
 		"{from: count, to: order, kind: start}",
-		"{from: order, to: split, kind: data}",
-		"{from: split, to: approve, kind: data}"),
-		`fork "split" is started by no trigger: add the start line it's missing, or split its work into a workflow of its own that an outside action starts`,
+		"{from: order, to: approve, kind: data}"),
 		`review "approve" is started by no trigger: add the start line it's missing, or split its work into a workflow of its own that an outside action starts`)
 }
 

@@ -12,9 +12,10 @@ import (
 // version comes back as it is. The file needn't pass Check, and the result may not either, since
 // newer versions hold a file to rules older ones didn't.
 //
-// From 0.7, only the version changes, since 0.8 changed only rules: what a standing approval may
-// cover, and that untrusted text reaching an action unchecked is a mistake.
-// From 0.6, a trigger of another workflow that only do steps lead into becomes their outside action,
+// From 0.7, each fork goes, since several start lines out of one part already show work side by
+// side, and each line into it joins each line out of it. Otherwise only the version changes, since
+// 0.8 changed only rules: what a standing approval may cover, and that untrusted text reaching an
+// action unchecked is a mistake. From 0.6, a trigger of another workflow that only do steps lead into becomes their outside action,
 // which refers to it, since a trigger is never a destination. From 0.5, each publish line becomes a
 // data line, since a data line publishes whenever its scopes make it one. A line's breaks goes,
 // since the check works out which lines are red. A line marked red that the check doesn't find gets
@@ -28,17 +29,175 @@ func Upgrade(doc any) (*Map, error) {
 // author to do by hand.
 func upgrade(doc any) (*Map, []string, error) {
 	file, err := upgradeFile(doc)
-	if err != nil || file == doc || !isOneOf(doc.(*Map).get("awml"), rewrittenFormats...) {
+	if err != nil || file == doc || file.has("platform") {
 		return file, nil, err
+	}
+	dropForks(file)
+	if !isOneOf(doc.(*Map).get("awml"), rewrittenFormats...) {
+		return file, nil, nil
 	}
 	notes := startOutsideActions(file)
 	return file, notes, nil
 }
 
-// rewrittenFormats are the versions whose workflows change in more than their version when
-// they're converted, the last of which let a do step lead into another workflow's trigger. A
-// later version changes only its version.
+// rewrittenFormats are the versions whose workflows change in more than their version and their
+// forks when they're converted, the last of which let a do step lead into another workflow's
+// trigger.
 var rewrittenFormats = []string{"0.2", "0.3", "0.4", "0.5", "0.6"}
+
+// dropForks takes out each fork, in the order of the parts, and joins each line into it to each
+// line out of it, in the place of the line out, with that line's kind and label, or with the line
+// in's label where the line out has none, so a review's "[yes]" stays. A joined line the file
+// already has isn't added again. A tie between a comment and a fork ties the comment instead
+// to each part a line into the fork came from, as does an implementation comment's tie, and a
+// hidden line at a fork goes, with the fork's place in each block.
+func dropForks(file *Map) {
+	parts, _ := file.get("parts").([]any)
+	lines, _ := file.get("lines").([]any)
+	var kept []any
+	forks, from := map[string]bool{}, map[string][]any{}
+	for _, item := range parts {
+		p, ok := item.(*Map)
+		if !ok || p.get("kind") != "fork" {
+			kept = append(kept, item)
+			continue
+		}
+		fork := str(p, "id")
+		forks[fork] = true
+		var into []*Map
+		for _, l := range soundMaps(lines) {
+			if l.get("to") == fork && l.get("from") != fork && !isOneOf(l.get("kind"), "tie", "hidden") {
+				into = append(into, l)
+				from[fork] = append(from[fork], l.get("from"))
+			}
+		}
+		var joined []any
+		has := func(line *Map) bool {
+			for _, l := range append(soundMaps(lines), soundMaps(joined)...) {
+				same := true
+				for _, field := range []string{"from", "to", "kind", "label"} {
+					same = same && l.has(field) == line.has(field) && keyOf(l.get(field)) == keyOf(line.get(field))
+				}
+				if same {
+					return true
+				}
+			}
+			return false
+		}
+		for _, item := range lines {
+			l, ok := item.(*Map)
+			switch {
+			case !ok || l.get("from") != fork && l.get("to") != fork:
+				joined = append(joined, item)
+			case l.get("kind") == "tie":
+				for _, part := range from[fork] {
+					tie := copyMap(l)
+					if l.get("from") == fork {
+						tie.set("from", part)
+					} else {
+						tie.set("to", part)
+					}
+					if !has(tie) {
+						joined = append(joined, tie)
+					}
+				}
+			case l.get("from") == fork && l.get("to") != fork && l.get("kind") != "hidden":
+				for _, in := range into {
+					line := copyMap(l)
+					line.set("from", in.get("from"))
+					if !line.has("label") && in.has("label") {
+						line.set("label", in.get("label"))
+					}
+					if !has(line) {
+						joined = append(joined, line)
+					}
+				}
+			}
+		}
+		lines = joined
+	}
+	if len(kept) == len(parts) {
+		return
+	}
+	file.set("parts", kept)
+	file.set("lines", lines)
+	implementations, ok := file.get("implementations").(*Map)
+	if !ok {
+		return
+	}
+	// split gives the parts a fork's work split from, through any forks in a row, or the part itself.
+	// A fork's lines in come only from parts that weren't forks when it went, so this ends. Each
+	// fork's parts are worked out once and kept, so forks in a row take no longer than their lines.
+	var split func(id any) []any
+	splits := map[string][]any{}
+	split = func(id any) []any {
+		s, _ := id.(string)
+		if !forks[s] {
+			return []any{id}
+		}
+		if parts, ok := splits[s]; ok {
+			return parts
+		}
+		var parts []any
+		seen := map[any]bool{}
+		for _, next := range from[s] {
+			for _, part := range split(next) {
+				if !seen[keyOf(part)] {
+					seen[keyOf(part)] = true
+					parts = append(parts, part)
+				}
+			}
+		}
+		splits[s] = parts
+		return parts
+	}
+	out := &Map{}
+	for _, name := range implementations.Keys() {
+		impl, ok := implementations.get(name).(*Map)
+		if !ok {
+			out.set(name, implementations.get(name))
+			continue
+		}
+		impl = copyMap(impl)
+		for _, list := range [][2]string{{"blocks", "parts"}, {"comments", "ties"}} {
+			items, ok := impl.get(list[0]).([]any)
+			if !ok {
+				continue
+			}
+			var changed []any
+			for _, item := range items {
+				m, ok := item.(*Map)
+				ids, isList := m.get(list[1]).([]any)
+				if !ok || !isList {
+					changed = append(changed, item)
+					continue
+				}
+				var to []any
+				seen := map[any]bool{}
+				for _, id := range ids {
+					if s, _ := id.(string); list[0] == "blocks" {
+						if !forks[s] {
+							to = append(to, id)
+						}
+						continue
+					}
+					for _, part := range split(id) {
+						if !seen[keyOf(part)] {
+							seen[keyOf(part)] = true
+							to = append(to, part)
+						}
+					}
+				}
+				m = copyMap(m)
+				m.set(list[1], to)
+				changed = append(changed, m)
+			}
+			impl.set(list[0], changed)
+		}
+		out.set(name, impl)
+	}
+	file.set("implementations", out)
+}
 
 func upgradeFile(doc any) (*Map, error) {
 	file, ok := doc.(*Map)

@@ -40,7 +40,6 @@ title: Changes
 parts:
   - {id: fill, kind: code, op: do, label: Fill}
   - {id: basket, kind: outside, label: "Fill the basket: Allow"}
-  - {id: split, kind: fork}
   - {id: approve, kind: review, label: Approve}
   - {id: checkout, kind: outside, label: "Check out: Ask"}
   - {id: filed, kind: context, label: Filed}
@@ -71,8 +70,7 @@ func TestAnAIDoStepWarns(t *testing.T) {
 func TestADoStepThatLeadsToMoreThanOneChangeWarns(t *testing.T) {
 	doWarnings(t, withChangeLines(t,
 		"{from: fill, to: basket, kind: data}",
-		"{from: fill, to: split, kind: start}",
-		"{from: split, to: approve, kind: data}",
+		"{from: fill, to: approve, kind: start}",
 		"{from: approve, to: checkout, kind: data}"),
 		`do step "fill" leads to 2 changes ("basket", "checkout"): each do step should make one`)
 }

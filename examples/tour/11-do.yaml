@@ -7,16 +7,14 @@ scopes:
   - { id: parents, label: "parents: Mia, Dev" }
 parts:
   - { id: done, kind: trigger, label: "The window cleaner says the windows are done" }
-  - { id: split, kind: fork, in: parents }
   - { id: book_next, kind: code, op: do, label: "Book the next visit", in: parents }
   - { id: book, kind: outside, label: "Put the next visit in the parents' calendar: Allow", in: parents }
   - { id: make_payment, kind: code, op: do, label: "Make the £20 payment", in: parents }
   - { id: approve, kind: review, label: "Dev's yes to the exact payment", in: parents }
   - { id: pay, kind: outside, label: "Pay the window cleaner £20: Ask", in: parents }
 lines:
-  - { from: done, to: split, kind: start }
-  - { from: split, to: book_next, kind: start }
+  - { from: done, to: book_next, kind: start }
   - { from: book_next, to: book, kind: data }
-  - { from: split, to: make_payment, kind: start }
+  - { from: done, to: make_payment, kind: start }
   - { from: make_payment, to: approve, kind: start }
   - { from: approve, to: pay, kind: data, label: "[yes]" }

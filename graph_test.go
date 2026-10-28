@@ -70,10 +70,9 @@ func TestTheGraphOfAWorkflowHasItsParts(t *testing.T) {
 title: T
 parts:
   - { id: ok, kind: review, label: "Ana's yes" }
-  - { id: fork, kind: fork }
 `, "").Parts
-	if review[0].Decider != "person" || review[1].Label != "" {
-		t.Errorf("a review and a fork are %+v", review)
+	if review[0].Decider != "person" {
+		t.Errorf("a review is %+v", review)
 	}
 }
 
