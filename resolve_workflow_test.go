@@ -58,8 +58,8 @@ func resolveRepo(t *testing.T, r *rehearsal) (origin, main, clean, conflicting s
 func resolvePull(number, branch, sha string) string {
 	return `
   "api repos/owner/repo/pulls/` + number + `") answer <<< '{"base": {"ref": "main"}, "head": {"ref": "` + branch + `", "sha": "` + sha +
-		`", "repo": {"full_name": "owner/repo"}}, "author_association": "OWNER", "user": {"type": "User"}}' ;;
-  "pr view ` + number + ` --repo owner/repo --json mergeable --jq .mergeable") echo CONFLICTING ;;`
+		`", "repo": {"full_name": "owner/repo"}}, "author_association": "OWNER", "user": {"login": "the-owner", "type": "User"}}' ;;
+  "pr view ` + number + ` --repo owner/repo --json mergeable --jq .mergeable") echo CONFLICTING ;;` + permissions
 }
 
 // The find job rebases each conflicting pull request with git alone. A clean rebase is bundled, its
@@ -290,5 +290,67 @@ func TestResolveReadsOnlyTheSessionsOwnFolder(t *testing.T) {
 		if entries, _ := os.ReadDir(filepath.Join(r.temp, "resolved")); len(entries) != 0 {
 			t.Errorf("with %s a symbolic link, the check kept %d of the session's files", how, len(entries))
 		}
+	}
+}
+
+// resolve.yml touches only branches of this repository whose pull request the app's own bot opened
+// from a build/issue- branch, or a person who may write opened: not any bot, nor a member who may
+// only read, whatever their association.
+func TestResolveTouchesOnlyItsOwnPeoplesBranches(t *testing.T) {
+	find, _ := readFactoryWorkflow(t, "resolve.yml").Jobs["find"].step(t, "find")
+	for name, tt := range map[string]struct {
+		user, kind, branch string
+		touched            bool
+	}{
+		"the app's build":               {"awml-factory[bot]", "Bot", "build/issue-5", true},
+		"another bot on a build branch": {"dependabot[bot]", "Bot", "build/issue-5", false},
+		"the app off a build branch":    {"awml-factory[bot]", "Bot", "scones", false},
+		"a writer":                      {"a-writer", "User", "scones", true},
+		"a member who may only read":    {"a-member", "User", "scones", false},
+	} {
+		r := newRehearsal(t)
+		origin, main, clean, _ := resolveRepo(t, r)
+		work := filepath.Join(r.root, "work")
+		gitIn(t, r.root, "clone", "-q", "--branch", "main", origin, work)
+		r.dir = work
+		pull := strings.Replace(strings.Replace(resolvePull("5", tt.branch, clean), `"login": "the-owner", "type": "User"`,
+			`"login": "`+tt.user+`", "type": "`+tt.kind+`"`, 1), `"author_association": "OWNER"`, `"author_association": "MEMBER"`, 1)
+		r.run(find, map[string]string{"GITHUB_SHA": main}, `
+  "api users/awml-factory%5Bbot%5D --jq .id") echo 41 ;;
+  "api --paginate repos/owner/repo/pulls?state=open&per_page=100 --jq .[].number") printf '5\n' ;;`+pull)
+		if tt.touched {
+			r.mustPass()
+		}
+		if got := strings.Contains(r.outputs["pulls"], `"number":5`); got != tt.touched {
+			t.Errorf("%s: resolve touched the branch: %v, want %v\n%s", name, got, tt.touched, r.printed)
+		}
+	}
+}
+
+// A branch whose commits change .github/ or Claude Code's files is held back even if a later commit
+// takes the change out again, since each of its commits would be pushed.
+func TestResolveHoldsBackABranchByEachOfItsCommits(t *testing.T) {
+	find, _ := readFactoryWorkflow(t, "resolve.yml").Jobs["find"].step(t, "find")
+	r := newRehearsal(t)
+	origin, main, _, _ := resolveRepo(t, r)
+	gitIn(t, origin, "switch", "-q", "-c", "sneaky", main+"^")
+	r.write(filepath.Join(origin, ".github/workflows/x.yml"), "name: X\n")
+	gitIn(t, origin, "add", "-A")
+	gitIn(t, origin, "commit", "-qm", "A workflow")
+	gitIn(t, origin, "rm", "-q", ".github/workflows/x.yml")
+	r.write(filepath.Join(origin, "recipes.md"), "Muffins\n")
+	gitIn(t, origin, "add", "-A")
+	gitIn(t, origin, "commit", "-qm", "Taken out again, and muffins")
+	head := gitIn(t, origin, "rev-parse", "HEAD")
+	gitIn(t, origin, "switch", "-q", "main")
+	work := filepath.Join(r.root, "work")
+	gitIn(t, r.root, "clone", "-q", "--branch", "main", origin, work)
+	r.dir = work
+	r.run(find, map[string]string{"GITHUB_SHA": main}, `
+  "api users/awml-factory%5Bbot%5D --jq .id") echo 41 ;;
+  "api --paginate repos/owner/repo/pulls?state=open&per_page=100 --jq .[].number") printf '9\n' ;;`+resolvePull("9", "sneaky", head))
+	r.mustPass()
+	if !strings.Contains(r.outputs["pulls"], `"held":true`) {
+		t.Errorf("a branch that added a workflow in one commit and took it out in the next wasn't held back: %v", r.outputs)
 	}
 }

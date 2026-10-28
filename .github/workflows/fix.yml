@@ -98,11 +98,23 @@ jobs:
           jq -e '[.[] | select((.name | IN("Bug review", "Security review")) and .conclusion == "failure")] | length > 0' \
             "$RUNNER_TEMP/jobs.json" > /dev/null || leave "Neither review failed, so there's nothing to fix."
 
-          pull="$(gh api "repos/$GITHUB_REPOSITORY/pulls?head=$GITHUB_REPOSITORY_OWNER:$branch&base=main&state=open" |
+          # Trust is by the opener's permission on this repository, read from GitHub, or the app's
+          # exact login and type, checked for each pull request on the branch, newest first.
+          may_write() {
+            [[ "$1" =~ ^[A-Za-z0-9-]{1,39}$ ]] || return 1
+            gh api "repos/$GITHUB_REPOSITORY/collaborators/$1/permission" --jq '"\(.permission) \(.role_name // "")"' 2> /dev/null |
+              grep -wE 'admin|maintain|write' > /dev/null
+          }
+          pull=""
+          while IFS= read -r candidate; do
+            login="$(jq -r .user.login <<< "$candidate")"
+            if { [ "$login" = "awml-factory[bot]" ] && [ "$(jq -r .user.type <<< "$candidate")" = Bot ]; } || may_write "$login"; then
+              pull="$candidate"
+              break
+            fi
+          done < <(gh api "repos/$GITHUB_REPOSITORY/pulls?head=$GITHUB_REPOSITORY_OWNER:$branch&base=main&state=open" |
             jq -c --arg repository "$GITHUB_REPOSITORY" --arg branch "$branch" \
-              '[.[] | select(.base.ref == "main" and .head.ref == $branch and .head.repo.full_name == $repository and
-                ((.author_association | IN("OWNER", "MEMBER", "COLLABORATOR")) or
-                 (.user.login == "awml-factory[bot]" and .user.type == "Bot")))] | first // empty')"
+              '.[] | select(.base.ref == "main" and .head.ref == $branch and .head.repo.full_name == $repository)')
           [ -n "$pull" ] ||
             leave "No open pull request into main on $branch was opened by someone with write access or by the app, so CI reviews none."
           pr="$(jq -r .number <<< "$pull")"
@@ -403,9 +415,11 @@ jobs:
             exit 0
           fi
           claudes='(^|/)\.claude(/|$)|(^|/)\.mcp\.json$|(^|/)CLAUDE(\.local)?\.md$|(^|/)\.npmrc$|(^|/)\.yarnrc(\.yml)?$|(^|/)node_modules(/|$)'
-          if git diff --cached --name-only --no-renames -z | grep -zqE "^\.github/|$claudes"; then
-            echo "The fix changes files the app never pushes:"
-            git diff --cached --name-only --no-renames -z | grep -zE "^\.github/|$claudes" | tr '\0' '\n' | jq -R .
+          if git diff --cached --name-only --no-renames -z | grep -zqE "^\.github/|$claudes" ||
+            git diff --cached --raw --no-renames | awk '$2 == "120000" { found = 1 } END { exit !found }'; then
+            echo "The fix changes files the app never pushes, or makes a symbolic link:"
+            git diff --cached --name-only --no-renames -z | grep -zE "^\.github/|$claudes" | tr '\0' '\n' | jq -R . || true
+            git diff --cached --raw --no-renames | awk '$2 == "120000" { print "a symbolic link" }' | sort -u
             echo "outcome=offer" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -461,7 +475,7 @@ jobs:
         run: |
           run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           {
-            printf '**The fix for the reviews'"'"' findings changes `.github/`, Claude Code'"'"'s own files** (`.claude/`, `.mcp.json` or a `CLAUDE.md`) **or npm'"'"'s** (`.npmrc`, `.yarnrc` or `node_modules/`), which the app never pushes, so it'"'"'s here for a person to apply. [The run](%s)\n' "$run_url"
+            printf '**The fix for the reviews'"'"' findings changes `.github/`, Claude Code'"'"'s own files** (`.claude/`, `.mcp.json` or a `CLAUDE.md`) **or npm'"'"'s** (`.npmrc`, `.yarnrc` or `node_modules/`), or makes a symbolic link,, which the app never pushes, so it'"'"'s here for a person to apply. [The run](%s)\n' "$run_url"
             echo
             echo "To look at it and apply it, in a checkout of this branch at $HEAD_SHA, the commit the reviews read:"
             echo

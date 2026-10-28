@@ -1,6 +1,7 @@
 package awml
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -10,10 +11,7 @@ func fixAnswers(tests, review, pullUser, pullSha string, fixCommits int, annotat
 	head := strings.Repeat("ab", 20)
 	pulls := "[]"
 	if pullUser != "" {
-		association := "NONE"
-		if pullUser == "the-maintainer" {
-			association = "OWNER"
-		}
+		association := "OWNER"
 		pulls = `[{"number": 8, "base": {"ref": "main"}, "head": {"ref": "scones", "sha": "` + pullSha +
 			`", "repo": {"full_name": "owner/repo"}}, "user": {"login": "` + pullUser + `", "type": "` + map[bool]string{true: "Bot", false: "User"}[strings.HasSuffix(pullUser, "[bot]")] + `"}, "author_association": "` + association + `"}]`
 	}
@@ -21,7 +19,7 @@ func fixAnswers(tests, review, pullUser, pullSha string, fixCommits int, annotat
 	for i := 0; i < fixCommits; i++ {
 		commits = append(commits, `{"sha": "2", "commit": {"message": "Fix\n\nFixed-by: fix-review-findings\nFixed-by: fix-review-findings"}}`)
 	}
-	return `
+	return permissions + `
   "api repos/owner/repo/actions/runs/77"*) answer <<< '{"path": ".github/workflows/ci.yml", "event": "pull_request", "status": "completed",
     "head_sha": "` + head + `", "head_branch": "scones", "head_repository": {"full_name": "owner/repo"}, "pull_requests": [{"number": 8}]}' ;;
   "api --paginate repos/owner/repo/actions/runs/77/jobs"*) answer <<< '{"jobs": [
@@ -147,8 +145,16 @@ func TestTheFixIsPushedOfferedOrLeft(t *testing.T) {
 		t.Errorf("a plain fix ended %q, want push:\n%s", pushed.outputs["outcome"], pushed.printed)
 	}
 	for _, path := range []string{".github/workflows/ci.yml", "CLAUDE.md", ".claude/settings.json", "docs/.mcp.json",
-		".npmrc", ".yarnrc", "node_modules/x/index.js"} {
-		r := fixGuard(t, nil, func(r *rehearsal, repo string) { r.write(filepath.Join(repo, path), "changed\n") }, false)
+		".npmrc", ".yarnrc", "node_modules/x/index.js", "a symbolic link"} {
+		r := fixGuard(t, nil, func(r *rehearsal, repo string) {
+			if path == "a symbolic link" {
+				if err := os.Symlink("/proc/self/environ", filepath.Join(repo, "notes.md")); err != nil {
+					t.Fatal(err)
+				}
+				return
+			}
+			r.write(filepath.Join(repo, path), "changed\n")
+		}, false)
 		r.mustPass()
 		if r.outputs["outcome"] != "offer" {
 			t.Errorf("a fix to %s ended %q, want offer", path, r.outputs["outcome"])

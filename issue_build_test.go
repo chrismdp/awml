@@ -290,8 +290,14 @@ func openGuard(t *testing.T, changed bool, message string, change func(r *rehear
 // applies to main says so. Anything else goes on to the push, with no comment.
 func TestTheBuildOffersAChangeToGithubAndStops(t *testing.T) {
 	for _, path := range []string{".github/workflows/ci.yml", ".github/build-prompt.md", "CLAUDE.md", "docs/.claude/settings.json",
-		".npmrc", "examples/.yarnrc.yml", "node_modules/@mermaid-js/mermaid-cli/index.js"} {
+		".npmrc", "examples/.yarnrc.yml", "node_modules/@mermaid-js/mermaid-cli/index.js", "a symbolic link"} {
 		r := openGuard(t, true, "Change the workflow\n", func(r *rehearsal, repo string) {
+			if path == "a symbolic link" {
+				if err := os.Symlink("/proc/self/environ", filepath.Join(repo, "notes.md")); err != nil {
+					t.Fatal(err)
+				}
+				return
+			}
 			r.write(filepath.Join(repo, path), "changed\n")
 		})
 		bodies := r.bodies()

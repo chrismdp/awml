@@ -39,6 +39,11 @@ if ! [[ "$base" =~ ^[0-9a-f]{40}$ ]] || ! git merge-base --is-ancestor "$base" "
   exit 1
 fi
 gh api "$compare" -H "Accept: application/vnd.github.diff" > "$review/change.patch"
+# A symbolic link in the working tree could lead a session anywhere, /proc included.
+if grep -qE '^(new file mode|new mode) 120000$|^index [0-9a-f]+\.\.[0-9a-f]+ 120000$' "$review/change.patch"; then
+  echo "The patch adds or changes a symbolic link, which a review session could follow out of the tree, so it isn't reviewed."
+  exit 1
+fi
 # The pull request's title and description as they are now, read from GitHub, not the event that
 # started CI, which holds them as they were when the push was made.
 gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '"# \(.title)\n\n\(.body // "")"' > "$review/pull-request.md"

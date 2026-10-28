@@ -103,22 +103,29 @@ func TestEveryPullRequestIsReviewedOrFailsAtTheGate(t *testing.T) {
 			t.Errorf("the session runs if %q, not only once the gate has passed", step.If)
 		}
 	}
-	event := func(repo, association, login string) map[string]string {
-		return map[string]string{"HEAD_REPOSITORY": repo, "AUTHOR_ASSOCIATION": association, "AUTHOR": login}
+	// Trust is by the opener's permission, read from GitHub, not by their association, which a
+	// member of an organisation could have without write access. The app's bot is known by its exact
+	// login and type.
+	event := func(repo, login, kind string) map[string]string {
+		return map[string]string{"HEAD_REPOSITORY": repo, "AUTHOR": login, "AUTHOR_TYPE": kind}
 	}
 	for name, tt := range map[string]struct {
 		env    map[string]string
 		passes bool
 	}{
-		"the owner's pull request":      {event("owner/repo", "OWNER", "the-owner"), true},
-		"a collaborator's pull request": {event("owner/repo", "COLLABORATOR", "a-collaborator"), true},
-		"the app's pull request":        {event("owner/repo", "NONE", "awml-factory[bot]"), true},
-		"a fork's pull request":         {event("a-stranger/repo", "OWNER", "the-owner"), false},
-		"a stranger's pull request":     {event("owner/repo", "CONTRIBUTOR", "a-stranger"), false},
-		"a stranger named like the app": {event("owner/repo", "NONE", "awml-factory"), false},
+		"the owner's pull request":      {event("owner/repo", "the-owner", "User"), true},
+		"a writer's pull request":       {event("owner/repo", "a-writer", "User"), true},
+		"a maintainer's pull request":   {event("owner/repo", "a-keeper", "User"), true},
+		"the app's pull request":        {event("owner/repo", "awml-factory[bot]", "Bot"), true},
+		"a fork's pull request":         {event("a-stranger/repo", "the-owner", "User"), false},
+		"a member who may only read":    {event("owner/repo", "a-member", "User"), false},
+		"a stranger's pull request":     {event("owner/repo", "a-stranger", "User"), false},
+		"a user with the app's name":    {event("owner/repo", "awml-factory[bot]", "User"), false},
+		"another bot":                   {event("owner/repo", "dependabot[bot]", "Bot"), false},
+		"a stranger named like the app": {event("owner/repo", "awml-factory", "User"), false},
 	} {
 		r := newRehearsal(t)
-		r.run(gate, tt.env, "")
+		r.run(gate, tt.env, permissions)
 		if r.failed == tt.passes {
 			t.Errorf("%s: the gate passed is %v, want %v:\n%s", name, !r.failed, tt.passes, r.printed)
 		}
@@ -126,12 +133,21 @@ func TestEveryPullRequestIsReviewedOrFailsAtTheGate(t *testing.T) {
 			t.Errorf("%s: the gate fails without saying why:\n%s", name, r.printed)
 		}
 	}
-	classify := jobs["classify"].If
-	for _, want := range []string{"github.event.pull_request.head.repo.full_name == github.repository",
-		`contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association)`,
-		"github.event.pull_request.user.login == 'awml-factory[bot]'"} {
-		if !strings.Contains(classify, want) {
-			t.Errorf("Classify runs if %q, which lacks %s", classify, want)
+	classify := jobs["classify"]
+	if !strings.Contains(classify.If, "github.event.pull_request.head.repo.full_name == github.repository") {
+		t.Errorf("Classify runs if %q, which lacks the head's repository", classify.If)
+	}
+	classifyGate, first := classify.step(t, "gate")
+	if first != 0 || classifyGate.Run != gate.Run {
+		t.Errorf("Classify's first step isn't the reviews' gate")
+	}
+	bring, _ := classify.step(t, "bring")
+	if bring.If != "steps.gate.outcome == 'success'" {
+		t.Errorf("Classify brings in the patch if %q, not only once its gate has passed", bring.If)
+	}
+	for _, file := range []string{"ci.yml", "fix.yml", "resolve.yml"} {
+		if strings.Contains(readText(t, ".github/workflows/"+file), "author_association") {
+			t.Errorf("%s trusts an opener by their association, not their permission", file)
 		}
 	}
 }
@@ -494,5 +510,29 @@ func TestTheReviewsReadThePullRequestAsItIsNow(t *testing.T) {
 		if bring.Env["PR_NUMBER"] != "${{ github.event.pull_request.number }}" {
 			t.Errorf("ci.yml's %s doesn't give bring-patch.sh the pull request's number", name)
 		}
+	}
+}
+
+// permissions answers GitHub's permission lookups: the owner admin, a writer write, a maintainer
+// maintain, a member and a stranger only read, whatever their association says.
+const permissions = `
+  "api repos/owner/repo/collaborators/the-owner/permission"*) answer <<< '{"permission": "admin", "role_name": "admin"}' ;;
+  "api repos/owner/repo/collaborators/the-maintainer/permission"*) answer <<< '{"permission": "admin", "role_name": "admin"}' ;;
+  "api repos/owner/repo/collaborators/a-writer/permission"*) answer <<< '{"permission": "write", "role_name": "write"}' ;;
+  "api repos/owner/repo/collaborators/a-collaborator/permission"*) answer <<< '{"permission": "write", "role_name": "write"}' ;;
+  "api repos/owner/repo/collaborators/a-keeper/permission"*) answer <<< '{"permission": "write", "role_name": "maintain"}' ;;
+  "api repos/owner/repo/collaborators/a-member/permission"*) answer <<< '{"permission": "read", "role_name": "triage"}' ;;
+  "api repos/owner/repo/collaborators/a-stranger/permission"*) answer <<< '{"permission": "read", "role_name": "read"}' ;;`
+
+// A symbolic link in the patch would reach the working tree the sessions read, which could follow
+// it anywhere, /proc included, so bring-patch.sh refuses a patch that adds or changes one.
+func TestTheReviewsRefuseASymbolicLink(t *testing.T) {
+	r := bringPatch(t, nil, func(r *rehearsal, repo string) {
+		if err := os.Symlink("/proc/self/environ", filepath.Join(repo, "notes.md")); err != nil {
+			t.Skip("can't make a symbolic link here:", err)
+		}
+	})
+	if !r.failed || !strings.Contains(r.printed, "symbolic link") {
+		t.Errorf("bring-patch.sh let a symbolic link through, or didn't say why:\n%s", r.printed)
 	}
 }

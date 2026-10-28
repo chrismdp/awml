@@ -76,6 +76,11 @@ jobs:
             command git -c core.hooksPath=/dev/null -c core.fsmonitor=false \
               -c user.name="awml-factory[bot]" -c user.email="$id+awml-factory[bot]@users.noreply.github.com" "$@"
           }
+          may_write() {
+            [[ "$1" =~ ^[A-Za-z0-9-]{1,39}$ ]] || return 1
+            gh api "repos/$GITHUB_REPOSITORY/collaborators/$1/permission" --jq '"\(.permission) \(.role_name // "")"' 2> /dev/null |
+              grep -wE 'admin|maintain|write' > /dev/null
+          }
           pulls='[]'
           while read -r number; do
             case "$number" in ''|*[!0-9]*) continue ;; esac
@@ -91,9 +96,15 @@ jobs:
             jq -e --arg repository "$GITHUB_REPOSITORY" '
               .base.ref == "main" and
               .head.repo.full_name == $repository and
-              .head.ref != "factory-media" and
-              ((.author_association | IN("OWNER", "MEMBER", "COLLABORATOR")) or
-               (.user.type == "Bot" and (.head.ref | startswith("build/issue-"))))' <<< "$pull" > /dev/null || continue
+              .head.ref != "factory-media"' <<< "$pull" > /dev/null || continue
+            # The app's own bot on a build/issue- branch, by its exact login and type, or a person whose
+            # permission on this repository, read from GitHub, lets them write.
+            login="$(jq -r .user.login <<< "$pull")"
+            if [ "$login" = "awml-factory[bot]" ] && [ "$(jq -r .user.type <<< "$pull")" = Bot ]; then
+              [[ "$(jq -r .head.ref <<< "$pull")" == build/issue-* ]] || continue
+            elif ! may_write "$login"; then
+              continue
+            fi
             branch="$(jq -r .head.ref <<< "$pull")"
             head_sha="$(jq -r .head.sha <<< "$pull")"
             if ! [[ "$branch" =~ ^[A-Za-z0-9._/-]+$ ]] || ! [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]]; then
@@ -103,7 +114,8 @@ jobs:
 
             git fetch -q --no-tags origin "$head_sha"
             claudes='(^|/)\.claude(/|$)|(^|/)\.mcp\.json$|(^|/)CLAUDE(\.local)?\.md$|(^|/)\.npmrc$|(^|/)\.yarnrc(\.yml)?$|(^|/)node_modules(/|$)'
-            if git diff --name-only --no-renames -z "$GITHUB_SHA...$head_sha" | grep -zqE "^\.github/|$claudes"; then
+            # Every commit's files, not the branch's net change, since each commit would be pushed.
+            if git log --format= --name-only --no-renames -z "$GITHUB_SHA..$head_sha" | grep -zqE "^\.github/|$claudes"; then
               echo "#$number's commits change .github/, Claude Code's own files or npm's, which the app never pushes."
               pulls="$(jq -c --argjson number "$number" --arg branch "$branch" --arg head_sha "$head_sha" \
                 '. + [{number: $number, branch: $branch, head_sha: $head_sha, clean: false, held: true}]' <<< "$pulls")"
