@@ -113,7 +113,7 @@ try {
 
   // An older file is refused, with a pointer to awml convert, in both engines.
   const older = [
-    { file: `${temporary}/older.yaml`, source: canonicalSource.replace('awml: "0.8"', 'awml: "0.5"') },
+    { file: `${temporary}/older.yaml`, source: canonicalSource.replace('awml: "0.9"', 'awml: "0.5"') },
     { file: `${temporary}/security.yaml`, source: "awml: \"0.3\"\ntitle: Pair\nview: security\nparts:\n  - { id: t, kind: trigger, label: T }\n" },
     { file: `${temporary}/broken.yaml`, source: "parts: [\n" },
   ];
@@ -123,7 +123,7 @@ try {
   assert.equal(api.checksJSON(older) + "\n", runNative(["check", "--json", ...older.map(({ file }) => file)], 1), "checks JSON for older files");
   assert.throws(() => api.draw(older[0].source), /upgrade the file with awml convert/);
 
-  // convert upgrades a file of each older version into one 0.8 file, workflow or platform
+  // convert upgrades a file of each older version into one 0.9 file, workflow or platform
   // description, and gives the file awml convert writes, byte for byte.
   const dinners = (version) => `# The family's dinners.
 awml: "${version}"
@@ -150,7 +150,7 @@ holds: [notes]
   const upgrades = {
     "dinners-0.2.yaml": dinners("0.2"),
     "dinners-0.3.yaml": dinners("0.3"),
-    "bread-0.4.yaml": canonicalSource.replace('awml: "0.8"', 'awml: "0.4"'),
+    "bread-0.4.yaml": canonicalSource.replace('awml: "0.9"', 'awml: "0.4"'),
     "renewals-0.5.yaml": `awml: "0.5"
 title: Renewals
 scopes:
@@ -205,7 +205,10 @@ lines:
 `,
     "description-0.7.yaml": description("0.7"),
     // A 0.7 file with no fork changes only its version.
-    "bread-0.7.yaml": canonicalSource.replace('awml: "0.8"', 'awml: "0.7"'),
+    "bread-0.7.yaml": canonicalSource.replace('awml: "0.9"', 'awml: "0.7"'),
+    "description-0.8.yaml": description("0.8"),
+    // A 0.8 file changes only its version.
+    "bread-0.8.yaml": canonicalSource.replace('awml: "0.9"', 'awml: "0.8"'),
     // A fork goes, and each line into it joins each line out of it.
     "newsletter-0.7.yaml": `awml: "0.7"
 title: The school newsletter
@@ -234,11 +237,11 @@ implementations:
   }
   assert.doesNotMatch(api.convert(upgrades["newsletter-0.7.yaml"]), /fork|split/, "convert of a file with a fork");
 
-  // A file already at 0.8 comes back unchanged.
+  // A file already at 0.9 comes back unchanged.
   const current = api.convert(upgrades["bread-0.4.yaml"]);
   await writeFile(`${temporary}/current.yaml`, current);
-  assert.equal(api.convert(current), current, "convert of a 0.8 file");
-  assert.equal(runNative(["convert", `${temporary}/current.yaml`]), current, "awml convert of a 0.8 file");
+  assert.equal(api.convert(current), current, "convert of a 0.9 file");
+  assert.equal(runNative(["convert", `${temporary}/current.yaml`]), current, "awml convert of a 0.9 file");
 
   // A legacy security view joins with its platform view, under the implementation named or default.
   const security = `# A bakery plans tomorrow's loaves. The bakery is fictional.
@@ -281,6 +284,20 @@ lines:
   // When the current rules find mistakes in the converted file, convert throws them, one to a line,
   // and the error carries the file, which awml convert still writes.
   const mistaken = {
+    // A 0.8 file changes only its version, and its line from an outside action into a context stays
+    // for the check to report.
+    "signed-off-0.8.yaml": `awml: "0.8"
+title: Sign-offs
+parts:
+  - { id: ask, kind: code, op: do, label: "Ask for a sign-off" }
+  - { id: approve, kind: review, label: "Yes to the policy" }
+  - { id: publish, kind: outside, label: "Publish the policy: Ask" }
+  - { id: store, kind: context, label: "Sign-offs" }
+lines:
+  - { from: ask, to: approve, kind: data }
+  - { from: approve, to: publish, kind: data, label: "[yes]" }
+  - { from: publish, to: store, kind: data }
+`,
     "send-0.4.yaml": `awml: "0.4"
 title: Send
 parts:
@@ -372,7 +389,7 @@ lines:
   assert.throws(() => api.convert([]), /^Error: convert takes one file, or a security view and its platform view$/);
 
   // Workflows given together follow each ref between them, a path from the referring file's folder.
-  const plan = `awml: "0.8"
+  const plan = `awml: "0.9"
 title: Dinners
 scopes:
   - { id: family, label: "family: parents, kids", processing: any }
@@ -390,7 +407,7 @@ lines:
   - { from: plan, to: tell, kind: start }
   - { from: tell, to: ready, kind: start }
 `;
-  const shop = `awml: "0.8"
+  const shop = `awml: "0.9"
 title: Shopping
 scopes:
   - { id: home, label: "home: parents, kids", processing: any }
@@ -553,7 +570,7 @@ lines:
   // A part they share is untrusted if any workflow's copy of it is marked untrusted. Its text reaches
   // the replier's send with nothing to stop it, a line that breaks a rule, so the check fails, and the
   // map and the summary are still given, as awml gives them.
-  const sorter = `awml: "0.8"
+  const sorter = `awml: "0.9"
 title: Inbox sorter
 scopes:
   - { id: office, label: "office: Ana", processing: any }
@@ -567,7 +584,7 @@ lines:
   - { from: mail, to: sort, kind: data }
   - { from: sort, to: queue, kind: data }
 `;
-  const replier = `awml: "0.8"
+  const replier = `awml: "0.9"
 title: Replier
 scopes:
   - { id: office, label: "office: Ana", processing: any }
@@ -646,7 +663,7 @@ lines:
   // Each kind of line break in a label folds into one space in the Mermaid, in both engines, while
   // the graph gives the label as written.
   for (const [name, escape] of [["lf", "\\n"], ["crlf", "\\r\\n"], ["cr", "\\r"], ["u2028", "\\u2028"], ["u2029", "\\u2029"]]) {
-    const source = `awml: "0.8"
+    const source = `awml: "0.9"
 title: "Bakery${escape}replies"
 scopes:
   - { id: shop, label: "${escape}end${escape}", processing: any }

@@ -7,7 +7,7 @@
 # or if the issue was edited since the label went on, a new comment on the issue says a person must
 # act. Each is said once, on the first failure of CI's tests since it came to hold. A re-run acts
 # only if no earlier attempt of the run failed its tests.
-awml: "0.8"
+awml: "0.9"
 title: A failed build tries again
 description: |
   The factory's retry: CI's failed tests on a build's pull request start the build again, up to

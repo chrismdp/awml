@@ -10,7 +10,7 @@ import (
 // A bakery's order form, which anyone can write in. What they type is read by an AI step, kept in
 // the orders and planned from, and the plan is pinned to the board with nothing to stop the text.
 // A code step that keeps only the order number and quantity passes on what the label is made from.
-const orderForm = `awml: "0.8"
+const orderForm = `awml: "0.9"
 title: Cake orders
 scopes:
   - { id: bakery, label: "bakery: Ana, Ben", processing: any }
@@ -43,7 +43,7 @@ const (
 )
 
 // A box labelled from the order form, with nothing between: the text reaches the label's printer.
-const labelForm = `awml: "0.8"
+const labelForm = `awml: "0.9"
 title: Box labels
 scopes:
   - { id: bakery, label: "bakery: Ana, Ben", processing: any }
@@ -87,7 +87,7 @@ func unstoppedParts(g Graph) []string {
 func TestA06FileIsAWorkflowThatMayMarkPartsUntrustedAndCodeStepsCleans(t *testing.T) {
 	doc := parsed(t, labelForm)
 	if !IsCanonical(doc) {
-		t.Fatal("a 0.8 file isn't read as a workflow")
+		t.Fatal("a 0.9 file isn't read as a workflow")
 	}
 	if got := Unsound(doc); len(got) != 0 {
 		t.Errorf("Unsound gave %q", got)

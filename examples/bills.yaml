@@ -1,4 +1,4 @@
-awml: "0.8"
+awml: "0.9"
 title: The family's bills check
 description: |
   Every morning, code matches the joint account against the bills expected and tells the parents in

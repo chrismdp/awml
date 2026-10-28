@@ -1,4 +1,4 @@
-awml: "0.8"
+awml: "0.9"
 title: The family's pickups
 description: |
   When a pickup changes in Nadia's calendar, code copies the pickups into the family's notes, and

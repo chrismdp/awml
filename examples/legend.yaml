@@ -1,4 +1,4 @@
-awml: "0.8"
+awml: "0.9"
 title: The parts of a drawing
 description: |
   Every kind of part, as a key to reading the drawings, with where untrusted text goes. The hidden

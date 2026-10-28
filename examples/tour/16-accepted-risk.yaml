@@ -1,4 +1,4 @@
-awml: "0.8"
+awml: "0.9"
 title: Answering customers on the bakery's website
 description: |
   A standing approval over actions that can't be undone. Every 15 minutes, the bakery answers the

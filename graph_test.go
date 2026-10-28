@@ -10,7 +10,7 @@ import (
 // A reply the bakery's owner drafts and sends: its line to the outside action breaks two rules, its
 // line to the shop's board publishes into the wider scope, a comment marks a gap, and its home
 // implementation places the parts on two platforms, with a comment tied to the draft.
-const bakeryReplies = `awml: "0.8"
+const bakeryReplies = `awml: "0.9"
 title: Bakery replies
 scopes:
   - { id: shop, label: "shop: Ana, Ben" }
@@ -66,7 +66,7 @@ func TestTheGraphOfAWorkflowHasItsParts(t *testing.T) {
 	if !reflect.DeepEqual(g.Parts, want) {
 		t.Errorf("parts are\n%+v", g.Parts)
 	}
-	review := graphOf(t, `awml: "0.8"
+	review := graphOf(t, `awml: "0.9"
 title: T
 parts:
   - { id: ok, kind: review, label: "Ana's yes" }
@@ -157,7 +157,7 @@ func TestTheGraphSaysWhereUntrustedTextGoes(t *testing.T) {
 	}
 }
 
-const ordersForGraph = `awml: "0.8"
+const ordersForGraph = `awml: "0.9"
 title: Orders
 scopes:
   - { id: bakery, label: "bakery: Ana, Ben" }
@@ -261,7 +261,7 @@ func TestTheGraphsJSONNamesItsFields(t *testing.T) {
 			t.Errorf("the JSON has no %s in\n%s", want, encoded)
 		}
 	}
-	empty, _ := json.Marshal(graphOf(t, "awml: \"0.8\"\ntitle: T\nparts:\n  - { id: a, kind: ai, label: A }\n", ""))
+	empty, _ := json.Marshal(graphOf(t, "awml: \"0.9\"\ntitle: T\nparts:\n  - { id: a, kind: ai, label: A }\n", ""))
 	if want := `{"view":"security","groups":[],"parts":[{"id":"a","kind":"ai","label":"A","decider":"ai"}],"lines":[],"comments":[],"places":[]}`; string(empty) != want {
 		t.Errorf("the JSON of a lone step is\n%s", empty)
 	}
@@ -335,7 +335,7 @@ func TestTheMermaidWritesWhatTheGraphListsInItsOrder(t *testing.T) {
 // the Mermaid does.
 func TestTheGraphGivesLabelsAsWrittenAndTheMermaidEscapesThem(t *testing.T) {
 	const label = `Say "yes" & <b>now</b>`
-	g := graphOf(t, "awml: \"0.8\"\ntitle: T\nparts:\n  - { id: a, kind: ai, label: '"+label+"' }\n", "")
+	g := graphOf(t, "awml: \"0.9\"\ntitle: T\nparts:\n  - { id: a, kind: ai, label: '"+label+"' }\n", "")
 	if g.Parts[0].Label != label {
 		t.Errorf("the label is %q", g.Parts[0].Label)
 	}
