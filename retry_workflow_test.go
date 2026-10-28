@@ -129,6 +129,8 @@ func TestRetryActsWhenTheTestsFailAndCountsTheBuilds(t *testing.T) {
   "api --paginate repos/owner/repo/actions/runs/72/jobs"*) answer <<< '{"jobs": [{"name": "test (1.22)", "conclusion": "failure"}]}' ;;`,
 			"failure", "success", head, "", []string{"build"}, 3), "report"},
 		{"a re-run of the third build's failure", retryAnswersOn(2, "", "failure", "success", head, "", []string{"build"}, 3), "none"},
+		// A re-run of a run that started a build started it already.
+		{"a re-run of a failure that started a build", retryAnswersOn(2, "", "failure", "success", head, "", []string{"build"}, 1), "none"},
 		// An edit since the label is said once too: unless an earlier run since the edit failed its
 		// tests, or this is a re-run. A takeover is checked first, since no edit brings the build back.
 		{"an issue edited since, after a failure since the edit", retryAnswersOn(1, earlierFailure(75, shaOf(9)), "failure", "success", head, "2026-10-27T10:30:00Z", []string{"build"}, 1), "none"},

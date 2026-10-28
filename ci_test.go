@@ -573,7 +573,7 @@ func TestTheReportNamesTheCommitByItsFirstLine(t *testing.T) {
 	}
 }
 
-// Every workflow that trusts a person by their permission uses the same may_write, word for word,
+// Every step that trusts a person by their permission uses the same may_write, word for word,
 // which compares exactly: write access is a permission of admin or write, or a role of admin,
 // maintain or write, never a role that merely holds one of those words.
 func TestEveryTrustIsTheSameExactPermissionCheck(t *testing.T) {
@@ -584,8 +584,8 @@ func TestEveryTrustIsTheSameExactPermissionCheck(t *testing.T) {
 			copies = append(copies, strings.TrimPrefix(found, "\n"))
 		}
 	}
-	if len(copies) != 5 {
-		t.Fatalf("found %d copies of may_write, want 5", len(copies))
+	if len(copies) != 6 {
+		t.Fatalf("found %d copies of may_write, want 6", len(copies))
 	}
 	for _, other := range copies[1:] {
 		if other != copies[0] {
@@ -616,6 +616,23 @@ func TestThePromptsSayWhatTheWorkingTreeHolds(t *testing.T) {
 		text := strings.Join(strings.Fields(readText(t, ".github/"+prompt)), " ")
 		if strings.Contains(text, "applied to main") || !strings.Contains(text, "the commit of main the pull request's branch starts from") {
 			t.Errorf("%s doesn't say the change is applied at the commit of main its branch starts from", prompt)
+		}
+	}
+}
+
+// The workflows that check who opened a pull request say who that may be as the gate decides it.
+func TestTheTrustedOpenersAreNamedByAccess(t *testing.T) {
+	for _, file := range []string{"ci.yml", "fix.yml"} {
+		var words []string
+		for _, word := range strings.Fields(readText(t, ".github/workflows/"+file)) {
+			if word != "#" {
+				words = append(words, word)
+			}
+		}
+		text := strings.Join(words, " ")
+		if strings.Contains(text, "a member, a collaborator") || strings.Contains(text, "a member or a collaborator") ||
+			!strings.Contains(text, "someone with write access to this repository, or the build's app") {
+			t.Errorf("%s names its trusted openers by their association, not their access", file)
 		}
 	}
 }

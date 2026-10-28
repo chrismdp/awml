@@ -1,6 +1,7 @@
 # An issue the maintainer labels build becomes a pull request. The repository is public, so
-# everything here sits in one scope: what matters is who may act. Only people with write access,
-# and the repository's own app, can add a label, so the label is the decision. The build says on
+# everything here sits in one scope: what matters is who may act. The label is the decision when
+# someone with write access, or the repository's own app, added it last, by GitHub's record and
+# each adder's permission, since someone with triage can add a label too. The build says on
 # the issue that it has started. Claude drafts with a read-only token, and as part of its draft
 # redraws the examples the change alters and pictures those that look different. The app then
 # pushes the branch and the pictures and opens the pull request. The build runs no checks of its
@@ -69,6 +70,27 @@ jobs:
           EVENT: ${{ github.event_name }}
         run: |
           case "$ISSUE" in ''|*[!0-9]*) echo "The issue must be a number: $ISSUE"; exit 1 ;; esac
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          # A rename doesn't change lastEditedAt, so the issue's renamed events count as edits too.
+          events="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$ISSUE/events?per_page=100" \
+            --jq '.[] | select((.event == "labeled" and .label.name == "build") or .event == "renamed")
+              | {event, created_at, actor: {login: (.actor.login // ""), type: (.actor.type // "")}}' | jq -s .)"
+          # Someone with triage can add a label without write access, so the last build label
+          # approves the issue only if someone with write access, or the app's bot, added it.
+          may_write() {
+            [[ "$1" =~ ^[A-Za-z0-9-]{1,39}$ ]] || return 1
+            [ "$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$1/permission" \
+              --jq '(.permission | IN("admin", "write")) or (.role_name | IN("admin", "maintain", "write"))' 2> /dev/null)" = true ]
+          }
+          labeller="$(jq -r '[.[] | select(.event == "labeled")] | last | .actor.login // ""' <<< "$events")"
+          labeller_type="$(jq -r '[.[] | select(.event == "labeled")] | last | .actor.type // ""' <<< "$events")"
+          if ! { [ "$labeller" = "awml-factory[bot]" ] && [ "$labeller_type" = Bot ]; } && ! may_write "$labeller"; then
+            printf '**The build stopped before drafting.** The build label was last added by someone without write access to this repository, so it doesn'"'"'t approve the issue. It must be added by someone with write access. [The run](%s)\n' \
+              "$run_url" > "$RUNNER_TEMP/stopped.md"
+            gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/stopped.md"
+            echo "go=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if [ "$EVENT" != workflow_dispatch ]; then
             echo "go=true" >> "$GITHUB_OUTPUT"
             exit 0
@@ -81,14 +103,10 @@ jobs:
                 issue(number: $number) { lastEditedAt labels(first: 100) { nodes { name } } }
               }
             }' --jq .data.repository.issue)"
-          # A rename doesn't change lastEditedAt, so the issue's renamed events count as edits too.
-          events="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$ISSUE/events?per_page=100" \
-            --jq '.[] | select((.event == "labeled" and .label.name == "build") or .event == "renamed") | {event, created_at}' | jq -s .)"
           labelled="$(jq -r '[.[] | select(.event == "labeled")] | last | .created_at // ""' <<< "$events")"
           renamed="$(jq -r '[.[] | select(.event == "renamed")] | last | .created_at // ""' <<< "$events")"
           edited="$(jq -r '.lastEditedAt // ""' <<< "$issue")"
           if [[ "$renamed" > "$edited" ]]; then edited="$renamed"; fi
-          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           if ! jq -e '[.labels.nodes[].name] | index("build")' <<< "$issue" > /dev/null || [ -z "$labelled" ]; then
             why="This issue no longer carries the build label"
           elif [ -n "$edited" ] && ! [[ "$edited" < "$labelled" ]]; then
@@ -173,7 +191,21 @@ jobs:
             }' --jq .data.repository.issue)"
           # A rename doesn't change lastEditedAt, so the issue's renamed events count as edits too.
           events="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$ISSUE/events?per_page=100" \
-            --jq '.[] | select((.event == "labeled" and .label.name == "build") or .event == "renamed") | {event, created_at}' | jq -s .)"
+            --jq '.[] | select((.event == "labeled" and .label.name == "build") or .event == "renamed")
+              | {event, created_at, actor: {login: (.actor.login // ""), type: (.actor.type // "")}}' | jq -s .)"
+          # Checked again here, since the label may have been added again since the start job: it
+          # approves the issue only if someone with write access, or the app's bot, added it last.
+          may_write() {
+            [[ "$1" =~ ^[A-Za-z0-9-]{1,39}$ ]] || return 1
+            [ "$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$1/permission" \
+              --jq '(.permission | IN("admin", "write")) or (.role_name | IN("admin", "maintain", "write"))' 2> /dev/null)" = true ]
+          }
+          labeller="$(jq -r '[.[] | select(.event == "labeled")] | last | .actor.login // ""' <<< "$events")"
+          labeller_type="$(jq -r '[.[] | select(.event == "labeled")] | last | .actor.type // ""' <<< "$events")"
+          if ! { [ "$labeller" = "awml-factory[bot]" ] && [ "$labeller_type" = Bot ]; } && ! may_write "$labeller"; then
+            echo "The build label was last added by someone without write access, so it doesn't approve the issue."
+            exit 1
+          fi
           labelled="$(jq -r '[.[] | select(.event == "labeled")] | last | .created_at // ""' <<< "$events")"
           renamed="$(jq -r '[.[] | select(.event == "renamed")] | last | .created_at // ""' <<< "$events")"
           edited="$(jq -r '.lastEditedAt // ""' <<< "$issue")"
@@ -197,13 +229,8 @@ jobs:
                 }
               }
             }' --jq '.data.repository.issue.comments.nodes[]' | jq -s . > "$RUNNER_TEMP/remarks.json"
-          # A comment is kept only if its author can write to the repository, by the same
-          # collaborator permission as every other trust in the factory. A deleted author has none.
-          may_write() {
-            [[ "$1" =~ ^[A-Za-z0-9-]{1,39}$ ]] || return 1
-            [ "$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$1/permission" \
-              --jq '(.permission | IN("admin", "write")) or (.role_name | IN("admin", "maintain", "write"))' 2> /dev/null)" = true ]
-          }
+          # A comment is kept only if its author can write to the repository, by the same may_write.
+          # A deleted author has none.
           writers=()
           while read -r login; do
             if may_write "$login"; then writers+=("$login"); fi

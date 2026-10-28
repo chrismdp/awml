@@ -64,8 +64,8 @@ jobs:
           cp AGENTS.md REVIEW.md "$RUNNER_TEMP/fix/in/"
 
       # Only a pull request CI reviews is fixed: one into main from a branch of this repository,
-      # opened by the owner, a member, a collaborator or the build's app, by GitHub's record of who
-      # opened it. It acts only when both test jobs passed and a review failed: when a test failed
+      # opened by someone with write access to this repository, or the build's app, by GitHub's
+      # record of who opened it. It acts only when both test jobs passed and a review failed: when a test failed
       # too, the tests own the run, and retry-a-build acts. Someone has pushed since the review when
       # the pull request's head isn't the commit CI ran on, and then it exits quietly. Its tries
       # are the fix commits on the branch, known by the line each one's message carries. It passes

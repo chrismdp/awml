@@ -79,9 +79,9 @@ jobs:
   # check that was skipped as passed. A fork's pull request, or one opened by anyone without write
   # access, fails at the first step, the gate, which checks out nothing and holds no secret: its
   # author could steer the sessions, which hold the maintainer's login token. Anyone who can read the
-  # repository can open a pull request between two of its branches, so the opener must be the owner,
-  # a member, a collaborator or the build's app. Only the session step, which runs only once the gate
-  # has passed, holds the token.
+  # repository can open a pull request between two of its branches, so the opener must be someone
+  # with write access to this repository, or the build's app. Only the session step, which runs only
+  # once the gate has passed, holds the token.
   #
   # Each job checks out main, never the head, and brings in the patch as data with main's
   # .github/bring-patch.sh, so the sessions follow main's prompts, AGENTS.md and REVIEW.md, which the

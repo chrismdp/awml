@@ -85,7 +85,7 @@ func TestLandExitsQuietlyUnlessEveryCheckPassedOnTheHead(t *testing.T) {
 	r.run(ready, map[string]string{"CI_RUN": "77"}, landRun("pull_request", "build/issue-120")+passed+landPulls("awml-factory[bot]", head))
 	r.mustPass()
 	if r.outputs["ready"] != "true" || r.outputs["pr"] != "8" || r.outputs["head_sha"] != head ||
-		r.outputs["labeller"] != "the-maintainer" || r.outputs["classify"] != "https://github.com/owner/repo/actions/runs/77/job/1" {
+		r.outputs["labeller"] != "owner" || r.outputs["classify"] != "https://github.com/owner/repo/actions/runs/77/job/1" {
 		t.Errorf("land didn't find the pull request ready to judge: %v", r.outputs)
 	}
 
@@ -441,5 +441,25 @@ func TestLandIgnoresAStrangersPullRequestOnTheBranch(t *testing.T) {
 func TestLandAddsNoRuleOfItsOwnForCI(t *testing.T) {
 	if strings.Contains(readText(t, ".github/workflows/land.yml"), "-- .github/workflows/ci.yml") {
 		t.Error("land.yml keeps a ci.yml check of its own beside the build rule's review_paths")
+	}
+}
+
+// land tells or asks whoever added the build label last, by the same labelled event the build
+// checks, or the owner when that was the app's bot.
+func TestLandTellsWhoeverLastAddedTheLabel(t *testing.T) {
+	ready, _ := readFactoryWorkflow(t, "land.yml").Jobs["find"].step(t, "ready")
+	head := strings.Repeat("ab", 20)
+	passed := landJobs(landJob("test (1.22)", "completed", "success"), landJob("test (stable)", "completed", "success"),
+		landJob("Bug review", "completed", "success"), landJob("Security review", "completed", "success"),
+		landJob("Classify", "completed", "success"))
+	pulls := landPulls("awml-factory[bot]", head)
+	byPerson := strings.Replace(pulls, `"actor": {"login": "awml-factory[bot]", "type": "Bot"}}]`, `"actor": {"login": "a-writer", "type": "User"}}]`, 1)
+	for want, answers := range map[string]string{"owner": pulls, "a-writer": byPerson} {
+		r := newRehearsal(t)
+		r.run(ready, map[string]string{"CI_RUN": "77"}, landRun("pull_request", "build/issue-120")+passed+answers)
+		r.mustPass()
+		if r.outputs["labeller"] != want {
+			t.Errorf("land's labeller is %q, want %q", r.outputs["labeller"], want)
+		}
 	}
 }

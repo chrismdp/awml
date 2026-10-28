@@ -112,9 +112,11 @@ jobs:
           pr="$(jq -r .number <<< "$pull")"
           case "$pr" in ''|*[!0-9]*) echo "The pull request's number isn't a number: $pr"; exit 1 ;; esac
 
+          # The last build label's adder, by the same labelled event the build checks: the owner when
+          # that was the app's bot.
           labeller="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$issue/events?per_page=100" \
-            --jq '.[] | select(.event == "labeled" and .label.name == "build" and .actor.type == "User") | .actor.login' |
-            tail -n 1)"
+            --jq '.[] | select(.event == "labeled" and .label.name == "build") | .actor' |
+            jq -rs 'last // {} | if .type == "User" then .login // "" else "" end')"
           [[ "$labeller" =~ ^[A-Za-z0-9-]{1,39}$ ]] || labeller="$GITHUB_REPOSITORY_OWNER"
           {
             echo "ready=true"

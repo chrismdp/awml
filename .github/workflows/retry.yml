@@ -181,7 +181,13 @@ jobs:
           builds="$(jq length "$RUNNER_TEMP/builds.json")"
           echo "Issue #$issue has had $builds builds since the label was added at $labelled."
           if [ "$builds" -lt 3 ]; then
-            echo "decision=again" >> "$GITHUB_OUTPUT"
+            # A re-run is the same run again, which started the build already.
+            if [ "$attempt" != 1 ]; then
+              echo "This is a re-run of a run that started the build already."
+              echo "decision=none" >> "$GITHUB_OUTPUT"
+            else
+              echo "decision=again" >> "$GITHUB_OUTPUT"
+            fi
             exit 0
           fi
           # Told once: on the first CI run since the last build started whose tests failed, whatever

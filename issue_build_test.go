@@ -29,7 +29,12 @@ func labelEventsRenamed(renamed string) string {
   "api --paginate repos/owner/repo/issues/120/events"*) answer <<< '[
     {"event": "renamed", "rename": {"from": "Scones", "to": "Bake scones"}, "created_at": "2026-10-27T08:00:00Z"},
     {"event": "labeled", "label": {"name": "tool"}, "created_at": "2026-10-27T09:00:00Z"},
-    {"event": "labeled", "label": {"name": "build"}, "created_at": "2026-10-27T10:00:00Z"}` + rename + `]' ;;`
+    {"event": "labeled", "label": {"name": "build"}, "actor": {"login": "the-owner", "type": "User"}, "created_at": "2026-10-27T10:00:00Z"}` + rename + `]' ;;` + permissions
+}
+
+// labelledBy has the build label last added by the actor given, not the owner.
+func labelledBy(answers, login, kind string) string {
+	return strings.Replace(answers, `"actor": {"login": "the-owner", "type": "User"}`, `"actor": {"login": "`+login+`", "type": "`+kind+`"}`, 1)
 }
 
 func issueAnswer(edited string, labels ...string) string {
@@ -70,10 +75,10 @@ func TestABuildSaysOnTheIssueThatItStarted(t *testing.T) {
 	still, _ := start.step(t, "still")
 	started, _ := start.step(t, "started")
 	r := newRehearsal(t)
-	r.run(still, map[string]string{"ISSUE": "120", "EVENT": "issues"}, "")
+	r.run(still, map[string]string{"ISSUE": "120", "EVENT": "issues"}, labelEvents)
 	r.mustPass()
-	if r.outputs["go"] != "true" || r.calls != "" {
-		t.Errorf("a label's build didn't go straight on: %v\n%s", r.outputs, r.calls)
+	if r.outputs["go"] != "true" || strings.Contains(r.calls, "graphql") {
+		t.Errorf("a label's build didn't go on with only the labeller checked: %v\n%s", r.outputs, r.calls)
 	}
 	r.run(started, map[string]string{"ISSUE": "120"}, `  "issue comment 120"*) ;;`)
 	r.mustPass()
@@ -679,6 +684,57 @@ func TestABuildThatStopsSaysSo(t *testing.T) {
 		"from: stopped, to: stopnote, kind: data", "from: stopnote, to: token, kind: data", "to: stopped, kind: tie"} {
 		if !strings.Contains(drawing, want) {
 			t.Errorf("the build's drawing lacks %s", want)
+		}
+	}
+}
+
+// Someone with triage can add a label without write access, so the build goes on only if the last
+// build label was added by someone with write access, by their permission, or by the app's bot. It
+// checks in the start job, saying so in a new comment from fixed text, and again before it drafts.
+func TestTheBuildLabelCountsOnlyFromSomeoneWhoCanWrite(t *testing.T) {
+	jobs := readBuildWorkflow(t)
+	still, _ := jobs["start"].step(t, "still")
+	keep, _ := jobs["draft"].step(t, "keep")
+	for _, c := range []struct {
+		name, login, kind string
+		goes              bool
+	}{
+		{"the owner", "the-owner", "User", true},
+		{"a writer", "a-writer", "User", true},
+		{"the app's bot", "awml-factory[bot]", "Bot", true},
+		{"a triager", "a-member", "User", false},
+		{"a user named as the app", "awml-factory[bot]", "User", false},
+		{"a deleted account", "ghost", "User", false},
+	} {
+		for _, event := range []string{"issues", "workflow_dispatch"} {
+			r := newRehearsal(t)
+			r.run(still, map[string]string{"ISSUE": "120", "EVENT": event},
+				labelledBy(issueAnswer("", "build")+labelEvents, c.login, c.kind)+`
+  "api repos/owner/repo/collaborators/ghost/permission"*) echo "Not Found" >&2; exit 1 ;;
+  "issue comment 120"*) ;;`)
+			r.mustPass()
+			if goes := r.outputs["go"] == "true"; goes != c.goes {
+				t.Errorf("%s, by %s: the build goes on is %v, want %v", c.name, event, goes, c.goes)
+			}
+			bodies := r.bodies()
+			if c.goes && len(bodies) != 0 {
+				t.Errorf("%s, by %s: the build commented %q", c.name, event, bodies)
+			}
+			if !c.goes && (len(bodies) != 1 || !strings.Contains(bodies[0], "added by someone with write access") ||
+				strings.Contains(bodies[0], c.login)) {
+				t.Errorf("%s, by %s: the build said %q, want a fixed-text comment that someone with write access must add the label", c.name, event, bodies)
+			}
+		}
+
+		r := newRehearsal(t)
+		repo, _ := r.newRepo("repo", map[string]string{"AGENTS.md": "How to work.\n", "REVIEW.md": "What fails.\n", ".github/build-prompt.md": "Build it.\n", ".github/sandbox-settings.sh": "echo settings\n"})
+		r.dir = repo
+		r.run(keep, map[string]string{"ISSUE": "120"}, `
+  "api repos/owner/repo/collaborators/ghost/permission"*) echo "Not Found" >&2; exit 1 ;;
+  "api graphql --paginate"*) answer <<< '{"data": {"repository": {"issue": {"comments": {"nodes": []}}}}}' ;;`+
+			labelledBy(issueAnswer("", "build")+labelEvents, c.login, c.kind))
+		if r.failed == c.goes || (!c.goes && r.read("build/issue.md") != "") {
+			t.Errorf("%s: the draft read the issue is %v, want %v:\n%s", c.name, !r.failed, c.goes, r.printed)
 		}
 	}
 }
