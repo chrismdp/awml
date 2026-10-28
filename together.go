@@ -656,7 +656,8 @@ func TogetherUnsound(workflows []Workflow) [][]string {
 }
 
 // TogetherWarnings gives the warnings in each workflow that only the workflows together show: a
-// context more than one writes, and a connector more than one brings items in from.
+// context more than one writes, a connector more than one brings items in from, and a surface that
+// untrusted text reaches unstopped through the workflows together.
 func TogetherWarnings(workflows []Workflow) [][]string {
 	return link(workflows).list(func(m mistake) bool { return strings.HasPrefix(m.check, "warn.") })
 }
