@@ -11,7 +11,8 @@
 #     .git/commondir, since node refuses an empty package.json and git an empty commondir.
 #   scrub-placeholders.sh after TREE STATE  removes each placeholder that is still empty, and each
 #     stand-in that's unchanged, and fails if one holds anything, is a link, or a stand-in changed.
-#     A .claude folder the session left is said and removed, whatever it holds.
+#     A .claude folder the session left is said in full and removed, whatever it holds. A
+#     placeholder inside another goes first.
 #   scrub-placeholders.sh exclude TREE  names each path in TREE's .git/info/exclude, so git add in a
 #     session's own clone commits no placeholder.
 #
@@ -40,15 +41,18 @@ case "$mode" in
     mkdir -p "$(dirname "$state")"
     : > "$state"
     for path in "${paths[@]}"; do
-      # The mount point is made at the first part of the path that's missing.
-      missing=""
+      # The mount point is made at the first part of the path that's missing, and a later one, for
+      # a path inside it, may be made in that one: every missing part is recorded.
+      missing=false
       sofar=""
       IFS=/ read -r -a parts <<< "$path"
       for part in "${parts[@]}"; do
         sofar="${sofar:+$sofar/}$part"
-        if [ ! -e "$tree/$sofar" ] && [ ! -L "$tree/$sofar" ]; then missing="$sofar"; break; fi
+        if [ "$missing" = true ] || { [ ! -e "$tree/$sofar" ] && [ ! -L "$tree/$sofar" ]; }; then
+          missing=true
+          printf '%s\n' "$sofar" >> "$state"
+        fi
       done
-      if [ -n "$missing" ]; then printf '%s\n' "$missing" >> "$state"; fi
     done
     sort -u -o "$state" "$state"
     if [ "${4:-}" = standin ]; then
@@ -63,18 +67,26 @@ case "$mode" in
   after)
     state="$3"
     refuse() { echo "The session left $1 at .${2#"$tree"}, where it started with nothing, so git isn't run on it."; exit 1; }
+    # .claude first: the sandbox's placeholders for its settings, commands, agents, hooks and skills,
+    # and anything Claude Code kept there, are said in full, each name escaped, and removed, since no
+    # change may carry .claude and nothing on the host reads it.
+    claude=false
+    if grep -qxF .claude "$state"; then
+      if [ -L "$tree/.claude" ]; then refuse "a link" "$tree/.claude"; fi
+      if [ -d "$tree/.claude" ]; then
+        echo "The session left these in .claude, which is removed:"
+        find "$tree/.claude" -mindepth 1 -printf '%P %s\n' | LC_ALL=C sort | jq -R .
+        rm -rf "${tree:?}/.claude"
+        claude=true
+      fi
+    fi
+    # The rest deepest first, so a placeholder inside another goes before it, and a folder is
+    # removed only once nothing but placeholders was in it.
     while IFS= read -r path; do
-      case "$path" in "standin "*) continue ;; esac
+      case "$path" in .claude|.claude/*) if [ "$claude" = true ]; then continue; fi ;; esac
       at="$tree/$path"
       if [ -L "$at" ]; then refuse "a link" "$at"; fi
-      if [ "$path" = .claude ] && [ -d "$at" ]; then
-        # The sandbox's placeholders for .claude's settings, commands, agents, hooks and skills,
-        # and what Claude Code keeps there itself: said, each name escaped, and removed, since no
-        # change may carry .claude and nothing on the host reads it.
-        echo "The session left these in .claude, which is removed:"
-        find "$at" -mindepth 1 -maxdepth 4 -printf '%P %s\n' | LC_ALL=C sort | jq -R .
-        rm -rf "$at"
-      elif grep -qxF "standin $path" "$state"; then
+      if grep -qxF "standin $path" "$state"; then
         if [ ! -f "$at" ] || ! cmp -s "$at" <(printf '%s\n' "${standins[$path]}"); then refuse "a ${path##*/} other than the stand-in" "$at"; fi
         rm -f "$at"
       elif [ -f "$at" ]; then
@@ -86,7 +98,7 @@ case "$mode" in
       elif [ -e "$at" ]; then
         refuse "something other than a file or folder" "$at"
       fi
-    done < "$state"
+    done < <(grep -v '^standin ' "$state" | awk -F/ '{ print NF "\t" $0 }' | LC_ALL=C sort -t "$(printf '\t')" -k1,1nr -k2 | cut -f 2-)
     ;;
   exclude)
     mkdir -p "$tree/.git/info"

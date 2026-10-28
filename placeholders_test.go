@@ -83,6 +83,9 @@ func TestTheSandboxsPlaceholdersAreCleanedOrRefused(t *testing.T) {
 		if !r.failed || !strings.Contains(r.printed, "isn't run on it") {
 			t.Errorf("with %s, the tree was taken:\n%s", name, r.printed)
 		}
+		if name == "a link" && !strings.Contains(r.printed, "left a link at ./.claude") {
+			t.Errorf("a .claude link wasn't refused as a link:\n%s", r.printed)
+		}
 	}
 
 	// A package.json the tree had is left alone, and no stand-in is made over it.
@@ -153,7 +156,7 @@ bash "$RUNNER_TEMP/scrub-placeholders.sh" before "$TREE" "$RUNNER_TEMP/absent" s
 // patch of its own change alone; one that leaves something in a placeholder stops git.
 func TestTheBuildsPatchHoldsNoPlaceholder(t *testing.T) {
 	patch, _ := readFactoryWorkflow(t, "build.yml").Jobs["draft"].step(t, "patch")
-	for _, leaves := range []string{"empty placeholders", "a placeholder with something in it", "a .claude link"} {
+	for _, leaves := range []string{"empty placeholders", "a placeholder with something in it", "a .claude link", "something in node_modules"} {
 		r := newRehearsal(t)
 		repo, _ := r.newRepo("repo", map[string]string{"recipes.md": "Bread\n"})
 		r.write("host/scrub-placeholders.sh", readText(t, ".github/scrub-placeholders.sh"))
@@ -176,7 +179,15 @@ func TestTheBuildsPatchHoldsNoPlaceholder(t *testing.T) {
 			r.write(filepath.Join(repo, file), "")
 		}
 		r.write(filepath.Join(repo, ".claude/settings.local.json"), "{\"permissions\": {}}\n")
+		// A placeholder inside a placeholder: node_modules/.bin, an empty folder, in node_modules.
+		for _, dir := range []string{"node_modules/.bin", ".claude/skills/deep/er/than/four"} {
+			if err := os.MkdirAll(filepath.Join(repo, dir), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
 		switch leaves {
+		case "something in node_modules":
+			r.write(filepath.Join(repo, "node_modules", "x"), "module.exports = 1\n")
 		case "a placeholder with something in it":
 			r.write(filepath.Join(repo, ".env"), "TOKEN=x\n")
 		case "a .claude link":
@@ -196,7 +207,8 @@ func TestTheBuildsPatchHoldsNoPlaceholder(t *testing.T) {
 				t.Errorf("the patch isn't the change alone:\n%s", made)
 			}
 			// What was in .claude is said, each name escaped, before it goes.
-			if !strings.Contains(r.printed, `"settings.local.json 20"`) || !strings.Contains(r.printed, `"commands 0"`) {
+			if !strings.Contains(r.printed, `"settings.local.json 20"`) || !strings.Contains(r.printed, `"commands 0"`) ||
+				!strings.Contains(r.printed, `"skills/deep/er/than/four `) {
 				t.Errorf("the step didn't say what was in .claude:\n%s", r.printed)
 			}
 			if _, err := os.Lstat(filepath.Join(repo, ".claude")); err == nil {
@@ -206,6 +218,12 @@ func TestTheBuildsPatchHoldsNoPlaceholder(t *testing.T) {
 		}
 		if !r.failed || made != "" {
 			t.Errorf("with %s, git ran on the tree:\n%s", leaves, r.printed)
+		}
+		// Each is refused for what it is.
+		want := map[string]string{"a placeholder with something in it": "left a file with something in it at ./.env",
+			"a .claude link": "left a link at ./.claude", "something in node_modules": "left a folder with something in it at ./node_modules"}[leaves]
+		if !strings.Contains(r.printed, want) {
+			t.Errorf("with %s, the step said:\n%s\nwant %q", leaves, r.printed, want)
 		}
 	}
 }
