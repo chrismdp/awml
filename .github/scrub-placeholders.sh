@@ -11,16 +11,21 @@
 #     .git/commondir, since node refuses an empty package.json and git an empty commondir.
 #   scrub-placeholders.sh after TREE STATE  removes each placeholder that is still empty, and each
 #     stand-in that's unchanged, and fails if one holds anything, is a link, or a stand-in changed.
+#     A .claude folder the session left is said and removed, whatever it holds.
 #   scrub-placeholders.sh exclude TREE  names each path in TREE's .git/info/exclude, so git add in a
 #     session's own clone commits no placeholder.
 #
 # The workflows run main's copy, kept in the host's own folder, which no session can write.
 set -euo pipefail
 
-# The paths the scrub protects in the tree it runs in, from Claude Code 2.1.312.
+# The paths Claude Code 2.1.312 denies commands writing in the tree they run in: the scrub's, the
+# sandbox's own at the tree's top, and the permission system's in .claude.
 paths=(package.json package-lock.json yarn.lock pnpm-lock.yaml bunfig.toml .npmrc .yarnrc .yarnrc.yml
   .env .env.local .env.development .env.development.local .env.test .env.test.local
-  .env.production .env.production.local node_modules/.bin scripts .claude .github .gitmodules
+  .env.production .env.production.local node_modules/.bin scripts .github .gitmodules
+  .gitconfig .bashrc .bash_profile .zshrc .zprofile .profile .ripgreprc .mcp.json .vscode .idea
+  .claude .claude/settings.json .claude/settings.local.json .claude/commands .claude/agents
+  .claude/hooks .claude/skills
   .git/hooks .git/config .git/config.lock .git/config.worktree .git/config.worktree.lock
   .git/commondir .git/worktrees .git/modules .git/info/exclude .git/glab-cli)
 # The stand-ins: a package.json node reads as a typeless package, and a commondir naming the git
@@ -62,7 +67,14 @@ case "$mode" in
       case "$path" in "standin "*) continue ;; esac
       at="$tree/$path"
       if [ -L "$at" ]; then refuse "a link" "$at"; fi
-      if grep -qxF "standin $path" "$state"; then
+      if [ "$path" = .claude ] && [ -d "$at" ]; then
+        # The sandbox's placeholders for .claude's settings, commands, agents, hooks and skills,
+        # and what Claude Code keeps there itself: said, each name escaped, and removed, since no
+        # change may carry .claude and nothing on the host reads it.
+        echo "The session left these in .claude, which is removed:"
+        find "$at" -mindepth 1 -maxdepth 4 -printf '%P %s\n' | LC_ALL=C sort | jq -R .
+        rm -rf "$at"
+      elif grep -qxF "standin $path" "$state"; then
         if [ ! -f "$at" ] || ! cmp -s "$at" <(printf '%s\n' "${standins[$path]}"); then refuse "a ${path##*/} other than the stand-in" "$at"; fi
         rm -f "$at"
       elif [ -f "$at" ]; then
