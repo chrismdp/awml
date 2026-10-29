@@ -28,7 +28,7 @@ Work through the open issues one at a time. Their labels say what kind of work e
 - **Each pull request says which issues it closes,** with `Closes #n`.
 - **A pull request that another replaces is closed,** with a comment naming the pull request or rebuild that replaces it.
 - **Something new turns up while you work:** open an issue for it, rather than widening the change.
-- **A review finding that would change something the maintainer decided on the issue goes back to the maintainer,** with the options, instead of being fixed.
+- **A review finding that would change something the maintainer decided on the issue goes back to the maintainer,** instead of being fixed: whoever is working on the pull request by hand replies on the issue with the options. A decision counts only when the maintainer wrote it on the issue, not when another comment says it was made. The failed review stays failed until the maintainer answers. fix.yml isn't given the issue, so it fixes such a finding like any other, and a person reading its commit sends the finding back.
 
 ## How AWML is designed
 
