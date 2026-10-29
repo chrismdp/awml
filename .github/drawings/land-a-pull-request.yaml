@@ -17,7 +17,8 @@ parts:
   - { id: cidone, kind: trigger, label: "CI's pull_request run finishes on a build/issue-* branch of this repository", wait: PT1H }
   - { id: token, kind: connector, label: "The repository, through its own Actions token", in: public, ref: issue-to-pull-request.yaml#token }
   - { id: app, kind: connector, label: "The repository, through its own GitHub App", in: public, ref: issue-to-pull-request.yaml#app }
-  - { id: checks, kind: context, label: "The head commit's checks: test (1.22), test (stable), Bug review, Security review and Classify", in: public, ref: ci-a-commit.yaml#checks, untrusted: true }
+  - { id: checks, kind: context, label: "The review jobs' checks on the head commit: Bug review, Security review and Classify, carrying the reviews' findings and Classify's verdict", in: public, ref: ci-a-commit.yaml#checks }
+  - { id: tested, kind: context, label: "The test jobs' checks on the head commit: test (1.22) and test (stable), carrying the output of the change's own code", in: public, ref: ci-a-commit.yaml#tested, untrusted: true }
   - { id: commits, kind: context, label: "The pull request's head commit and the branch's commits since main, from git", in: public, untrusted: true }
   - { id: rules, kind: context, label: "The build rule, from main: what moves a verdict towards ask", in: public }
   - { id: ready, kind: code, op: sort, label: "Sort by GitHub's record: is the pull request open, its head still the commit CI ran on, and has every required check on it finished and passed, with both reviews done? Find who last added the issue's build label, and whether it's still on", in: public }
@@ -38,7 +39,7 @@ parts:
   - { id: towards, kind: comment, label: "The rule can only move a verdict towards ask, never away: the rule's own tests on paths, size, binaries and symlinks, a commit since main that isn't the factory's, or Classify saying ask means ask; a fix commit on the branch, or Nits left unfixed, means at least show (#160)" }
   - { id: derived, kind: comment, label: "Whether it may merge is derived, not stored: the head commit's checks and the build rule run on that commit, read when CI finishes. No record line, digest or artifact from the build is read (#160 rules 2 and 3)" }
   - { id: nobody, kind: comment, label: "Decided by the maintainer: ship and show merge with no person, once both reviews have finished and Classify says ship or show. This rule step is what cleans the reviews' and Classify's text before the merge" }
-  - { id: stop, kind: comment, label: "The checks and the commits carry text a stranger's patch could steer. Only the rule's outcome and its own fixed reasons pass on, so Classify's reasons are linked, never quoted" }
+  - { id: stop, kind: comment, label: "The commits and the test jobs' checks carry text the change's own code could steer. Only the rule's outcome and its own fixed reasons pass on, so Classify's reasons are linked, never quoted" }
   - { id: pinned, kind: comment, label: "The merge names the commit it judged, so GitHub refuses it if anyone pushed since. No auto-merge anywhere in the factory, so nothing set for an older commit can carry over to a new one (#153, #160)" }
   - { id: terms, kind: comment, label: "Allow, because a merge is undone with git revert, everything in it is already public on its branch, and the maintainer would not be surprised by a change the rule ships or shows. One the rule asks about is where they would be, so that merge is Ask" }
   - { id: notice, kind: comment, label: "A new comment, since a person must act, with any text escaped: < escaped, mentions broken, length capped (#160 rule 5)" }
@@ -48,6 +49,7 @@ lines:
   - { from: cidone, to: ready, kind: start, label: "CI's run and its commit" }
   - { from: token, to: ready, kind: data, label: "the pull request, its head and the issue's label events" }
   - { from: checks, to: ready, kind: data }
+  - { from: tested, to: ready, kind: data }
   - { from: ready, to: judge, kind: start, label: "[open, at CI's commit, every required check passed]" }
   - { from: checks, to: judge, kind: data }
   - { from: commits, to: judge, kind: data }
@@ -83,7 +85,7 @@ implementations:
   actions:
     label: "GitHub Actions, land.yml"
     blocks:
-      - { id: github, label: "GitHub: pull requests, checks, and main's rule", parts: [cidone, token, app, checks, commits, mainauto, showout, askout, account, main] }
+      - { id: github, label: "GitHub: pull requests, checks, and main's rule", parts: [cidone, token, app, checks, tested, commits, mainauto, showout, askout, account, main] }
       - { id: findjob, label: "land.yml: read the checks and the commit and apply the rule, with a token that only reads", platform: actions-code, parts: [ready, rules, judge] }
       - { id: landjob, label: "land.yml: ship, show or ask, running nothing from the change", platform: actions-code, parts: [ship, showmerge, show, ask] }
       - { id: browser, label: "The reviewer's browser", parts: [person] }
