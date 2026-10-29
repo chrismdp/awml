@@ -6,7 +6,7 @@
 # person who added the label what to look at. Ask requests their review and doesn't merge: they
 # merge from their own account, which is their yes. Nothing sets a pull request to merge by itself
 # later, and main's own rule holds every merge until CI has passed.
-awml: "0.9"
+awml: "0.10"
 title: A pull request lands once CI has run
 description: |
   The factory's landing: when CI finishes on a factory branch, a code rule reads the head commit's
