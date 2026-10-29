@@ -21,21 +21,19 @@ parts:
   - { id: failed, kind: trigger, label: "CI finishes on a pull request from a branch of this repository with the tests passed and Bug review or Security review failed", wait: PT1H }
   - { id: token, kind: connector, label: "The repository, through its own Actions token", in: public, ref: issue-to-pull-request.yaml#token }
   - { id: app, kind: connector, label: "The repository, through its own GitHub App", in: public, ref: issue-to-pull-request.yaml#app }
-  - { id: checks, kind: context, label: "The head commit's checks: test (1.22), test (stable), Bug review, Security review and Classify", in: public, ref: ci-a-commit.yaml#checks, untrusted: true }
-  - { id: branch, kind: context, label: "The pull request's patch against main, and the branch's commits, from git", in: public, untrusted: true }
+  - { id: checks, kind: context, label: "The head commit's checks: test (1.22), test (stable), Bug review, Security review and Classify", in: public, ref: ci-a-commit.yaml#checks }
+  - { id: branch, kind: context, label: "The pull request's patch against main, and the branch's commits, from git", in: public }
   - { id: issue, kind: context, label: "The pull request's issue and its comments, which anyone can write", in: public, untrusted: true }
   - { id: keep, kind: code, op: sort, cleans: true, label: "Keep only the issue's comments by people with admin, maintain or write permission on the repository, by each author's collaborator permission, as the build keeps an issue's", in: public }
   - { id: decisions, kind: context, label: "The decisions on the issue: its writers' comments, as GitHub renders them, made read-only", in: public }
-  - { id: tries, kind: code, op: sort, cleans: true, label: "Sort by GitHub's record, passing on only the reviewed commit's sha and a count: is the pull request open, its head still the reviewed commit, and how many fix commits does the branch carry?", in: public }
+  - { id: tries, kind: code, op: sort, cleans: true, label: "Sort by GitHub's record, passing on only the reviewed commit's sha and a count: is the pull request open, opened by someone with write access or the app, its head still the reviewed commit, and how many fix commits does the branch carry? Past this gate the patch and the findings come only from trusted people and models: the opener or the build, from an issue kept to writers, and review sessions with no Bash, no web tools and no host allowed", in: public }
   - { id: bring, kind: code, op: bring-in, label: "Bring in both reviews' findings from their checks, and the patch, as read-only files for the session", in: public }
   - { id: asked, kind: context, label: "The findings and the patch, made read-only", in: public }
   - { id: repo, kind: context, label: "Main's fix prompt, AGENTS.md and REVIEW.md, copied out before the session starts", in: public }
   - { id: weigh, kind: ai, op: sort, label: "For each finding: would fixing it change a decision on the issue?", in: public }
-  - { id: referred, kind: context, label: "The findings referred back, each with the decision it would change and the options, in the session's out folder", in: public, untrusted: true }
-  - { id: ask, kind: code, op: do, label: "Post the referred findings in a new comment on the pull request's issue, the session's text escaped, inside stop-commands, with the app's token", in: public }
-  - { id: standask, kind: approval, label: "The maintainer's standing approval, proposed and not yet given: one new comment a fix run on the pull request's issue, asking about the findings referred back, its text the session's, escaped", in: public }
-  - { id: askout, kind: outside, label: "Comment on the pull request's issue: Ask", in: public }
-  - { id: issuelisted, kind: surface, label: "The issue's thread, where each comment the fixer posts is listed", in: public }
+  - { id: referred, kind: context, label: "The findings referred back, each with the decision it would change and the options, in the session's out folder", in: public }
+  - { id: ask, kind: code, op: do, label: "Post the referred findings in a new comment on the pull request's issue, with the app's token, inside stop-commands, the session's text escaped, since a mention or a workflow command in it would still act", in: public }
+  - { id: askout, kind: outside, label: "Comment on the pull request's issue: Allow", in: public }
   - { id: fix, kind: ai, op: draft, label: "Fix every finding of both reviews, Important ones and Nits, test first", in: public }
   - { id: change, kind: context, label: "The fix, as a patch", in: public }
   - { id: guard, kind: code, op: sort, label: "Sort by git: does the fix touch .github/ or Claude Code's own files, and is the branch still at the reviewed commit?", in: public }
@@ -82,9 +80,7 @@ lines:
   - { from: guard, to: ask, kind: start, label: "[no fix: every Important finding referred back, so nothing is pushed]" }
   - { from: push, to: ask, kind: start, label: "[findings referred back too]" }
   - { from: referred, to: ask, kind: data, label: "the comment's text" }
-  - { from: ask, to: standask, kind: start }
-  - { from: standask, to: askout, kind: data, label: "[within limits]" }
-  - { from: standask, to: issuelisted, kind: data, label: "each comment, as posted" }
+  - { from: ask, to: askout, kind: data }
   - { from: askout, to: app, kind: data }
   - { from: change, to: push, kind: data }
   - { from: push, to: standpush, kind: start }
@@ -109,7 +105,7 @@ implementations:
   actions:
     label: "GitHub Actions, fix.yml"
     blocks:
-      - { id: github, label: "GitHub: pull requests, checks and comments", parts: [failed, token, app, checks, branch, issue, standpush, pushed, offered, gaveup, standask, askout, listed, issuelisted] }
+      - { id: github, label: "GitHub: pull requests, checks and comments", parts: [failed, token, app, checks, branch, issue, standpush, pushed, offered, gaveup, askout, listed] }
       - { id: decidejob, label: "Actions job: decide, reading only GitHub, with a token that only reads, in no concurrency group", platform: actions-code, parts: [tries] }
       - { id: fixjob, label: "Actions job: fix, with a token that only reads, one at a time on the pull request decided", platform: actions-code, parts: [keep, decisions, bring, asked, repo, referred, change] }
       - { id: agent, label: "Claude Code, claude-opus-5-5, on the maintainer's subscription", platform: actions-agent, in: fixjob, parts: [weigh, fix] }
