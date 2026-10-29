@@ -278,9 +278,9 @@ func checkView(file *Map, projected bool) (mistakeList, bool) {
 			errors.add("triggers.no-line-in", fmt.Sprintf(`%s goes into trigger "%s": a trigger only starts its own workflow, so start another workflow with an outside action whose ref names its trigger`, name, show(l.get("to"))))
 		}
 		// Only a step writes to a context. A comment's line is reported above.
-		from := kinds[keyOf(l.get("from"))]
-		if k != "tie" && k != "hidden" && isOneOf(from, "review", "approval", "trigger", "connector", "surface", "outside", "context") && kinds[keyOf(l.get("to"))] == "context" {
-			errors.add("contexts.written-by-steps", fmt.Sprintf(`%s goes from %s "%s" into context "%s": only a step writes to a context, so draw a recorded sign-off as a review whose [yes] leads to a code do step that writes it, something brought in from outside as a connector that a bring-in step reads, then writes, and a copy from one context into another as a step that reads one and writes the other`, name, strings.SplitN(kindNames[from.(string)], " ", 2)[1], show(l.get("from")), show(l.get("to"))))
+		from, _ := kinds[keyOf(l.get("from"))].(string)
+		if k != "tie" && k != "hidden" && shapes[from] != "" && !steps[from] && from != "comment" && kinds[keyOf(l.get("to"))] == "context" {
+			errors.add("contexts.written-by-steps", fmt.Sprintf(`%s goes from %s "%s" into context "%s": only a step writes to a context, so draw a recorded sign-off as a review whose [yes] leads to a code do step that writes it, something brought in from outside as a connector that a bring-in step reads, then writes, and a copy from one context into another as a step that reads one and writes the other, or, where the copy publishes, as a step in the first one's scope that hands it to a step in the other's, which writes it`, name, kindNames[from], show(l.get("from")), show(l.get("to"))))
 		}
 	}
 	errors = append(errors, operations(parts, lines)...)

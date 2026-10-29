@@ -222,6 +222,10 @@ func TestAnOutsideActionsRefNamesTheTriggerOfTheWorkflowItStarts(t *testing.T) {
 	togetherFinds(t, together(t, "plan.yaml", plan, "shop.yaml", shopWorkflow), []string{
 		`part "ready" refers to shop.yaml#fill, but that's a code step: an outside action's ref names the trigger of the workflow it starts`,
 	}, nil)
+	plan = strings.Replace(planWorkflow, "ref: shop.yaml#ready", "ref: shop.yaml#basket", 1)
+	togetherFinds(t, together(t, "plan.yaml", plan, "shop.yaml", shopWorkflow), []string{
+		`part "ready" refers to shop.yaml#basket, but that's an outside action: an outside action's ref names the trigger of the workflow it starts`,
+	}, nil)
 	plan = strings.Replace(planWorkflow, "ref: shop.yaml#ready", "ref: shop.yaml#readied", 1)
 	togetherFinds(t, together(t, "plan.yaml", plan, "shop.yaml", shopWorkflow), []string{
 		`part "ready" refers to shop.yaml#readied, but shop.yaml has no part "readied"`,

@@ -134,7 +134,7 @@ func TestUpgradeFrom09ChangesOnlyTheVersion(t *testing.T) {
 	if err != nil || notes != nil || string(data) != upgraded(t, copied) {
 		t.Fatalf("convert of a 0.9 file gave\n%s\nnotes %q, %v, want\n%s", data, notes, err, upgraded(t, copied))
 	}
-	if want := []string{`the line from "drafts" to "sent" goes from context "drafts" into context "sent": only a step writes to a context, so draw a recorded sign-off as a review whose [yes] leads to a code do step that writes it, something brought in from outside as a connector that a bring-in step reads, then writes, and a copy from one context into another as a step that reads one and writes the other`}; !reflect.DeepEqual(found, want) {
+	if want := []string{`the line from "drafts" to "sent" goes from context "drafts" into context "sent": only a step writes to a context, so draw a recorded sign-off as a review whose [yes] leads to a code do step that writes it, something brought in from outside as a connector that a bring-in step reads, then writes, and a copy from one context into another as a step that reads one and writes the other, or, where the copy publishes, as a step in the first one's scope that hands it to a step in the other's, which writes it`}; !reflect.DeepEqual(found, want) {
 		t.Errorf("convert of a 0.9 file found %q, want %q", found, want)
 	}
 }
@@ -150,7 +150,7 @@ func TestUpgradeFrom08ChangesOnlyTheVersion(t *testing.T) {
 	if err != nil || notes != nil || string(data) != upgraded(t, signedOff) {
 		t.Fatalf("convert of a 0.8 file gave\n%s\nnotes %q, %v, want\n%s", data, notes, err, upgraded(t, signedOff))
 	}
-	if want := []string{`the line from "send" to "drafts" goes from outside action "send" into context "drafts": only a step writes to a context, so draw a recorded sign-off as a review whose [yes] leads to a code do step that writes it, something brought in from outside as a connector that a bring-in step reads, then writes, and a copy from one context into another as a step that reads one and writes the other`}; !reflect.DeepEqual(found, want) {
+	if want := []string{`the line from "send" to "drafts" goes from outside action "send" into context "drafts": only a step writes to a context, so draw a recorded sign-off as a review whose [yes] leads to a code do step that writes it, something brought in from outside as a connector that a bring-in step reads, then writes, and a copy from one context into another as a step that reads one and writes the other, or, where the copy publishes, as a step in the first one's scope that hands it to a step in the other's, which writes it`}; !reflect.DeepEqual(found, want) {
 		t.Errorf("convert of a 0.8 file found %q, want %q", found, want)
 	}
 }

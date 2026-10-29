@@ -3,6 +3,7 @@ package awml
 import (
 	"fmt"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -419,10 +420,22 @@ func TestNoLineButATieOrAHiddenOneGoesIntoATrigger(t *testing.T) {
 
 // Only a step writes to a context, so no line but a tie or a hidden one goes into a context from
 // anything else: a review, a standing approval, a trigger, a connector, a surface, an outside action
-// or another context.
+// or another context. A comment's line is reported as a comment's, and a kind added later is held to
+// the rule too, since each kind is taken from the ones awml draws.
 func TestOnlyAStepWritesToAContext(t *testing.T) {
-	for _, part := range [][2]string{{"send", "outside action"}, {"approve", "review"}, {"ok", "standing approval"}, {"monday", "trigger"}, {"inbox", "connector"}, {"phone", "surface"}, {"sent", "context"}} {
-		from, what := part[0], part[1]
+	ofKind := map[string]string{"outside": "send", "review": "approve", "approval": "ok", "trigger": "monday", "connector": "inbox", "surface": "phone", "context": "sent"}
+	var writers []string
+	for k := range shapes {
+		if !steps[k] && k != "comment" {
+			writers = append(writers, k)
+		}
+	}
+	sort.Strings(writers)
+	for _, k := range writers {
+		from, what := ofKind[k], kindNames[k]
+		if from == "" {
+			t.Fatalf("withParts has no part of kind %q", k)
+		}
 		for _, kind := range []string{"start", "data", "refused"} {
 			t.Run(from+"/"+kind, func(t *testing.T) {
 				d := withParts(t, "{ from: "+from+", to: drafts, kind: "+kind+" }")
@@ -432,7 +445,7 @@ func TestOnlyAStepWritesToAContext(t *testing.T) {
 						found = append(found, m)
 					}
 				}
-				want := fmt.Sprintf(`the line from "%s" to "drafts" goes from %s "%s" into context "drafts": only a step writes to a context, so draw a recorded sign-off as a review whose [yes] leads to a code do step that writes it, something brought in from outside as a connector that a bring-in step reads, then writes, and a copy from one context into another as a step that reads one and writes the other`, from, what, from)
+				want := fmt.Sprintf(`the line from "%s" to "drafts" goes from %s "%s" into context "drafts": only a step writes to a context, so draw a recorded sign-off as a review whose [yes] leads to a code do step that writes it, something brought in from outside as a connector that a bring-in step reads, then writes, and a copy from one context into another as a step that reads one and writes the other, or, where the copy publishes, as a step in the first one's scope that hands it to a step in the other's, which writes it`, from, what, from)
 				if !reflect.DeepEqual(found, []string{want}) {
 					t.Errorf("Check found\n  %s\nwant\n  %s", strings.Join(found, "\n  "), want)
 				}
