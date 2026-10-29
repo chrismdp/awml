@@ -759,7 +759,8 @@ assert.equal(api.fitJSON(fitSources) + "\n", runNative(["fit", "--json", ...fitP
 const splitPaths = fitPaths.filter((path) => !path.includes("scripts-mac-mini"));
 const splitSources = fitSources.filter((_, i) => !fitPaths[i].includes("scripts-mac-mini"));
 assert.equal(api.fitPartsJSON(splitSources) + "\n", runNative(["fit", "--parts", "--json", ...splitPaths]), "fit of each part JSON");
-assert.deepEqual(api.fitParts(splitSources).placements, [["cowork-mac-mini", "worker"]], "the fewest platforms that hold the client email");
+assert.deepEqual(api.fitParts(splitSources).options.map((option) => option.platforms), [["cowork-mac-mini", "worker"]], "the options that hold the client email");
+assert.deepEqual(api.fitParts(splitSources).options[0].placement.find((placed) => placed.part === "bring").platforms, ["worker"], "where the client email's bring goes");
 
 // The examples that share a part are drawn together as their map.
 const familyPaths = ["examples/dinners.yaml", "examples/shopping.yaml", "examples/bills.yaml", "examples/pickups.yaml", "examples/question.yaml"];

@@ -489,7 +489,7 @@ awml pull family/dinners@1 -o dinners
 
 - `check`, `draw`, `graph`, `summary` and `fit` take any number of files, and a folder stands for every `.yaml` file directly inside it, with a file named twice read once. Given several workflows, they follow each `ref` between them, as the next section says.
 - `awml check` checks the design and each implementation. It prints each warning, then each error, saying that it's an error, then each mistake that makes the file invalid, or `ok` when there are no errors or mistakes. It exits 1 only for an invalid file. `--json` lists every check it makes, passing ones included, each with a stable id and its result: `pass`, `fail`, `error`, `skipped` or `warn`. Each finding says whether it makes the file `invalid`, is an `error` or is a `warning`.
-- `awml fit` judges the design against platform descriptions, telling the two apart by what each file holds. Given several workflows, it judges each platform as running them all, and names each part after its file, as `dinners#plan`, or `x/dinners#plan` where two files share a name. Add `--implementation ID` to judge one workflow's placement, `--parts` to judge each part on its own and find the fewest platforms that hold them all where no one platform does, and `--json` for the report's JSON form. An implementation can be given without descriptions, and then each block says it has no platform or that its platform wasn't described.
+- `awml fit` judges the design against platform descriptions, telling the two apart by what each file holds. Given several workflows, it judges each platform as running them all, and names each part after its file, as `dinners#plan`, or `x/dinners#plan` where two files share a name. Add `--implementation ID` to judge one workflow's placement, `--parts` to judge each part on its own and list each set of platforms that holds them all with none to spare, and `--json` for the report's JSON form. An implementation can be given without descriptions, and then each block says it has no platform or that its platform wasn't described.
 - `awml draw` prints the security view's Mermaid, or the map of several workflows. Add `--implementation ID` for a platform view. It draws a drawing with errors, and refuses an invalid file, printing why instead. Every other command does the same.
 - `awml graph` takes what `awml draw` takes, and prints what it would draw as JSON, with nothing laid out, for a tool that lays the drawing out itself. Each id is the one `awml draw` gives it, and the spec lists the fields. Its text isn't escaped and keeps its line breaks, so a tool that shows it must escape it and handle them.
 - `awml page` writes one standalone HTML page with the security view, then every implementation, each with a heading. Given several files, it draws their map first, then each file's views in the order given. The page takes their shared title, or Workflows when they differ.
@@ -509,7 +509,7 @@ worker            no: engagements is kept at notes/engagements, which the platfo
                   no: project is kept at notes/projects, which the platform doesn't hold
 ```
 
-Without the scheduled scripts, no one platform holds it all, and `--parts` shows which platforms hold each part and the fewest that hold them between them:
+Without the scheduled scripts, no one platform holds it all, and `--parts` shows which platforms hold each part, then each option that holds them between them, with where each part goes:
 
 ```text
 $ awml fit --parts examples/client-email.yaml examples/platforms/cowork-mac-mini.yaml examples/platforms/worker.yaml
@@ -528,8 +528,18 @@ project      held by cowork-mac-mini
 draft        held by cowork-mac-mini and worker
 save         held by worker
              not by cowork-mac-mini: save is a code step, which anthropic's agent would carry out
-fewest platforms: cowork-mac-mini and worker
-a placement on several platforms is judged part by part only: whether its parts can reach each other isn't judged
+option: cowork-mac-mini and worker
+  mailbox      on cowork-mac-mini or worker
+  weekdays     on cowork-mac-mini or worker
+  bring        on worker
+  rules        on worker
+  engagements  on cowork-mac-mini
+  choose       on cowork-mac-mini or worker
+  learn        on cowork-mac-mini or worker
+  project      on cowork-mac-mini
+  draft        on cowork-mac-mini or worker
+  save         on worker
+an option on several platforms is judged part by part only: whether its parts can reach each other isn't judged
 ```
 
 The Mermaid works anywhere that draws Mermaid 11.4.1. To make an SVG, use the Mermaid CLI, which needs Node:

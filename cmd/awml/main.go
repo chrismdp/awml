@@ -104,7 +104,7 @@ positional arguments:
 options:
   -h, --help  show this help message and exit
   --json      print JSON
-  --parts     judge each part alone, and give the fewest platforms that hold them all
+  --parts     judge each part alone, and give each set of platforms that holds them all with none to spare
   --implementation ID  judge one implementation
 `},
 	"summary": {"usage: awml summary [-h] [--json] files [files ...]\n", `

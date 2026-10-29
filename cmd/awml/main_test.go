@@ -427,13 +427,17 @@ lines: [{from: mail, to: draft, kind: start}]
 	plain := awmlRun("fit", "--parts", workflow, laptop, worker)
 	want := "mail   held by worker\n" +
 		"       not by laptop: mail may wait PT1H, but the platform may be off for P1D\n" +
-		"draft  held by laptop and worker\n"
+		"draft  held by laptop and worker\n" +
+		"option: worker\n" +
+		"  mail   on worker\n" +
+		"  draft  on worker\n"
 	if plain != (result{0, want, ""}) {
 		t.Errorf("fit --parts gave %+v", plain)
 	}
 	json := awmlRun("fit", "--parts", "--json", workflow, laptop, worker)
 	wantJSON := `{"parts":[{"part":"mail","platforms":["worker"],"reasons":[{"platform":"laptop","reasons":["mail may wait PT1H, but the platform may be off for P1D"]}],"models":{}},` +
-		`{"part":"draft","platforms":["laptop","worker"],"reasons":[],"models":{"laptop":["anthropic"],"worker":["anthropic"]}}],"placements":[],"gaps":[]}`
+		`{"part":"draft","platforms":["laptop","worker"],"reasons":[],"models":{"laptop":["anthropic"],"worker":["anthropic"]}}],` +
+		`"options":[{"platforms":["worker"],"placement":[{"part":"mail","platforms":["worker"]},{"part":"draft","platforms":["worker"]}]}],"gaps":[]}`
 	if json != (result{0, wantJSON + "\n", ""}) {
 		t.Errorf("fit --parts --json gave %+v", json)
 	}
@@ -448,7 +452,7 @@ lines: [{from: mail, to: draft, kind: start}]
 	if r := awmlRun("fit", "--parts", workflow); r != (result{2, "", usage + "no platform descriptions were given\n"}) {
 		t.Errorf("fit --parts without descriptions gave %+v", r)
 	}
-	if r := awmlRun("fit", "-h"); !strings.Contains(r.stdout, "  --parts     judge each part alone, and give the fewest platforms that hold them all\n") {
+	if r := awmlRun("fit", "-h"); !strings.Contains(r.stdout, "  --parts     judge each part alone, and give each set of platforms that holds them all with none to spare\n") {
 		t.Errorf("fit -h gave %+v", r)
 	}
 }
