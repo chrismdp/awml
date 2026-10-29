@@ -182,8 +182,10 @@ jobs:
       actions: read
       checks: read
       contents: read
+      issues: read
       pull-requests: read
     outputs:
+      issue: ${{ steps.bring.outputs.issue }}
       decision: ${{ steps.patch.outputs.decision }}
       reason: ${{ steps.patch.outputs.reason }}
       digest: ${{ steps.pack.outputs.digest }}
@@ -197,11 +199,14 @@ jobs:
       - name: Keep main's script, prompt, AGENTS.md and REVIEW.md
         run: |
           mkdir -p "$RUNNER_TEMP/fix/in" "$RUNNER_TEMP/fix/out"
-          cp .github/read-findings.sh .github/fix-prompt.md .github/sandbox-settings.sh .github/scrub-placeholders.sh "$RUNNER_TEMP/"
+          cp .github/read-findings.sh .github/fix-prompt.md .github/sandbox-settings.sh .github/scrub-placeholders.sh .github/issue-text.sh "$RUNNER_TEMP/"
           cp AGENTS.md REVIEW.md "$RUNNER_TEMP/fix/in/"
 
       # The findings, as both reviews' checks carry them, the patch, GitHub's diff of the reviewed
       # commit against main, and the commits, one line each, go to the session as read-only files.
+      # So does the pull request's issue, as decisions.md, read by main's issue-text.sh as the build
+      # reads it: the build's branch names it, and otherwise GitHub's record of the pull request's
+      # closing reference. A pull request with no issue has no decisions file.
       - name: Bring in both reviews' findings and the patch, as read-only files for the session
         id: bring
         env:
@@ -209,8 +214,24 @@ jobs:
           PR_NUMBER: ${{ needs.decide.outputs.pr }}
           HEAD_SHA: ${{ needs.decide.outputs.head_sha }}
           CI_RUN: ${{ github.event.workflow_run.id }}
+          BRANCH: ${{ needs.decide.outputs.branch }}
         run: |
           in="$RUNNER_TEMP/fix/in"
+          if [[ "$BRANCH" =~ ^build/issue-([0-9]+)$ ]]; then
+            issue="${BASH_REMATCH[1]}"
+          else
+            issue="$(gh api graphql -F owner="${GITHUB_REPOSITORY%%/*}" -F name="${GITHUB_REPOSITORY#*/}" -F number="$PR_NUMBER" -f query='
+              query($owner: String!, $name: String!, $number: Int!) {
+                repository(owner: $owner, name: $name) {
+                  pullRequest(number: $number) { closingIssuesReferences(first: 1) { nodes { number } } }
+                }
+              }' --jq '.data.repository.pullRequest.closingIssuesReferences.nodes[0].number // empty')"
+          fi
+          case "$issue" in *[!0-9]*) echo "The pull request's issue isn't a number: $issue"; exit 1 ;; esac
+          if [ -n "$issue" ]; then
+            bash "$RUNNER_TEMP/issue-text.sh" "$issue" "$in/decisions.md"
+            echo "issue=$issue" >> "$GITHUB_OUTPUT"
+          fi
           bash "$RUNNER_TEMP/read-findings.sh" "$CI_RUN" "$RUNNER_TEMP/checks"
           jq -r '["Important", "Nit", "Pre-existing"][] as $rank | .[] | select(.severity == $rank)
             | "- **\(.severity)**, from the \(.review) review, in `\(.file)\(if .line > 0 then ":\(.line)" else "" end)`: \(.title) \(.detail)"' \
@@ -426,9 +447,17 @@ jobs:
           git add -A
           git diff --cached --binary --no-ext-diff --no-textconv "$HEAD_SHA" > "$fix/fix.patch"
           if [ -f "$out/message.md" ]; then cp "$out/message.md" "$fix/"; fi
+          if [ -s "$out/referred.md" ]; then cp "$out/referred.md" "$fix/"; fi
+          # Findings referred back and nothing changed: nothing is pushed, so no fix commit counts as
+          # a try and no CI run starts a retry, and the referral is posted on the issue.
           if [ ! -s "$fix/fix.patch" ]; then
-            echo "Claude changed nothing."
-            printf 'decision=giveup\nreason=nothing\n' >> "$GITHUB_OUTPUT"
+            if [ -f "$fix/referred.md" ]; then
+              echo "Claude referred the findings back and changed nothing."
+              echo "decision=referred" >> "$GITHUB_OUTPUT"
+            else
+              echo "Claude changed nothing."
+              printf 'decision=giveup\nreason=nothing\n' >> "$GITHUB_OUTPUT"
+            fi
           fi
 
       # Everything the session wrote is scanned for anything like the login token before it's
@@ -474,7 +503,8 @@ jobs:
           path: ${{ env.HOST_DIR }}/fix
           retention-days: 30
 
-  # Pushes the fix, offers it, or gives up, in new comments from fixed text. It checks out the
+  # Pushes the fix, offers it, or gives up, in new comments from fixed text, and posts any findings
+  # the session referred back on the issue. It checks out the
   # reviewed commit and applies the fix there, then runs only git, with no hooks, and gh, so it runs
   # nothing from the change.
   write:
@@ -494,6 +524,7 @@ jobs:
       PR_NUMBER: ${{ needs.decide.outputs.pr }}
       BRANCH: ${{ needs.decide.outputs.branch }}
       HEAD_SHA: ${{ needs.decide.outputs.head_sha }}
+      ISSUE: ${{ needs.fix.outputs.issue }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         if: env.DECISION == 'fix' && env.FIXED == 'success'
@@ -501,7 +532,7 @@ jobs:
           ref: ${{ needs.decide.outputs.head_sha }}
           persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        if: env.DECISION == 'fix' && env.FIXED == 'success'
+        if: (env.DECISION == 'fix' || env.DECISION == 'referred') && env.FIXED == 'success'
         with:
           name: fix
           path: ${{ runner.temp }}/fix
@@ -509,7 +540,9 @@ jobs:
       # The fix must be the one the fix job gave the digest of. Then it's applied, staged, to the
       # reviewed commit, and every name it stages is checked, a renamed file by both its names. A
       # branch that has moved since the review means it exits quietly. A fix that touches .github/
-      # or Claude Code's own files is offered to a person.
+      # or Claude Code's own files is offered to a person. Findings the session referred back are
+      # posted on the pull request's issue after the fix is pushed or offered, and a run that only
+      # referred findings back pushes nothing.
       - name: "Sort by git: does the fix touch .github/ or Claude Code's own files, and is the branch still at the reviewed commit?"
         id: guard
         env:
@@ -540,6 +573,15 @@ jobs:
           if [ "$(digest "$RUNNER_TEMP/fix")" != "$CHANGE_DIGEST" ]; then
             echo "The fix isn't the one the fix job made."
             exit 1
+          fi
+          case "$ISSUE" in *[!0-9]*) echo "The pull request's issue must be a number: $ISSUE"; exit 1 ;; esac
+          if [ -s "$RUNNER_TEMP/fix/referred.md" ] && [ -n "$ISSUE" ]; then
+            echo "referred=true" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "$DECISION" = referred ]; then
+            if [ -z "$ISSUE" ]; then give_up nothing; fi
+            echo "outcome=referred" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
           if [ "$(git rev-parse HEAD)" != "$HEAD_SHA" ]; then
             echo "The checkout isn't the reviewed commit."
@@ -606,6 +648,42 @@ jobs:
           git -c core.hooksPath=/dev/null -c core.fsmonitor=false \
             -c http.https://github.com/.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" \
             push --force-with-lease="refs/heads/$BRANCH:$HEAD_SHA" origin "HEAD:refs/heads/$BRANCH"
+
+      # The referral goes to the issue, where the decisions were made, as the app's comment, so a
+      # build after the answer reads it. It's the session's text, so every mention in it is broken,
+      # as the fix's commit message's are, and the log shows it with workflow commands stopped. It
+      # starts by saying what it is and ends by saying how to go on.
+      - name: Make the app's token for the issue
+        id: asker
+        if: steps.guard.outputs.referred == 'true' && contains(fromJSON('["referred", "push", "offer"]'), steps.guard.outputs.outcome)
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
+        with:
+          app-id: ${{ secrets.FACTORY_APP_ID }}
+          private-key: ${{ secrets.FACTORY_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-issues: write
+
+      - name: Post the findings referred back as a new comment on the issue
+        id: ask
+        if: steps.guard.outputs.referred == 'true' && contains(fromJSON('["referred", "push", "offer"]'), steps.guard.outputs.outcome)
+        env:
+          GH_TOKEN: ${{ steps.asker.outputs.token }}
+        run: |
+          case "$ISSUE" in ''|*[!0-9]*) echo "The issue must be a number: $ISSUE"; exit 1 ;; esac
+          case "$PR_NUMBER" in ''|*[!0-9]*) echo "The pull request must be a number: $PR_NUMBER"; exit 1 ;; esac
+          pull_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/pull/$PR_NUMBER"
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          {
+            printf '**The fixer referred findings back.** Fixing them would change what was decided on this issue, so they need a person'"'"'s answer. [The pull request](%s) · [The run](%s)\n\n' "$pull_url" "$run_url"
+            jq -Rrs '.[0:60000] | gsub("@(?=[A-Za-z0-9])"; "@​")' "$RUNNER_TEMP/fix/referred.md"
+            printf '\nTo go on, answer here and add the build label again.\n'
+          } > "$RUNNER_TEMP/referred.md"
+          stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+          echo "::stop-commands::$stop"
+          cat "$RUNNER_TEMP/referred.md"
+          echo "::$stop::"
+          gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/referred.md"
 
       # From fixed text, quoting none of the fix: the commands to download the run's fix artifact and
       # apply it, and that it lasts 30 days.

@@ -179,7 +179,9 @@ jobs:
       # them, bodyHTML, never the Markdown behind them, whose HTML comments the page hides (#150).
       # Anyone can comment, but only the comments of people with admin, maintain or write permission
       # are passed on, so the text of strangers, and of members who can only read, never reaches the
-      # draft step (awml #5). Main's AGENTS.md and REVIEW.md
+      # draft step (awml #5). The app's own comments are passed on too, so a build after the fixer
+      # referred findings back reads the referral beside its answer. Main's issue-text.sh reads them,
+      # as fix.yml does. Main's AGENTS.md and REVIEW.md
       # are kept with them before Claude starts, so a session that edits them still follows main's.
       - name: Keep the issue's text, unedited since the label, and the comments of people who can write to it
         id: keep
@@ -190,15 +192,10 @@ jobs:
           build="$RUNNER_TEMP/build"
           mkdir -p "$build"
           cp AGENTS.md REVIEW.md "$build/"
-          cp .github/build-prompt.md .github/sandbox-settings.sh .github/scrub-placeholders.sh "$RUNNER_TEMP/"
-          owner="${GITHUB_REPOSITORY%%/*}"
-          name="${GITHUB_REPOSITORY#*/}"
-          issue="$(gh api graphql -F owner="$owner" -F name="$name" -F number="$ISSUE" -f query='
-            query($owner: String!, $name: String!, $number: Int!) {
-              repository(owner: $owner, name: $name) {
-                issue(number: $number) { number title bodyHTML lastEditedAt labels(first: 100) { nodes { name } } }
-              }
-            }' --jq .data.repository.issue)"
+          cp .github/build-prompt.md .github/sandbox-settings.sh .github/scrub-placeholders.sh .github/issue-text.sh "$RUNNER_TEMP/"
+          # The issue is read into a file of its own, which reaches the draft only once it's checked.
+          bash "$RUNNER_TEMP/issue-text.sh" "$ISSUE" "$RUNNER_TEMP/issue.md" "$RUNNER_TEMP/issue.json"
+          issue="$(cat "$RUNNER_TEMP/issue.json")"
           # A rename doesn't change lastEditedAt, so the issue's renamed events count as edits too.
           events="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$ISSUE/events?per_page=100" \
             --jq '.[] | select((.event == "labeled" and .label.name == "build") or .event == "renamed")
@@ -228,29 +225,7 @@ jobs:
             echo "The issue was edited or renamed at $edited, after the build label was last added at $labelled, so it isn't drafted from."
             exit 1
           fi
-          gh api graphql --paginate -F owner="$owner" -F name="$name" -F number="$ISSUE" -f query='
-            query($owner: String!, $name: String!, $number: Int!, $endCursor: String) {
-              repository(owner: $owner, name: $name) {
-                issue(number: $number) {
-                  comments(first: 100, after: $endCursor) {
-                    nodes { author { login } createdAt bodyHTML }
-                    pageInfo { hasNextPage endCursor }
-                  }
-                }
-              }
-            }' --jq '.data.repository.issue.comments.nodes[]' | jq -s . > "$RUNNER_TEMP/remarks.json"
-          # A comment is kept only if its author can write to the repository, by the same may_write.
-          # A deleted author has none.
-          writers=()
-          while read -r login; do
-            if may_write "$login"; then writers+=("$login"); fi
-          done < <(jq -r '[.[].author.login // empty] | unique[]' "$RUNNER_TEMP/remarks.json")
-          {
-            jq -r '"# #\(.number): \(.title)\n\nLabels: \([.labels.nodes[].name] | join(", "))\n\n\(.bodyHTML // "")\n"' <<< "$issue"
-            jq -r --argjson writers "$(jq -nc '$ARGS.positional' --args "${writers[@]}")" \
-              '.[] | select(.author.login != null and (.author.login | IN($writers[])))
-                | "## Comment by \(.author.login), \(.createdAt)\n\n\(.bodyHTML)\n"' "$RUNNER_TEMP/remarks.json"
-          } > "$build/issue.md"
+          mv "$RUNNER_TEMP/issue.md" "$build/issue.md"
 
       # Why the last try failed: the failed tests' log of CI's latest pull_request run on the issue's
       # branch in this repository, if it failed. It's the output of the branch's code, so Claude

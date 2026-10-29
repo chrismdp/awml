@@ -274,7 +274,8 @@ func TestTheFixerIsToldWhenFindingsMayBeMissing(t *testing.T) {
 		r.write("read-findings.sh", "#!/bin/bash\n")
 		r.write("fix/in/.keep", "")
 		t.Cleanup(func() { exec.Command("chmod", "-R", "u+w", filepath.Join(r.temp, "fix")).Run() })
-		r.run(bring, map[string]string{"PR_NUMBER": "8", "HEAD_SHA": strings.Repeat("ab", 20), "CI_RUN": "77"}, `
+		r.run(bring, map[string]string{"PR_NUMBER": "8", "HEAD_SHA": strings.Repeat("ab", 20), "CI_RUN": "77", "BRANCH": "scones"}, `
+  "api graphql"*) answer <<< '{"data": {"repository": {"pullRequest": {"closingIssuesReferences": {"nodes": []}}}}}' ;;
   "api repos/owner/repo/compare/"*) answer <<< 'diff' ;;
   "api --paginate repos/owner/repo/pulls/8/commits"*) answer <<< '[{"sha": "abc", "commit": {"message": "A commit"}}]' ;;`)
 		r.mustPass()
