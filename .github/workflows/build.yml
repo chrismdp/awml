@@ -179,8 +179,9 @@ jobs:
       # them, bodyHTML, never the Markdown behind them, whose HTML comments the page hides (#150).
       # Anyone can comment, but only the comments of people with admin, maintain or write permission
       # are passed on, so the text of strangers, and of members who can only read, never reaches the
-      # draft step (awml #5). The app's own comments are passed on too, so a build after the fixer
-      # referred findings back reads the referral beside its answer. Main's issue-text.sh reads them,
+      # draft step (awml #5). The app's own comments are passed on too, if posted before the label
+      # was last added and unedited since, so a build after the fixer referred findings back reads
+      # the referral beside its answer. Main's issue-text.sh reads them,
       # as fix.yml does. Main's AGENTS.md and REVIEW.md
       # are kept with them before Claude starts, so a session that edits them still follows main's.
       - name: Keep the issue's text, unedited since the label, and the comments of people who can write to it

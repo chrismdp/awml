@@ -8,8 +8,8 @@
 # files as the run's artifact, with the commands to download and apply it in a new comment. A finding
 # whose fix would change a decision recorded on the pull request's issue, by someone with write
 # access, isn't fixed: the session refers it back, and a new comment on the issue asks the
-# maintainer, with the decision it would change and the options. If every Important finding is
-# referred back, nothing is pushed.
+# maintainer, with the decision it would change and the options. A session that refers any finding
+# back changes nothing, so nothing is pushed and the pull request waits for the answer.
 awml: "0.9"
 title: A failed review is fixed
 description: |
@@ -24,7 +24,7 @@ parts:
   - { id: checks, kind: context, label: "The review jobs' checks on the head commit: Bug review, Security review and Classify, carrying the reviews' findings and Classify's verdict", in: public, ref: ci-a-commit.yaml#checks }
   - { id: branch, kind: context, label: "The pull request's patch against main, and the branch's commits, from git", in: public }
   - { id: issue, kind: context, label: "The pull request's issue and its comments, which anyone can write", in: public, untrusted: true }
-  - { id: keep, kind: code, op: sort, cleans: true, label: "Keep only the issue's comments by people with admin, maintain or write permission on the repository, by each author's collaborator permission, as the build keeps an issue's", in: public }
+  - { id: keep, kind: code, op: sort, cleans: true, label: "Keep only the issue's comments by people with admin, maintain or write permission on the repository, by each author's collaborator permission, and the app's own posted before the build label was last added and unedited since, as the build keeps an issue's", in: public }
   - { id: decisions, kind: context, label: "The decisions on the issue: its writers' comments, as GitHub renders them, made read-only", in: public }
   - { id: tries, kind: code, op: sort, cleans: true, label: "Sort by GitHub's record, passing on only the reviewed commit's sha and a count: is the pull request open, opened by someone with write access or the app, its head still the reviewed commit, and how many fix commits does the branch carry? Past this gate the patch and the findings come only from trusted people and models: the opener or the build, from an issue kept to writers, and review sessions with no Bash, no web tools and no host allowed", in: public }
   - { id: bring, kind: code, op: bring-in, label: "Bring in both reviews' findings from their checks, and the patch, as read-only files for the session", in: public }
@@ -51,7 +51,7 @@ parts:
   - { id: testsown, kind: comment, label: "Decided in #160's follow-up: the tests own a run where both failed, so retry-a-build acts then, not this. A fix commit that breaks a test wakes retry, which redrafts and uses a try; the tries cap stops it" }
   - { id: loose, kind: comment, label: "Loosely coupled: it reads only the checks on the head commit and the branch. Builds and landing don't call it or wait for it, so a person's pull request is fixed the same way as a build's" }
   - { id: ownfiles, kind: comment, label: "The app may not change a workflow, and Claude Code's own files, .claude/, .mcp.json or a CLAUDE.md, are never pushed by a session, so a fix touching either is offered for a person: decided in #160's follow-up, the comment carries the gh run download command for the run's fix artifact, not the patch, so nothing is escaped or capped" }
-  - { id: refer, kind: comment, label: "Decided by the maintainer after #200: a finding whose fix would undo a decision recorded on the issue, such as #197's, is referred back to him, not fixed. The other findings are still fixed. If every Important finding is referred back, nothing is pushed" }
+  - { id: refer, kind: comment, label: "Decided by the maintainer after #200: a finding whose fix would undo a decision recorded on the issue, such as #197's, is referred back to him, not fixed. If any finding is referred back, the session changes nothing, not even the other findings or the Nits, and nothing is pushed: a pushed fix would start the reviews again, which would find the same finding to refer back, in a loop. A session that refers and changes something too is refused" }
   - { id: steer, kind: comment, label: "The findings came from sessions that read the patch, and the patch is the branch's, so text in either can steer this session. Nothing can stop it before the push, so the push goes under a standing approval. The offer and giving up quote none of it" }
 lines:
   - { from: failed, to: tries, kind: start, label: "CI's run and its commit" }
@@ -69,16 +69,16 @@ lines:
   - { from: bring, to: weigh, kind: start }
   - { from: asked, to: weigh, kind: data }
   - { from: decisions, to: weigh, kind: data }
-  - { from: weigh, to: fix, kind: start, label: "[the findings that change no decision]" }
+  - { from: weigh, to: fix, kind: start, label: "[no finding would change a decision]" }
   - { from: weigh, to: referred, kind: data, label: "[those that would change one]" }
+  - { from: weigh, to: guard, kind: start, label: "[some would change one, so nothing is changed]" }
   - { from: asked, to: fix, kind: data }
   - { from: repo, to: fix, kind: data }
   - { from: fix, to: change, kind: data }
   - { from: fix, to: guard, kind: start, label: "the fix" }
   - { from: change, to: guard, kind: data }
   - { from: guard, to: push, kind: start, label: "[a fix touching none of those files, not moved]" }
-  - { from: guard, to: ask, kind: start, label: "[no fix: every Important finding referred back, so nothing is pushed]" }
-  - { from: push, to: ask, kind: start, label: "[findings referred back too]" }
+  - { from: guard, to: ask, kind: start, label: "[findings referred back and nothing changed, so nothing is pushed]" }
   - { from: referred, to: ask, kind: data, label: "the comment's text" }
   - { from: ask, to: askout, kind: data }
   - { from: askout, to: app, kind: data }

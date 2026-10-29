@@ -9,7 +9,9 @@ import (
 )
 
 // issueAnswers answers the issue's GraphQL with comments by the owner, a writer, a member who may
-// only read, a stranger, the app's own bot and a user named like it, each with its link.
+// only read, a stranger, the app's own bot and a user named like it, each with its link. The build
+// label was added at 10:32, after the app's first comment, and before its second, and before its
+// third was edited.
 const issueAnswers = `
   "api graphql --paginate"*) answer <<< '{"data": {"repository": {"issue": {"comments": {"nodes": [
     {"author": {"login": "the-owner", "__typename": "User"}, "createdAt": "2026-10-27T10:00:00Z", "url": "https://github.com/owner/repo/issues/120#issuecomment-1",
@@ -22,14 +24,23 @@ const issueAnswers = `
      "bodyHTML": "<p>The fixer referred a finding back.</p>"},
     {"author": {"login": "awml-factory", "__typename": "User"}, "createdAt": "2026-10-27T10:35:00Z", "url": "https://github.com/owner/repo/issues/120#issuecomment-5",
      "bodyHTML": "<p>A user named like the app.</p>"},
+    {"author": {"login": "awml-factory", "__typename": "Bot"}, "createdAt": "2026-10-27T10:20:00Z", "lastEditedAt": "2026-10-27T10:50:00Z",
+     "url": "https://github.com/owner/repo/issues/120#issuecomment-7", "bodyHTML": "<p>The app edited this after the label.</p>"},
     {"author": {"login": "a-writer", "__typename": "User"}, "createdAt": "2026-10-27T10:40:00Z", "url": "https://github.com/owner/repo/issues/120#issuecomment-6",
-     "bodyHTML": "<p>Answer: option B.</p>"}]}}}}}' ;;
+     "bodyHTML": "<p>Answer: option B.</p>"},
+    {"author": {"login": "awml-factory", "__typename": "Bot"}, "createdAt": "2026-10-27T10:45:00Z", "url": "https://github.com/owner/repo/issues/120#issuecomment-8",
+     "bodyHTML": "<p>The app posted this after the label.</p>"}]}}}}}' ;;
+  "api --paginate repos/owner/repo/issues/120/events"*) answer <<< '[
+    {"event": "labeled", "label": {"name": "build"}, "actor": {"login": "the-owner", "type": "User"}, "created_at": "2026-10-27T09:00:00Z"},
+    {"event": "labeled", "label": {"name": "tool"}, "actor": {"login": "the-owner", "type": "User"}, "created_at": "2026-10-27T10:31:00Z"},
+    {"event": "labeled", "label": {"name": "build"}, "actor": {"login": "the-owner", "type": "User"}, "created_at": "2026-10-27T10:32:00Z"}]' ;;
   "api graphql"*) answer <<< '{"data": {"repository": {"issue": {"number": 120, "title": "Bake scones",
     "bodyHTML": "<p>Add a scone recipe.</p>", "labels": {"nodes": [{"name": "build"}]}}}}}' ;;` + permissions
 
 // The decisions on an issue are its text and the comments of people who can write to the
-// repository, by their permission, and the app's own, by its exact bot: the build reads them, and so
-// does the fixer, from the one script, each comment with its link.
+// repository, by their permission, and the app's own, by its exact bot, if the build label, last
+// added, approved them as they read: the build reads them, and so does the fixer, from the one
+// script, each comment with its link.
 func TestTheIssuesTextKeepsWritersAndTheApp(t *testing.T) {
 	r := newRehearsal(t)
 	r.write("issue-text.sh", readText(t, ".github/issue-text.sh"))
@@ -42,7 +53,8 @@ func TestTheIssuesTextKeepsWritersAndTheApp(t *testing.T) {
 			t.Errorf("the issue's text lacks %q:\n%s", want, text)
 		}
 	}
-	for _, never := range []string{"A reader says jam", "A stranger says cream", "A user named like the app"} {
+	for _, never := range []string{"A reader says jam", "A stranger says cream", "A user named like the app",
+		"The app posted this after the label", "The app edited this after the label"} {
 		if strings.Contains(text, never) {
 			t.Errorf("the issue's text holds %q, which nobody who can write wrote:\n%s", never, text)
 		}
@@ -80,7 +92,8 @@ func TestTheFixerReadsTheIssuesDecisions(t *testing.T) {
 		}
 	}
 	prompt := strings.Join(strings.Fields(readText(t, ".github/fix-prompt.md")), " ")
-	for _, want := range []string{"FIX_DIR/decisions.md", "OUT_DIR/referred.md", "would change a decision"} {
+	for _, want := range []string{"FIX_DIR/decisions.md", "OUT_DIR/referred.md", "would change a decision",
+		"If you refer any finding back, change nothing"} {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("the fix prompt doesn't say %q", want)
 		}
@@ -114,10 +127,12 @@ func fixPatchStep(t *testing.T, changed, referred bool) *rehearsal {
 	return r
 }
 
-// When the session referred every Important finding back and changed nothing, the run ends there,
-// referred: nothing is pushed, so no fix commit counts as a try and no CI run starts a retry. When it
-// fixed some and referred others, the referral is kept with the fix for the write job to post.
-func TestAFixThatReferredEverythingPushesNothing(t *testing.T) {
+// When the session referred findings back and changed nothing, the run ends there, referred:
+// nothing is pushed, so no fix commit counts as a try and no CI run starts a retry. A session that
+// referred findings back must change nothing, since a pushed fix would start the reviews again, which
+// would find the same finding to refer back: one that changed something too is refused, and nothing
+// is pushed.
+func TestAFixThatReferredPushesNothing(t *testing.T) {
 	all := fixPatchStep(t, false, true)
 	all.mustPass()
 	if all.outputs["decision"] != "referred" || !strings.Contains(all.read("host/fix/referred.md"), "would undo") {
@@ -130,37 +145,43 @@ func TestAFixThatReferredEverythingPushesNothing(t *testing.T) {
 	}
 	mixed := fixPatchStep(t, true, true)
 	mixed.mustPass()
-	if mixed.outputs["decision"] != "" || !strings.Contains(mixed.read("host/fix/fix.patch"), "+Scones") ||
-		!strings.Contains(mixed.read("host/fix/referred.md"), "would undo") {
-		t.Errorf("a session that fixed some findings and referred others didn't keep both:\n%s", mixed.printed)
+	if mixed.outputs["decision"] != "giveup" || mixed.outputs["reason"] != "mixed" {
+		t.Errorf("a session that referred findings back and changed something decided %q, %q:\n%s",
+			mixed.outputs["decision"], mixed.outputs["reason"], mixed.printed)
+	}
+	unchanged := fixPatchStep(t, true, false)
+	unchanged.mustPass()
+	if unchanged.outputs["decision"] != "" {
+		t.Errorf("a session that fixed everything decided %q", unchanged.outputs["decision"])
 	}
 
-	plain := func(r *rehearsal, repo string) {
-		r.write(filepath.Join(repo, "recipes.md"), "Bread\nScones\n")
-		r.write("fix/referred.md", "- A finding referred back.\n")
-	}
 	referred := fixGuard(t, map[string]string{"DECISION": "referred", "ISSUE": "120"}, func(r *rehearsal, repo string) {
 		r.write("fix/referred.md", "- A finding referred back.\n")
 	}, false)
 	referred.mustPass()
-	if referred.outputs["outcome"] != "referred" || referred.outputs["referred"] != "true" {
+	if referred.outputs["outcome"] != "referred" {
 		t.Errorf("a run that only referred findings back ended %v", referred.outputs)
 	}
-	both := fixGuard(t, map[string]string{"ISSUE": "120"}, plain, false)
-	both.mustPass()
-	if both.outputs["outcome"] != "push" || both.outputs["referred"] != "true" {
-		t.Errorf("a run that fixed and referred ended %v", both.outputs)
+	nowhere := fixGuard(t, map[string]string{"DECISION": "referred", "ISSUE": ""}, func(r *rehearsal, repo string) {
+		r.write("fix/referred.md", "- A finding referred back.\n")
+	}, false)
+	nowhere.mustPass()
+	if nowhere.outputs["outcome"] != "giveup" || nowhere.outputs["reason"] != "nothing" {
+		t.Errorf("a referral with no issue to post it on ended %v", nowhere.outputs)
 	}
-
+	refused := fixGuard(t, map[string]string{"DECISION": "giveup", "STOPPED": "mixed"}, func(r *rehearsal, repo string) {}, false)
+	refused.mustPass()
+	if refused.outputs["outcome"] != "giveup" || refused.outputs["reason"] != "mixed" {
+		t.Errorf("a fix refused for referring and changing ended %v", refused.outputs)
+	}
 	write := readFactoryWorkflow(t, "fix.yml").Jobs["write"]
-	push, pushedAt := write.step(t, "push")
-	ask, at := write.step(t, "ask")
-	if at < pushedAt {
-		t.Error("the referral is posted before the fix is pushed")
+	giveup, _ := write.step(t, "giveup")
+	if !strings.Contains(giveup.Run, `mixed) why="`) {
+		t.Error("giving up doesn't say why a fix that referred findings back and changed something isn't pushed")
 	}
-	if push.If != "steps.guard.outputs.outcome == 'push'" || ask.If != "steps.guard.outputs.referred == 'true' && "+
-		`contains(fromJSON('["referred", "push", "offer"]'), steps.guard.outputs.outcome)` {
-		t.Errorf("the referral is posted if %q, the fix pushed if %q", ask.If, push.If)
+	ask, _ := write.step(t, "ask")
+	if ask.If != "steps.guard.outputs.outcome == 'referred'" {
+		t.Errorf("the referral is posted if %q", ask.If)
 	}
 	for _, step := range write.Steps {
 		if strings.HasPrefix(step.Uses, "actions/download-artifact@") && !strings.Contains(step.If, "env.DECISION == 'referred'") {
@@ -177,17 +198,31 @@ func TestTheReferralIsPostedEscaped(t *testing.T) {
 	if ask.Env["GH_TOKEN"] != "${{ steps.asker.outputs.token }}" {
 		t.Errorf("the referral is posted with %q, not the app's token for the issue", ask.Env["GH_TOKEN"])
 	}
+	// A build's pull request goes on with a fresh build. A person's goes on with its author, since
+	// the label would start a build of its own beside it.
+	for branch, end := range map[string]string{
+		"build/issue-120": "To go on, answer here, then remove the build label and add it again.",
+		"scones":          "To go on, answer here; the pull request's author takes it from there.",
+	} {
+		r := newRehearsal(t)
+		r.write("fix/referred.md", "- A finding.\n")
+		r.run(ask, map[string]string{"ISSUE": "120", "PR_NUMBER": "8", "BRANCH": branch}, `  "issue comment 120"*) ;;`)
+		r.mustPass()
+		if bodies := r.bodies(); len(bodies) != 1 || !strings.HasSuffix(strings.TrimSpace(bodies[0]), end) {
+			t.Errorf("on %s, the referral doesn't end %q:\n%s", branch, end, bodies)
+		}
+	}
 	r := newRehearsal(t)
 	r.write("fix/referred.md", "- The finding would undo what @the-owner decided.\n::error::forged\n")
-	r.run(ask, map[string]string{"ISSUE": "120", "PR_NUMBER": "8"}, `  "issue comment 120"*) ;;`)
+	r.run(ask, map[string]string{"ISSUE": "120", "PR_NUMBER": "8", "BRANCH": "build/issue-120"}, `  "issue comment 120"*) ;;`)
 	r.mustPass()
 	bodies := r.bodies()
 	if len(bodies) != 1 {
 		t.Fatalf("the referral made %d comments, want 1", len(bodies))
 	}
 	body := bodies[0]
-	if !strings.HasPrefix(body, "**The fixer referred findings back") || !strings.HasSuffix(strings.TrimSpace(body), "To go on, answer here, then remove the build label and add it again.") {
-		t.Errorf("the referral doesn't say what it is and how to go on:\n%s", body)
+	if !strings.HasPrefix(body, "**The fixer referred findings back") {
+		t.Errorf("the referral doesn't say what it is:\n%s", body)
 	}
 	if strings.Contains(body, "@the-owner") || !strings.Contains(body, "@\u200bthe-owner") {
 		t.Errorf("the referral's mention isn't broken:\n%s", body)
@@ -208,7 +243,7 @@ func TestARebuildAfterAReferralReadsTheAnswer(t *testing.T) {
 		".github/sandbox-settings.sh": "echo settings\n", ".github/scrub-placeholders.sh": "echo placeholders\n",
 		".github/issue-text.sh": readText(t, ".github/issue-text.sh")})
 	r.dir = repo
-	r.run(keep, map[string]string{"ISSUE": "120"}, issueAnswers+labelEvents)
+	r.run(keep, map[string]string{"ISSUE": "120"}, issueAnswers)
 	r.mustPass()
 	issue := r.read("build/issue.md")
 	for _, want := range []string{"The fixer referred a finding back.", "Answer: option B."} {

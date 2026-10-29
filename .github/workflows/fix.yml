@@ -449,8 +449,14 @@ jobs:
           if [ -f "$out/message.md" ]; then cp "$out/message.md" "$fix/"; fi
           if [ -s "$out/referred.md" ]; then cp "$out/referred.md" "$fix/"; fi
           # Findings referred back and nothing changed: nothing is pushed, so no fix commit counts as
-          # a try and no CI run starts a retry, and the referral is posted on the issue.
-          if [ ! -s "$fix/fix.patch" ]; then
+          # a try and no CI run starts a retry, and the referral is posted on the issue. A session
+          # that referred findings back must change nothing, since a pushed fix would start the
+          # reviews again, which would find the same finding to refer back, so one that did is
+          # refused.
+          if [ -s "$fix/fix.patch" ] && [ -f "$fix/referred.md" ]; then
+            echo "Claude referred findings back but changed the tree too, so nothing is pushed."
+            printf 'decision=giveup\nreason=mixed\n' >> "$GITHUB_OUTPUT"
+          elif [ ! -s "$fix/fix.patch" ]; then
             if [ -f "$fix/referred.md" ]; then
               echo "Claude referred the findings back and changed nothing."
               echo "decision=referred" >> "$GITHUB_OUTPUT"
@@ -540,9 +546,8 @@ jobs:
       # The fix must be the one the fix job gave the digest of. Then it's applied, staged, to the
       # reviewed commit, and every name it stages is checked, a renamed file by both its names. A
       # branch that has moved since the review means it exits quietly. A fix that touches .github/
-      # or Claude Code's own files is offered to a person. Findings the session referred back are
-      # posted on the pull request's issue after the fix is pushed or offered, and a run that only
-      # referred findings back pushes nothing.
+      # or Claude Code's own files is offered to a person. A run that referred findings back pushes
+      # nothing, and the referral is posted on the pull request's issue.
       - name: "Sort by git: does the fix touch .github/ or Claude Code's own files, and is the branch still at the reviewed commit?"
         id: guard
         env:
@@ -561,7 +566,7 @@ jobs:
           give_up() { printf 'outcome=giveup\nreason=%s\n' "$1" >> "$GITHUB_OUTPUT"; exit 0; }
           if [ "$DECISION" = giveup ]; then
             case "$STOPPED" in
-              tried|unread|nothing) give_up "$STOPPED" ;;
+              tried|unread|nothing|mixed) give_up "$STOPPED" ;;
               *) give_up stopped ;;
             esac
           fi
@@ -575,11 +580,8 @@ jobs:
             exit 1
           fi
           case "$ISSUE" in *[!0-9]*) echo "The pull request's issue must be a number: $ISSUE"; exit 1 ;; esac
-          if [ -s "$RUNNER_TEMP/fix/referred.md" ] && [ -n "$ISSUE" ]; then
-            echo "referred=true" >> "$GITHUB_OUTPUT"
-          fi
           if [ "$DECISION" = referred ]; then
-            if [ -z "$ISSUE" ]; then give_up nothing; fi
+            if [ -z "$ISSUE" ] || [ ! -s "$RUNNER_TEMP/fix/referred.md" ]; then give_up nothing; fi
             echo "outcome=referred" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -652,10 +654,11 @@ jobs:
       # The referral goes to the issue, where the decisions were made, as the app's comment, so a
       # build after the answer reads it. It's the session's text, so every mention in it is broken,
       # as the fix's commit message's are, and the log shows it with workflow commands stopped. It
-      # starts by saying what it is and ends by saying how to go on.
+      # starts by saying what it is and ends by saying how to go on: a build's pull request with a
+      # fresh build, and a person's with its author, since the label would start a build beside it.
       - name: Make the app's token for the issue
         id: asker
-        if: steps.guard.outputs.referred == 'true' && contains(fromJSON('["referred", "push", "offer"]'), steps.guard.outputs.outcome)
+        if: steps.guard.outputs.outcome == 'referred'
         uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
         with:
           app-id: ${{ secrets.FACTORY_APP_ID }}
@@ -666,7 +669,7 @@ jobs:
 
       - name: Post the findings referred back as a new comment on the issue
         id: ask
-        if: steps.guard.outputs.referred == 'true' && contains(fromJSON('["referred", "push", "offer"]'), steps.guard.outputs.outcome)
+        if: steps.guard.outputs.outcome == 'referred'
         env:
           GH_TOKEN: ${{ steps.asker.outputs.token }}
         run: |
@@ -677,7 +680,11 @@ jobs:
           {
             printf '**The fixer referred findings back.** Fixing them would change what was decided on this issue, so they need a person'"'"'s answer. [The pull request](%s) · [The run](%s)\n\n' "$pull_url" "$run_url"
             jq -Rrs '.[0:60000] | gsub("@(?=[A-Za-z0-9])"; "@​")' "$RUNNER_TEMP/fix/referred.md"
-            printf '\nTo go on, answer here, then remove the build label and add it again.\n'
+            if [[ "$BRANCH" =~ ^build/issue-[0-9]+$ ]]; then
+              printf '\nTo go on, answer here, then remove the build label and add it again.\n'
+            else
+              printf '\nTo go on, answer here; the pull request'"'"'s author takes it from there.\n'
+            fi
           } > "$RUNNER_TEMP/referred.md"
           stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
           echo "::stop-commands::$stop"
@@ -723,6 +730,7 @@ jobs:
             tried) why="This branch already carries two fix commits, the most the factory makes." ;;
             unread) why="A review failed, but its check carries no Important finding to fix." ;;
             nothing) why="Claude changed nothing." ;;
+            mixed) why="Claude referred findings back to the issue but changed the tree too, which a referral mustn't, so nothing is pushed or posted." ;;
             session) why="The Claude session that fixes the findings failed or ran out of time." ;;
             unkept) why="The fix job failed before the fix was kept. The run says why." ;;
             apply) why="The fix didn't apply to the commit the reviews read." ;;
