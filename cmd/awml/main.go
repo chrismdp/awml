@@ -31,7 +31,7 @@ positional arguments:
     draw             print a file's Mermaid
     graph            print what a file's drawing shows, as JSON
     page             write one HTML page that draws each file
-    check            report warnings and structural mistakes
+    check            report warnings, errors and what makes a file invalid
     fit              judge where workflows can run
     summary          count the parts and lines in workflows
     convert          upgrade an older file, or join a legacy pair, into one 0.9 file
@@ -142,7 +142,7 @@ options:
 }
 
 // run reads its arguments as the Python tool's argparse did, with the same messages, and gives the
-// exit code: 0 when all is well, 1 for a file with mistakes, 2 for a mistake in the command.
+// exit code: 0 when all is well, 1 for an invalid file, 2 for a mistake in the command.
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fail := func(use, prog, msg string) int {
 		fmt.Fprintf(stderr, "%s%s: error: %s\n", use, prog, msg)
@@ -284,22 +284,28 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if command == "check" && jsonOutput {
 		return checkJSON(given, stdout, stderr)
 	}
+	// check fails only for an invalid file. A drawing with errors is valid, so it passes, saying each
+	// error.
 	if command == "check" {
 		code := 0
 		report := awml.CheckSources(currentVersion(), given)
 		for i, file := range report.Files {
-			warnings, mistakes := report.Said(i)
+			warnings, errs, invalid := report.Said(i)
 			for _, warning := range warnings {
 				fmt.Fprintf(stdout, "%s: warning: %s\n", file.File, warning)
 			}
-			if len(mistakes) == 0 {
-				fmt.Fprintf(stdout, "%s: ok\n", file.File)
-				continue
+			for _, e := range errs {
+				fmt.Fprintf(stdout, "%s: error: %s\n", file.File, e)
 			}
-			for _, mistake := range mistakes {
+			for _, mistake := range invalid {
 				fmt.Fprintf(stdout, "%s: %s\n", file.File, mistake)
 			}
-			code = 1
+			if len(errs) == 0 && len(invalid) == 0 {
+				fmt.Fprintf(stdout, "%s: ok\n", file.File)
+			}
+			if len(invalid) != 0 {
+				code = 1
+			}
 		}
 		return code
 	}
@@ -370,7 +376,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		printSummary(stdout, summary)
 		return 0
 	}
-	workflows, err := awml.ReadSources(given, true)
+	workflows, err := awml.ReadSources(given)
 	if err != nil {
 		return refused(err)
 	}
@@ -411,7 +417,7 @@ func sources(files []string) []awml.Source {
 }
 
 // checkJSON prints every check and its result as JSON, and fails as the plain output does: when
-// any check finds a mistake.
+// any check finds a file invalid.
 func checkJSON(sources []awml.Source, stdout, stderr io.Writer) int {
 	report := awml.CheckSources(currentVersion(), sources)
 	if err := json.NewEncoder(stdout).Encode(report); err != nil {
@@ -428,8 +434,8 @@ func checkJSON(sources []awml.Source, stdout, stderr io.Writer) int {
 
 // convert prints one 0.9 file, upgraded from a file of an older version or joined from a legacy
 // pair, as awml.ConvertSources writes it. It fails when the files can't be converted, when it notes
-// something it couldn't carry over, and when the converted file has mistakes, which newer versions'
-// rules can find in a file that older ones passed. It lists those on standard error.
+// something it couldn't carry over, and when the converted file is invalid, as newer versions' rules
+// can find a file that older ones passed. It lists those on standard error.
 func convert(files []string, implementation string, stdout, stderr io.Writer) int {
 	var sources []awml.Source
 	for _, path := range files {
@@ -456,7 +462,7 @@ func convert(files []string, implementation string, stdout, stderr io.Writer) in
 		}
 	}
 	if len(mistakes) != 0 {
-		fmt.Fprintln(stderr, "awml convert: converted, but awml check finds these mistakes in the result:")
+		fmt.Fprintln(stderr, "awml convert: converted, but the result is invalid:")
 		for _, mistake := range mistakes {
 			fmt.Fprintf(stderr, "  %s\n", mistake)
 		}

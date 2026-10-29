@@ -61,8 +61,8 @@ func TestNoExampleHasAnUntrustedView(t *testing.T) {
 	}
 }
 
-// A drawing of a live system shows where it breaks the design, so awml check fails on it by
-// design. Its examples sit apart from the rest, which every check passes.
+// A drawing of a live system shows where it breaks the design, so it has errors by design. Its
+// examples sit apart from the rest, which have none.
 func liveExamples(t *testing.T) []string {
 	t.Helper()
 	paths, err := filepath.Glob("examples/live/*.yaml")
@@ -90,7 +90,8 @@ func TestEachExampleIsSoundAndItsDrawingsAreCurrent(t *testing.T) {
 				t.Fatal(err)
 			}
 			if strings.HasPrefix(path, "examples/live/") {
-				// Each of its mistakes is a line that breaks a rule, which it draws red.
+				// It's valid, and each of its mistakes is an error, a line that breaks a rule, which
+				// it draws red.
 				if len(Check(doc)) == 0 || len(Unsound(doc)) != 0 {
 					t.Errorf("%s: Check gave %q and Unsound %q", path, Check(doc), Unsound(doc))
 				}

@@ -461,8 +461,9 @@ func commentRedLines(file *Map, red []*Map) {
 // default unless it's given. A file of the current version comes back as it was. Otherwise the
 // comment block the first file starts with becomes the workflow's description, where it has none, and
 // each other YAML comment of the files moves to the top once, in the files' order. It also gives the mistakes
-// Check finds in the result, since newer rules can find mistakes in a file that older ones passed,
+// that make the result invalid, since newer rules can find a file invalid that older ones passed,
 // and before those its notes of what it couldn't carry over, for the author to do by hand. A
+// result with errors, lines that break a rule, is valid, so those are left to awml check. A
 // mistake in one of the files starts with its name, when it has one.
 func ConvertSources(sources []Source, implementation string) (file []byte, notes, mistakes []string, err error) {
 	if len(sources) == 0 || len(sources) > 2 {
@@ -492,7 +493,7 @@ func ConvertSources(sources []Source, implementation string) (file []byte, notes
 	var converted *Map
 	if len(docs) == 1 {
 		if file, ok := docs[0].(*Map); ok && file.get("awml") == currentFormat {
-			return sources[0].Text, nil, Check(file), nil
+			return sources[0].Text, nil, Unsound(file), nil
 		}
 		if converted, notes, err = upgrade(docs[0]); err != nil {
 			return nil, nil, nil, named(sources[0], err)
@@ -521,7 +522,7 @@ func ConvertSources(sources []Source, implementation string) (file []byte, notes
 		out.WriteString(comment + "\n")
 	}
 	out.Write(data)
-	return out.Bytes(), notes, Check(converted), nil
+	return out.Bytes(), notes, Unsound(converted), nil
 }
 
 // describeFrom gives the comment block a file starts with as a description: each line without its #,

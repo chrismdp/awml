@@ -104,11 +104,26 @@ lines:
   - { from: night, to: tidy, kind: start }
 `
 
-func TestALineThatBreaksARuleFailsTheCheckButIsDrawnRed(t *testing.T) {
+// A drawing with errors is valid, so check passes it, saying each error, and every command takes it.
+func TestADrawingWithErrorsPassesTheCheckAndIsDrawnRed(t *testing.T) {
 	path := write(t, "live.yaml", live)
 	message := `outside action "wipe" is Block, but part "tidy" leads to it: a blocked action is never taken, so a line into it is red`
-	if r := awmlRun("check", path); r != (result{1, path + ": " + message + "\n", ""}) {
+	if r := awmlRun("check", path); r != (result{0, path + ": error: " + message + "\n", ""}) {
 		t.Errorf("check gave %+v", r)
+	}
+	if r := awmlRun("check", "--json", path); r.code != 0 ||
+		!strings.Contains(r.stdout, `"result":"error","mistakes":[{"file":"`+path+`","message":"outside action \"wipe\"`) ||
+		!strings.Contains(r.stdout, `so a line into it is red","severity":"error"}`) {
+		t.Errorf("check --json gave %+v", r)
+	}
+	description := write(t, "laptop.yaml", "awml: \"0.9\"\nplatform: { id: laptop, label: Laptop }\noff_for_up_to: PT0S\nsteps: code\nagents: []\ncalls: any\nholds: []\n")
+	for _, args := range [][]string{{"fit", path, description}, {"fit", "--parts", path, description}} {
+		if r := awmlRun(args...); r.stderr != "" || r.stdout == "" {
+			t.Errorf("awml %q gave %+v", args, r)
+		}
+	}
+	if r := awmlRun("convert", path); r != (result{0, live, ""}) {
+		t.Errorf("convert gave %+v", r)
 	}
 	if r := awmlRun("draw", path); r.code != 0 || r.stdout != awml.Draw(doc(t, live))+"\n" || !strings.Contains(r.stdout, "linkStyle 0 stroke:#d0342c") {
 		t.Errorf("draw gave %+v", r)
@@ -249,7 +264,7 @@ lines:
   - { from: act, to: out, kind: data }
 `
 	r := awmlRun("convert", write(t, "old.yaml", old))
-	want := "awml convert: converted, but awml check finds these mistakes in the result:\n" +
+	want := "awml convert: converted, but the result is invalid:\n" +
 		`  outside action "out" has no tier: end its label with Allow, Ask or Block after a colon, as in "Send the mail: Ask"` + "\n"
 	if r != (result{1, strings.Replace(old, `awml: "0.4"`, `awml: "0.9"`, 1), want}) {
 		t.Errorf("convert gave %+v", r)
@@ -544,12 +559,12 @@ func TestSummaryListsWhatEachUntrustedPartsTextReaches(t *testing.T) {
 }
 
 // Untrusted text that reaches an outside action with nothing to stop it or accept the risk breaks
-// a rule, so check fails on it, and draw draws it red, as every line that breaks a rule. The
-// security view shows where the text goes, so there's no untrusted view to ask for.
-func TestCheckFailsOnUntrustedTextThatReachesAnActionUnstopped(t *testing.T) {
+// a rule, so it's an error, which check says, and draw draws red, as every line that breaks a rule.
+// The security view shows where the text goes, so there's no untrusted view to ask for.
+func TestUntrustedTextThatReachesAnActionUnstoppedIsAnError(t *testing.T) {
 	path := write(t, "orders.yaml", orders)
 	words := `untrusted text from part "form" reaches outside action "board" with nothing to stop it or accept the risk`
-	if r := awmlRun("check", path); r != (result{1, path + ": " + words + ": a review, a person's own step or a code step marked cleans on the way would stop it, or a standing approval in front of the action would accept the risk\n", ""}) {
+	if r := awmlRun("check", path); r != (result{0, path + ": error: " + words + ": a review, a person's own step or a code step marked cleans on the way would stop it, or a standing approval in front of the action would accept the risk\n", ""}) {
 		t.Errorf("check gave %+v", r)
 	}
 	if r := awmlRun("draw", path); r.code != 0 || !strings.Contains(r.stdout, "  linkStyle 2,3 stroke:#d0342c") || !strings.Contains(r.stdout, "  class form unstopped\n") {
@@ -790,6 +805,25 @@ func TestPushChecksThenSendsTheWorkflowAndToken(t *testing.T) {
 	wantBody := map[string]any{"workflow": canonicalFile, "visibility": "private"}
 	if !reflect.DeepEqual(gotBody, wantBody) {
 		t.Errorf("body = %#v", gotBody)
+	}
+}
+
+// The registry stores a drawing with errors, so push sends one.
+func TestPushSendsADrawingWithErrors(t *testing.T) {
+	useTemporaryHome(t)
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Fatal(err)
+		}
+		w.WriteHeader(http.StatusCreated)
+		fmt.Fprint(w, `{"owner":"acme","slug":"files","number":1,"url":"/acme/files/v/1"}`)
+	}))
+	defer server.Close()
+	loginForTest(t, server.URL, "push-token")
+	r := awmlRun("push", "acme/files", write(t, "live.yaml", live), "--registry", server.URL)
+	if r != (result{0, "Pushed acme/files version 1: /acme/files/v/1\n", ""}) || gotBody["workflow"] != live {
+		t.Errorf("push gave %+v and sent %#v", r, gotBody)
 	}
 }
 

@@ -152,7 +152,7 @@ func TestARefusedReadCarriesNoUntrustedText(t *testing.T) {
 // A line that brings untrusted text into an outside action, with nothing on the way to stop it or
 // accept the risk, breaks a rule. It and every line on the text's way there are red, and so is the
 // source's outline.
-func TestUntrustedTextThatReachesAnOutsideActionUnstoppedIsAMistakeDrawnRed(t *testing.T) {
+func TestUntrustedTextThatReachesAnOutsideActionUnstoppedIsAnErrorDrawnRed(t *testing.T) {
 	doc := parsed(t, labelForm)
 	breach := `untrusted text from part "form" reaches outside action "box" with nothing to stop it or accept the risk`
 	mistakes(t, doc, breach+": "+untrustedFix)
@@ -185,7 +185,7 @@ func TestUntrustedTextThatReachesAnOutsideActionUnstoppedIsAMistakeDrawnRed(t *t
 		}
 	}
 	report := CheckSources("dev", []Source{source("labels.yaml", labelForm)})
-	if got := checkResult(t, report, untrustedRule); got.Result != "fail" || len(got.Mistakes) != 1 {
+	if got := checkResult(t, report, untrustedRule); got.Result != "error" || len(got.Mistakes) != 1 {
 		t.Errorf("%s gave %s with %+v", untrustedRule, got.Result, got.Mistakes)
 	}
 	if got := Summarise(doc).RedLines; got != 1 {
@@ -330,7 +330,7 @@ func TestUntrustedTextThatReachesASurfaceUnstoppedIsAWarning(t *testing.T) {
 		t.Errorf("lines are %q", got)
 	}
 	report := CheckSources("dev", []Source{source("labels.yaml", src)})
-	want := []FileMistake{{File: "labels.yaml", Message: shownOn(`part "form"`, "chat")}}
+	want := []FileMistake{{File: "labels.yaml", Message: shownOn(`part "form"`, "chat"), Severity: "warning"}}
 	if got := checkResult(t, report, surfaceRule); got.Result != "warn" || !reflect.DeepEqual(got.Mistakes, want) {
 		t.Errorf("%s gave %s with %+v", surfaceRule, got.Result, got.Mistakes)
 	}

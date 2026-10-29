@@ -10,8 +10,8 @@ type Refusal string
 
 func (r Refusal) Error() string { return string(r) }
 
-// Mistakes are what stop a command reading the files it was given, each with its file, in the order
-// the files were given.
+// Mistakes are what make the files a command was given invalid, so that it can't read them, each
+// with its file, in the order the files were given.
 type Mistakes []FileMistake
 
 // Error says each mistake on a line of its own, after its file's name, as awml prints them. A file
@@ -28,35 +28,30 @@ func (m Mistakes) Error() string {
 }
 
 // ReadSources reads files given together, as every command but convert reads them, and gives each
-// as a workflow, platform descriptions included. When any file has mistakes it gives them all: each
-// file's own, then those following each ref between the workflows given finds. A command that draws
-// or counts red lines reads them drawn, taking a file whose only mistakes are lines that break a
-// rule.
-func ReadSources(sources []Source, drawn bool) ([]Workflow, error) {
-	find, together := Check, TogetherMistakes
-	if drawn {
-		find, together = Unsound, TogetherUnsound
-	}
+// as a workflow, platform descriptions included. When any file is invalid it gives every mistake
+// that makes one so: each file's own, then those following each ref between the workflows given
+// finds. A drawing with errors, lines that break a rule, is valid, so it's read as any other.
+func ReadSources(sources []Source) ([]Workflow, error) {
 	sources = once(sources)
 	docs := make([]*Map, len(sources))
 	found := make([][]string, len(sources))
 	var given []Workflow
 	var at []int
 	for i, source := range sources {
-		docs[i], found[i] = readSource(source, find)
+		docs[i], found[i] = readSource(source)
 		if IsCanonical(docs[i]) {
 			given = append(given, source.workflow(docs[i]))
 			at = append(at, i)
 		}
 	}
-	for n, mistakes := range together(given) {
+	for n, mistakes := range TogetherUnsound(given) {
 		found[at[n]] = append(found[at[n]], mistakes...)
 	}
 	var mistakes Mistakes
 	workflows := make([]Workflow, 0, len(sources))
 	for i, source := range sources {
 		for _, message := range found[i] {
-			mistakes = append(mistakes, FileMistake{source.File, message})
+			mistakes = append(mistakes, FileMistake{File: source.File, Message: message})
 		}
 		workflows = append(workflows, source.workflow(docs[i]))
 	}
@@ -66,9 +61,9 @@ func ReadSources(sources []Source, drawn bool) ([]Workflow, error) {
 	return workflows, nil
 }
 
-// readSource gives the document in a file, if it holds a mapping, and the mistakes find reports in
-// it.
-func readSource(source Source, find func(any) []string) (*Map, []string) {
+// readSource gives the document in a file, if it holds a mapping, and the mistakes that make it
+// invalid.
+func readSource(source Source) (*Map, []string) {
 	if source.Unreadable != "" {
 		return nil, []string{source.Unreadable}
 	}
@@ -77,7 +72,7 @@ func readSource(source Source, find func(any) []string) (*Map, []string) {
 		return nil, []string{notYAML(err)}
 	}
 	file, _ := doc.(*Map)
-	return file, find(doc)
+	return file, Unsound(doc)
 }
 
 // notYAML says why a file isn't YAML, on one line.
@@ -132,7 +127,7 @@ func graphSources(sources []Source, implementation, verb string) (Graph, error) 
 	if implementation != "" && len(sources) > 1 {
 		return Graph{}, Refusal("argument --implementation: " + verb + " one workflow, not several")
 	}
-	workflows, err := ReadSources(sources, true)
+	workflows, err := ReadSources(sources)
 	if err != nil {
 		return Graph{}, err
 	}
@@ -140,7 +135,7 @@ func graphSources(sources []Source, implementation, verb string) (Graph, error) 
 		for _, w := range workflows {
 			if !IsCanonical(w.Doc) {
 				_, err := View(w.Doc, "")
-				return Graph{}, Mistakes{{w.File, err.Error()}}
+				return Graph{}, Mistakes{{File: w.File, Message: err.Error()}}
 			}
 		}
 		return GraphMap(workflows), nil
@@ -194,7 +189,7 @@ func FitPartsSources(sources []Source) (PartsReport, error) {
 // what they hold: a file with platform is a platform description. It refuses where no workflow was
 // given.
 func fitGiven(sources []Source) ([]Workflow, []*Map, error) {
-	read, err := ReadSources(sources, false)
+	read, err := ReadSources(sources)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -215,7 +210,7 @@ func fitGiven(sources []Source) ([]Workflow, []*Map, error) {
 
 // SummariseSources summarises the workflows given together, as awml summary does.
 func SummariseSources(sources []Source) (Summary, error) {
-	workflows, err := ReadSources(sources, true)
+	workflows, err := ReadSources(sources)
 	if err != nil {
 		return Summary{}, err
 	}

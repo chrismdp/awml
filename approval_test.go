@@ -147,7 +147,9 @@ func TestTheSummaryNamesAStandingApprovalAsAPlaceAPersonDecides(t *testing.T) {
 	}
 }
 
-func TestTheTierChecksPassOrFail(t *testing.T) {
+// A tier that disagrees with what stands in front of its action is an error, a line that breaks a
+// rule.
+func TestTheTierChecksPassOrFindAnError(t *testing.T) {
 	report := CheckSources("dev", []Source{source("prices.yaml", standing)})
 	for _, id := range []string{"tiers.written", "tiers.shape", "approvals.listed"} {
 		if got := checkResult(t, report, id); got.Result != "pass" {
@@ -156,7 +158,7 @@ func TestTheTierChecksPassOrFail(t *testing.T) {
 	}
 	src := strings.Replace(standing, "Update the prices: Ask", "Update the prices: Allow", 1)
 	report = CheckSources("dev", []Source{source("prices.yaml", src)})
-	if got := checkResult(t, report, "tiers.shape"); got.Result != "fail" || len(got.Mistakes) != 1 {
+	if got := checkResult(t, report, "tiers.shape"); got.Result != "error" || len(got.Mistakes) != 1 {
 		t.Errorf("tiers.shape gave %s with %+v", got.Result, got.Mistakes)
 	}
 }

@@ -138,6 +138,19 @@ func TestUpgradeFrom08ChangesOnlyTheVersion(t *testing.T) {
 	}
 }
 
+// A converted file with errors is still valid, so convert finds nothing wrong with it, and the
+// check says its errors.
+func TestConvertFindsNoMistakeInADrawingWithErrors(t *testing.T) {
+	live := strings.Replace(redLineWorkflow, `awml: "0.9"`, `awml: "0.8"`, 1)
+	data, notes, found, err := ConvertSources([]Source{{Text: []byte(live)}}, "")
+	if err != nil || notes != nil || found != nil || string(data) != redLineWorkflow {
+		t.Errorf("convert gave\n%s\nnotes %q, mistakes %q, %v", data, notes, found, err)
+	}
+	if _, _, found, _ := ConvertSources([]Source{{Text: []byte(redLineWorkflow)}}, ""); found != nil {
+		t.Errorf("convert of a current file finds %q", found)
+	}
+}
+
 // Apart from dropping forks, 0.8 changed only rules, what a standing approval may cover and that
 // untrusted text reaching an action unchecked is a mistake, so a 0.7 file with no fork changes only
 // its version, even one that still has a line from a do step into a trigger with a ref, which

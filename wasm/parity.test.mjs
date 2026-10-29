@@ -18,16 +18,12 @@ for (const path of top.sort()) {
   const source = await readFile(path, "utf8");
   const relative = path.slice(new URL("../", import.meta.url).pathname.length);
 
-  // A drawing of a live system fails the check by design, for the lines it draws red.
-  const wasmErrors = api.check(source);
-  const failed = wasmErrors.length ? 1 : 0;
+  // A drawing of a live system has errors by design, the lines it draws red, and is still valid.
+  const invalid = api.unsound(source);
+  const failed = invalid.length ? 1 : 0;
   const nativeCheck = runNative(["check", relative], failed);
-  const wasmWarnings = api.warnings(source);
-  const wasmCheck = [
-    ...wasmWarnings.map((message) => `${relative}: warning: ${message}\n`),
-    ...(wasmErrors.length ? wasmErrors.map((message) => `${relative}: ${message}\n`) : [`${relative}: ok\n`]),
-  ].join("");
-  assert.equal(wasmCheck, nativeCheck, `${relative}: check output`);
+  assert.deepEqual(api.check(source), [...api.errors(source), ...invalid], `${relative}: check gives its errors, then what makes it invalid`);
+  assert.equal(said(relative, source), nativeCheck, `${relative}: check output`);
 
   assert.equal(api.checksJSON([{ file: relative, source }]) + "\n", runNative(["check", "--json", relative], failed), `${relative}: checks JSON`);
   assert.equal(api.summaryJSON(source) + "\n", runNative(["summary", "--json", relative]), `${relative}: summary JSON`);
@@ -72,7 +68,7 @@ for (const path of top.sort()) {
 
 const everyPath = [...top.sort(), ...descriptions].map((path) => path.slice(new URL("../", import.meta.url).pathname.length));
 const everySource = await Promise.all(everyPath.map(async (file) => ({ file, source: await readFile(new URL(`../${file}`, import.meta.url), "utf8") })));
-assert.equal(api.checksJSON(everySource) + "\n", runNative(["check", "--json", ...everyPath], 1), "checks JSON for every example at once");
+assert.equal(api.checksJSON(everySource) + "\n", runNative(["check", "--json", ...everyPath]), "checks JSON for every example at once");
 // Each file named twice is read once, where it's first named, in both.
 assert.deepEqual(api.checks(everySource).files.map((file) => file.file), [...new Set(everyPath)]);
 
@@ -102,13 +98,9 @@ try {
   ]) {
     const path = `${temporary}/${name}.yaml`;
     await writeFile(path, source);
-    const errors = api.check(source);
-    const output = [
-      ...api.warnings(source).map((message) => `${path}: warning: ${message}\n`),
-      ...(errors.length ? errors.map((message) => `${path}: ${message}\n`) : [`${path}: ok\n`]),
-    ].join("");
-    assert.equal(output, runNative(["check", path], errors.length ? 1 : 0), `canonical ${name}`);
-    assert.equal(api.checksJSON([{ file: path, source }]) + "\n", runNative(["check", "--json", path], errors.length ? 1 : 0), `canonical ${name}: checks JSON`);
+    const failed = api.unsound(source).length ? 1 : 0;
+    assert.equal(said(path, source), runNative(["check", path], failed), `canonical ${name}`);
+    assert.equal(api.checksJSON([{ file: path, source }]) + "\n", runNative(["check", "--json", path], failed), `canonical ${name}: checks JSON`);
   }
 
   // An older file is refused, with a pointer to awml convert, in both engines.
@@ -281,8 +273,8 @@ lines:
   assert.equal(api.convert([security, platform], "office"), runNative(["convert", "--implementation", "office", ...pair]), "convert of a legacy pair, naming its implementation");
   conversions += 2;
 
-  // When the current rules find mistakes in the converted file, convert throws them, one to a line,
-  // and the error carries the file, which awml convert still writes.
+  // When the current rules find the converted file invalid, convert throws why, one to a line, and
+  // the error carries the file, which awml convert still writes.
   const mistaken = {
     // A 0.8 file changes only its version, and its line from an outside action into a context stays
     // for the check to report.
@@ -306,7 +298,21 @@ parts:
 lines:
   - { from: act, to: out, kind: data }
 `,
-    "red-line-0.5.yaml": `awml: "0.5"
+  };
+  for (const [name, source] of Object.entries(mistaken)) {
+    await writeFile(`${temporary}/${name}`, source);
+    const native = runNativeResult(["convert", `${temporary}/${name}`], 1);
+    assert.throws(() => api.convert(source), (error) => {
+      assert.equal(error.converted, native.stdout, `convert ${name}: the file`);
+      assert.equal("awml convert: converted, but the result is invalid:\n" +
+        error.message.split("\n").map((message) => `  ${message}\n`).join(""), native.stderr, `convert ${name}: its mistakes`);
+      return true;
+    });
+    conversions++;
+  }
+  // A drawing with errors is valid, so a file whose red lines older rules marked converts with
+  // nothing thrown, and awml convert exits 0.
+  const redLine05 = `awml: "0.5"
 title: The club's Friday message
 scopes:
   - {id: ella, label: "ella: Ella"}
@@ -322,19 +328,11 @@ lines:
   - {from: ask, to: approve, kind: data}
   - {from: approve, to: send, kind: data, label: "[yes]"}
   - {from: write, to: send, kind: data, label: sent without Ella's yes, breaks: true}
-`,
-  };
-  for (const [name, source] of Object.entries(mistaken)) {
-    await writeFile(`${temporary}/${name}`, source);
-    const native = runNativeResult(["convert", `${temporary}/${name}`], 1);
-    assert.throws(() => api.convert(source), (error) => {
-      assert.equal(error.converted, native.stdout, `convert ${name}: the file`);
-      assert.equal("awml convert: converted, but awml check finds these mistakes in the result:\n" +
-        error.message.split("\n").map((message) => `  ${message}\n`).join(""), native.stderr, `convert ${name}: its mistakes`);
-      return true;
-    });
-    conversions++;
-  }
+`;
+  await writeFile(`${temporary}/red-line-0.5.yaml`, redLine05);
+  assert.equal(api.convert(redLine05), runNative(["convert", `${temporary}/red-line-0.5.yaml`]), "convert of a drawing with errors");
+  assert(api.errors(api.convert(redLine05)).length, "the converted drawing has errors");
+  conversions++;
 
   // What convert couldn't carry over comes before the mistakes, in both engines.
   const noted = `awml: "0.6"
@@ -355,7 +353,7 @@ lines:
     assert.equal(error.converted, nativeNoted.stdout, "convert with a note: the file");
     assert.equal(error.notes.length, 1, "convert with a note: its note");
     assert.equal("awml convert: converted, but do this by hand:\n" + error.notes.map((note) => `  ${note}\n`).join("") +
-      "awml convert: converted, but awml check finds these mistakes in the result:\n" + error.mistakes.map((mistake) => `  ${mistake}\n`).join(""),
+      "awml convert: converted, but the result is invalid:\n" + error.mistakes.map((mistake) => `  ${mistake}\n`).join(""),
       nativeNoted.stderr, "convert with a note: its notes and mistakes");
     assert.equal(error.message, [...error.notes, ...error.mistakes].join("\n"));
     return true;
@@ -484,23 +482,24 @@ lines:
     });
   }
   // Untrusted text follows an outside action into the workflow it starts. Here the order form's text
-  // reaches the basket with nothing to stop it, a line that breaks a rule: check fails and fit
-  // refuses, while the map, its graph and the summary are still given, the same from both.
+  // reaches the basket with nothing to stop it, a line that breaks a rule, an error: the check passes,
+  // saying it, and the map, its graph, the summary and the fit are given, the same from both.
   const taintedPlan = plan.replace("label: The order form, in: family", "label: The order form, untrusted: true, in: family");
   const tainted = [{ file: handOff[0].file, source: taintedPlan }, handOff[1]];
   for (const { file, source } of tainted) await writeFile(file, source);
-  assert.equal(api.checksJSON(tainted) + "\n", runNative(["check", "--json", ...handOffPaths], 1), "checks JSON of untrusted text across a hand-off");
-  assert.equal(api.checks(tainted).checks.find((check) => check.id === "untrusted.outside").result, "fail");
+  assert.equal(api.checksJSON(tainted) + "\n", runNative(["check", "--json", ...handOffPaths]), "checks JSON of untrusted text across a hand-off");
+  const taintedCheck = api.checks(tainted).checks.find((check) => check.id === "untrusted.outside");
+  assert.equal(taintedCheck.result, "error");
+  assert(taintedCheck.mistakes.length && taintedCheck.mistakes.every(({ severity }) => severity === "error"), "untrusted text across a hand-off: each finding is an error");
   assert.equal(api.draw(tainted) + "\n", runNative(["draw", ...handOffPaths]), "map of untrusted text across a hand-off");
   assert.equal(api.graphJSON(tainted) + "\n", runNative(["graph", ...handOffPaths]), "map graph of untrusted text across a hand-off");
   assert.equal(api.summaryJSON(tainted) + "\n", runNative(["summary", "--json", ...handOffPaths]), "summary of untrusted text across a hand-off");
   {
-    const refused = runNativeResult(["fit", "--json", ...handOffPaths, ...descriptions], 1);
-    assert.equal(refused.stdout, "", "fit of untrusted text across a hand-off: awml prints nothing");
-    assert.throws(() => api.fit([...tainted, ...descriptionSources]), (error) => {
-      assert.equal(`${error.message}\n`, refused.stderr, "fit of untrusted text across a hand-off");
-      return true;
-    });
+    const given = [...tainted, ...descriptionSources];
+    assert.equal(api.fitJSON(given) + "\n",
+      runNative(["fit", "--json", ...handOffPaths, ...descriptions], api.fit(given).gaps.length ? 1 : 0), "fit of untrusted text across a hand-off");
+    assert.equal(api.fitPartsJSON(given) + "\n",
+      runNative(["fit", "--parts", "--json", ...handOffPaths, ...descriptions], api.fitParts(given).gaps.length ? 1 : 0), "fit of each part, of untrusted text across a hand-off");
   }
   for (const { file, source } of handOff) await writeFile(file, source);
   // A file that isn't a mapping is refused by fit as awml refuses it, and the module carries on.
@@ -568,8 +567,8 @@ lines:
   }
 
   // A part they share is untrusted if any workflow's copy of it is marked untrusted. Its text reaches
-  // the replier's send with nothing to stop it, a line that breaks a rule, so the check fails, and the
-  // map and the summary are still given, as awml gives them.
+  // the replier's send with nothing to stop it, a line that breaks a rule, so it's an error, and the
+  // map and the summary are given, as awml gives them.
   const sorter = `awml: "0.9"
 title: Inbox sorter
 scopes:
@@ -604,8 +603,8 @@ lines:
   const inbox = [{ file: `${temporary}/sorter.yaml`, source: sorter }, { file: `${temporary}/replier.yaml`, source: replier }];
   for (const { file, source } of inbox) await writeFile(file, source);
   const inboxPaths = inbox.map(({ file }) => file);
-  assert.equal(api.checksJSON(inbox) + "\n", runNative(["check", "--json", ...inboxPaths], 1), "checks JSON of a part marked untrusted by a copy");
-  assert.equal(api.checks(inbox).checks.find((check) => check.id === "untrusted.outside").result, "fail");
+  assert.equal(api.checksJSON(inbox) + "\n", runNative(["check", "--json", ...inboxPaths]), "checks JSON of a part marked untrusted by a copy");
+  assert.equal(api.checks(inbox).checks.find((check) => check.id === "untrusted.outside").result, "error");
   assert.match(api.draw(inbox), /class s1 unstopped/);
   assert.equal(api.summaryJSON(inbox) + "\n", runNative(["summary", "--json", ...inboxPaths]), "summary JSON of a part marked untrusted by a copy");
   assert.equal(api.draw(inbox) + "\n", runNative(["draw", ...inboxPaths]), "map of a part marked untrusted by a copy");
@@ -616,9 +615,9 @@ lines:
     "  - { from: sort, to: screen, kind: data }\n";
   const onScreen = [{ file: inbox[0].file, source: screened }, inbox[1]];
   const alone = [{ file: inbox[0].file, source: screened.replace("label: The shop inbox, in: office }", "label: The shop inbox, in: office, untrusted: true }") }];
-  for (const [name, files, code] of [["together", onScreen, 1], ["alone", alone, 0]]) {
+  for (const [name, files] of [["together", onScreen], ["alone", alone]]) {
     for (const { file, source } of files) await writeFile(file, source);
-    assert.equal(api.checksJSON(files) + "\n", runNative(["check", "--json", ...files.map(({ file }) => file)], code), `checks JSON of untrusted text on a surface ${name}`);
+    assert.equal(api.checksJSON(files) + "\n", runNative(["check", "--json", ...files.map(({ file }) => file)]), `checks JSON of untrusted text on a surface ${name}`);
     const warned = api.checks(files).checks.find((check) => check.id === "warn.untrusted-surface");
     assert.equal(warned.result, "warn", `untrusted text on a surface ${name}`);
     assert.match(warned.mistakes[0].message, /reaches surface "screen": people reading it see text a stranger could have written/);
@@ -732,12 +731,13 @@ assert.equal(
 const redPath = new URL("testdata/red-line.yaml", import.meta.url).pathname;
 const redRelative = redPath.slice(new URL("../", import.meta.url).pathname.length);
 const redSource = await readFile(redPath, "utf8");
-assert.equal([
-  ...api.warnings(redSource).map((message) => `${redRelative}: warning: ${message}\n`),
-  ...api.check(redSource).map((message) => `${redRelative}: ${message}\n`),
-].join(""), runNative(["check", redRelative], 1), "red line: check messages");
+assert.equal(said(redRelative, redSource), runNative(["check", redRelative]), "red line: check messages");
+assert.match(runNative(["check", redRelative]), /: error: /, "red line: the check says each error is one");
 assert.deepEqual(api.unsound(redSource), []);
+assert.deepEqual(api.errors(redSource), api.check(redSource));
+assert.equal(api.checksJSON([{ file: redRelative, source: redSource }]) + "\n", runNative(["check", "--json", redRelative]), "red line: checks JSON");
 assert.deepEqual(api.unsound(badSource), api.check(badSource));
+assert.deepEqual(api.errors(badSource), []);
 assert.equal(api.draw(redSource) + "\n", runNative(["draw", redRelative]), "red line: Mermaid");
 assert.match(api.draw(redSource), /linkStyle 0,1 stroke:#d0342c/);
 assert.equal(api.draw(redSource, "home") + "\n", runNative(["draw", "--implementation", "home", redRelative]), "red line: home Mermaid");
@@ -768,6 +768,19 @@ assert.equal(api.draw(family) + "\n", await readFile(new URL("../examples/family
 assert.equal(api.summaryJSON(family) + "\n", runNative(["summary", "--json", ...familyPaths]), "the family's summary JSON");
 
 console.log(`Node wasm parity: ${passed} examples passed (check, warnings, summary, convert, Mermaid, graph); ${placements} implementations; ${untrustedDrawings} drawings of untrusted text; ${conversions} conversions; invalid check messages and fit passed`);
+
+// said gives what awml check prints of one file: its warnings, its errors, each said to be one, and
+// the mistakes that make it invalid, or ok when it has neither.
+function said(file, source) {
+  const errors = api.errors(source);
+  const invalid = api.unsound(source);
+  return [
+    ...api.warnings(source).map((message) => `${file}: warning: ${message}\n`),
+    ...errors.map((message) => `${file}: error: ${message}\n`),
+    ...invalid.map((message) => `${file}: ${message}\n`),
+    ...(errors.length || invalid.length ? [] : [`${file}: ok\n`]),
+  ].join("");
+}
 
 async function yamlFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });

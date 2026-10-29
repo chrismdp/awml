@@ -29,11 +29,18 @@ async function start(source) {
   }
 
   return {
+    // check gives what awml check reports of a file, warnings aside: its errors, then the mistakes
+    // that make it invalid.
     check(sourceText) {
       return JSON.parse(globalThis.__awmlCheck(sourceText));
     },
-    // unsound gives the mistakes that stop a file being drawn: every one check gives, except a line
-    // that breaks a rule, which draw draws red.
+    // errors gives a file's errors, the lines that break a rule, which draw draws red. A drawing with
+    // errors is valid.
+    errors(sourceText) {
+      return JSON.parse(globalThis.__awmlErrors(sourceText));
+    },
+    // unsound gives the mistakes that make a file invalid, so that it can't be read or drawn: every
+    // one check gives, except an error.
     unsound(sourceText) {
       return JSON.parse(globalThis.__awmlUnsound(sourceText));
     },
@@ -49,8 +56,9 @@ async function start(source) {
     },
     // summary, fit and draw take one file or several, each its text or { file, source }. Given
     // together, workflows follow each ref between them, a path ref from the file's name, which is
-    // its path from one root. Each throws every file's own mistakes and those following the refs finds,
-    // one to a line after the file's name, as awml prints them.
+    // its path from one root. Each throws every file's own mistakes that make it invalid and those
+    // following the refs finds, one to a line after the file's name, as awml prints them. A drawing
+    // with errors is valid, so each takes it.
     summaryJSON(sourceTexts) {
       return answer(globalThis.__awmlSummary(JSON.stringify(given(sourceTexts))));
     },
@@ -76,8 +84,8 @@ async function start(source) {
     },
     // convert upgrades one file of an older version, or joins a legacy security view and its
     // platform view given as [security, platform], into one 0.9 file, as awml convert does. When it
-    // notes something it couldn't carry over, or the current rules find mistakes in the file, it
-    // throws them, one to a line, notes first. The error's notes and mistakes hold each, and its
+    // notes something it couldn't carry over, or the current rules find the file invalid, it throws
+    // them, one to a line, notes first. The error's notes and mistakes hold each, and its
     // converted holds the file, which awml convert still writes.
     convert(sourceTexts, implementation = "") {
       const sources = Array.isArray(sourceTexts) ? sourceTexts : [sourceTexts];

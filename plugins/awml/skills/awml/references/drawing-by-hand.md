@@ -1,12 +1,12 @@
 # Drawing a file by hand
 
-Use this only where `awml draw` can't run, as in a chat with no shell. It gives the Mermaid that `awml draw` would print, so a hand drawing looks like every other AWML drawing. Check the file first, since `awml draw` refuses a file with mistakes. Say that you drew it by hand, and that `awml draw` gives the exact drawing.
+Use this only where `awml draw` can't run, as in a chat with no shell. It gives the Mermaid that `awml draw` would print, so a hand drawing looks like every other AWML drawing. Check the file first, since `awml draw` refuses an invalid file, though it draws a drawing with errors, with its errors red. Say that you drew it by hand, and that `awml draw` gives the exact drawing.
 
 Read `examples/dinners.yaml` beside `examples/dinners.mmd` for its security view and `examples/dinners-home.mmd` for its home implementation. Copy their form exactly.
 
 For the security view, use `scopes` as groups and each part's `in` as its group. For a platform view, use the chosen implementation's blocks as groups. Replace each part's scope with the block whose `parts` lists it, leaving unplaced triggers and design comments without a group. Keep the design's part and line order. Append implementation comments as comment parts in their blocks, then append their `tie` lines in comment and target order. The steps below work on these groups, parts and lines.
 
-Several workflows given together are drawn as their map, which section 6 describes. Check them together first, since `awml draw` refuses them when following their refs finds a mistake.
+Several workflows given together are drawn as their map, which section 6 describes. Check them together first, since `awml draw` refuses them when following their refs finds one invalid.
 
 ## 1. The header
 

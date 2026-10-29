@@ -36,18 +36,33 @@ type CheckReport struct {
 	found []mistakeList
 }
 
-// Said gives the warnings and the mistakes found in the file at that place among the files read,
-// each in the order awml check prints them: the file's own, then those following each ref between
-// the workflows given finds.
-func (r CheckReport) Said(file int) (warnings, mistakes []string) {
+// Said gives the warnings, the errors and the mistakes that make it invalid found in the file at
+// that place among the files read, each in the order awml check prints them: the file's own, then
+// those following each ref between the workflows given finds.
+func (r CheckReport) Said(file int) (warnings, errors, invalid []string) {
 	for _, m := range r.found[file] {
-		if strings.HasPrefix(m.check, "warn.") {
+		switch m.severity() {
+		case "warning":
 			warnings = append(warnings, m.message)
-		} else {
-			mistakes = append(mistakes, m.message)
+		case "error":
+			errors = append(errors, m.message)
+		default:
+			invalid = append(invalid, m.message)
 		}
 	}
-	return warnings, mistakes
+	return warnings, errors, invalid
+}
+
+// severity says what a finding is: a warning, an error, which is a line that breaks a rule, or
+// invalid, a mistake that stops the file being read or drawn.
+func (m mistake) severity() string {
+	switch {
+	case strings.HasPrefix(m.check, "warn."):
+		return "warning"
+	case m.isError():
+		return "error"
+	}
+	return "invalid"
 }
 
 // CheckedFile names a file and what kind of file it was read as: workflow or platform-description.
@@ -58,8 +73,10 @@ type CheckedFile struct {
 	View string `json:"view,omitempty"`
 }
 
-// CheckResult is one check: pass, fail, skipped or warn, with the mistakes it found. Its id stays
-// the same from release to release, and a check that changes meaning gets a new one.
+// CheckResult is one check: pass, fail, error, skipped or warn, with the mistakes it found. It
+// fails when it found a file invalid, and is error when what it found are errors, lines that break
+// a rule in a valid drawing. Its id stays the same from release to release, and a check that changes
+// meaning gets a new one.
 type CheckResult struct {
 	ID             string        `json:"id"`
 	Name           string        `json:"name"`
@@ -70,10 +87,12 @@ type CheckResult struct {
 	Mistakes       []FileMistake `json:"mistakes"`
 }
 
-// FileMistake is one mistake, word for word as awml check prints it, and the file it is in.
+// FileMistake is one mistake, word for word as awml check prints it, and the file it is in. In a
+// check's results, Severity says whether it makes the file invalid, is an error or is a warning.
 type FileMistake struct {
-	File    string `json:"file"`
-	Message string `json:"message"`
+	File     string `json:"file"`
+	Message  string `json:"message"`
+	Severity string `json:"severity,omitempty"`
 }
 
 var (
@@ -179,13 +198,14 @@ func CheckSources(engine string, sources []Source) CheckReport {
 	for _, definition := range checkDefinitions {
 		result := CheckResult{ID: definition.id, Name: definition.name, About: definition.about,
 			AppliesTo: definition.appliesTo, Mistakes: []FileMistake{}}
-		ran, applies := false, false
+		ran, applies, invalid := false, false, false
 		for i, file := range checked {
 			found := false
 			for _, m := range file.mistakes {
 				if m.check == definition.id {
-					result.Mistakes = append(result.Mistakes, FileMistake{sources[i].File, m.message})
+					result.Mistakes = append(result.Mistakes, FileMistake{sources[i].File, m.message, m.severity()})
 					found = true
+					invalid = invalid || m.severity() == "invalid"
 				}
 			}
 			if found || definition.appliesToFile(file) {
@@ -196,8 +216,10 @@ func CheckSources(engine string, sources []Source) CheckReport {
 		switch {
 		case len(result.Mistakes) > 0 && definition.warn:
 			result.Result = "warn"
-		case len(result.Mistakes) > 0:
+		case invalid:
 			result.Result = "fail"
+		case len(result.Mistakes) > 0:
+			result.Result = "error"
 		case ran:
 			result.Result = "pass"
 		default:

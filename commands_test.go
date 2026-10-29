@@ -7,7 +7,8 @@ import (
 	"testing"
 )
 
-// A workflow whose line into a Block action breaks a rule: check fails, and draw draws it red.
+// A workflow whose line into a Block action breaks a rule, an error: it's a valid drawing with
+// errors, and draw draws the line red.
 const redLineWorkflow = `awml: "0.9"
 title: The bakery's old files
 scopes:
@@ -44,11 +45,11 @@ func mistaken(t *testing.T, err error) Mistakes {
 func TestReadingSaysEachFilesOwnMistakesThenThoseOfItsRefsAfterItsName(t *testing.T) {
 	plan := strings.Replace(planWorkflow, "  - { id: thu,", "  - { id: odd, kind: bogus, label: Odd }\n  - { id: thu,", 1)
 	shop := strings.Replace(shopWorkflow, "plan.yaml#list", "plan.yaml#lists", 1)
-	_, err := ReadSources([]Source{source("plan.yaml", plan), source("shop.yaml", shop)}, false)
+	_, err := ReadSources([]Source{source("plan.yaml", plan), source("shop.yaml", shop)})
 	got := mistaken(t, err)
 	want := Mistakes{
-		{"plan.yaml", Check(parsed(t, plan))[0]},
-		{"shop.yaml", `part "list" refers to plan.yaml#lists, but plan.yaml has no part "lists"`},
+		{File: "plan.yaml", Message: Check(parsed(t, plan))[0]},
+		{File: "shop.yaml", Message: `part "list" refers to plan.yaml#lists, but plan.yaml has no part "lists"`},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("mistakes are %q\nwant %q", got, want)
@@ -64,27 +65,25 @@ func TestReadingGoesOnPastAFileThatCantBeRead(t *testing.T) {
 		source("broken.yaml", "parts: [\n"),
 		source("list.yaml", "- a list\n"),
 		source("dinners.yaml", soundWorkflow),
-	}, true)
+	})
 	got := mistaken(t, err)
-	if len(got) != 3 || got[0] != (FileMistake{"missing.yaml", "can't be read: No such file or directory"}) ||
+	if len(got) != 3 || got[0] != (FileMistake{File: "missing.yaml", Message: "can't be read: No such file or directory"}) ||
 		got[1].File != "broken.yaml" || !strings.HasPrefix(got[1].Message, "isn't YAML: ") ||
-		got[2] != (FileMistake{"list.yaml", "the file must be a mapping of fields, starting with awml"}) {
+		got[2] != (FileMistake{File: "list.yaml", Message: "the file must be a mapping of fields, starting with awml"}) {
 		t.Errorf("mistakes are %q", got)
 	}
 }
 
 func TestAFileGivenWithoutANameHasItsMistakesSaidAlone(t *testing.T) {
-	_, err := ReadSources([]Source{{Text: []byte("- a list\n")}}, false)
+	_, err := ReadSources([]Source{{Text: []byte("- a list\n")}})
 	if err == nil || err.Error() != "the file must be a mapping of fields, starting with awml" {
 		t.Errorf("gave %v", err)
 	}
 }
 
-func TestReadingForADrawingLetsALineThatBreaksARuleThrough(t *testing.T) {
-	if _, err := ReadSources([]Source{source("red.yaml", redLineWorkflow)}, false); err == nil {
-		t.Error("a line that breaks a rule passes the check")
-	}
-	workflows, err := ReadSources([]Source{source("red.yaml", redLineWorkflow)}, true)
+// A drawing with errors is valid, so every command reads it.
+func TestReadingTakesADrawingWithErrors(t *testing.T) {
+	workflows, err := ReadSources([]Source{source("red.yaml", redLineWorkflow)})
 	if err != nil || len(workflows) != 1 || workflows[0].File != "red.yaml" || str(workflows[0].Doc, "title") != "The bakery's old files" {
 		t.Errorf("gave %+v and %v", workflows, err)
 	}
@@ -98,7 +97,7 @@ func TestAFileGivenTwiceIsReadOnceWhereItsFirstGiven(t *testing.T) {
 		{File: "shop.yaml", Path: "/home/./shop.yaml", Text: []byte(shopWorkflow)},
 		{Text: []byte(soundWorkflow)},
 		{Text: []byte(soundWorkflow)},
-	}, false)
+	})
 	var files []string
 	for _, w := range workflows {
 		files = append(files, w.File)
@@ -121,9 +120,42 @@ func TestTheCheckSaysEachFilesWarningsThenItsMistakes(t *testing.T) {
 		{nil, nil},
 		{nil, {`part "list" refers to plan.yaml#lists, but plan.yaml has no part "lists"`}},
 	} {
-		warnings, mistakes := report.Said(i)
-		if !reflect.DeepEqual(warnings, want[0]) || !reflect.DeepEqual(mistakes, want[1]) {
-			t.Errorf("file %d: warnings %q and mistakes %q, want %q and %q", i, warnings, mistakes, want[0], want[1])
+		warnings, errors, invalid := report.Said(i)
+		if !reflect.DeepEqual(warnings, want[0]) || errors != nil || !reflect.DeepEqual(invalid, want[1]) {
+			t.Errorf("file %d: warnings %q, errors %q and mistakes %q, want %q, none and %q", i, warnings, errors, invalid, want[0], want[1])
+		}
+	}
+}
+
+// The check tells a drawing's errors, its lines that break a rule, from the mistakes that make a file
+// invalid.
+func TestTheCheckTellsErrorsFromWhatMakesAFileInvalid(t *testing.T) {
+	broken := strings.Replace(redLineWorkflow, "label: \"Every night\" }", "label: \"Every night\", colour: grey }", 1)
+	report := CheckSources("dev", []Source{source("red.yaml", redLineWorkflow), source("broken.yaml", broken)})
+	breach := `outside action "wipe" is Block, but part "tidy" leads to it: a blocked action is never taken, so a line into it is red`
+	unknown := `part "night" has unknown field "colour"`
+	for i, want := range [][2][]string{{{breach}, nil}, {{breach}, {unknown}}} {
+		if _, errors, invalid := report.Said(i); !reflect.DeepEqual(errors, want[0]) || !reflect.DeepEqual(invalid, want[1]) {
+			t.Errorf("file %d: errors %q and mistakes %q, want %q and %q", i, errors, invalid, want[0], want[1])
+		}
+	}
+	for _, check := range report.Checks {
+		switch check.ID {
+		case "tiers.shape":
+			want := []FileMistake{{"red.yaml", breach, "error"}, {"broken.yaml", breach, "error"}}
+			if check.Result != "error" || !reflect.DeepEqual(check.Mistakes, want) {
+				t.Errorf("tiers.shape is %+v", check)
+			}
+		case "fields.known":
+			if check.Result != "fail" || !reflect.DeepEqual(check.Mistakes, []FileMistake{{"broken.yaml", unknown, "invalid"}}) {
+				t.Errorf("fields.known is %+v", check)
+			}
+		}
+	}
+	warned := CheckSources("dev", []Source{source("dinners.yaml", strings.Replace(soundWorkflow, "kind: ai, op: draft", "kind: ai, op: do", 1))})
+	for _, check := range warned.Checks {
+		if check.ID == "warn.do-by-code" && (check.Result != "warn" || check.Mistakes[0].Severity != "warning") {
+			t.Errorf("warn.do-by-code is %+v", check)
 		}
 	}
 }
@@ -132,7 +164,7 @@ func TestTheCheckSaysAFilesOwnMistakesBeforeThoseOfItsRefs(t *testing.T) {
 	shop := strings.Replace(shopWorkflow, "plan.yaml#list", "plan.yaml#lists", 1)
 	shop = strings.Replace(shop, "kind: code, op: do, label: Fill", "kind: code, op: bogus, label: Fill", 1)
 	report := CheckSources("dev", []Source{source("plan.yaml", planWorkflow), source("shop.yaml", shop)})
-	_, mistakes := report.Said(1)
+	_, _, mistakes := report.Said(1)
 	want := append(Check(parsed(t, shop)), `part "list" refers to plan.yaml#lists, but plan.yaml has no part "lists"`)
 	if !reflect.DeepEqual(mistakes, want) {
 		t.Errorf("mistakes are %q\nwant %q", mistakes, want)
@@ -209,7 +241,7 @@ func TestDrawingAnImplementationTakesOneWorkflow(t *testing.T) {
 func TestDrawingSaysTheMistakesOfEveryFile(t *testing.T) {
 	shop := strings.Replace(shopWorkflow, "plan.yaml#list", "plan.yaml#lists", 1)
 	sources := []Source{source("plan.yaml", planWorkflow), source("shop.yaml", shop)}
-	_, want := ReadSources(sources, true)
+	_, want := ReadSources(sources)
 	if _, err := DrawSources(sources, ""); err == nil || err.Error() != want.Error() {
 		t.Errorf("draw gave %v, want %v", err, want)
 	}
@@ -267,9 +299,17 @@ func TestFitRefusesWhatItCantJudge(t *testing.T) {
 			t.Errorf("%s: refused with %q, want %q", tc.name, err, tc.want)
 		}
 	}
-	_, want := ReadSources([]Source{source("red.yaml", redLineWorkflow)}, false)
-	if _, err := FitSources([]Source{source("red.yaml", redLineWorkflow), source("laptop.yaml", laptop)}, ""); err == nil || err.Error() != want.Error() {
-		t.Errorf("fit of a line that breaks a rule gave %v, want %v", err, want)
+}
+
+// A drawing with errors is valid, so fit judges it as any other.
+func TestFitJudgesADrawingWithErrors(t *testing.T) {
+	sources := []Source{source("red.yaml", redLineWorkflow), source("laptop.yaml", laptop)}
+	workflows := together(t, "red.yaml", redLineWorkflow)
+	if report, err := FitSources(sources, ""); err != nil || !reflect.DeepEqual(report, JudgeTogether(workflows, fitDocs(t, laptop))) {
+		t.Errorf("fit gave %+v with %v", report, err)
+	}
+	if report, err := FitPartsSources(sources); err != nil || !reflect.DeepEqual(report, JudgeParts(workflows, fitDocs(t, laptop))) {
+		t.Errorf("fit --parts gave %+v with %v", report, err)
 	}
 }
 
