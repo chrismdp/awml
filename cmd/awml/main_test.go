@@ -325,8 +325,27 @@ func TestCheckJSONListsEveryCheckAndFailsLikeThePlainOutput(t *testing.T) {
 	}
 }
 
+// --fail-on-errors fails a drawing with errors too, for a gate that holds drawings to the rules.
+func TestCheckFailsOnErrorsWhenAskedTo(t *testing.T) {
+	path := write(t, "live.yaml", live)
+	message := `outside action "wipe" is Block, but part "tidy" leads to it: a blocked action is never taken, so a line into it is red`
+	if r := awmlRun("check", "--fail-on-errors", path); r != (result{1, path + ": error: " + message + "\n", ""}) {
+		t.Errorf("check --fail-on-errors gave %+v", r)
+	}
+	if r := awmlRun("check", "--json", "--fail-on-errors", path); r.code != 1 || !strings.Contains(r.stdout, `"severity":"error"`) {
+		t.Errorf("check --json --fail-on-errors gave %+v", r)
+	}
+	g := write(t, "good.yaml", good)
+	if r := awmlRun("check", "--fail-on-errors", g); r != (result{0, g + ": ok\n", ""}) {
+		t.Errorf("check --fail-on-errors of a sound file gave %+v", r)
+	}
+	if r := awmlRun("check", "-h"); !strings.Contains(r.stdout, "  --fail-on-errors  exit 1 for a drawing with errors too, not only for an invalid file\n") {
+		t.Errorf("check -h gave %+v", r)
+	}
+}
+
 func TestCheckHelpMentionsJSON(t *testing.T) {
-	if r := awmlRun("check", "-h"); r.code != 0 || !strings.HasPrefix(r.stdout, "usage: awml check [-h] [--json] files [files ...]\n") || !strings.Contains(r.stdout, "  --json      print every check and its result as JSON\n") {
+	if r := awmlRun("check", "-h"); r.code != 0 || !strings.HasPrefix(r.stdout, "usage: awml check [-h] [--json] [--fail-on-errors] files [files ...]\n") || !strings.Contains(r.stdout, "  --json            print every check and its result as JSON\n") {
 		t.Errorf("check -h gave %+v", r)
 	}
 }
@@ -729,7 +748,7 @@ func TestAMistakeInTheCommandShowsHowToUseIt(t *testing.T) {
 		{nil, "usage: awml [-h] [--version] [--registry URL] {draw,graph,page,check,fit,summary,convert,login,push,pull} ...\nawml: error: the following arguments are required: command\n"},
 		{[]string{"drew", "a.yaml"}, "usage: awml [-h] [--version] [--registry URL] {draw,graph,page,check,fit,summary,convert,login,push,pull} ...\nawml: error: argument command: invalid choice: 'drew' (choose from 'draw', 'graph', 'page', 'check', 'fit', 'summary', 'convert', 'login', 'push', 'pull')\n"},
 		{[]string{"draw"}, "usage: awml draw [-h] [--implementation ID] files [files ...]\nawml draw: error: the following arguments are required: files\n"},
-		{[]string{"check"}, "usage: awml check [-h] [--json] files [files ...]\nawml check: error: the following arguments are required: files\n"},
+		{[]string{"check"}, "usage: awml check [-h] [--json] [--fail-on-errors] files [files ...]\nawml check: error: the following arguments are required: files\n"},
 		{[]string{"page", "a.yaml"}, "usage: awml page [-h] -o OUT files [files ...]\nawml page: error: the following arguments are required: -o/--out\n"},
 		{[]string{"page", "a.yaml", "-o"}, "usage: awml page [-h] -o OUT files [files ...]\nawml page: error: argument -o/--out: expected one argument\n"},
 		{[]string{"page", "-o", "out.html"}, "usage: awml page [-h] -o OUT files [files ...]\nawml page: error: the following arguments are required: files\n"},

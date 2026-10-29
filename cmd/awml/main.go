@@ -87,13 +87,14 @@ options:
   -h, --help         show this help message and exit
   -o OUT, --out OUT
 `},
-	"check": {"usage: awml check [-h] [--json] files [files ...]\n", `
+	"check": {"usage: awml check [-h] [--json] [--fail-on-errors] files [files ...]\n", `
 positional arguments:
-  files       files, or folders of them, checked together
+  files             files, or folders of them, checked together
 
 options:
-  -h, --help  show this help message and exit
-  --json      print every check and its result as JSON
+  -h, --help        show this help message and exit
+  --json            print every check and its result as JSON
+  --fail-on-errors  exit 1 for a drawing with errors too, not only for an invalid file
 `},
 	"fit": {"usage: awml fit [-h] [--json] [--parts] [--implementation ID] files [files ...]\n", `
 Judge each platform described as running every workflow given, or with --parts, each part alone.
@@ -154,6 +155,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	implementation := ""
 	jsonOutput := false
 	parts := false
+	failOnErrors := false
 	private := false
 	var registryFlag *string
 	flags := true
@@ -211,6 +213,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			jsonOutput = true
 		case flags && command == "fit" && a == "--parts":
 			parts = true
+		case flags && command == "check" && a == "--fail-on-errors":
+			failOnErrors = true
 		case flags && command == "push" && a == "--private":
 			private = true
 		case flags && strings.HasPrefix(a, "-") && a != "-":
@@ -282,10 +286,10 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	given := sources(files)
 	if command == "check" && jsonOutput {
-		return checkJSON(given, stdout, stderr)
+		return checkJSON(given, failOnErrors, stdout, stderr)
 	}
 	// check fails only for an invalid file. A drawing with errors is valid, so it passes, saying each
-	// error.
+	// error, unless --fail-on-errors asks for it to fail too.
 	if command == "check" {
 		code := 0
 		report := awml.CheckSources(currentVersion(), given)
@@ -303,7 +307,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			if len(errs) == 0 && len(invalid) == 0 {
 				fmt.Fprintf(stdout, "%s: ok\n", file.File)
 			}
-			if len(invalid) != 0 {
+			if len(invalid) != 0 || failOnErrors && len(errs) != 0 {
 				code = 1
 			}
 		}
@@ -417,15 +421,15 @@ func sources(files []string) []awml.Source {
 }
 
 // checkJSON prints every check and its result as JSON, and fails as the plain output does: when
-// any check finds a file invalid.
-func checkJSON(sources []awml.Source, stdout, stderr io.Writer) int {
+// any check finds a file invalid, or with failOnErrors, when any finds an error.
+func checkJSON(sources []awml.Source, failOnErrors bool, stdout, stderr io.Writer) int {
 	report := awml.CheckSources(currentVersion(), sources)
 	if err := json.NewEncoder(stdout).Encode(report); err != nil {
 		fmt.Fprintf(stderr, "awml check: can't write its output: %s\n", err)
 		return 1
 	}
 	for _, check := range report.Checks {
-		if check.Result == "fail" {
+		if check.Result == "fail" || failOnErrors && check.Result == "error" {
 			return 1
 		}
 	}
