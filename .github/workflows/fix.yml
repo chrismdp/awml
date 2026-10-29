@@ -677,7 +677,7 @@ jobs:
           {
             printf '**The fixer referred findings back.** Fixing them would change what was decided on this issue, so they need a person'"'"'s answer. [The pull request](%s) · [The run](%s)\n\n' "$pull_url" "$run_url"
             jq -Rrs '.[0:60000] | gsub("@(?=[A-Za-z0-9])"; "@​")' "$RUNNER_TEMP/fix/referred.md"
-            printf '\nTo go on, answer here and add the build label again.\n'
+            printf '\nTo go on, answer here, then remove the build label and add it again.\n'
           } > "$RUNNER_TEMP/referred.md"
           stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
           echo "::stop-commands::$stop"

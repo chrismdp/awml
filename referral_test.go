@@ -186,7 +186,7 @@ func TestTheReferralIsPostedEscaped(t *testing.T) {
 		t.Fatalf("the referral made %d comments, want 1", len(bodies))
 	}
 	body := bodies[0]
-	if !strings.HasPrefix(body, "**The fixer referred findings back") || !strings.HasSuffix(strings.TrimSpace(body), "To go on, answer here and add the build label again.") {
+	if !strings.HasPrefix(body, "**The fixer referred findings back") || !strings.HasSuffix(strings.TrimSpace(body), "To go on, answer here, then remove the build label and add it again.") {
 		t.Errorf("the referral doesn't say what it is and how to go on:\n%s", body)
 	}
 	if strings.Contains(body, "@the-owner") || !strings.Contains(body, "@\u200bthe-owner") {
