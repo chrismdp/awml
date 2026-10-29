@@ -652,10 +652,11 @@ jobs:
             push --force-with-lease="refs/heads/$BRANCH:$HEAD_SHA" origin "HEAD:refs/heads/$BRANCH"
 
       # The referral goes to the issue, where the decisions were made, as the app's comment, so a
-      # build after the answer reads it. It's the session's text, so every mention in it is broken,
-      # as the fix's commit message's are, and the log shows it with workflow commands stopped. It
-      # starts by saying what it is and ends by saying how to go on: a build's pull request with a
-      # fresh build, and a person's with its author, since the label would start a build beside it.
+      # build after the answer reads it. It's the session's text, so every mention in it is broken
+      # and every < escaped, as in every comment of session text (#160 rule 5), and the log shows
+      # it with workflow commands stopped. It starts by saying what it is and ends by saying how to
+      # go on: a build's pull request with a fresh build, and a person's with its author, since the
+      # label would start a build beside it.
       - name: Make the app's token for the issue
         id: asker
         if: steps.guard.outputs.outcome == 'referred'
@@ -679,7 +680,7 @@ jobs:
           run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           {
             printf '**The fixer referred findings back.** Fixing them would change what was decided on this issue, so they need a person'"'"'s answer. [The pull request](%s) · [The run](%s)\n\n' "$pull_url" "$run_url"
-            jq -Rrs '.[0:60000] | gsub("@(?=[A-Za-z0-9])"; "@​")' "$RUNNER_TEMP/fix/referred.md"
+            jq -Rrs '.[0:60000] | gsub("<"; "&lt;") | gsub("@(?=[A-Za-z0-9])"; "@​")' "$RUNNER_TEMP/fix/referred.md"
             if [[ "$BRANCH" =~ ^build/issue-[0-9]+$ ]]; then
               printf '\nTo go on, answer here, then remove the build label and add it again.\n'
             else

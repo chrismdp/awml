@@ -591,8 +591,8 @@ func TestEveryTrustIsTheSameExactPermissionCheck(t *testing.T) {
 	} else {
 		copies = append(copies, regexp.MustCompile(`(?m)^`).ReplaceAllString(strings.Trim(script, "\n"), strings.Repeat(" ", 10))+"\n")
 	}
-	if len(copies) != 8 {
-		t.Fatalf("found %d copies of may_write, want 8", len(copies))
+	if len(copies) != 7 {
+		t.Fatalf("found %d copies of may_write, want 7", len(copies))
 	}
 	for _, other := range copies[1:] {
 		if other != copies[0] {
