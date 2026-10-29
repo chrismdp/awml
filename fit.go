@@ -40,7 +40,7 @@ func Fit(security, placement *Map, descriptions []*Map) (lines, gaps []string) {
 
 // Judge judges a workflow, or its security view, against platform descriptions, either as
 // whole-workflow candidates or in the placement drawn by one of its platform views. The documents
-// must have passed Check.
+// must have no mistakes but lines that break a rule.
 func Judge(security, placement *Map, descriptions []*Map) FitReport {
 	results, gaps := judge(security, placement, descriptions)
 	if results == nil {

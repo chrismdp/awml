@@ -32,7 +32,7 @@ Use this only where `awml check` can't run, as in a chat with no shell. It cover
 
 ## Operations, tiers and untrusted text
 
-For these, skip any `hidden`, `refused` or `tie` line: only `start` and `data` lines lead anywhere. A line that breaks one of these rules is an error. In a drawing of a live system, it may be what the system really did. It stays an error, and the drawing shows it red, so leave it there until the system changes. Every other mistake on this list makes the file invalid, and every command refuses an invalid file, but a drawing with errors is valid, and `awml check` passes it, saying each error.
+For these, skip any `hidden`, `refused` or `tie` line: only `start` and `data` lines lead anywhere. A line that breaks rule 18, 19, 21 or 23 is an error. In a drawing of a live system, it may be what the system really did. It stays an error, and the drawing shows it red, so leave it there until the system changes. A mistake against rule 20 or 22, and every other mistake on this list, makes the file invalid, and every command refuses an invalid file, but a drawing with errors is valid, and `awml check` passes it, saying each error.
 
 18. **Only a `do` step leads to an outside action.** For each `outside` part, walk back along the lines that lead into it. Pass through any review or standing approval and keep walking back from it. Every step you meet whose `op` is anything but `do` or `other` is a mistake, such as a `draft` step whose line reaches a send through a review. A step with no `op` is held to nothing.
 19. **An `answer` or `check` step never writes to a context.** No line runs from a step whose `op` is `answer` or `check` to a `context`.
