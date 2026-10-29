@@ -112,7 +112,7 @@ type checkDefinition struct {
 
 var checkDefinitions = []checkDefinition{
 	{id: "file.yaml", name: "The file is YAML", about: "Each file can be read, and holds a YAML mapping of fields.", appliesTo: everyFile, early: true},
-	{id: "file.version", name: "The file is of the version this release reads", about: "awml is \"0.9\". An older file is upgraded with awml convert.", appliesTo: everyFile, early: true},
+	{id: "file.version", name: "The file is of the version this release reads", about: "awml is \"0.10\". An older file is upgraded with awml convert.", appliesTo: everyFile, early: true},
 	{id: "fields.known", name: "Every field is known and none is missing", about: "Each file, scope, part, line, implementation, block and comment has the fields it needs and no others, and each list is a list of mappings.", appliesTo: everyFile, early: true},
 	{id: "kinds.known", name: "Every kind is known", about: "Each part and line has a kind the spec defines.", appliesTo: workflows},
 	{id: "ids.unique", name: "No id is used twice", about: "Scope, part, block and comment ids are unique across the file.", appliesTo: workflows},
@@ -123,7 +123,7 @@ var checkDefinitions = []checkDefinition{
 	{id: "comments.tie-only", name: "A comment is linked only by tie lines", about: "A comment moves nothing, so only a tie, or a hidden line, may touch it.", appliesTo: workflows},
 	{id: "ties.comment", name: "Every tie has a comment at one end", about: "A tie links a comment to what it explains, so one of its ends is a comment.", appliesTo: workflows},
 	{id: "triggers.no-line-in", name: "No line goes into a trigger", about: "A trigger only starts its own workflow, so no line but a tie or a hidden one goes into it. A workflow starts another with an outside action whose ref names the other's trigger.", appliesTo: workflows},
-	{id: "contexts.written-by-steps", name: "No line goes from an outside action into a context", about: "An outside action changes only what's outside the system, so no line but a tie or a hidden one goes from it into a context. A recorded sign-off is a review whose yes leads to a code do step that writes it, or a connector that a bring-in step reads.", appliesTo: workflows},
+	{id: "contexts.written-by-steps", name: "Only a step writes to a context", about: "No line but a tie or a hidden one goes into a context from anything but a step. A recorded sign-off is a review whose yes leads to a code do step that writes it, something brought in from outside is a connector that a bring-in step reads, then writes, and a copy from one context into another is a step that reads one and writes the other.", appliesTo: workflows},
 	{id: "ops.known", name: "Every op is known and on a step", about: "An op is one of the operations the spec lists, on an ai, code or person step.", appliesTo: workflows},
 	{id: "operations.only-do-acts", name: "Only a do step leads to an outside action", about: "A step that leads to an outside action, straight or through a review or a standing approval, is a do step.", appliesTo: workflows},
 	{id: "operations.answer-check-read-only", name: "An answer or check step never writes to a context", about: "An answer step and a check step read contexts and speak on surfaces, but never write to a context.", appliesTo: workflows},

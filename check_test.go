@@ -9,7 +9,7 @@ import (
 )
 
 const good = `
-awml: "0.9"
+awml: "0.10"
 title: The family's dinners
 scopes:
   - { id: carers, label: carers }
@@ -98,7 +98,7 @@ func TestASoundFileHasNoMistakes(t *testing.T) {
 
 func TestLabelsThatMarkdownWouldRecogniseHaveNoMistakes(t *testing.T) {
 	mistakes(t, parsed(t, `
-awml: "0.9"
+awml: "0.10"
 title: Literal labels
 scopes: [{id: group, label: '# Team'}]
 parts:
@@ -129,14 +129,14 @@ func TestTheOldNamesForKindsAreUnknown(t *testing.T) {
 	mistakes(t, changed(t, "parts.1.kind", "human"), `part "plan" has unknown kind "human"`)
 }
 
-// Several start lines out of one part already show work side by side, so 0.9 has no fork.
+// Several start lines out of one part already show work side by side, so 0.10 has no fork.
 func TestAForkIsAnUnknownKind(t *testing.T) {
 	mistakes(t, changed(t, "parts.3.kind", "fork"), `part "screen" has unknown kind "fork"`)
 	mistakes(t, changed(t, "parts.3.kind", "fork", "parts.3.label", gone), `part "screen" has no label`, `part "screen" has unknown kind "fork"`)
 }
 
 func TestAnUnknownVersion(t *testing.T) {
-	mistakes(t, changed(t, "awml", "2"), `awml must be "0.9", not "2"`)
+	mistakes(t, changed(t, "awml", "2"), `awml must be "0.10", not "2"`)
 }
 
 func TestAPartInAnUnknownGroup(t *testing.T) {
@@ -181,7 +181,7 @@ func TestGroupsNestedInEachOther(t *testing.T) {
 }
 
 func TestAnIdUsedTwice(t *testing.T) {
-	mistakes(t, changed(t, "parts.2.id", "plan", "lines.1.to", "plan", "lines.2.from", "plan"), `id "plan" is used twice`)
+	mistakes(t, changed(t, "parts.0.id", "plan", "lines.0.from", "plan", "lines.4.to", "plan"), `id "plan" is used twice`)
 }
 
 func TestAnIdMermaidCantRead(t *testing.T) {
@@ -200,7 +200,7 @@ func TestTheVersionIsText(t *testing.T) {
 }
 
 func TestAFileInAVersionNoReleaseReadIsRefused(t *testing.T) {
-	mistakes(t, changed(t, "awml", "0.1"), `awml must be "0.9", not "0.1"`)
+	mistakes(t, changed(t, "awml", "0.1"), `awml must be "0.10", not "0.1"`)
 }
 
 func TestAnUnknownField(t *testing.T) {
@@ -222,7 +222,7 @@ func TestEveryMistakeIsReportedAtOnce(t *testing.T) {
 
 func TestAValueYAMLReadsAsTrueMustBeQuoted(t *testing.T) {
 	d := parsed(t, `
-awml: "0.9"
+awml: "0.10"
 title: T
 parts:
   - { id: true, kind: review, label: True }
@@ -237,13 +237,13 @@ lines:
 }
 
 func TestANumberMustBeQuoted(t *testing.T) {
-	d := parsed(t, `{awml: "0.9", title: T, parts: [{id: t, kind: trigger, label: 12}]}`)
+	d := parsed(t, `{awml: "0.10", title: T, parts: [{id: t, kind: trigger, label: 12}]}`)
 	mistakes(t, d, `part "t": YAML read its label as 12, not text: put it in quotes`)
 }
 
 func TestYesNoOnOffAndTimesAreText(t *testing.T) {
 	d := parsed(t, `
-awml: "0.9"
+awml: "0.10"
 title: T
 parts:
   - { id: t, kind: trigger, label: 19:00 }
@@ -258,7 +258,7 @@ lines:
 }
 
 const reply = `
-awml: "0.9"
+awml: "0.10"
 title: A reply
 parts:
   - { id: write, kind: ai, op: draft, label: Draft the reply }
@@ -287,7 +287,7 @@ func withLines(t *testing.T, lines ...string) *Map {
 func TestEachOperationNamesAStep(t *testing.T) {
 	for _, op := range []string{"bring-in", "sort", "learn", "prepare", "check", "reflect", "draft", "do", "answer", "other"} {
 		for _, kind := range []string{"ai", "code", "person"} {
-			d := parsed(t, fmt.Sprintf(`{awml: "0.9", title: T, parts: [{id: s, kind: %s, op: %s, label: S}]}`, kind, op))
+			d := parsed(t, fmt.Sprintf(`{awml: "0.10", title: T, parts: [{id: s, kind: %s, op: %s, label: S}]}`, kind, op))
 			mistakes(t, d)
 		}
 	}
@@ -346,7 +346,7 @@ func TestHiddenAndRefusedLinesLeadNowhere(t *testing.T) {
 }
 
 const question = `
-awml: "0.9"
+awml: "0.10"
 title: A question
 parts:
   - { id: notes, kind: context, label: Family notes }
@@ -380,7 +380,7 @@ func TestACheckPassesItsVerdictOnAndAStepAfterItKeepsIt(t *testing.T) {
 
 // The dinners start the shopping by asking it to start, as they would call any outside service.
 const startsShopping = `
-awml: "0.9"
+awml: "0.10"
 title: Dinners
 parts:
   - { id: thu, kind: trigger, label: "Thursday 19:00" }
@@ -417,17 +417,55 @@ func TestNoLineButATieOrAHiddenOneGoesIntoATrigger(t *testing.T) {
 	mistakes(t, changed(t, "lines.4.kind", "tie"))
 }
 
-// An outside action changes only what's outside the system, so it leads on to a connector, a step or a
-// review, but never into a context.
-func TestNoLineButATieOrAHiddenOneGoesFromAnOutsideActionIntoAContext(t *testing.T) {
-	for _, kind := range []string{"start", "data", "refused"} {
-		t.Run(kind, func(t *testing.T) {
-			mistakes(t, withLines(t, "{ from: send, to: drafts, kind: "+kind+" }"),
-				`the line from "send" to "drafts" goes from outside action "send" into context "drafts": an outside action changes only what's outside the system, so draw a recorded sign-off as a review whose [yes] leads to a code do step that writes it, or, where it's given outside the system, as a connector that a bring-in step reads`)
-		})
+// Only a step writes to a context, so no line but a tie or a hidden one goes into a context from
+// anything else: a review, a standing approval, a trigger, a connector, a surface, an outside action
+// or another context.
+func TestOnlyAStepWritesToAContext(t *testing.T) {
+	for _, part := range [][2]string{{"send", "outside action"}, {"approve", "review"}, {"ok", "standing approval"}, {"monday", "trigger"}, {"inbox", "connector"}, {"phone", "surface"}, {"sent", "context"}} {
+		from, what := part[0], part[1]
+		for _, kind := range []string{"start", "data", "refused"} {
+			t.Run(from+"/"+kind, func(t *testing.T) {
+				d := withParts(t, "{ from: "+from+", to: drafts, kind: "+kind+" }")
+				var found []string
+				for _, m := range Check(d) {
+					if strings.Contains(m, `into context "drafts"`) {
+						found = append(found, m)
+					}
+				}
+				want := fmt.Sprintf(`the line from "%s" to "drafts" goes from %s "%s" into context "drafts": only a step writes to a context, so draw a recorded sign-off as a review whose [yes] leads to a code do step that writes it, something brought in from outside as a connector that a bring-in step reads, then writes, and a copy from one context into another as a step that reads one and writes the other`, from, what, from)
+				if !reflect.DeepEqual(found, []string{want}) {
+					t.Errorf("Check found\n  %s\nwant\n  %s", strings.Join(found, "\n  "), want)
+				}
+			})
+		}
+		for _, kind := range []string{"tie", "hidden"} {
+			for _, m := range Check(withParts(t, "{ from: "+from+", to: drafts, kind: "+kind+" }")) {
+				if strings.Contains(m, "only a step writes to a context") {
+					t.Errorf("a %s line from %s into a context gave %q", kind, from, m)
+				}
+			}
+		}
 	}
-	mistakes(t, withLines(t, "{ from: send, to: drafts, kind: hidden }"))
+	for _, step := range []string{"write", "ask"} {
+		mistakes(t, withLines(t, "{ from: "+step+", to: drafts, kind: data }"))
+	}
 	mistakes(t, withLines(t, "{ from: file, to: ask, kind: data }", "{ from: file, to: approve, kind: data }"))
+}
+
+// withParts is the reply with a part of each kind that isn't a step, and more lines.
+func withParts(t *testing.T, lines ...string) *Map {
+	t.Helper()
+	src := strings.Replace(reply, "lines:\n", `  - { id: ok, kind: approval, label: "Sam's standing approval: replies only" }
+  - { id: monday, kind: trigger, label: Monday }
+  - { id: inbox, kind: connector, label: Inbox }
+  - { id: phone, kind: surface, label: Sam's phone }
+  - { id: sent, kind: context, label: Sent replies }
+lines:
+`, 1)
+	for _, l := range lines {
+		src += "  - " + l + "\n"
+	}
+	return parsed(t, src)
 }
 
 func TestARefIsWellWritten(t *testing.T) {

@@ -1,4 +1,4 @@
-awml: "0.9"
+awml: "0.10"
 title: The bakery's supplier order
 description: |
   When the stock count says something runs low, AI drafts the order from the stock levels, and Ana

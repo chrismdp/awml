@@ -43,7 +43,7 @@ Ask both at once:
 
 ## 4. Check, then publish
 
-Use one 0.9 file. If the workflow is in an older version, or still a legacy pair, convert it first:
+Use one 0.10 file. If the workflow is in an older version, or still a legacy pair, convert it first:
 
 ```sh
 awml convert old.yaml > workflow.yaml

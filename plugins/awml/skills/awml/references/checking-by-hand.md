@@ -5,7 +5,7 @@ Use this only where `awml check` can't run, as in a chat with no shell. It cover
 ## The file
 
 1. The file is one YAML mapping with `awml`, `title` and `parts`, and may have `description`, `scopes`, `lines` and `implementations`. It has no other field.
-2. `awml` is `"0.9"`, in quotes. There is no `view`.
+2. `awml` is `"0.10"`, in quotes. There is no `view`.
 3. `parts`, and `scopes` and `lines` where given, are lists, and each item in them is a mapping.
 
 ## Scopes and parts
@@ -23,7 +23,7 @@ Use this only where `awml check` can't run, as in a chat with no shell. It cover
 12. Each line's `kind` is one of `start`, `data`, `refused`, `tie` and `hidden`. There is no `publish`: a `data` line publishes whenever its scopes make it one.
 13. No line has `breaks`. A line that breaks rule 18, 19, 21 or 23 is an error, and the drawing shows it red, so a file never marks one by hand.
 14. A line with a comment at either end is a `tie` or a `hidden` line. A `tie` has a comment at one end or both.
-15. No line but a `tie` or a `hidden` one goes into a `trigger`. A trigger only starts its own workflow, so to start another, a `do` step leads to an `outside` part whose `ref` names the other's trigger. Nor does any line but a `tie` or a `hidden` one go from an `outside` part into a `context`. An outside action changes only what's outside the system, so a recorded sign-off is a `review` whose `[yes]` leads to a `code` `do` step that writes it, or, where it's given outside the system, a `connector` that a `bring-in` step reads.
+15. No line but a `tie` or a `hidden` one goes into a `trigger`. A trigger only starts its own workflow, so to start another, a `do` step leads to an `outside` part whose `ref` names the other's trigger. Nor does any line but a `tie` or a `hidden` one go into a `context` from anything but an `ai`, `code` or `person` step. Only a step writes to a context, so a recorded sign-off is a `review` whose `[yes]` leads to a `code` `do` step that writes it, something brought in from outside is a `connector` that a `bring-in` step reads, then writes, and a copy from one context into another is a step that reads one and writes the other.
 
 ## Text
 

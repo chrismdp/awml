@@ -1,4 +1,4 @@
-awml: "0.9"
+awml: "0.10"
 title: The bakery's morning order
 description: |
   The second of the two workflows, split out at its trigger. Each morning AI drafts the supplier

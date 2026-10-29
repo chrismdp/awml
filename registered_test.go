@@ -42,7 +42,7 @@ func TestABlockMayNameARegisteredPlatform(t *testing.T) {
 	}
 }
 
-const registeredDescription = `awml: "0.9"
+const registeredDescription = `awml: "0.10"
 platform: { id: acme/platforms/ops-runner, label: "The ops runner" }
 off_for_up_to: PT0S
 steps: code

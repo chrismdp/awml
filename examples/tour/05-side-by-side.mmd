@@ -15,6 +15,7 @@ flowchart TB
     invoices[("The bakery#39;s invoices")]
     checklist[("Jo#39;s checklist for chasing")]
     chase("<small style='color:rgb(61,67,79)'>🤖 ✏️ draft</small><br>Draft a reminder for each late invoice")
+    copy("<small style='color:rgb(61,67,79)'>⚙️ 🛠️ do</small><br>Copy the checklist#44; taking the names out")
   end
   subgraph pottery["pottery#58; Jo#44; Kit"]
     direction TB
@@ -23,10 +24,12 @@ flowchart TB
   end
 
   monday --> chase
+  monday --> copy
   monday --> remind
   invoices -.-> chase
   checklist -.-> chase
-  checklist ==>|"the checklist#44; with no names in it · adds Kit"| shop_notes
+  checklist -.-> copy
+  copy ==>|"the checklist#44; with no names in it · adds Kit"| shop_notes
   shop_notes -.-> remind
   classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
@@ -40,6 +43,7 @@ flowchart TB
   class monday trig
   class invoices,checklist,shop_notes ctx
   class chase,remind ai
+  class copy code
   style bakery fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
   style pottery fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
-  linkStyle 4 stroke-dasharray:3
+  linkStyle 6 stroke-dasharray:3

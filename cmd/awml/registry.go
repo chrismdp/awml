@@ -124,7 +124,7 @@ func push(name string, paths []string, private bool, registry string, stdout, st
 }
 
 func printConvertAdvice(stderr io.Writer) {
-	fmt.Fprintln(stderr, "awml push: push one 0.9 workflow; join an old pair with awml convert security.yaml platform.yaml > workflow.yaml")
+	fmt.Fprintln(stderr, "awml push: push one 0.10 workflow; join an old pair with awml convert security.yaml platform.yaml > workflow.yaml")
 }
 
 func pull(name, dir, registry string, stdout, stderr io.Writer) int {
