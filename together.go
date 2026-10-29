@@ -652,7 +652,7 @@ func TogetherMistakes(workflows []Workflow) [][]string {
 // TogetherUnsound gives the mistakes TogetherMistakes gives that stop a drawing: every one but
 // untrusted text that reaches an outside action unstopped, which is a line that breaks a rule.
 func TogetherUnsound(workflows []Workflow) [][]string {
-	return link(workflows).list(func(m mistake) bool { return !strings.HasPrefix(m.check, "warn.") && m.breach == "" })
+	return link(workflows).list(func(m mistake) bool { return !strings.HasPrefix(m.check, "warn.") && !m.isError() })
 }
 
 // TogetherWarnings gives the warnings in each workflow that only the workflows together show: a
