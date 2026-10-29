@@ -111,7 +111,7 @@ func TestAMistakeFailsItsCheckWithTodaysMessage(t *testing.T) {
 	src := strings.Replace(soundWorkflow, "to: notes", "to: note", 1)
 	report := CheckSources("dev", []Source{source("dinners.yaml", src)})
 	references := checkResult(t, report, "references.known")
-	want := []FileMistake{{File: "dinners.yaml", Message: `the line from "plan" to "note" ends at unknown part "note"`}}
+	want := []FileMistake{{File: "dinners.yaml", Message: `the line from "plan" to "note" ends at unknown part "note"`, Severity: "invalid"}}
 	if references.Result != "fail" || !reflect.DeepEqual(references.Mistakes, want) {
 		t.Errorf("references.known gave %s with %+v", references.Result, references.Mistakes)
 	}
@@ -124,7 +124,7 @@ func TestWarningsRideInTheListAsWarn(t *testing.T) {
 	src := strings.Replace(soundWorkflow, "kind: ai, op: draft", "kind: ai, op: do", 1)
 	report := CheckSources("dev", []Source{source("dinners.yaml", src)})
 	check := checkResult(t, report, "warn.do-by-code")
-	want := []FileMistake{{File: "dinners.yaml", Message: Warnings(parsed(t, src))[0]}}
+	want := []FileMistake{{File: "dinners.yaml", Message: Warnings(parsed(t, src))[0], Severity: "warning"}}
 	if check.Result != "warn" || !reflect.DeepEqual(check.Mistakes, want) {
 		t.Errorf("warn.do-by-code gave %s with %+v", check.Result, check.Mistakes)
 	}
@@ -143,7 +143,7 @@ func TestAFileThatIsntYAMLRunsNoOtherCheck(t *testing.T) {
 	}
 	yaml := checkResult(t, report, "file.yaml")
 	if yaml.Result != "fail" || len(yaml.Mistakes) != 2 || !strings.HasPrefix(yaml.Mistakes[0].Message, "isn't YAML: ") ||
-		yaml.Mistakes[1] != (FileMistake{"missing.yaml", "can't be read: No such file or directory"}) {
+		yaml.Mistakes[1] != (FileMistake{"missing.yaml", "can't be read: No such file or directory", "invalid"}) {
 		t.Errorf("file.yaml gave %s with %+v", yaml.Result, yaml.Mistakes)
 	}
 	if fields := checkResult(t, report, "fields.known"); fields.Result != "skipped" || fields.SkippedBecause != "no file given could be read as YAML" {
@@ -175,7 +175,7 @@ parts:
 		t.Errorf("files are %+v", report.Files)
 	}
 	version := checkResult(t, report, "file.version")
-	want := []FileMistake{{"old.yaml", `awml is "0.2", which this release no longer reads: upgrade the file with awml convert`}}
+	want := []FileMistake{{"old.yaml", `awml is "0.2", which this release no longer reads: upgrade the file with awml convert`, "invalid"}}
 	if version.Result != "fail" || !reflect.DeepEqual(version.Mistakes, want) {
 		t.Errorf("file.version gave %s with %+v", version.Result, version.Mistakes)
 	}
@@ -194,7 +194,7 @@ func TestAPlatformDescriptionIsCheckedOnItsOwnTerms(t *testing.T) {
 		t.Errorf("files are %+v", report.Files)
 	}
 	ids := checkResult(t, report, "description.ids")
-	if ids.Result != "fail" || !reflect.DeepEqual(ids.Mistakes, []FileMistake{{"server.yaml", `holds item "/notes" must be a path`}}) {
+	if ids.Result != "fail" || !reflect.DeepEqual(ids.Mistakes, []FileMistake{{"server.yaml", `holds item "/notes" must be a path`, "invalid"}}) {
 		t.Errorf("description.ids gave %s with %+v", ids.Result, ids.Mistakes)
 	}
 	if values := checkResult(t, report, "description.values"); values.Result != "pass" {
@@ -214,7 +214,7 @@ func TestTheReportsJSONUsesTheIssuesNames(t *testing.T) {
 	for _, want := range []string{
 		`{"engine":"dev","files":[{"file":"dinners.yaml","view":"workflow"}],"checks":[{"id":"file.yaml","name":`,
 		`"applies_to":["workflow","platform-description"],"result":"pass","mistakes":[]}`,
-		`"result":"fail","mistakes":[{"file":"dinners.yaml","message":"the line from \"plan\" to \"note\" ends at unknown part \"note\""}]}`,
+		`"result":"fail","mistakes":[{"file":"dinners.yaml","message":"the line from \"plan\" to \"note\" ends at unknown part \"note\"","severity":"invalid"}]}`,
 		`"result":"skipped","skipped_because":"no file given is a platform description","mistakes":[]}`,
 	} {
 		if !strings.Contains(string(encoded), want) {

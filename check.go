@@ -7,34 +7,40 @@ import (
 	"strings"
 )
 
-// Check finds the structural mistakes in an AWML document: what would draw wrongly, or not at all.
+// Check finds what awml check reports in an AWML document, warnings aside: the mistakes that make it
+// invalid, and its errors, the lines that break a rule.
 func Check(doc any) []string {
 	found, _ := checkDoc(doc)
 	return found.messages()
 }
 
-// Unsound finds the mistakes that stop a document being drawn: every one Check finds, except a line
-// that breaks a rule, which Draw draws red.
+// Unsound finds the mistakes that make a document invalid, so that it can't be read or drawn: every
+// one Check finds, except an error, a line that breaks a rule, which Draw draws red.
 func Unsound(doc any) []string {
 	found, _ := checkDoc(doc)
 	var unsound mistakeList
 	for _, m := range found {
-		if m.lines == nil {
+		if !m.isError() {
 			unsound = append(unsound, m)
 		}
 	}
 	return unsound.messages()
 }
 
-// mistake is one thing Check reports, with the id of the check that found it. A mistake that is a
-// line breaking a rule also has the lines, their places in the file's list of lines, and breach, the
-// check's words for what's wrong, which the line's label adds.
+// mistake is one thing Check reports, with the id of the check that found it. A mistake that is an
+// error, a line breaking a rule, also has breach, the check's words for what's wrong, which the
+// line's label adds, and the lines, with their places in the file's list of lines, where the file
+// alone shows them.
 type mistake struct {
 	check, message string
 	lines          []*Map
 	places         []int
 	breach         string
 }
+
+// isError is whether the mistake is an error, a line that breaks a rule, rather than one that makes
+// the file invalid.
+func (m mistake) isError() bool { return m.breach != "" }
 
 type mistakeList []mistake
 

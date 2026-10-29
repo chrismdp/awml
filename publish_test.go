@@ -145,7 +145,7 @@ func TestTermsThatAllowCertainOperationsAreNamed(t *testing.T) {
 func TestAWorkflowThatPublishesPassesEveryCheck(t *testing.T) {
 	report := CheckSources("dev", []Source{source("replies.yaml", replies)})
 	for _, check := range report.Checks {
-		if check.Result == "fail" {
+		if check.Result == "fail" || check.Result == "error" {
 			t.Errorf("%s failed with %+v", check.ID, check.Mistakes)
 		}
 	}

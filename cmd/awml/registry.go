@@ -73,7 +73,7 @@ func push(name string, paths []string, private bool, registry string, stdout, st
 		Visibility string `json:"visibility,omitempty"`
 	}{}
 	given := sources(paths)
-	workflows, err := awml.ReadSources(given, false)
+	workflows, err := awml.ReadSources(given)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1

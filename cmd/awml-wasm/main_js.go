@@ -24,13 +24,20 @@ func main() {
 		}
 		return encoded(awml.CheckSources(engine(), sources), nil)
 	})
+	// __awmlCheck gives what awml check reports of a file, warnings aside: its errors, then the
+	// mistakes that make it invalid.
 	expose("__awmlCheck", func(args []js.Value) string {
-		_, mistakes := alone(args[0]).Said(0)
-		return list(mistakes)
+		_, errs, invalid := alone(args[0]).Said(0)
+		return list(append(errs, invalid...))
 	})
-	// __awmlUnsound gives the mistakes that stop a file being drawn, as awml draw prints them.
+	// __awmlErrors gives a file's errors, the lines that break a rule, as awml check says them.
+	expose("__awmlErrors", func(args []js.Value) string {
+		_, errs, _ := alone(args[0]).Said(0)
+		return list(errs)
+	})
+	// __awmlUnsound gives the mistakes that make a file invalid, as awml draw prints them.
 	expose("__awmlUnsound", func(args []js.Value) string {
-		_, err := awml.ReadSources([]awml.Source{{Text: []byte(args[0].String())}}, true)
+		_, err := awml.ReadSources([]awml.Source{{Text: []byte(args[0].String())}})
 		var mistakes awml.Mistakes
 		errors.As(err, &mistakes)
 		messages := make([]string, len(mistakes))
@@ -40,7 +47,7 @@ func main() {
 		return list(messages)
 	})
 	expose("__awmlWarnings", func(args []js.Value) string {
-		warnings, _ := alone(args[0]).Said(0)
+		warnings, _, _ := alone(args[0]).Said(0)
 		return list(warnings)
 	})
 	// __awmlSummary summarises the workflows given together, as awml summary does.
@@ -68,7 +75,7 @@ func main() {
 		return encoded(awml.FitPartsSources(sources))
 	})
 	// __awmlConvert gives the 0.9 file awml convert writes, from one file or a legacy pair, what it
-	// notes it couldn't carry over, and the mistakes the current rules find in it.
+	// notes it couldn't carry over, and the mistakes that make it invalid under the current rules.
 	expose("__awmlConvert", func(args []js.Value) string {
 		var texts []string
 		if err := json.Unmarshal([]byte(args[0].String()), &texts); err != nil {

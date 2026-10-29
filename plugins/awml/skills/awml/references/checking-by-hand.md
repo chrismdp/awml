@@ -21,7 +21,7 @@ Use this only where `awml check` can't run, as in a chat with no shell. It cover
 10. Each line has `from`, `to` and `kind`, and may have `label`. Nothing else.
 11. `from` and `to` each name a part in the same file, never a group.
 12. Each line's `kind` is one of `start`, `data`, `refused`, `tie` and `hidden`. There is no `publish`: a `data` line publishes whenever its scopes make it one.
-13. No line has `breaks`. A line that breaks rule 18, 19, 21 or 23 is a mistake, and the drawing shows it red, so a file never marks one by hand.
+13. No line has `breaks`. A line that breaks rule 18, 19, 21 or 23 is an error, and the drawing shows it red, so a file never marks one by hand.
 14. A line with a comment at either end is a `tie` or a `hidden` line. A `tie` has a comment at one end or both.
 15. No line but a `tie` or a `hidden` one goes into a `trigger`. A trigger only starts its own workflow, so to start another, a `do` step leads to an `outside` part whose `ref` names the other's trigger. Nor does any line but a `tie` or a `hidden` one go from an `outside` part into a `context`. An outside action changes only what's outside the system, so a recorded sign-off is a `review` whose `[yes]` leads to a `code` `do` step that writes it, or, where it's given outside the system, a `connector` that a `bring-in` step reads.
 
@@ -32,7 +32,7 @@ Use this only where `awml check` can't run, as in a chat with no shell. It cover
 
 ## Operations, tiers and untrusted text
 
-For these, skip any `hidden`, `refused` or `tie` line: only `start` and `data` lines lead anywhere. In a drawing of a live system, a line that breaks one of these rules may be what the system really did. It stays a mistake, and the drawing shows it red, so leave it there until the system changes.
+For these, skip any `hidden`, `refused` or `tie` line: only `start` and `data` lines lead anywhere. A line that breaks rule 18, 19, 21 or 23 is an error. In a drawing of a live system, it may be what the system really did. It stays an error, and the drawing shows it red, so leave it there until the system changes. A mistake against rule 20 or 22, and every other mistake on this list, makes the file invalid, and every command refuses an invalid file, but a drawing with errors is valid, and `awml check` passes it, saying each error.
 
 18. **Only a `do` step leads to an outside action.** For each `outside` part, walk back along the lines that lead into it. Pass through any review or standing approval and keep walking back from it. Every step you meet whose `op` is anything but `do` or `other` is a mistake, such as a `draft` step whose line reaches a send through a review. A step with no `op` is held to nothing.
 19. **An `answer` or `check` step never writes to a context.** No line runs from a step whose `op` is `answer` or `check` to a `context`.

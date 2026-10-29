@@ -61,8 +61,8 @@ func TestNoExampleHasAnUntrustedView(t *testing.T) {
 	}
 }
 
-// A drawing of a live system shows where it breaks the design, so awml check fails on it by
-// design. Its examples sit apart from the rest, which every check passes.
+// A drawing of a live system shows where it breaks the design, so it has errors by design. Its
+// examples sit apart from the rest, which have none.
 func liveExamples(t *testing.T) []string {
 	t.Helper()
 	paths, err := filepath.Glob("examples/live/*.yaml")
@@ -90,7 +90,8 @@ func TestEachExampleIsSoundAndItsDrawingsAreCurrent(t *testing.T) {
 				t.Fatal(err)
 			}
 			if strings.HasPrefix(path, "examples/live/") {
-				// Each of its mistakes is a line that breaks a rule, which it draws red.
+				// It's valid, and each of its mistakes is an error, a line that breaks a rule, which
+				// it draws red.
 				if len(Check(doc)) == 0 || len(Unsound(doc)) != 0 {
 					t.Errorf("%s: Check gave %q and Unsound %q", path, Check(doc), Unsound(doc))
 				}
@@ -334,4 +335,44 @@ worker            no: engagements is kept at notes/engagements, which the platfo
 	if shown := "examples/platforms/worker.yaml\n" + strings.Join(parts, "\n") + "\n```"; !strings.Contains(string(readme), shown) {
 		t.Errorf("README.md doesn't contain the client email's fit of each part:\n%s", shown)
 	}
+}
+
+// awml check passes a drawing with errors, so CI's check of the repository's own drawings would pass
+// untrusted text that reaches an outside action unstopped. The drawings are of this repository's own
+// workflows, so they have no mistakes, alone or together, errors included.
+func TestTheRepositorysDrawingsHaveNoErrors(t *testing.T) {
+	paths, err := filepath.Glob(".github/drawings/*.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) == 0 {
+		t.Fatal("no drawings in .github/drawings")
+	}
+	if got := drawingMistakes(t, paths); got != nil {
+		t.Errorf("the repository's drawings have mistakes: %q", got)
+	}
+	// The live examples have errors by design, so they show the test sees them.
+	if got := drawingMistakes(t, liveExamples(t)); got == nil {
+		t.Error("the live examples' errors went unseen")
+	}
+}
+
+// drawingMistakes gives each mistake in the files given, errors included, alone and together.
+func drawingMistakes(t *testing.T, paths []string) []string {
+	t.Helper()
+	var found []string
+	var workflows []Workflow
+	for _, path := range paths {
+		doc := readExample(t, path)
+		for _, m := range Check(doc) {
+			found = append(found, path+": "+m)
+		}
+		workflows = append(workflows, Workflow{File: path, Doc: doc})
+	}
+	for i, mistakes := range TogetherMistakes(workflows) {
+		for _, m := range mistakes {
+			found = append(found, paths[i]+": "+m)
+		}
+	}
+	return found
 }

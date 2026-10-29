@@ -120,17 +120,18 @@ func TestDrawOfSeveralWorkflowsDrawsTheirMap(t *testing.T) {
 }
 
 // Untrusted text that reaches an outside action unstopped in a workflow another starts is a line
-// that breaks a rule: check fails on it, and the commands that draw and count red lines go ahead.
-func TestUntrustedTextAcrossWorkflowsFailsTheCheckButIsStillDrawn(t *testing.T) {
+// that breaks a rule, an error: check passes, saying it, and every command takes the files.
+func TestUntrustedTextAcrossWorkflowsIsAnError(t *testing.T) {
 	plan := strings.Replace(planWorkflow, "  - { id: tell,", "  - { id: form, kind: connector, label: The order form, untrusted: true, in: family }\n  - { id: tell,", 1)
 	plan = strings.Replace(plan, "lines:\n", "lines:\n  - { from: form, to: tell, kind: data }\n", 1)
 	dir := folder(t, "plan.yaml", plan, "shop.yaml", shopWorkflow)
 	planPath, shopPath := filepath.Join(dir, "plan.yaml"), filepath.Join(dir, "shop.yaml")
 	got := awmlRun("check", planPath, shopPath)
-	if got.code != 1 || !strings.Contains(got.stdout, shopPath+`: untrusted text from part "form" in `+planPath+` reaches outside action "basket" with nothing to stop it or accept the risk: `) {
+	if got.code != 0 || !strings.Contains(got.stdout, shopPath+`: error: untrusted text from part "form" in `+planPath+` reaches outside action "basket" with nothing to stop it or accept the risk: `) {
 		t.Errorf("check gave %+v", got)
 	}
-	for _, args := range [][]string{{"draw", planPath, shopPath}, {"summary", planPath, shopPath}} {
+	laptop := write(t, "laptop.yaml", agentLaptop)
+	for _, args := range [][]string{{"draw", planPath, shopPath}, {"summary", planPath, shopPath}, {"fit", planPath, shopPath, laptop}, {"fit", "--parts", planPath, shopPath, laptop}} {
 		if got := awmlRun(args...); got.code != 0 || got.stderr != "" {
 			t.Errorf("awml %q gave %+v", args, got)
 		}
