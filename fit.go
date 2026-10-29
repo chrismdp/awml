@@ -456,12 +456,26 @@ func FitLines(results []FitResult) []string {
 }
 
 // PartsReport is the whole of `awml fit --parts --json`: for each part, the platforms that can hold
-// it alone; the fewest platforms that between them hold every part, where no one platform does; and
-// the gaps that kept the workflow from being judged.
+// it alone; each option of platforms that between them hold every part, with none to spare; and the
+// gaps that kept the workflow from being judged.
 type PartsReport struct {
-	Parts      []PartFit  `json:"parts"`
-	Placements [][]string `json:"placements"`
-	Gaps       []string   `json:"gaps"`
+	Parts   []PartFit     `json:"parts"`
+	Options []PartsOption `json:"options"`
+	Gaps    []string      `json:"gaps"`
+}
+
+// PartsOption is one set of platforms that between them hold every part, from which none could be
+// dropped, in the order the platforms were given, and its placement: for each part, in the order of
+// the parts, the platforms in the option that can hold it.
+type PartsOption struct {
+	Platforms []string        `json:"platforms"`
+	Placement []PartPlacement `json:"placement"`
+}
+
+// PartPlacement is where one part of an option may go: every platform in the option that holds it.
+type PartPlacement struct {
+	Part      string   `json:"part"`
+	Platforms []string `json:"platforms"`
 }
 
 // PartFit is the verdict on one part: the platforms that can hold it, in the order given, why each
@@ -480,15 +494,15 @@ type PlatformReasons struct {
 }
 
 // JudgeParts judges each trigger, step that runs on a platform, context and connector of the
-// workflows given on its own against each platform, by the same rules as Judge, and finds the fewest
-// platforms that between them hold them all. Whether parts on different platforms can reach each
-// other isn't judged.
+// workflows given on its own against each platform, by the same rules as Judge, and finds every
+// option of platforms that between them hold them all with none to spare. Whether parts on different
+// platforms can reach each other isn't judged.
 func JudgeParts(workflows []Workflow, descriptions []*Map) PartsReport {
 	model := securityFitModel(workflows[0].Doc)
 	if len(workflows) > 1 {
 		model = togetherFitModel(workflows)
 	}
-	report := PartsReport{Parts: []PartFit{}, Placements: [][]string{}, Gaps: []string{}}
+	report := PartsReport{Parts: []PartFit{}, Options: []PartsOption{}, Gaps: []string{}}
 	platforms, _, gaps := describe(model, descriptions)
 	if len(gaps) != 0 {
 		report.Gaps = gaps
@@ -517,39 +531,56 @@ func JudgeParts(workflows []Workflow, descriptions []*Map) PartsReport {
 		report.Parts = append(report.Parts, verdict)
 		held = append(held, holders)
 	}
-	report.Placements = fewestPlatforms(platforms, held)
+	report.Options = options(platforms, report.Parts, held)
 	return report
 }
 
-// fewestPlatforms gives every smallest set of two or more platforms that between them hold every
-// part, each in the order the platforms were given, and the sets in that order too. It gives none
-// where one platform holds every part, or where some part no platform holds. Trying every
-// combination is fine for the handful of platforms a person describes.
-func fewestPlatforms(platforms []fitPlatform, held [][]bool) [][]string {
-	placements := [][]string{}
-	for _, holders := range held {
-		if !anyTrue(holders) {
-			return placements
+// options gives every set of platforms that between them hold every part and from which no platform
+// could be dropped, smallest first, then in the order the platforms were given, each with its
+// placement. A set that adds a platform to one of these isn't given, and none is given where some
+// part no platform holds. Trying every combination is fine for the handful of platforms a person
+// describes.
+func options(platforms []fitPlatform, parts []PartFit, held [][]bool) []PartsOption {
+	found := []PartsOption{}
+	// covers says whether the chosen platforms, leaving out the one at skip, hold every part.
+	covers := func(chosen []int, skip int) bool {
+		for _, holders := range held {
+			covered := false
+			for j, i := range chosen {
+				covered = covered || (j != skip && holders[i])
+			}
+			if !covered {
+				return false
+			}
 		}
+		return true
 	}
 	var chosen []int
 	var choose func(from, size int)
 	choose = func(from, size int) {
 		if len(chosen) == size {
-			for _, holders := range held {
-				covered := false
-				for _, i := range chosen {
-					covered = covered || holders[i]
-				}
-				if !covered {
+			if !covers(chosen, -1) {
+				return
+			}
+			for skip := range chosen {
+				if covers(chosen, skip) {
 					return
 				}
 			}
-			placement := make([]string, 0, size)
+			option := PartsOption{Platforms: make([]string, 0, size), Placement: make([]PartPlacement, 0, len(parts))}
 			for _, i := range chosen {
-				placement = append(placement, platforms[i].id)
+				option.Platforms = append(option.Platforms, platforms[i].id)
 			}
-			placements = append(placements, placement)
+			for p, part := range parts {
+				placement := PartPlacement{Part: part.Part, Platforms: []string{}}
+				for _, i := range chosen {
+					if held[p][i] {
+						placement.Platforms = append(placement.Platforms, platforms[i].id)
+					}
+				}
+				option.Placement = append(option.Placement, placement)
+			}
+			found = append(found, option)
 			return
 		}
 		for i := from; i <= len(platforms)-(size-len(chosen)); i++ {
@@ -560,28 +591,13 @@ func fewestPlatforms(platforms []fitPlatform, held [][]bool) [][]string {
 	}
 	for size := 1; size <= len(platforms); size++ {
 		choose(0, size)
-		if size == 1 && len(placements) != 0 {
-			return [][]string{}
-		}
-		if len(placements) != 0 {
-			return placements
-		}
 	}
-	return placements
-}
-
-func anyTrue(values []bool) bool {
-	for _, value := range values {
-		if value {
-			return true
-		}
-	}
-	return false
+	return found
 }
 
 // PartsLines gives the lines `awml fit --parts` prints: for each part, the platforms that hold it
-// and why each other one doesn't, then the fewest platforms that hold every part, or the parts that
-// no platform holds.
+// and why each other one doesn't, then each option with where each part goes in it, or the parts
+// that no platform holds.
 func PartsLines(report PartsReport) []string {
 	width := 0
 	for _, part := range report.Parts {
@@ -611,16 +627,16 @@ func PartsLines(report PartsReport) []string {
 		}
 		return append(lines, fmt.Sprintf("no placement: %s %s held by no platform given", naturalList(unheld), verb))
 	}
-	if len(report.Placements) == 0 {
-		return lines
-	}
-	const fewest = "fewest platforms: "
-	for i, placement := range report.Placements {
-		lead := fewest
-		if i > 0 {
-			lead = strings.Repeat(" ", len(fewest))
+	several := false
+	for _, option := range report.Options {
+		lines = append(lines, "option: "+naturalList(option.Platforms))
+		for _, placement := range option.Placement {
+			lines = append(lines, fmt.Sprintf("  %-*s  on %s", width, placement.Part, strings.Join(placement.Platforms, " or ")))
 		}
-		lines = append(lines, lead+naturalList(placement))
+		several = several || len(option.Platforms) > 1
 	}
-	return append(lines, "a placement on several platforms is judged part by part only: whether its parts can reach each other isn't judged")
+	if several {
+		lines = append(lines, "an option on several platforms is judged part by part only: whether its parts can reach each other isn't judged")
+	}
+	return lines
 }

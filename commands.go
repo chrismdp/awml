@@ -177,8 +177,8 @@ func FitSources(sources []Source, implementation string) (FitReport, error) {
 }
 
 // FitPartsSources judges each part of the workflows given on its own against each platform
-// described, and gives the fewest platforms that between them hold every part, as awml fit --parts
-// does.
+// described, and gives each option of platforms that between them hold every part with none to
+// spare, as awml fit --parts does.
 func FitPartsSources(sources []Source) (PartsReport, error) {
 	workflows, descriptions, err := fitGiven(sources)
 	if err != nil {

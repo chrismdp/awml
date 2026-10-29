@@ -176,9 +176,10 @@ var splitPlatforms = []string{
 	`{awml: "0.9", platform: {id: cowork, label: Cowork}, off_for_up_to: PT0S, steps: agent, agents: [anthropic], calls: any, holds: [notes]}`,
 }
 
-func TestFitPartsSaysWhichPlatformsHoldEachPartAndTheFewestThatHoldThemAll(t *testing.T) {
+func TestFitPartsListsEveryOptionWithNoSparePlatformAndItsPlacement(t *testing.T) {
 	docs := fitDocs(t, append([]string{fitSecurity}, splitPlatforms...)...)
 	report := JudgeParts([]Workflow{{Doc: docs[0]}}, docs[1:])
+	on := func(part string, platforms ...string) PartPlacement { return PartPlacement{Part: part, Platforms: platforms} }
 	want := PartsReport{
 		Parts: []PartFit{
 			{Part: "hourly", Platforms: []string{"server", "cowork"}, Reasons: []PlatformReasons{{Platform: "laptop", Reasons: []string{"hourly may wait PT2H, but the platform may be off for P1D"}}}, Models: map[string][]string{}},
@@ -187,8 +188,12 @@ func TestFitPartsSaysWhichPlatformsHoldEachPartAndTheFewestThatHoldThemAll(t *te
 			{Part: "notes", Platforms: []string{"laptop", "cowork"}, Reasons: []PlatformReasons{{Platform: "server", Reasons: []string{"notes is kept at notes/projects, which the platform doesn't hold"}}}, Models: map[string][]string{}},
 			{Part: "choose", Platforms: []string{"laptop", "cowork"}, Reasons: []PlatformReasons{{Platform: "server", Reasons: []string{"choose has no company it may use"}}}, Models: map[string][]string{"laptop": {"anthropic"}, "cowork": {"anthropic"}}},
 		},
-		Placements: [][]string{{"laptop", "server"}, {"laptop", "cowork"}, {"server", "cowork"}},
-		Gaps:       []string{},
+		Options: []PartsOption{
+			{Platforms: []string{"laptop", "server"}, Placement: []PartPlacement{on("hourly", "server"), on("bring", "laptop", "server"), on("mail", "laptop", "server"), on("notes", "laptop"), on("choose", "laptop")}},
+			{Platforms: []string{"laptop", "cowork"}, Placement: []PartPlacement{on("hourly", "cowork"), on("bring", "laptop"), on("mail", "laptop", "cowork"), on("notes", "laptop", "cowork"), on("choose", "laptop", "cowork")}},
+			{Platforms: []string{"server", "cowork"}, Placement: []PartPlacement{on("hourly", "server", "cowork"), on("bring", "server"), on("mail", "server", "cowork"), on("notes", "cowork"), on("choose", "cowork")}},
+		},
+		Gaps: []string{},
 	}
 	if !reflect.DeepEqual(report, want) {
 		t.Errorf("JudgeParts gave\n%+v\nwant\n%+v", report, want)
@@ -203,26 +208,54 @@ func TestFitPartsSaysWhichPlatformsHoldEachPartAndTheFewestThatHoldThemAll(t *te
 		"        not by server: notes is kept at notes/projects, which the platform doesn't hold",
 		"choose  held by laptop and cowork",
 		"        not by server: choose has no company it may use",
-		"fewest platforms: laptop and server",
-		"                  laptop and cowork",
-		"                  server and cowork",
-		"a placement on several platforms is judged part by part only: whether its parts can reach each other isn't judged",
+		"option: laptop and server",
+		"  hourly  on server",
+		"  bring   on laptop or server",
+		"  mail    on laptop or server",
+		"  notes   on laptop",
+		"  choose  on laptop",
+		"option: laptop and cowork",
+		"  hourly  on cowork",
+		"  bring   on laptop",
+		"  mail    on laptop or cowork",
+		"  notes   on laptop or cowork",
+		"  choose  on laptop or cowork",
+		"option: server and cowork",
+		"  hourly  on server or cowork",
+		"  bring   on server",
+		"  mail    on server or cowork",
+		"  notes   on cowork",
+		"  choose  on cowork",
+		"an option on several platforms is judged part by part only: whether its parts can reach each other isn't judged",
 	}
 	if lines := PartsLines(report); !reflect.DeepEqual(lines, wantLines) {
 		t.Errorf("PartsLines gave\n%q\nwant\n%q", lines, wantLines)
 	}
 }
 
-// Where one platform holds every part, it fits as a whole, and there's no placement across several.
-func TestFitPartsGivesNoPlacementWhereOnePlatformHoldsEveryPart(t *testing.T) {
+// Where one platform holds every part, it is an option of its own, listed first, and no option that
+// adds a platform to it is listed. The options of two that leave it out still are.
+func TestFitPartsListsAnOptionOfOnePlatformBeforeLargerOnes(t *testing.T) {
 	fitting := `{awml: "0.9", platform: {id: fitting, label: Fitting}, off_for_up_to: PT1H, steps: code, agents: [], calls: [anthropic], holds: [notes]}`
-	docs := fitDocs(t, append([]string{fitSecurity, fitting}, splitPlatforms...)...)
+	docs := fitDocs(t, append([]string{fitSecurity}, append(append([]string{}, splitPlatforms...), fitting)...)...)
 	report := JudgeParts([]Workflow{{Doc: docs[0]}}, docs[1:])
-	if len(report.Placements) != 0 || report.Placements == nil {
-		t.Errorf("JudgeParts gave placements %q", report.Placements)
+	var got [][]string
+	for _, option := range report.Options {
+		got = append(got, option.Platforms)
 	}
-	if lines := PartsLines(report); lines[len(lines)-1] != "        not by server: choose has no company it may use" {
-		t.Errorf("PartsLines ended with %q", lines[len(lines)-1])
+	if want := [][]string{{"fitting"}, {"laptop", "server"}, {"laptop", "cowork"}, {"server", "cowork"}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("JudgeParts gave options %q, want %q", got, want)
+	}
+	if want := []PartPlacement{{Part: "hourly", Platforms: []string{"fitting"}}, {Part: "bring", Platforms: []string{"fitting"}}}; !reflect.DeepEqual(report.Options[0].Placement[:2], want) {
+		t.Errorf("JudgeParts placed the option of one as %+v", report.Options[0].Placement)
+	}
+
+	// With only the platform that holds every part, there's its option, and no note about several.
+	docs = fitDocs(t, fitSecurity, fitting)
+	lines := PartsLines(JudgeParts([]Workflow{{Doc: docs[0]}}, docs[1:]))
+	want := []string{"option: fitting", "  hourly  on fitting", "  bring   on fitting", "  mail    on fitting", "  notes   on fitting", "  choose  on fitting"}
+	if len(lines) < len(want) || !reflect.DeepEqual(lines[len(lines)-len(want):], want) {
+		t.Errorf("PartsLines gave %q", lines)
 	}
 }
 
@@ -230,8 +263,8 @@ func TestFitPartsGivesNoPlacementWhereOnePlatformHoldsEveryPart(t *testing.T) {
 func TestFitPartsNamesAPartNoPlatformHolds(t *testing.T) {
 	docs := fitDocs(t, fitSecurity, splitPlatforms[1])
 	report := JudgeParts([]Workflow{{Doc: docs[0]}}, docs[1:])
-	if len(report.Placements) != 0 {
-		t.Errorf("JudgeParts gave placements %q", report.Placements)
+	if len(report.Options) != 0 || report.Options == nil {
+		t.Errorf("JudgeParts gave options %+v", report.Options)
 	}
 	lines := PartsLines(report)
 	if lines[len(lines)-1] != "no placement: notes and choose are held by no platform given" {
@@ -239,7 +272,7 @@ func TestFitPartsNamesAPartNoPlatformHolds(t *testing.T) {
 	}
 	docs = fitDocs(t, fitSecurity, splitPlatforms[0], splitPlatforms[1])
 	lines = PartsLines(JudgeParts([]Workflow{{Doc: docs[0]}}, docs[1:]))
-	if !reflect.DeepEqual(lines[len(lines)-3:len(lines)-1], []string{"        not by server: choose has no company it may use", "fewest platforms: laptop and server"}) {
+	if !reflect.DeepEqual(lines[len(lines)-8:len(lines)-6], []string{"        not by server: choose has no company it may use", "option: laptop and server"}) {
 		t.Errorf("PartsLines gave %q", lines)
 	}
 	docs = fitDocs(t, strings.Replace(fitSecurity, "at: notes/projects", "at: elsewhere", 1), splitPlatforms[0], splitPlatforms[1])
@@ -252,7 +285,7 @@ func TestFitPartsNamesAPartNoPlatformHolds(t *testing.T) {
 func TestFitPartsReportsGapsAndDuplicateDescriptions(t *testing.T) {
 	docs := fitDocs(t, fitSecurity, goodPlatform, goodPlatform)
 	report := JudgeParts([]Workflow{{Doc: docs[0]}}, docs[1:])
-	want := PartsReport{Parts: []PartFit{}, Placements: [][]string{}, Gaps: []string{`platform description "worker" was given twice`}}
+	want := PartsReport{Parts: []PartFit{}, Options: []PartsOption{}, Gaps: []string{`platform description "worker" was given twice`}}
 	if !reflect.DeepEqual(report, want) {
 		t.Errorf("JudgeParts gave %+v", report)
 	}

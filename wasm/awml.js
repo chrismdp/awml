@@ -67,7 +67,8 @@ async function start(source) {
       return JSON.parse(this.fitJSON(sourceTexts, implementation));
     },
     // fitParts judges each part of the workflows given alone against each platform described, and
-    // gives the fewest platforms that between them hold every part, as awml fit --parts does.
+    // gives each option of platforms that between them hold every part with none to spare, and
+    // where each part goes in it, as awml fit --parts does.
     fitPartsJSON(sourceTexts) {
       return answer(globalThis.__awmlFitParts(JSON.stringify(given(sourceTexts))));
     },
