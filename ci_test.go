@@ -584,6 +584,13 @@ func TestEveryTrustIsTheSameExactPermissionCheck(t *testing.T) {
 			copies = append(copies, strings.TrimPrefix(found, "\n"))
 		}
 	}
+	// issue-text.sh's copy sits at the top of the script, so it's indented to match the workflows'.
+	script := regexp.MustCompile(`(?s)\nmay_write\(\) \{\n.*?\n\}\n`).FindString(readText(t, ".github/issue-text.sh"))
+	if script == "" {
+		t.Error("issue-text.sh has no may_write")
+	} else {
+		copies = append(copies, regexp.MustCompile(`(?m)^`).ReplaceAllString(strings.Trim(script, "\n"), strings.Repeat(" ", 10))+"\n")
+	}
 	if len(copies) != 7 {
 		t.Fatalf("found %d copies of may_write, want 7", len(copies))
 	}

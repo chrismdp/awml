@@ -2,8 +2,11 @@ You are building the change that one issue of the AWML repository asks for. The 
 the `build` label, or one of the repository's own workflows started the build, which says it is
 wanted now.
 
-The issue, with only the comments of people who can write to the repository, is in BUILD_DIR/issue.md, each
-body as GitHub renders it, in HTML, so you read just what the maintainer saw. Read it, then read
+The issue, with only the comments of people who can write to the repository and of the
+repository's app, is in BUILD_DIR/issue.md, each body as GitHub renders it, in HTML, so you read
+just what the maintainer saw. The app's comments may include findings the fixer referred back,
+because fixing them would have changed a decision on the issue. The maintainer's answer to a finding
+the fixer referred back is a decision like any other: build to it. Read it, then read
 BUILD_DIR/AGENTS.md, main's copy, and follow it, and read SPEC.md before changing anything it
 describes. Read BUILD_DIR/REVIEW.md too: once the pull request opens, CI's two fresh
 reviews hold the change to it.
