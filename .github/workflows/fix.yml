@@ -185,7 +185,6 @@ jobs:
       issues: read
       pull-requests: read
     outputs:
-      issue: ${{ steps.bring.outputs.issue }}
       decision: ${{ steps.patch.outputs.decision }}
       reason: ${{ steps.patch.outputs.reason }}
       digest: ${{ steps.pack.outputs.digest }}
@@ -217,9 +216,7 @@ jobs:
         run: |
           in="$RUNNER_TEMP/fix/in"
           if [[ "$BRANCH" =~ ^build/issue-([0-9]+)$ ]]; then
-            issue="${BASH_REMATCH[1]}"
-            bash "$RUNNER_TEMP/issue-text.sh" "$issue" "$in/decisions.md"
-            echo "issue=$issue" >> "$GITHUB_OUTPUT"
+            bash "$RUNNER_TEMP/issue-text.sh" "${BASH_REMATCH[1]}" "$in/decisions.md"
           fi
           bash "$RUNNER_TEMP/read-findings.sh" "$CI_RUN" "$RUNNER_TEMP/checks"
           jq -r '["Important", "Nit", "Pre-existing"][] as $rank | .[] | select(.severity == $rank)
@@ -519,10 +516,11 @@ jobs:
       PR_NUMBER: ${{ needs.decide.outputs.pr }}
       BRANCH: ${{ needs.decide.outputs.branch }}
       HEAD_SHA: ${{ needs.decide.outputs.head_sha }}
-      ISSUE: ${{ needs.fix.outputs.issue }}
     steps:
+      # A referral applies nothing, but its checkout is the remote the guard asks whether the branch
+      # has moved.
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-        if: env.DECISION == 'fix' && env.FIXED == 'success'
+        if: (env.DECISION == 'fix' || env.DECISION == 'referred') && env.FIXED == 'success'
         with:
           ref: ${{ needs.decide.outputs.head_sha }}
           persist-credentials: false
@@ -534,9 +532,9 @@ jobs:
 
       # The fix must be the one the fix job gave the digest of. Then it's applied, staged, to the
       # reviewed commit, and every name it stages is checked, a renamed file by both its names. A
-      # branch that has moved since the review means it exits quietly. A fix that touches .github/
-      # or Claude Code's own files is offered to a person. A run that referred findings back pushes
-      # nothing, and the referral is posted on the build's issue.
+      # branch that has moved since the review means it exits quietly, with a fix or a referral. A
+      # fix that touches .github/ or Claude Code's own files is offered to a person. A run that
+      # referred findings back pushes nothing, and the referral is posted on the build's issue.
       - name: "Sort by git: does the fix touch .github/ or Claude Code's own files, and is the branch still at the reviewed commit?"
         id: guard
         env:
@@ -568,9 +566,19 @@ jobs:
             echo "The fix isn't the one the fix job made."
             exit 1
           fi
-          case "$ISSUE" in *[!0-9]*) echo "The pull request's issue must be a number: $ISSUE"; exit 1 ;; esac
+          moved() {
+            remote="$(git ls-remote origin "refs/heads/$BRANCH")"
+            if [ "${remote%%$'\t'*}" != "$HEAD_SHA" ]; then
+              echo "Someone has pushed to $BRANCH since the reviews read $HEAD_SHA, so the $1 is left."
+              echo "outcome=moved" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          }
+          # Only a build/issue-N branch names an issue to post a referral on.
           if [ "$DECISION" = referred ]; then
-            if [ -z "$ISSUE" ] || [ ! -s "$RUNNER_TEMP/fix/referred.md" ]; then give_up nothing; fi
+            [[ "$BRANCH" =~ ^build/issue-[0-9]+$ ]] || give_up noissue
+            [ -s "$RUNNER_TEMP/fix/referred.md" ] || give_up nothing
+            moved referral
             echo "outcome=referred" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -579,12 +587,7 @@ jobs:
             exit 1
           fi
           git apply --index "$RUNNER_TEMP/fix/fix.patch" || give_up apply
-          remote="$(git ls-remote origin "refs/heads/$BRANCH")"
-          if [ "${remote%%$'\t'*}" != "$HEAD_SHA" ]; then
-            echo "Someone has pushed to $BRANCH since the reviews read $HEAD_SHA, so the fix is left."
-            echo "outcome=moved" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+          moved fix
           claudes='(^|/)\.claude(/|$)|(^|/)\.mcp\.json$|(^|/)CLAUDE(\.local)?\.md$|(^|/)\.npmrc$|(^|/)\.yarnrc(\.yml)?$|(^|/)node_modules(/|$)'
           # The names go to a file and are searched there, so no grep stops early in a pipe.
           names="$(mktemp)"
@@ -662,7 +665,8 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.asker.outputs.token }}
         run: |
-          case "$ISSUE" in ''|*[!0-9]*) echo "The issue must be a number: $ISSUE"; exit 1 ;; esac
+          [[ "$BRANCH" =~ ^build/issue-([0-9]+)$ ]] || { echo "Only a build/issue-N branch names an issue: $BRANCH"; exit 1; }
+          issue="${BASH_REMATCH[1]}"
           case "$PR_NUMBER" in ''|*[!0-9]*) echo "The pull request must be a number: $PR_NUMBER"; exit 1 ;; esac
           pull_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/pull/$PR_NUMBER"
           run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
@@ -675,7 +679,7 @@ jobs:
           echo "::stop-commands::$stop"
           cat "$RUNNER_TEMP/referred.md"
           echo "::$stop::"
-          gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/referred.md"
+          gh issue comment "$issue" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/referred.md"
 
       # From fixed text, quoting none of the fix: the commands to download the run's fix artifact and
       # apply it, and that it lasts 30 days.
@@ -716,6 +720,7 @@ jobs:
             unread) why="A review failed, but its check carries no Important finding to fix." ;;
             nothing) why="Claude changed nothing." ;;
             mixed) why="Claude referred findings back to the issue but changed the tree too, which a referral mustn't, so nothing is pushed or posted." ;;
+            noissue) why="Claude referred findings back, but this branch names no issue to post them on, so nothing is pushed or posted." ;;
             session) why="The Claude session that fixes the findings failed or ran out of time." ;;
             unkept) why="The fix job failed before the fix was kept. The run says why." ;;
             apply) why="The fix didn't apply to the commit the reviews read." ;;

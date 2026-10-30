@@ -52,7 +52,7 @@ parts:
   - { id: loose, kind: comment, label: "Loosely coupled: it reads only the checks on the head commit and the branch. Builds and landing don't call it or wait for it, so a person's pull request is fixed the same way as a build's" }
   - { id: ownfiles, kind: comment, label: "The app may not change a workflow, and Claude Code's own files, .claude/, .mcp.json or a CLAUDE.md, are never pushed by a session, so a fix touching either is offered for a person: decided in #160's follow-up, the comment carries the gh run download command for the run's fix artifact, not the patch, so nothing is escaped or capped" }
   - { id: refer, kind: comment, label: "Decided by the maintainer after #200: a finding whose fix would undo a decision recorded on the build's issue, such as #197's, is referred back to him, not fixed. Any other branch has no issue and refers nothing. If any finding is referred back, the session changes nothing, not even the other findings or the Nits, and nothing is pushed: a pushed fix would start the reviews again, which would find the same finding to refer back, in a loop. A session that refers and changes something too is refused" }
-  - { id: steer, kind: comment, label: "The findings came from sessions that read the patch, and the patch is the branch's, so text in either can steer this session. Nothing can stop it before the push, so the push goes under a standing approval. The offer and giving up quote none of it" }
+  - { id: steer, kind: comment, label: "Decided with the opener gate: past it, the findings and the patch are trusted, as trusted people's and models' text, not as clean text. The findings came from sessions that read the patch, and a build's patch from a session that read an issue a writer's label approved and the failed tests' log, so text in either can still steer this session. Nothing can stop it before the push, so the push goes under a standing approval. The offer and giving up quote none of it, and the referral is posted with every < escaped and every mention broken" }
 lines:
   - { from: failed, to: tries, kind: start, label: "CI's run and its commit" }
   - { from: token, to: tries, kind: data, label: "the pull request and its head" }
@@ -78,7 +78,7 @@ lines:
   - { from: fix, to: guard, kind: start, label: "the fix" }
   - { from: change, to: guard, kind: data }
   - { from: guard, to: push, kind: start, label: "[a fix touching none of those files, not moved]" }
-  - { from: guard, to: ask, kind: start, label: "[findings referred back and nothing changed, so nothing is pushed]" }
+  - { from: guard, to: ask, kind: start, label: "[findings referred back and nothing changed, so nothing is pushed, not moved]" }
   - { from: referred, to: ask, kind: data, label: "the comment's text" }
   - { from: ask, to: askout, kind: data }
   - { from: askout, to: app, kind: data }

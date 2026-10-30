@@ -135,15 +135,17 @@ func TestTheFixerReadsTheIssuesDecisions(t *testing.T) {
   "api --paginate repos/owner/repo/pulls/8/commits"*) answer <<< '[{"sha": "abc", "commit": {"message": "A commit"}}]' ;;`)
 		r.mustPass()
 		decisions := r.read("fix/in/decisions.md")
+		if issue, passed := r.outputs["issue"]; passed {
+			t.Errorf("on %s, the bring step passes on issue %q, which the write job works out from the branch", c.branch, issue)
+		}
 		if c.issue == "" {
-			_, hasIssue := r.outputs["issue"]
-			if _, err := os.Stat(filepath.Join(r.temp, "fix", "in", "decisions.md")); !os.IsNotExist(err) || hasIssue {
-				t.Errorf("a pull request with no issue got outputs %v and decisions:\n%s", r.outputs, decisions)
+			if _, err := os.Stat(filepath.Join(r.temp, "fix", "in", "decisions.md")); !os.IsNotExist(err) {
+				t.Errorf("a pull request with no issue got decisions:\n%s", decisions)
 			}
 			continue
 		}
-		if r.outputs["issue"] != c.issue || !strings.Contains(decisions, "Keep the scones plain.") {
-			t.Errorf("on %s, the fixer read issue %q's decisions as:\n%s", c.branch, r.outputs["issue"], decisions)
+		if !strings.HasPrefix(decisions, "# #"+c.issue+"\n") || !strings.Contains(decisions, "Keep the scones plain.") {
+			t.Errorf("on %s, the fixer read issue %s's decisions as:\n%s", c.branch, c.issue, decisions)
 		}
 	}
 	prompt := strings.Join(strings.Fields(readText(t, ".github/fix-prompt.md")), " ")
@@ -210,18 +212,22 @@ func TestAFixThatReferredPushesNothing(t *testing.T) {
 		t.Errorf("a session that fixed everything decided %q", unchanged.outputs["decision"])
 	}
 
-	referred := fixGuard(t, map[string]string{"DECISION": "referred", "ISSUE": "120"}, func(r *rehearsal, repo string) {
-		r.write("fix/referred.md", "- A finding referred back.\n")
-	}, false)
+	refer := func(r *rehearsal, repo string) { r.write("fix/referred.md", "- A finding referred back.\n") }
+	referred := fixGuard(t, map[string]string{"DECISION": "referred", "BRANCH": "build/issue-120"}, refer, false)
 	referred.mustPass()
 	if referred.outputs["outcome"] != "referred" {
 		t.Errorf("a run that only referred findings back ended %v", referred.outputs)
 	}
-	nowhere := fixGuard(t, map[string]string{"DECISION": "referred", "ISSUE": ""}, func(r *rehearsal, repo string) {
-		r.write("fix/referred.md", "- A finding referred back.\n")
-	}, false)
+	// A referral made on a commit someone has since replaced is left quietly, as a fix is, so a
+	// rebuild never reads a stale referral as the app's approved comment.
+	stale := fixGuard(t, map[string]string{"DECISION": "referred", "BRANCH": "build/issue-120"}, refer, true)
+	stale.mustPass()
+	if stale.outputs["outcome"] != "moved" {
+		t.Errorf("a referral on a branch someone pushed to since the review ended %v, want moved", stale.outputs)
+	}
+	nowhere := fixGuard(t, map[string]string{"DECISION": "referred"}, refer, false)
 	nowhere.mustPass()
-	if nowhere.outputs["outcome"] != "giveup" || nowhere.outputs["reason"] != "nothing" {
+	if nowhere.outputs["outcome"] != "giveup" || nowhere.outputs["reason"] != "noissue" {
 		t.Errorf("a referral with no issue to post it on ended %v", nowhere.outputs)
 	}
 	refused := fixGuard(t, map[string]string{"DECISION": "giveup", "STOPPED": "mixed"}, func(r *rehearsal, repo string) {}, false)
@@ -233,6 +239,14 @@ func TestAFixThatReferredPushesNothing(t *testing.T) {
 	giveup, _ := write.step(t, "giveup")
 	if !strings.Contains(giveup.Run, `mixed) why="`) {
 		t.Error("giving up doesn't say why a fix that referred findings back and changed something isn't pushed")
+	}
+	if !strings.Contains(giveup.Run, `noissue) why="`) {
+		t.Error("giving up doesn't say a referral had no issue to be posted on")
+	}
+	// The write job works the issue out from the branch, as the bring step does, so the branch's
+	// name is the only source of it.
+	if issue, passed := write.Env["ISSUE"]; passed {
+		t.Errorf("the write job is passed the issue as %q, rather than working it out from the branch", issue)
 	}
 	ask, _ := write.step(t, "ask")
 	if ask.If != "steps.guard.outputs.outcome == 'referred'" {
@@ -255,7 +269,7 @@ func TestTheReferralIsPostedEscaped(t *testing.T) {
 	}
 	r := newRehearsal(t)
 	r.write("fix/referred.md", "- The finding would undo what @the-owner decided.\n::error::forged\n<img src=x onerror=alert(1)>\n")
-	r.run(ask, map[string]string{"ISSUE": "120", "PR_NUMBER": "8"}, `  "issue comment 120"*) ;;`)
+	r.run(ask, map[string]string{"BRANCH": "build/issue-120", "PR_NUMBER": "8"}, `  "issue comment 120"*) ;;`)
 	r.mustPass()
 	bodies := r.bodies()
 	if len(bodies) != 1 {
