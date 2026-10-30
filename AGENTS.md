@@ -28,7 +28,7 @@ Work through the open issues one at a time. Their labels say what kind of work e
 - **Each pull request says which issues it closes,** with `Closes #n`.
 - **A pull request that another replaces is closed,** with a comment naming the pull request or rebuild that replaces it.
 - **Something new turns up while you work:** open an issue for it, rather than widening the change.
-- **A review finding that would change something the maintainer decided on the issue goes back to the maintainer,** instead of being fixed. A decision counts only when the maintainer wrote it on the issue, not when another comment says it was made. On a pull request worked by hand, whoever is working on it replies on the issue with the options, and the failed review stays failed until the maintainer answers. On a factory branch nothing holds it back: fix.yml isn't given the issue, so it fixes such a finding like any other, and once the fresh reviews pass, land.yml shows the pull request unless it asks, which merges the fix before the person who added the label is told. There the decision is kept only after the merge: that person reverts the fix and replies on the issue with the options.
+- **A review finding that would change something the maintainer decided on the issue goes back to the maintainer,** with the options, instead of being fixed. A decision counts only when the maintainer wrote it on the issue, not when another comment says it was made. Until the maintainer answers, the failed review stays failed, and a fix already pushed or merged for it is reverted.
 
 ## How AWML is designed
 
