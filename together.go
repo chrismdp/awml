@@ -52,9 +52,9 @@ type linked struct {
 
 // kindNames names a part by its kind, as a message says what a ref names.
 var kindNames = map[string]string{
-	"trigger": "a trigger", "ai": "an AI step", "code": "a code step", "person": "a person's step", "review": "a review",
-	"approval": "a standing approval", "context": "a context", "connector": "a connector",
-	"surface": "a surface", "outside": "an outside action", "comment": "a comment",
+	"trigger": "trigger", "ai": "AI step", "code": "code step", "person": "person's step", "review": "review",
+	"approval": "standing approval", "context": "context", "connector": "connector",
+	"surface": "surface", "outside": "outside action", "comment": "comment",
 }
 
 // handOff is an outside action of one workflow that starts another, and the trigger it starts. The
@@ -114,9 +114,11 @@ func link(workflows []Workflow) linked {
 			}
 			if str(p, "kind") == "outside" {
 				if kind := str(target, "kind"); kind != "trigger" {
-					what := kindNames[kind]
-					if what == "" {
-						what = fmt.Sprintf(`a part of kind "%s"`, kind)
+					what := fmt.Sprintf(`a part of kind "%s"`, kind)
+					if name := kindNames[kind]; name != "" && strings.ContainsRune("aeiouAEIOU", rune(name[0])) {
+						what = "an " + name
+					} else if name != "" {
+						what = "a " + name
 					}
 					l.found[i].add("refs.starts", fmt.Sprintf(`%sthat's %s: an outside action's ref names the trigger of the workflow it starts`, name, what))
 					continue

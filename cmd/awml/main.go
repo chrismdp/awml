@@ -34,7 +34,7 @@ positional arguments:
     check            report warnings, errors and what makes a file invalid
     fit              judge where workflows can run
     summary          count the parts and lines in workflows
-    convert          upgrade an older file, or join a legacy pair, into one 0.9 file
+    convert          upgrade an older file, or join a legacy pair, into one 0.10 file
     login            save a registry API token
     push             push a new workflow version
     pull             download a workflow or platform version
@@ -68,7 +68,7 @@ options:
   --implementation ID  give one implementation of one workflow
 `},
 	"convert": {"usage: awml convert [-h] [--implementation ID] file [PLATFORM]\n", `
-Upgrade a file of an older version into one 0.9 file, or join a legacy security view and platform
+Upgrade a file of an older version into one 0.10 file, or join a legacy security view and platform
 view into one.
 
 positional arguments:
@@ -436,7 +436,7 @@ func checkJSON(sources []awml.Source, failOnErrors bool, stdout, stderr io.Write
 	return 0
 }
 
-// convert prints one 0.9 file, upgraded from a file of an older version or joined from a legacy
+// convert prints one 0.10 file, upgraded from a file of an older version or joined from a legacy
 // pair, as awml.ConvertSources writes it. It fails when the files can't be converted, when it notes
 // something it couldn't carry over, and when the converted file is invalid, as newer versions' rules
 // can find a file that older ones passed. It lists those on standard error.

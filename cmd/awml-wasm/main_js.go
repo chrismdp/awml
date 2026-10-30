@@ -74,7 +74,7 @@ func main() {
 		}
 		return encoded(awml.FitPartsSources(sources))
 	})
-	// __awmlConvert gives the 0.9 file awml convert writes, from one file or a legacy pair, what it
+	// __awmlConvert gives the 0.10 file awml convert writes, from one file or a legacy pair, what it
 	// notes it couldn't carry over, and the mistakes that make it invalid under the current rules.
 	expose("__awmlConvert", func(args []js.Value) string {
 		var texts []string

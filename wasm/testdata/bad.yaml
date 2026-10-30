@@ -1,4 +1,4 @@
-awml: "0.9"
+awml: "0.10"
 title: Broken
 parts:
   - { id: start, kind: trigger, label: Start }

@@ -6,9 +6,9 @@ import (
 	"testing"
 )
 
-// replies is a 0.9 workflow whose data lines cross between a private scope that allows any
+// replies is a 0.10 workflow whose data lines cross between a private scope that allows any
 // company and a business scope that allows only anthropic, and into a venture beside them.
-const replies = `awml: "0.9"
+const replies = `awml: "0.10"
 title: Replies
 scopes:
   - { id: private, label: "private: the consultant", processing: any }
@@ -34,7 +34,7 @@ implementations:
 
 func TestA06FileIsAWorkflow(t *testing.T) {
 	if !IsCanonical(parsed(t, replies)) {
-		t.Fatal("a 0.9 file isn't read as a workflow")
+		t.Fatal("a 0.10 file isn't read as a workflow")
 	}
 }
 
@@ -82,11 +82,11 @@ func TestTheSummaryListsEachPublishWithWhatItAddsOrLoosens(t *testing.T) {
 	}
 }
 
-// publishingLabels checks a 0.9 file with the scopes, parts and lines given, and gives each
+// publishingLabels checks a 0.10 file with the scopes, parts and lines given, and gives each
 // publishing line's label.
 func publishingLabels(t *testing.T, scopes, parts, lines string) []string {
 	t.Helper()
-	src := "awml: \"0.9\"\ntitle: T\nscopes:\n" + scopes + "parts:\n" + parts + "lines:\n" + lines
+	src := "awml: \"0.10\"\ntitle: T\nscopes:\n" + scopes + "parts:\n" + parts + "lines:\n" + lines
 	doc := parsed(t, src)
 	mistakes(t, doc)
 	return Summarise(doc).PublishingLines.Labels
@@ -103,8 +103,8 @@ func labels(t *testing.T, got []string, want ...string) {
 func TestAPublishIntoAScopeThatAddsPeopleNamesThem(t *testing.T) {
 	labels(t, publishingLabels(t,
 		"  - { id: carers, label: \"carers: + June, Beth\" }\n  - { id: family, label: \"family: parents, kids\", in: carers }\n",
-		"  - { id: plan, kind: context, label: Plan, in: family }\n  - { id: screen, kind: surface, label: Screen, in: carers }\n",
-		"  - { from: plan, to: screen, kind: data, label: \"standing rule: dinners to carers\" }\n  - { from: screen, to: plan, kind: data }\n"),
+		"  - { id: plan, kind: context, label: Plan, in: family }\n  - { id: screen, kind: surface, label: Screen, in: carers }\n  - { id: read, kind: ai, label: Read, in: family }\n",
+		"  - { from: plan, to: screen, kind: data, label: \"standing rule: dinners to carers\" }\n  - { from: screen, to: read, kind: data }\n"),
 		"standing rule: dinners to carers · adds June and Beth")
 }
 
@@ -129,7 +129,7 @@ func TestAPublishOutsideEveryScopeSaysSo(t *testing.T) {
 func TestAPublishTheScopesCantExplainNamesItsTarget(t *testing.T) {
 	labels(t, publishingLabels(t,
 		"  - { id: bakery, label: Bakery }\n  - { id: pottery, label: Pottery }\n",
-		"  - { id: notes, kind: context, label: Notes, in: bakery }\n  - { id: shop, kind: context, label: Shop, in: pottery }\n",
+		"  - { id: notes, kind: context, label: Notes, in: bakery }\n  - { id: shop, kind: surface, label: Shop, in: pottery }\n",
 		"  - { from: notes, to: shop, kind: data }\n"),
 		"publishes into Pottery")
 }

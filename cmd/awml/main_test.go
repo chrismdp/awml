@@ -15,7 +15,7 @@ import (
 	"github.com/chrismdp/awml"
 )
 
-const good = `awml: "0.9"
+const good = `awml: "0.10"
 title: Dinners
 scopes:
   - { id: family, label: "family" }
@@ -92,8 +92,8 @@ func TestDrawRefusesAFileWithMistakes(t *testing.T) {
 	}
 }
 
-// A 0.9 drawing of a live system, whose one line into a Block action breaks a rule.
-const live = `awml: "0.9"
+// A 0.10 drawing of a live system, whose one line into a Block action breaks a rule.
+const live = `awml: "0.10"
 title: Old files
 parts:
   - { id: night, kind: trigger, label: "Every night" }
@@ -116,7 +116,7 @@ func TestADrawingWithErrorsPassesTheCheckAndIsDrawnRed(t *testing.T) {
 		!strings.Contains(r.stdout, `so a line into it is red","severity":"error"}`) {
 		t.Errorf("check --json gave %+v", r)
 	}
-	description := write(t, "laptop.yaml", "awml: \"0.9\"\nplatform: { id: laptop, label: Laptop }\noff_for_up_to: PT0S\nsteps: code\nagents: []\ncalls: any\nholds: []\n")
+	description := write(t, "laptop.yaml", "awml: \"0.10\"\nplatform: { id: laptop, label: Laptop }\noff_for_up_to: PT0S\nsteps: code\nagents: []\ncalls: any\nholds: []\n")
 	for _, args := range [][]string{{"fit", path, description}, {"fit", "--parts", path, description}} {
 		if r := awmlRun(args...); r.stderr != "" || r.stdout == "" {
 			t.Errorf("awml %q gave %+v", args, r)
@@ -182,7 +182,7 @@ func TestCheckReportsEachMistakeAndFails(t *testing.T) {
 }
 
 func TestEveryCommandRefusesAnOlderFileAndSaysToConvertIt(t *testing.T) {
-	path := write(t, "old.yaml", strings.Replace(good, `awml: "0.9"`, `awml: "0.5"`, 1))
+	path := write(t, "old.yaml", strings.Replace(good, `awml: "0.10"`, `awml: "0.5"`, 1))
 	message := path + `: awml is "0.5", which this release no longer reads: upgrade the file with awml convert` + "\n"
 	if r := awmlRun("check", path); r != (result{1, message, ""}) {
 		t.Errorf("check gave %+v", r)
@@ -197,7 +197,7 @@ func TestEveryCommandRefusesAnOlderFileAndSaysToConvertIt(t *testing.T) {
 }
 
 func TestConvertUpgradesOneOlderFile(t *testing.T) {
-	old := "# Dinners at home.\n" + strings.Replace(strings.Replace(good, `awml: "0.9"`, `awml: "0.5"`, 1),
+	old := "# Dinners at home.\n" + strings.Replace(strings.Replace(good, `awml: "0.10"`, `awml: "0.5"`, 1),
 		"kind: start }", "kind: start, breaks: false }", 1)
 	r := awmlRun("convert", write(t, "old.yaml", old))
 	if r != (result{0, strings.Replace(good, "title: Dinners\n", "title: Dinners\ndescription: |\n  Dinners at home.\n", 1), ""}) {
@@ -266,7 +266,7 @@ lines:
 	r := awmlRun("convert", write(t, "old.yaml", old))
 	want := "awml convert: converted, but the result is invalid:\n" +
 		`  outside action "out" has no tier: end its label with Allow, Ask or Block after a colon, as in "Send the mail: Ask"` + "\n"
-	if r != (result{1, strings.Replace(old, `awml: "0.4"`, `awml: "0.9"`, 1), want}) {
+	if r != (result{1, strings.Replace(old, `awml: "0.4"`, `awml: "0.10"`, 1), want}) {
 		t.Errorf("convert gave %+v", r)
 	}
 }
@@ -282,7 +282,7 @@ parts:
 lines:
   - { from: tell, to: ready, kind: start }
 `
-	converted := `awml: "0.9"
+	converted := `awml: "0.10"
 title: Dinners
 parts:
   - { id: tell, kind: code, op: do, label: "Tell the shopping" }
@@ -360,14 +360,14 @@ func TestCheckReportsAMissingFile(t *testing.T) {
 
 func TestFitPrintsPlainAndJSONResults(t *testing.T) {
 	security := write(t, "security.yaml", `
-awml: "0.9"
+awml: "0.10"
 title: Reply
 scopes: [{id: business, label: business, processing: {anthropic: any}}]
 parts:
   - {id: draft, kind: ai, op: draft, label: Draft, in: business}
 `)
 	platform := write(t, "worker.yaml", `
-awml: "0.9"
+awml: "0.10"
 platform: {id: worker, label: Worker}
 off_for_up_to: PT0S
 steps: code
@@ -385,7 +385,7 @@ holds: []
 		t.Errorf("JSON fit gave %+v", json)
 	}
 	cowork := write(t, "cowork.yaml", `
-awml: "0.9"
+awml: "0.10"
 platform: {id: cowork, label: Cowork}
 off_for_up_to: PT0S
 steps: agent
@@ -402,7 +402,7 @@ holds: []
 
 func TestFitFailsForAGapOrTheWrongKindsOfFile(t *testing.T) {
 	security := write(t, "security.yaml", `
-awml: "0.9"
+awml: "0.10"
 title: Reply
 scopes: [{id: business, label: business}]
 parts: [{id: draft, kind: ai, op: draft, label: Draft, in: business}]
@@ -433,7 +433,7 @@ parts: [{id: draft, kind: ai, op: draft, label: Draft, in: business}]
 
 func TestFitPartsJudgesEachPartAlone(t *testing.T) {
 	workflow := write(t, "reply.yaml", `
-awml: "0.9"
+awml: "0.10"
 title: Reply
 scopes: [{id: business, label: business, processing: {anthropic: any}}]
 parts:
@@ -487,7 +487,7 @@ func mustRead(t *testing.T, path string) string {
 
 func TestFitJudgesAnImplementation(t *testing.T) {
 	workflow := write(t, "reply.yaml", `
-awml: "0.9"
+awml: "0.10"
 title: Reply
 scopes: [{id: business, label: business, processing: {anthropic: any}}]
 parts: [{id: draft, kind: ai, op: draft, label: Draft, in: business}]
@@ -503,7 +503,7 @@ implementations:
 }
 
 const goodPlatformForCommand = `
-awml: "0.9"
+awml: "0.10"
 platform: {id: worker, label: Worker}
 off_for_up_to: PT0S
 steps: code
@@ -542,7 +542,7 @@ func TestSummaryPrintsPlainCounts(t *testing.T) {
 	}
 }
 
-const orders = `awml: "0.9"
+const orders = `awml: "0.10"
 title: Cake orders
 scopes:
   - { id: bakery, label: "bakery: Ana, Ben", processing: any }
@@ -655,7 +655,7 @@ lines:
 `)
 	r := awmlRun("convert", "--implementation", "office", security, platform)
 	want := `# It runs in the bakery office.
-awml: "0.9"
+awml: "0.10"
 title: Tomorrow's loaves
 description: |
   A bakery plans tomorrow's loaves. The bakery is fictional.
@@ -857,7 +857,7 @@ func TestPushRefusesOlderOrMultipleFilesWithoutAnHTTPCall(t *testing.T) {
 	defer server.Close()
 	security := write(t, "security.yaml", legacySecurity)
 	platform := write(t, "platform.yaml", legacyPlatform)
-	older := write(t, "older.yaml", strings.Replace(canonicalFile, `awml: "0.9"`, `awml: "0.5"`, 1))
+	older := write(t, "older.yaml", strings.Replace(canonicalFile, `awml: "0.10"`, `awml: "0.5"`, 1))
 
 	for _, files := range [][]string{{security}, {older}, {security, platform}} {
 		args := append([]string{"push", "acme/mail"}, files...)
@@ -867,7 +867,7 @@ func TestPushRefusesOlderOrMultipleFilesWithoutAnHTTPCall(t *testing.T) {
 			t.Errorf("push %v gave %+v", files, r)
 		}
 	}
-	if r := awmlRun("push", "acme/mail", write(t, "worker.yaml", goodPlatformForCommand), "--registry", server.URL); r.code != 1 || !strings.Contains(r.stderr, "push one 0.9 workflow") {
+	if r := awmlRun("push", "acme/mail", write(t, "worker.yaml", goodPlatformForCommand), "--registry", server.URL); r.code != 1 || !strings.Contains(r.stderr, "push one 0.10 workflow") {
 		t.Errorf("push of a platform description gave %+v", r)
 	}
 	if calls != 0 {
@@ -1032,7 +1032,7 @@ func loginForTest(t *testing.T, registry, token string) {
 }
 
 const canonicalFile = `# Bakery workflow
-awml: "0.9"
+awml: "0.10"
 title: Bread
 scopes: [{id: bakery, label: Bakery, processing: any}]
 parts:
@@ -1045,7 +1045,7 @@ implementations:
 
 func TestCanonicalCommands(t *testing.T) {
 	path := write(t, "bread.yaml", canonicalFile)
-	desc := write(t, "scripts.yaml", `awml: "0.9"
+	desc := write(t, "scripts.yaml", `awml: "0.10"
 platform: {id: scripts, label: Scripts}
 off_for_up_to: PT0S
 steps: code
@@ -1097,7 +1097,7 @@ func TestConvertCommand(t *testing.T) {
 	security := write(t, "security.yaml", "# Keep this comment\n"+legacySecurity)
 	platform := write(t, "platform.yaml", legacyPlatform)
 	got := awmlRun("convert", security, platform)
-	if got.code != 0 || !strings.Contains(got.stdout, "\ndescription: |\n  Keep this comment\n") || !strings.Contains(got.stdout, `awml: "0.9"`) {
+	if got.code != 0 || !strings.Contains(got.stdout, "\ndescription: |\n  Keep this comment\n") || !strings.Contains(got.stdout, `awml: "0.10"`) {
 		t.Fatalf("%+v", got)
 	}
 	parsed, err := awml.Parse([]byte(got.stdout))

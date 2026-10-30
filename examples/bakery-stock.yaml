@@ -1,4 +1,4 @@
-awml: "0.9"
+awml: "0.10"
 title: The bakery's stock count
 description: |
   Each evening, code works out what the day's baking used from the till's sales and keeps the stock

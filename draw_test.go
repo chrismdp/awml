@@ -235,7 +235,7 @@ func TestLineBreaksInLabelTextFoldIntoOneSpace(t *testing.T) {
 // A file whose labels hold line breaks, each written as %[1]s, and its twin, whose labels are the
 // same with each run of breaks one space. The outer scope's label is a row of its own holding end,
 // which would close its subgraph, and the step's is a block that keeps its last line break.
-const brokenLabels = `awml: "0.9"
+const brokenLabels = `awml: "0.10"
 title: "Bakery%[1]sreplies"
 scopes:
   - { id: shop, label: "%[1]send%[1]s" }
@@ -263,7 +263,7 @@ implementations:
       - { id: tried, label: "Tried%[1]sonce", in: laptop, ties: [draft] }
 `
 
-const foldedLabels = `awml: "0.9"
+const foldedLabels = `awml: "0.10"
 title: "Bakery replies"
 scopes:
   - { id: shop, label: "end" }
@@ -525,7 +525,7 @@ func TestEachOperationIsDrawnWithItsEmoji(t *testing.T) {
 }
 
 const questionFile = `
-awml: "0.9"
+awml: "0.10"
 title: A question in the family chat
 scopes:
   - {id: zCarers, label: "carers: + June, Beth"}

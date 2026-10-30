@@ -9,7 +9,7 @@
 # A fork's pull request, or one a stranger opened, gets no review: its review jobs fail at a gate
 # that holds no secret, so a person reviews and merges it, and a hand merge never sees green
 # reviews that didn't run, as it would if they were skipped.
-awml: "0.9"
+awml: "0.10"
 title: A commit is checked
 description: |
   CI for the factory: the tests, Bug review and Security review side by side, then Classify on a

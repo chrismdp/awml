@@ -12,7 +12,7 @@ import (
 
 // Two workflows that hand work on through a shopping list, and an outside action that starts the
 // shopping, as in the package's tests.
-const planWorkflow = `awml: "0.9"
+const planWorkflow = `awml: "0.10"
 title: Dinners
 scopes:
   - { id: family, label: "family: parents, kids", processing: any }
@@ -29,7 +29,7 @@ lines:
   - { from: tell, to: ready, kind: start }
 `
 
-const shopWorkflow = `awml: "0.9"
+const shopWorkflow = `awml: "0.10"
 title: Shopping
 scopes:
   - { id: home, label: "home: parents, kids", processing: any }
@@ -44,7 +44,7 @@ lines:
   - { from: fill, to: basket, kind: data }
 `
 
-const agentLaptop = `awml: "0.9"
+const agentLaptop = `awml: "0.10"
 platform: { id: laptop, label: A laptop }
 off_for_up_to: PT0S
 steps: agent

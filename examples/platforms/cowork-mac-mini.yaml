@@ -1,4 +1,4 @@
-awml: "0.9"
+awml: "0.10"
 platform: { id: cowork-mac-mini, label: "Claude Cowork on a Mac mini" }
 off_for_up_to: PT0S
 steps: agent

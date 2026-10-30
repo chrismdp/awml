@@ -61,7 +61,7 @@ func TestGraphRefusesWhatDrawRefuses(t *testing.T) {
 	if r := awmlRun("graph"); r.code != 2 || !strings.Contains(r.stderr, "the following arguments are required: files") {
 		t.Errorf("graph of nothing gave %+v", r)
 	}
-	if r := awmlRun("graph", write(t, "broken.yaml", "awml: \"0.9\"\ntitle: T\n")); r.code != 1 || r.stdout != "" || r.stderr == "" {
+	if r := awmlRun("graph", write(t, "broken.yaml", "awml: \"0.10\"\ntitle: T\n")); r.code != 1 || r.stdout != "" || r.stderr == "" {
 		t.Errorf("graph of a file with mistakes gave %+v", r)
 	}
 }
