@@ -1,4 +1,4 @@
-awml: "0.9"
+awml: "0.10"
 title: A cake order from the website
 description: |
   Untrusted text. Anyone can type into the bakery's order form, so its text could steer an AI step

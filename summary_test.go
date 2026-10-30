@@ -25,7 +25,7 @@ func TestSummariseEveryExample(t *testing.T) {
 		"examples/tour/02-two-start-lines.yaml":   {Steps: StepCounts{AI: 2}, Operations: map[string]int{"learn": 1, "check": 1}, Triggers: 1, Contexts: 1, Surfaces: 1, Scopes: 1},
 		"examples/tour/03-refused-read.yaml":      {Steps: StepCounts{AI: 1}, Operations: map[string]int{"answer": 1}, Triggers: 1, Contexts: 2, Surfaces: 1, Scopes: 2, RefusedReads: 1},
 		"examples/tour/04-publishing.yaml":        {Steps: StepCounts{Code: 1}, Operations: map[string]int{"bring-in": 1}, Triggers: 1, Contexts: 1, Connectors: 1, Surfaces: 1, Scopes: 2, PublishingLines: pubGrandma},
-		"examples/tour/05-side-by-side.yaml":      {Steps: StepCounts{AI: 2}, Operations: map[string]int{"draft": 2}, Triggers: 1, Contexts: 3, Scopes: 2, PublishingLines: pubChecklist},
+		"examples/tour/05-side-by-side.yaml":      {Steps: StepCounts{AI: 2, Code: 2}, Operations: map[string]int{"draft": 2, "do": 2}, Triggers: 1, Contexts: 3, Scopes: 2, PublishingLines: pubChecklist},
 		"examples/live/red-line.yaml":             {Steps: StepCounts{AI: 1, Code: 1}, Operations: map[string]int{"draft": 1, "do": 1}, OutsideActions: TierCounts{Ask: 1}, Triggers: 1, Reviews: 1, Scopes: 1, RedLines: 1},
 		"examples/tour/07-person-step.yaml":       {Steps: StepCounts{Code: 1, Person: 1}, Operations: map[string]int{"check": 1, "do": 1}, Triggers: 1, Contexts: 1, Surfaces: 1, Scopes: 1},
 		"examples/tour/08-gap.yaml":               {Steps: StepCounts{Code: 1}, Operations: map[string]int{"bring-in": 1}, Triggers: 1, Contexts: 1, Connectors: 1, Surfaces: 1, Scopes: 1},
@@ -101,7 +101,7 @@ func TestSummaryHasStableJSONFieldNames(t *testing.T) {
 
 func TestAnOutsideActionWithoutATierIsNotInvented(t *testing.T) {
 	doc := parsed(t, `
-awml: "0.9"
+awml: "0.10"
 title: No tier
 parts:
   - { id: action, kind: outside, label: "" }
@@ -113,7 +113,7 @@ parts:
 
 func TestSummariseCountsEveryOutsideActionTier(t *testing.T) {
 	doc := parsed(t, `
-awml: "0.9"
+awml: "0.10"
 title: Tiers
 parts:
   - { id: allow, kind: outside, label: "Keep the draft: Allow" }
@@ -152,7 +152,7 @@ func TestSummariseListsPersonStepsReviewsAndStandingApprovalsInFileOrder(t *test
 
 func TestAScopeWithoutMembersIsNamedByItsWholeLabel(t *testing.T) {
 	doc := parsed(t, `
-awml: "0.9"
+awml: "0.10"
 title: Bare scope
 scopes:
   - { id: team, label: "The team" }

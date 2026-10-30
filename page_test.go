@@ -17,7 +17,7 @@ func pageDoc(t *testing.T, title, view, label string) *Map {
 	if view == "platform" {
 		implementations = ", implementations: {home: {label: Home, blocks: [{id: server, label: Server, parts: [a]}]}}"
 	}
-	return parsed(t, fmt.Sprintf("{awml: \"0.9\", title: %q, parts: [{id: a, kind: ai, label: %q}]%s}", title, label, implementations))
+	return parsed(t, fmt.Sprintf("{awml: \"0.10\", title: %q, parts: [{id: a, kind: ai, label: %q}]%s}", title, label, implementations))
 }
 
 // given gives each document as a workflow in a file of its own, as awml page reads them.
@@ -84,7 +84,7 @@ func TestOneWorkflowHasNoMap(t *testing.T) {
 
 func TestAPlatformDescriptionGivenWithAWorkflowMakesNoMap(t *testing.T) {
 	d := pageDoc(t, "Dinners", "security", "Plan")
-	desc := parsed(t, `{awml: "0.9", platform: {id: scripts, label: Scripts}}`)
+	desc := parsed(t, `{awml: "0.10", platform: {id: scripts, label: Scripts}}`)
 	if got := drawings(t, Page(given(d, desc))); !reflect.DeepEqual(got, []string{Draw(d)}) {
 		t.Errorf("drawings = %q", got)
 	}

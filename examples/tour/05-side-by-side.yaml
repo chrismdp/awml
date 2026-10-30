@@ -1,9 +1,11 @@
-awml: "0.9"
+awml: "0.10"
 title: A checklist moves from a client to a side venture
 description: |
   Two scopes side by side. Jo keeps the books for a bakery and runs a small pottery shop on the
-  side. The two scopes share only Jo, so neither sits inside the other, and the line between them
-  is publishing. Jo, the bakery and the shop are fictional.
+  side. The two scopes share only Jo, so neither sits inside the other. A code step in the bakery
+  reads Jo's checklist and takes the names out, and hands the copy to a code step in the shop,
+  which writes it into the shop's notes. The hand-off between them is publishing. Jo, the bakery
+  and the shop are fictional.
 scopes:
   - { id: bakery, label: "bakery: Jo, Ben, Lou" }
   - { id: pottery, label: "pottery: Jo, Kit" }
@@ -12,12 +14,18 @@ parts:
   - { id: invoices, kind: context, label: "The bakery's invoices", in: bakery }
   - { id: checklist, kind: context, label: "Jo's checklist for chasing", in: bakery }
   - { id: chase, kind: ai, op: draft, label: "Draft a reminder for each late invoice", in: bakery }
+  - { id: copy, kind: code, op: do, label: "Take the names out of the checklist", in: bakery }
+  - { id: keep, kind: code, op: do, label: "Keep the checklist in the shop's notes", in: pottery }
   - { id: shop_notes, kind: context, label: "The shop's notes", in: pottery }
   - { id: remind, kind: ai, op: draft, label: "Draft a reminder for each late order", in: pottery }
 lines:
   - { from: monday, to: chase, kind: start }
+  - { from: monday, to: copy, kind: start }
   - { from: monday, to: remind, kind: start }
   - { from: invoices, to: chase, kind: data }
   - { from: checklist, to: chase, kind: data }
-  - { from: checklist, to: shop_notes, kind: data, label: "the checklist, with no names in it" }
+  - { from: checklist, to: copy, kind: data }
+  - { from: copy, to: keep, kind: start }
+  - { from: copy, to: keep, kind: data, label: "the checklist, with no names in it" }
+  - { from: keep, to: shop_notes, kind: data }
   - { from: shop_notes, to: remind, kind: data }

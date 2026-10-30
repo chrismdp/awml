@@ -10,7 +10,7 @@
 # access, isn't fixed: the session refers it back, and a new comment on the issue asks the
 # maintainer, with the decision it would change and the options. A session that refers any finding
 # back changes nothing, so nothing is pushed and the pull request waits for the answer.
-awml: "0.9"
+awml: "0.10"
 title: A failed review is fixed
 description: |
   The factory's fixer: when a review fails on a pull request, a session fixes the findings and the
