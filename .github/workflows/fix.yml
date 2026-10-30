@@ -204,9 +204,8 @@ jobs:
 
       # The findings, as both reviews' checks carry them, the patch, GitHub's diff of the reviewed
       # commit against main, and the commits, one line each, go to the session as read-only files.
-      # So does the pull request's issue, as decisions.md, read by main's issue-text.sh as the build
-      # reads it: the build's branch names it, and otherwise GitHub's record of the pull request's
-      # closing reference. A pull request with no issue has no decisions file.
+      # So does the build's issue, as decisions.md, read by main's issue-text.sh as the build reads
+      # it. Only a build/issue-N branch names an issue. Any other branch has no decisions file.
       - name: Bring in both reviews' findings and the patch, as read-only files for the session
         id: bring
         env:
@@ -219,16 +218,6 @@ jobs:
           in="$RUNNER_TEMP/fix/in"
           if [[ "$BRANCH" =~ ^build/issue-([0-9]+)$ ]]; then
             issue="${BASH_REMATCH[1]}"
-          else
-            issue="$(gh api graphql -F owner="${GITHUB_REPOSITORY%%/*}" -F name="${GITHUB_REPOSITORY#*/}" -F number="$PR_NUMBER" -f query='
-              query($owner: String!, $name: String!, $number: Int!) {
-                repository(owner: $owner, name: $name) {
-                  pullRequest(number: $number) { closingIssuesReferences(first: 1) { nodes { number } } }
-                }
-              }' --jq '.data.repository.pullRequest.closingIssuesReferences.nodes[0].number // empty')"
-          fi
-          case "$issue" in *[!0-9]*) echo "The pull request's issue isn't a number: $issue"; exit 1 ;; esac
-          if [ -n "$issue" ]; then
             bash "$RUNNER_TEMP/issue-text.sh" "$issue" "$in/decisions.md"
             echo "issue=$issue" >> "$GITHUB_OUTPUT"
           fi
@@ -547,7 +536,7 @@ jobs:
       # reviewed commit, and every name it stages is checked, a renamed file by both its names. A
       # branch that has moved since the review means it exits quietly. A fix that touches .github/
       # or Claude Code's own files is offered to a person. A run that referred findings back pushes
-      # nothing, and the referral is posted on the pull request's issue.
+      # nothing, and the referral is posted on the build's issue.
       - name: "Sort by git: does the fix touch .github/ or Claude Code's own files, and is the branch still at the reviewed commit?"
         id: guard
         env:
@@ -651,12 +640,11 @@ jobs:
             -c http.https://github.com/.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" \
             push --force-with-lease="refs/heads/$BRANCH:$HEAD_SHA" origin "HEAD:refs/heads/$BRANCH"
 
-      # The referral goes to the issue, where the decisions were made, as the app's comment, so a
-      # build after the answer reads it. It's the session's text, so every mention in it is broken
+      # The referral goes to the build's issue, where the decisions were made, as the app's comment.
+      # A build after the answer reads it. It's the session's text, so every mention in it is broken
       # and every < escaped, as in every comment of session text (#160 rule 5), and the log shows
-      # it with workflow commands stopped. It starts by saying what it is and ends by saying how to
-      # go on: a build's pull request with a fresh build, and a person's with its author, since the
-      # label would start a build beside it.
+      # it with workflow commands stopped. It starts by saying what it is and ends by asking for
+      # an answer and a fresh build.
       - name: Make the app's token for the issue
         id: asker
         if: steps.guard.outputs.outcome == 'referred'
@@ -681,11 +669,7 @@ jobs:
           {
             printf '**The fixer referred findings back.** Fixing them would change what was decided on this issue, so they need a person'"'"'s answer. [The pull request](%s) · [The run](%s)\n\n' "$pull_url" "$run_url"
             jq -Rrs '.[0:60000] | gsub("<"; "&lt;") | gsub("@(?=[A-Za-z0-9])"; "@​")' "$RUNNER_TEMP/fix/referred.md"
-            if [[ "$BRANCH" =~ ^build/issue-[0-9]+$ ]]; then
-              printf '\nTo go on, answer here, then remove the build label and add it again.\n'
-            else
-              printf '\nTo go on, answer here; the pull request'"'"'s author takes it from there.\n'
-            fi
+            printf '\nTo go on, answer here, then remove the build label and add it again.\n'
           } > "$RUNNER_TEMP/referred.md"
           stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
           echo "::stop-commands::$stop"

@@ -118,33 +118,31 @@ func TestTheFixerReadsOnlyTheApprovedIssue(t *testing.T) {
 	}
 }
 
-// The fixer reads the decisions on the pull request's issue: the build's branch names it, and
-// otherwise the pull request's closing reference does. A pull request with no issue gets no
-// decisions file, and the fixer works as before.
+// The fixer reads decisions only from the issue named by the build/issue-N branch. A pull
+// request on any other branch has no issue or decisions file, and the fixer works as before.
 func TestTheFixerReadsTheIssuesDecisions(t *testing.T) {
 	bring, _ := readFactoryWorkflow(t, "fix.yml").Jobs["fix"].step(t, "bring")
-	for _, c := range []struct{ branch, closing, issue string }{
-		{"build/issue-120", "[]", "120"}, {"scones", `[{"number": 120}]`, "120"}, {"scones", "[]", ""},
+	for _, c := range []struct{ branch, issue string }{
+		{"build/issue-120", "120"}, {"scones", ""},
 	} {
 		r := newRehearsal(t)
-		r.write("issue-text.sh", readText(t, ".github/issue-text.sh"))
+		r.write("issue-text.sh", "#!/bin/bash\nprintf '# #%s\\n\\nKeep the scones plain.\\n' \"$1\" > \"$2\"\n")
 		r.write("read-findings.sh", "#!/bin/bash\nmkdir -p \"$2\"\necho '[]' > \"$2/findings.json\"\n")
 		r.write("fix/in/.keep", "")
 		t.Cleanup(func() { exec.Command("chmod", "-R", "u+w", filepath.Join(r.temp, "fix")).Run() })
 		r.run(bring, map[string]string{"PR_NUMBER": "8", "HEAD_SHA": strings.Repeat("ab", 20), "CI_RUN": "77", "BRANCH": c.branch}, `
-  "api graphql -F owner=owner -F name=repo -F number=8"*) answer <<< '{"data": {"repository": {"pullRequest": {"closingIssuesReferences": {"nodes": `+c.closing+`}}}}}' ;;`+
-			issueAnswers+`
   "api repos/owner/repo/compare/"*) answer <<< 'diff' ;;
   "api --paginate repos/owner/repo/pulls/8/commits"*) answer <<< '[{"sha": "abc", "commit": {"message": "A commit"}}]' ;;`)
 		r.mustPass()
 		decisions := r.read("fix/in/decisions.md")
 		if c.issue == "" {
-			if _, err := os.Stat(filepath.Join(r.temp, "fix", "in", "decisions.md")); err == nil || r.outputs["issue"] != "" {
-				t.Errorf("a pull request with no issue got decisions:\n%s", decisions)
+			_, hasIssue := r.outputs["issue"]
+			if _, err := os.Stat(filepath.Join(r.temp, "fix", "in", "decisions.md")); !os.IsNotExist(err) || hasIssue {
+				t.Errorf("a pull request with no issue got outputs %v and decisions:\n%s", r.outputs, decisions)
 			}
 			continue
 		}
-		if r.outputs["issue"] != c.issue || !strings.Contains(decisions, "Keep the scones plain.") || strings.Contains(decisions, "A stranger says cream") {
+		if r.outputs["issue"] != c.issue || !strings.Contains(decisions, "Keep the scones plain.") {
 			t.Errorf("on %s, the fixer read issue %q's decisions as:\n%s", c.branch, r.outputs["issue"], decisions)
 		}
 	}
@@ -247,31 +245,17 @@ func TestAFixThatReferredPushesNothing(t *testing.T) {
 	}
 }
 
-// The referral is one new comment on the issue, with the app's token: it says what it is, carries
-// the session's text with every mention broken, and says how to go on. The log shows it inside
+// The referral is one new comment on the build's issue, with the app's token: it says what it is,
+// carries the session's text with every mention broken, and says how to go on. The log shows it inside
 // stop-commands, so no line of it can be a workflow command.
 func TestTheReferralIsPostedEscaped(t *testing.T) {
 	ask, _ := readFactoryWorkflow(t, "fix.yml").Jobs["write"].step(t, "ask")
 	if ask.Env["GH_TOKEN"] != "${{ steps.asker.outputs.token }}" {
 		t.Errorf("the referral is posted with %q, not the app's token for the issue", ask.Env["GH_TOKEN"])
 	}
-	// A build's pull request goes on with a fresh build. A person's goes on with its author, since
-	// the label would start a build of its own beside it.
-	for branch, end := range map[string]string{
-		"build/issue-120": "To go on, answer here, then remove the build label and add it again.",
-		"scones":          "To go on, answer here; the pull request's author takes it from there.",
-	} {
-		r := newRehearsal(t)
-		r.write("fix/referred.md", "- A finding.\n")
-		r.run(ask, map[string]string{"ISSUE": "120", "PR_NUMBER": "8", "BRANCH": branch}, `  "issue comment 120"*) ;;`)
-		r.mustPass()
-		if bodies := r.bodies(); len(bodies) != 1 || !strings.HasSuffix(strings.TrimSpace(bodies[0]), end) {
-			t.Errorf("on %s, the referral doesn't end %q:\n%s", branch, end, bodies)
-		}
-	}
 	r := newRehearsal(t)
 	r.write("fix/referred.md", "- The finding would undo what @the-owner decided.\n::error::forged\n<img src=x onerror=alert(1)>\n")
-	r.run(ask, map[string]string{"ISSUE": "120", "PR_NUMBER": "8", "BRANCH": "build/issue-120"}, `  "issue comment 120"*) ;;`)
+	r.run(ask, map[string]string{"ISSUE": "120", "PR_NUMBER": "8"}, `  "issue comment 120"*) ;;`)
 	r.mustPass()
 	bodies := r.bodies()
 	if len(bodies) != 1 {
@@ -280,6 +264,9 @@ func TestTheReferralIsPostedEscaped(t *testing.T) {
 	body := bodies[0]
 	if !strings.HasPrefix(body, "**The fixer referred findings back") {
 		t.Errorf("the referral doesn't say what it is:\n%s", body)
+	}
+	if end := "To go on, answer here, then remove the build label and add it again."; !strings.HasSuffix(strings.TrimSpace(body), end) {
+		t.Errorf("the referral doesn't end %q:\n%s", end, body)
 	}
 	if strings.Contains(body, "@the-owner") || !strings.Contains(body, "@\u200bthe-owner") {
 		t.Errorf("the referral's mention isn't broken:\n%s", body)
