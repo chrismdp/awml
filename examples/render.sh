@@ -51,7 +51,7 @@ redraw() {
   done
 }
 for f in examples/*.yaml examples/tour/*.yaml examples/live/*.yaml; do
-  redraw "$f"
+  redraw -descriptions examples/platforms "$f"
 done
 # The examples that share a part are drawn together as their map.
 redraw -map examples/family-map.mmd examples/dinners.yaml examples/shopping.yaml examples/bills.yaml examples/pickups.yaml examples/question.yaml

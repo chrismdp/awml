@@ -133,7 +133,7 @@ The operating model has little to do with AI: it's how work is organised, whoeve
 
 ### The parts
 
-![Every kind of part, laid out as a key](examples/legend.svg)
+![Every kind of part, with a dashed orange outline on code a model carries out](examples/legend-agent.svg)
 
 - A **trigger** is a pink rounded box. It starts the workflow: a time, such as `Weekdays 07:00`, or an event, such as someone asking in a chat or an email arriving.
 - A **step** is a rounded box: one piece of work, with the colour and emoji of who decides it.
@@ -298,6 +298,8 @@ In the platform view, each platform is a tinted block, and each part sits in the
 ![The family's dinners, by where each part runs](examples/dinners-home.svg)
 
 A block is labelled with what an **implementation** chose there, such as the model it runs, and with when the machine is on, if that isn't always, as in `Noor's laptop: on some evenings`. Work for a machine that is off waits for it. An implementation is one running system built from a design, and each draws its own platform view, with the same parts in different blocks.
+
+A code step gets a thick dashed orange outline when its block names a platform whose description has `steps: agent`. A model carries out that step, at a cost, though code could do the work. Its fill stays green. Give the descriptions after the workflow to `awml draw --implementation ID workflow.yaml DESC...`, and AWML works out the outline. A description that isn't given adds no outline. The security view stays the same, and untrusted parts keep their solid orange outline.
 
 Two rules make this view worth drawing.
 
@@ -478,6 +480,7 @@ awml check examples/question.yaml        # report errors and mistakes; exits 1 i
 awml fit examples/client-email.yaml examples/platforms/*.yaml
 awml draw examples/question.yaml         # print the Mermaid
 awml draw --implementation home examples/dinners.yaml
+awml draw --implementation agent examples/legend.yaml examples/platforms/*.yaml
 awml page examples/dinners.yaml -o dinners.html
 awml summary examples/dinners.yaml --json
 awml draw examples/dinners.yaml examples/question.yaml   # the map of workflows that share parts
@@ -490,7 +493,7 @@ awml pull family/dinners@1 -o dinners
 - `check`, `draw`, `graph`, `summary` and `fit` take any number of files, and a folder stands for every `.yaml` file directly inside it, with a file named twice read once. Given several workflows, they follow each `ref` between them, as the next section says.
 - `awml check` checks the design and each implementation. It prints each warning, then each error, saying that it's an error, then each mistake that makes the file invalid, or `ok` when there are no errors or mistakes. It exits 1 only for an invalid file, or with `--fail-on-errors`, for a drawing with errors too. `--json` lists every check it makes, passing ones included, each with a stable id and its result: `pass`, `fail`, `error`, `skipped` or `warn`. Each finding says whether it makes the file `invalid`, is an `error` or is a `warning`.
 - `awml fit` judges the design against platform descriptions, telling the two apart by what each file holds. Given several workflows, it judges each platform as running them all, and names each part after its file, as `dinners#plan`, or `x/dinners#plan` where two files share a name. Add `--implementation ID` to judge one workflow's placement, `--parts` to judge each part on its own and list each set of platforms that holds them all with none to spare, and `--json` for the report's JSON form. An implementation can be given without descriptions, and then each block says it has no platform or that its platform wasn't described.
-- `awml draw` prints the security view's Mermaid, or the map of several workflows. Add `--implementation ID` for a platform view. It draws a drawing with errors, and refuses an invalid file, printing why instead. Every other command does the same.
+- `awml draw` prints the security view's Mermaid, or the map of several workflows. Add `--implementation ID` for a platform view, with optional platform descriptions after the workflow to outline code steps carried out by a model. It draws a drawing with errors, and refuses an invalid file, printing why instead. Every other command does the same.
 - `awml graph` takes what `awml draw` takes, and prints what it would draw as JSON, with nothing laid out, for a tool that lays the drawing out itself. Each id is the one `awml draw` gives it, and the spec lists the fields. Its text isn't escaped and keeps its line breaks, so a tool that shows it must escape it and handle them.
 - `awml page` writes one standalone HTML page with the security view, then every implementation, each with a heading. Given several files, it draws their map first, then each file's views in the order given. The page takes their shared title, or Workflows when they differ.
 - `awml summary` counts the scopes, platforms, parts and lines in one workflow, and lists every publish with what it adds or loosens. It includes platforms from every implementation and counts the design once, and lists what each untrusted part's text reaches, what stops it and the risks accepted. Given several workflows, it counts each part they share once, and lists those parts. `--json` prints the registry's JSON form.

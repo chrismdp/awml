@@ -83,6 +83,52 @@ func TestDrawPrintsMermaid(t *testing.T) {
 	}
 }
 
+func TestDrawTakesPlatformDescriptionsAfterTheWorkflow(t *testing.T) {
+	workflow := strings.Replace(good, "kind: ai", "kind: code", 1) + `implementations:
+  home:
+    label: At home
+    blocks:
+      - { id: session, label: Agent session, platform: session, parts: [plan] }
+`
+	path := write(t, "workflow.yaml", workflow)
+	for _, tc := range []struct {
+		steps, implementation string
+		outlined              bool
+	}{
+		{"agent", "home", true},
+		{"code", "home", false},
+		{"", "home", false},
+		{"agent", "", false},
+	} {
+		t.Run(tc.steps+"/"+tc.implementation, func(t *testing.T) {
+			args := []string{"draw", path}
+			if tc.implementation != "" {
+				args = append(args, "--implementation", tc.implementation)
+			}
+			if tc.steps != "" {
+				args = append(args, write(t, "session.yaml", "awml: \"0.10\"\nplatform: { id: session, label: Session }\noff_for_up_to: PT0S\nsteps: "+tc.steps+"\nagents: []\ncalls: any\nholds: []\n"))
+			}
+			r := awmlRun(args...)
+			if r.code != 0 || r.stderr != "" || strings.Contains(r.stdout, "  class plan agentrun\n") != tc.outlined {
+				t.Errorf("draw gave %+v", r)
+			}
+		})
+	}
+}
+
+func TestDrawHelpNamesOptionalPlatformDescriptions(t *testing.T) {
+	r := awmlRun("draw", "-h")
+	for _, want := range []string{
+		"usage: awml draw [-h] [--implementation ID] files [files ...] [DESCRIPTIONS ...]\n",
+		"DESCRIPTIONS  optional platform descriptions, or folders of them",
+		"Code steps on a platform with steps: agent have a dashed orange outline.",
+	} {
+		if r.code != 0 || !strings.Contains(r.stdout, want) {
+			t.Errorf("draw -h lacks %q:\n%+v", want, r)
+		}
+	}
+}
+
 func TestDrawRefusesAFileWithMistakes(t *testing.T) {
 	f := write(t, "bad.yaml", bad)
 	r := awmlRun("draw", f)
@@ -747,7 +793,7 @@ func TestAMistakeInTheCommandShowsHowToUseIt(t *testing.T) {
 	}{
 		{nil, "usage: awml [-h] [--version] [--registry URL] {draw,graph,page,check,fit,summary,convert,login,push,pull} ...\nawml: error: the following arguments are required: command\n"},
 		{[]string{"drew", "a.yaml"}, "usage: awml [-h] [--version] [--registry URL] {draw,graph,page,check,fit,summary,convert,login,push,pull} ...\nawml: error: argument command: invalid choice: 'drew' (choose from 'draw', 'graph', 'page', 'check', 'fit', 'summary', 'convert', 'login', 'push', 'pull')\n"},
-		{[]string{"draw"}, "usage: awml draw [-h] [--implementation ID] files [files ...]\nawml draw: error: the following arguments are required: files\n"},
+		{[]string{"draw"}, "usage: awml draw [-h] [--implementation ID] files [files ...] [DESCRIPTIONS ...]\nawml draw: error: the following arguments are required: files\n"},
 		{[]string{"check"}, "usage: awml check [-h] [--json] [--fail-on-errors] files [files ...]\nawml check: error: the following arguments are required: files\n"},
 		{[]string{"page", "a.yaml"}, "usage: awml page [-h] -o OUT files [files ...]\nawml page: error: the following arguments are required: -o/--out\n"},
 		{[]string{"page", "a.yaml", "-o"}, "usage: awml page [-h] -o OUT files [files ...]\nawml page: error: argument -o/--out: expected one argument\n"},

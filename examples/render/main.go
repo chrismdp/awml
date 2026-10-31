@@ -3,23 +3,42 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/chrismdp/awml"
 )
 
 func main() {
-	if len(os.Args) > 2 && os.Args[1] == "-map" {
-		if err := drawMap(os.Args[2], os.Args[3:]); err != nil {
+	mapOut := flag.String("map", "", "write the workflows' map to this Mermaid file")
+	platforms := flag.String("descriptions", "", "folder of platform descriptions")
+	flag.Parse()
+	if *mapOut != "" {
+		if err := drawMap(*mapOut, flag.Args()); err != nil {
 			fail(err)
 		}
-		fmt.Println(os.Args[2])
+		fmt.Println(*mapOut)
 		return
 	}
-	for _, path := range os.Args[1:] {
-		drawings, err := drawExample(path)
+	var descriptions []awml.Source
+	if *platforms != "" {
+		paths, err := filepath.Glob(filepath.Join(*platforms, "*.yaml"))
+		if err != nil {
+			fail(err)
+		}
+		for _, path := range paths {
+			text, err := os.ReadFile(path)
+			if err != nil {
+				fail(err)
+			}
+			descriptions = append(descriptions, awml.Source{File: path, Text: text})
+		}
+	}
+	for _, path := range flag.Args() {
+		drawings, err := drawExample(path, descriptions...)
 		if err != nil {
 			fail(err)
 		}
@@ -47,14 +66,19 @@ func read(path string) (*awml.Map, error) {
 }
 
 // drawExample writes every view of the example at path, and gives the Mermaid paths it wrote.
-func drawExample(path string) ([]string, error) {
+func drawExample(path string, descriptions ...awml.Source) ([]string, error) {
 	doc, err := read(path)
 	if err != nil {
 		return nil, err
 	}
+	text, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	sources := append([]awml.Source{{File: path, Text: text}}, descriptions...)
 	var drawings []string
 	for _, implementation := range append([]string{""}, awml.ImplementationIDs(doc)...) {
-		view, err := awml.View(doc, implementation)
+		drawn, err := awml.DrawSources(sources, implementation)
 		if err != nil {
 			return nil, err
 		}
@@ -62,7 +86,7 @@ func drawExample(path string) ([]string, error) {
 		if implementation != "" {
 			stem += "-" + implementation
 		}
-		if err := os.WriteFile(stem+".mmd", []byte(awml.Draw(view)+"\n"), 0644); err != nil {
+		if err := os.WriteFile(stem+".mmd", []byte(drawn+"\n"), 0644); err != nil {
 			return nil, err
 		}
 		drawings = append(drawings, stem+".mmd")

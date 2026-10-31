@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/chrismdp/awml"
 )
 
 // copyExample puts the example at path, changed by edit, in a directory of its own, so drawing it
@@ -56,6 +58,28 @@ func TestTheHelperDrawsOnlyTheSecurityViewOfAFileThatMarksAPartUntrusted(t *test
 	}
 	if want := []string{strings.TrimSuffix(path, ".yaml") + ".mmd"}; !reflect.DeepEqual(drawings, want) {
 		t.Errorf("drawings = %q, want %q", drawings, want)
+	}
+}
+
+func TestTheHelperUsesDescriptionsOnlyForThePlatformView(t *testing.T) {
+	path := copyExample(t, "../legend.yaml", func(s string) string { return s })
+	description, err := os.ReadFile("../platforms/cowork-mac-mini.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = drawExample(path, awml.Source{Text: description})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stem := strings.TrimSuffix(path, ".yaml")
+	for _, view := range []string{"", "-agent"} {
+		text, err := os.ReadFile(stem + view + ".mmd")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Contains(string(text), "  class code agentrun\n"); got != (view == "-agent") {
+			t.Errorf("%s outline = %t:\n%s", view, got, text)
+		}
 	}
 }
 

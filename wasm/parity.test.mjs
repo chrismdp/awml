@@ -13,6 +13,7 @@ const descriptionSources = await Promise.all(descriptions.map((path) => readFile
 let passed = 0;
 let placements = 0;
 let untrustedDrawings = 0;
+let agentRunDrawings = 0;
 let conversions = 0;
 for (const path of top.sort()) {
   const source = await readFile(path, "utf8");
@@ -57,6 +58,12 @@ for (const path of top.sort()) {
         runNative(["draw", "--implementation", implementation, relative]), `${relative}: ${implementation} Mermaid`);
       assert.equal(api.graphJSON(source, implementation) + "\n",
         runNative(["graph", "--implementation", implementation, relative]), `${relative}: ${implementation} graph`);
+      const withDescriptions = api.draw(source, implementation, descriptionSources);
+      assert.equal(withDescriptions + "\n",
+        runNative(["draw", "--implementation", implementation, relative, ...descriptions]), `${relative}: ${implementation} Mermaid with descriptions`);
+      assert.equal(api.graphJSON(source, implementation, descriptionSources) + "\n",
+        runNative(["graph", "--implementation", implementation, relative, ...descriptions]), `${relative}: ${implementation} graph with descriptions`);
+      if (/ class .* agentrun\n/.test(withDescriptions)) agentRunDrawings++;
       const fit = api.fit([source, ...descriptionSources], implementation);
       assert.equal(api.fitJSON([source, ...descriptionSources], implementation) + "\n",
         runNative(["fit", "--json", "--implementation", implementation, relative, ...descriptions], fit.gaps.length ? 1 : 0), `${relative}: ${implementation} fit`);
@@ -91,6 +98,35 @@ assert(api.check(canonicalSource.replace("parts: [plan, notes]", "parts: [plan]"
 
 const temporary = await mkdtemp(new URL("../build/parity-", import.meta.url));
 try {
+  // Platform descriptions are optional after the implementation, and in the list of files.
+  const stock = canonicalSource.replace("kind: ai, label: Plan", "kind: code, label: Plan");
+  const stockPath = `${temporary}/stock.yaml`;
+  await writeFile(stockPath, stock);
+  for (const steps of ["agent", "code"]) {
+    const description = `awml: "0.10"\nplatform: { id: scripts, label: Scripts }\noff_for_up_to: PT0S\nsteps: ${steps}\nagents: []\ncalls: any\nholds: [notes]\n`;
+    const descriptionPath = `${temporary}/${steps}.yaml`;
+    await writeFile(descriptionPath, description);
+    for (const [name, source, path, implementation, supplied, outlined] of [
+      ["code step", stock, stockPath, "home", [description], steps === "agent"],
+      ["AI step", canonicalSource, canonicalPath, "home", [description], false],
+      ["no descriptions", stock, stockPath, "home", [], false],
+      ["security view", stock, stockPath, "", [description], false],
+    ]) {
+      const args = implementation ? ["--implementation", implementation] : [];
+      const paths = supplied.length ? [descriptionPath] : [];
+      const drawn = api.draw(source, implementation, supplied);
+      assert.equal(drawn.includes("  class plan agentrun\n"), outlined, `${steps}: ${name}: outline`);
+      assert.equal(drawn + "\n", runNative(["draw", ...args, path, ...paths]), `${steps}: ${name}: Mermaid`);
+      assert.equal(api.draw([source, ...supplied], implementation), drawn, `${steps}: ${name}: descriptions among files`);
+      assert.equal(api.graphJSON(source, implementation, supplied) + "\n",
+        runNative(["graph", ...args, path, ...paths]), `${steps}: ${name}: graph`);
+      assert.equal(Boolean(api.graph(source, implementation, supplied).parts.find((part) => part.id === "plan").agentRun), outlined,
+        `${steps}: ${name}: graph outline`);
+    }
+    assert.equal(globalThis.__awmlDraw(JSON.stringify([stock]), "home", JSON.stringify([description])),
+      api.draw(stock, "home", [description]), "the Go bridge takes optional descriptions");
+  }
+
   for (const [name, source] of [
     ["warning", canonicalSource.replace("label: Plan", "label: Plan, op: do")],
     ["unplaced", canonicalSource.replace("parts: [plan, notes]", "parts: [plan]")],
@@ -556,13 +592,15 @@ lines:
       return true;
     });
   }
-  // A file that can't be on a map, or isn't YAML, is named as awml names it, after every other file's
-  // mistakes.
+  // A platform description is kept out of the security view and the map in both engines.
+  assert.equal(api.draw([handOff[0], laptop]) + "\n", runNative(["draw", handOff[0].file, laptop.file]));
+  assert.equal(api.graphJSON([handOff[0], laptop]) + "\n", runNative(["graph", handOff[0].file, laptop.file]));
+  assert.equal(api.draw([...handOff, laptop]), api.draw(handOff));
+  assert.equal(api.draw([...handOff, laptop]) + "\n", runNative(["draw", ...handOffPaths, laptop.file]));
+  // A file that isn't YAML is named as awml names it, after every other file's mistakes.
   const notYAML = { file: `${temporary}/not-yaml.yaml`, source: "parts: [\n" };
   await writeFile(notYAML.file, notYAML.source);
   for (const [name, call, args, files] of [
-    ["draw of a platform description with a workflow", () => api.draw([handOff[0], laptop]), ["draw", handOff[0].file, laptop.file], handOff],
-    ["graph of a platform description with a workflow", () => api.graph([handOff[0], laptop]), ["graph", handOff[0].file, laptop.file], handOff],
     ["draw of a file that isn't YAML", () => api.draw([notYAML, ...odd]), ["draw", notYAML.file, ...handOffPaths], odd],
     ["summary of a file that isn't YAML", () => api.summary([notYAML, ...odd]), ["summary", notYAML.file, ...handOffPaths], odd],
     ["fit of a file that isn't YAML", () => api.fit([notYAML, ...odd, laptop]), ["fit", notYAML.file, ...handOffPaths, laptop.file], odd],
@@ -778,7 +816,8 @@ const family = await Promise.all(familyPaths.map(async (file) => ({ file, source
 assert.equal(api.draw(family) + "\n", await readFile(new URL("../examples/family-map.mmd", import.meta.url), "utf8"), "the family's map");
 assert.equal(api.summaryJSON(family) + "\n", runNative(["summary", "--json", ...familyPaths]), "the family's summary JSON");
 
-console.log(`Node wasm parity: ${passed} examples passed (check, warnings, summary, convert, Mermaid, graph); ${placements} implementations; ${untrustedDrawings} drawings of untrusted text; ${conversions} conversions; invalid check messages and fit passed`);
+assert(agentRunDrawings > 0, "no example outlines a code step carried out by a model");
+console.log(`Node wasm parity: ${passed} examples passed (check, warnings, summary, convert, Mermaid, graph); ${placements} implementations; ${untrustedDrawings} drawings of untrusted text; ${agentRunDrawings} drawings of code carried out by a model; ${conversions} conversions; invalid check messages and fit passed`);
 
 // said gives what awml check prints of one file: its warnings, its errors, each said to be one, and
 // the mistakes that make it invalid, or ok when it has neither.

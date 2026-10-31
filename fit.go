@@ -126,6 +126,11 @@ func describe(model fitModel, descriptions []*Map) ([]fitPlatform, map[string]fi
 	if gaps := model.gaps(); len(gaps) != 0 {
 		return nil, nil, gaps
 	}
+	return describePlatforms(descriptions)
+}
+
+// describePlatforms reads descriptions in their given order and matches them by platform id.
+func describePlatforms(descriptions []*Map) ([]fitPlatform, map[string]fitPlatform, []string) {
 	var gaps []string
 	var platforms []fitPlatform
 	described := map[string]fitPlatform{}

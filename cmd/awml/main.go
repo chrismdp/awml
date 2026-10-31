@@ -46,11 +46,15 @@ options:
 `
 
 var commands = map[string]struct{ usage, help string }{
-	"draw": {"usage: awml draw [-h] [--implementation ID] files [files ...]\n", `
+	"draw": {"usage: awml draw [-h] [--implementation ID] files [files ...] [DESCRIPTIONS ...]\n", `
 Draw a workflow's security view, or the map of several workflows drawn together.
+With --implementation, draw its platform view. Give platform descriptions to show where a model
+carries out code steps. Code steps on a platform with steps: agent have a dashed orange outline.
+A description that wasn't given leaves the drawing unchanged.
 
 positional arguments:
-  files       workflows, or folders of them
+  files         workflows, or folders of them
+  DESCRIPTIONS  optional platform descriptions, or folders of them
 
 options:
   -h, --help  show this help message and exit
@@ -61,7 +65,7 @@ Print what awml draw would draw, as JSON with nothing laid out: its groups, part
 and places.
 
 positional arguments:
-  files       workflows, or folders of them
+  files       workflows and optional platform descriptions, or folders of them
 
 options:
   -h, --help  show this help message and exit

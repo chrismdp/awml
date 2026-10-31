@@ -132,6 +132,7 @@ func TestTheGuideToDrawingByHandMatchesDraw(t *testing.T) {
 		want = append(want, "`"+arrow+"`")
 	}
 	want = append(want, "  classDef untrusted "+untrustedOutline, "  classDef unstopped "+unstoppedOutline, "`untrusted`", "`unstopped`", "`"+orange+"`", "`"+green+"`")
+	want = append(want, "  classDef agentrun "+agentRunOutline, "`agentrun`", "`steps: agent`")
 	want = append(want, pastel...)
 	// A map of several workflows draws each workflow as a box, and each line between a box and a part
 	// it shares, always dotted, with a head at one end, at each or at none.

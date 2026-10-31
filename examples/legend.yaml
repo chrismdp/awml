@@ -1,8 +1,8 @@
 awml: "0.10"
 title: The parts of a drawing
 description: |
-  Every kind of part, as a key to reading the drawings, with where untrusted text goes. The hidden
-  lines only lay it out as a grid.
+  Every kind of part, as a key to reading the drawings, with where untrusted text goes. The platform
+  view also shows a code step carried out by a model. The hidden lines only lay it out as a grid.
 parts:
   - { id: trigger, kind: trigger, label: "A trigger: a time or an event" }
   - { id: ai, kind: ai, label: "A step decided by AI" }
@@ -25,3 +25,8 @@ lines:
   - { from: context, to: outside, kind: hidden }
   - { from: code, to: connector, kind: hidden }
   - { from: person, to: comment, kind: tie }
+implementations:
+  agent:
+    label: A model carries out the steps
+    blocks:
+      - { id: session, label: "A model carries out code steps: a dashed orange outline", platform: cowork-mac-mini, parts: [trigger, ai, code, person, review, approval, context, connector, strangers, surface, outside, comment] }

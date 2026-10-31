@@ -213,19 +213,19 @@ func TestDrawingSeveralFilesDrawsTheirMap(t *testing.T) {
 	}
 }
 
-func TestTheMapRefusesAFileThatCantBeOnIt(t *testing.T) {
+func TestDrawingOneWorkflowIgnoresDescriptionsInItsSecurityView(t *testing.T) {
 	sources := []Source{source("plan.yaml", planWorkflow), source("laptop.yaml", laptop)}
-	want := "laptop.yaml: a platform description has no drawing"
-	if _, err := DrawSources(sources, ""); err == nil || err.Error() != want {
-		t.Errorf("draw gave %v, want %q", err, want)
+	want, err := DrawSources(sources[:1], "")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, err := GraphSources(sources, ""); err == nil || err.Error() != want {
-		t.Errorf("graph gave %v, want %q", err, want)
+	if got, err := DrawSources(sources, ""); err != nil || got != want {
+		t.Errorf("draw gave %q with %v", got, err)
 	}
 }
 
 func TestDrawingAnImplementationTakesOneWorkflow(t *testing.T) {
-	sources := []Source{source("plan.yaml", planWorkflow), {File: "missing.yaml", Unreadable: "can't be read: No such file or directory"}}
+	sources := []Source{source("plan.yaml", planWorkflow), source("shop.yaml", shopWorkflow)}
 	if _, err := DrawSources(sources, "home"); refused(t, err) != "argument --implementation: draws one workflow, not several" {
 		t.Errorf("draw refused with %q", err)
 	}
