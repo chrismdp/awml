@@ -10,6 +10,15 @@ FIX_DIR/AGENTS.md, main's copy, and follow it, and read SPEC.md before changing 
 describes. Read FIX_DIR/REVIEW.md too: once your fix is pushed, CI's two fresh reviews hold the pull
 request to it again.
 
+- If FIX_DIR/decisions.md exists, it is the pull request's issue: its text and the comments of
+  the people who decided what the pull request builds, each with its link. Weigh each finding
+  against those decisions before you fix anything. If fixing a finding would change a decision,
+  write it to OUT_DIR/referred.md, with the finding, the decision it would change, quoted, with the
+  comment's link, and the options as you see them. If you refer any finding back, change nothing
+  at all, not even the other findings or the Nits: the pull request waits for the answer, and a
+  fix pushed now would start the reviews again, which would find the same finding. The app posts
+  OUT_DIR/referred.md on the issue for a person to answer. A run that refers findings back and
+  changes something too pushes nothing.
 - Fix every Important finding and every Nit. Leave the Pre-existing ones: the fault was there
   before the pull request.
 - Check each finding before you fix it. If one is wrong, leave the code as it is for that one, and

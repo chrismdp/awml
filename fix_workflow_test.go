@@ -122,17 +122,21 @@ func TestTheFixCommitCarriesTheLineItsTriesAreCountedBy(t *testing.T) {
 	}
 }
 
-// fixGuard rehearses the write job's guard on a bakery's branch, at the reviewed commit, with a fix
+// fixGuard rehearses the write job's guard on a bakery's branch, scones unless env names another, at the reviewed commit, with a fix
 // made by change and the digest the fix job gave.
 func fixGuard(t *testing.T, env map[string]string, change func(r *rehearsal, repo string), moved bool) *rehearsal {
 	t.Helper()
 	guard, _ := readFactoryWorkflow(t, "fix.yml").Jobs["write"].step(t, "guard")
 	r := newRehearsal(t)
+	branch := "scones"
+	if env["BRANCH"] != "" {
+		branch = env["BRANCH"]
+	}
 	origin, _ := r.newRepo("origin", map[string]string{"recipes.md": "Bread\n", ".github/workflows/ci.yml": "name: CI\n"})
-	gitIn(t, origin, "switch", "-q", "-c", "scones")
+	gitIn(t, origin, "switch", "-q", "-c", branch)
 	head := gitIn(t, origin, "rev-parse", "HEAD")
 	work := filepath.Join(r.root, "work")
-	gitIn(t, r.root, "clone", "-q", "--branch", "scones", origin, work)
+	gitIn(t, r.root, "clone", "-q", "--branch", branch, origin, work)
 	change(r, work)
 	gitIn(t, work, "add", "-A")
 	r.write("fix/fix.patch", gitIn(t, work, "diff", "--cached", "--binary")+"\n")
@@ -274,7 +278,7 @@ func TestTheFixerIsToldWhenFindingsMayBeMissing(t *testing.T) {
 		r.write("read-findings.sh", "#!/bin/bash\n")
 		r.write("fix/in/.keep", "")
 		t.Cleanup(func() { exec.Command("chmod", "-R", "u+w", filepath.Join(r.temp, "fix")).Run() })
-		r.run(bring, map[string]string{"PR_NUMBER": "8", "HEAD_SHA": strings.Repeat("ab", 20), "CI_RUN": "77"}, `
+		r.run(bring, map[string]string{"PR_NUMBER": "8", "HEAD_SHA": strings.Repeat("ab", 20), "CI_RUN": "77", "BRANCH": "scones"}, `
   "api repos/owner/repo/compare/"*) answer <<< 'diff' ;;
   "api --paginate repos/owner/repo/pulls/8/commits"*) answer <<< '[{"sha": "abc", "commit": {"message": "A commit"}}]' ;;`)
 		r.mustPass()

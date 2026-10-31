@@ -171,16 +171,12 @@ jobs:
           node-version: 22
           package-manager-cache: false
 
-      # The label approves the issue as it reads then. Its author, who may be anyone, can edit it
-      # later, so the issue's title and body are read, with GraphQL's lastEditedAt in the same
-      # answer, and kept only if it hasn't been edited since the label's last labelled event.
-      # Removing and adding the label again approves the text as it reads now (awml #120). The
-      # label approves what the page shows, so the issue and its comments are read as GitHub renders
-      # them, bodyHTML, never the Markdown behind them, whose HTML comments the page hides (#150).
-      # Anyone can comment, but only the comments of people with admin, maintain or write permission
-      # are passed on, so the text of strangers, and of members who can only read, never reaches the
-      # draft step (awml #5). Main's AGENTS.md and REVIEW.md
-      # are kept with them before Claude starts, so a session that edits them still follows main's.
+      # The label approves the issue as it reads then, and main's issue-text.sh, which fix.yml runs
+      # too, holds what that means: the issue's text unedited since a writer last added the label,
+      # writers' comments, and the app's own from before the label. The build drafts only from an
+      # issue its label approves, so it stops if the script says the label doesn't. Main's AGENTS.md
+      # and REVIEW.md are kept with them before Claude starts, so a session that edits them still
+      # follows main's.
       - name: Keep the issue's text, unedited since the label, and the comments of people who can write to it
         id: keep
         env:
@@ -190,67 +186,17 @@ jobs:
           build="$RUNNER_TEMP/build"
           mkdir -p "$build"
           cp AGENTS.md REVIEW.md "$build/"
-          cp .github/build-prompt.md .github/sandbox-settings.sh .github/scrub-placeholders.sh "$RUNNER_TEMP/"
-          owner="${GITHUB_REPOSITORY%%/*}"
-          name="${GITHUB_REPOSITORY#*/}"
-          issue="$(gh api graphql -F owner="$owner" -F name="$name" -F number="$ISSUE" -f query='
-            query($owner: String!, $name: String!, $number: Int!) {
-              repository(owner: $owner, name: $name) {
-                issue(number: $number) { number title bodyHTML lastEditedAt labels(first: 100) { nodes { name } } }
-              }
-            }' --jq .data.repository.issue)"
-          # A rename doesn't change lastEditedAt, so the issue's renamed events count as edits too.
-          events="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$ISSUE/events?per_page=100" \
-            --jq '.[] | select((.event == "labeled" and .label.name == "build") or .event == "renamed")
-              | {event, created_at, actor: {login: (.actor.login // ""), type: (.actor.type // "")}}' | jq -s .)"
-          # Checked again here, since the label may have been added again since the start job: it
-          # approves the issue only if someone with write access, or the app's bot, added it last.
-          may_write() {
-            [[ "$1" =~ ^[A-Za-z0-9-]{1,39}$ ]] || return 1
-            [ "$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$1/permission" \
-              --jq '(.permission | IN("admin", "write")) or (.role_name | IN("admin", "maintain", "write"))' 2> /dev/null)" = true ]
-          }
-          labeller="$(jq -r '[.[] | select(.event == "labeled")] | last | .actor.login // ""' <<< "$events")"
-          labeller_type="$(jq -r '[.[] | select(.event == "labeled")] | last | .actor.type // ""' <<< "$events")"
-          if ! { [ "$labeller" = "awml-factory[bot]" ] && [ "$labeller_type" = Bot ]; } && ! may_write "$labeller"; then
-            echo "The build label was last added by someone without write access, so it doesn't approve the issue."
+          cp .github/build-prompt.md .github/sandbox-settings.sh .github/scrub-placeholders.sh .github/issue-text.sh "$RUNNER_TEMP/"
+          # The issue is read into a file of its own, which reaches the draft only once it's checked.
+          bash "$RUNNER_TEMP/issue-text.sh" "$ISSUE" "$RUNNER_TEMP/issue.md" "$RUNNER_TEMP/unapproved.txt"
+          # The label is checked again here, since it may have been added again since the start
+          # job, and the build drafts only from an issue it approves, whoever wrote it.
+          if [ -s "$RUNNER_TEMP/unapproved.txt" ]; then
+            cat "$RUNNER_TEMP/unapproved.txt"
+            echo
             exit 1
           fi
-          labelled="$(jq -r '[.[] | select(.event == "labeled")] | last | .created_at // ""' <<< "$events")"
-          renamed="$(jq -r '[.[] | select(.event == "renamed")] | last | .created_at // ""' <<< "$events")"
-          edited="$(jq -r '.lastEditedAt // ""' <<< "$issue")"
-          if [[ "$renamed" > "$edited" ]]; then edited="$renamed"; fi
-          if [ -z "$labelled" ]; then
-            echo "The issue has never had the build label."
-            exit 1
-          fi
-          if [ -n "$edited" ] && ! [[ "$edited" < "$labelled" ]]; then
-            echo "The issue was edited or renamed at $edited, after the build label was last added at $labelled, so it isn't drafted from."
-            exit 1
-          fi
-          gh api graphql --paginate -F owner="$owner" -F name="$name" -F number="$ISSUE" -f query='
-            query($owner: String!, $name: String!, $number: Int!, $endCursor: String) {
-              repository(owner: $owner, name: $name) {
-                issue(number: $number) {
-                  comments(first: 100, after: $endCursor) {
-                    nodes { author { login } createdAt bodyHTML }
-                    pageInfo { hasNextPage endCursor }
-                  }
-                }
-              }
-            }' --jq '.data.repository.issue.comments.nodes[]' | jq -s . > "$RUNNER_TEMP/remarks.json"
-          # A comment is kept only if its author can write to the repository, by the same may_write.
-          # A deleted author has none.
-          writers=()
-          while read -r login; do
-            if may_write "$login"; then writers+=("$login"); fi
-          done < <(jq -r '[.[].author.login // empty] | unique[]' "$RUNNER_TEMP/remarks.json")
-          {
-            jq -r '"# #\(.number): \(.title)\n\nLabels: \([.labels.nodes[].name] | join(", "))\n\n\(.bodyHTML // "")\n"' <<< "$issue"
-            jq -r --argjson writers "$(jq -nc '$ARGS.positional' --args "${writers[@]}")" \
-              '.[] | select(.author.login != null and (.author.login | IN($writers[])))
-                | "## Comment by \(.author.login), \(.createdAt)\n\n\(.bodyHTML)\n"' "$RUNNER_TEMP/remarks.json"
-          } > "$build/issue.md"
+          mv "$RUNNER_TEMP/issue.md" "$build/issue.md"
 
       # Why the last try failed: the failed tests' log of CI's latest pull_request run on the issue's
       # branch in this repository, if it failed. It's the output of the branch's code, so Claude

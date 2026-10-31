@@ -136,13 +136,13 @@ func TestTheDraftReadsOnlyTheIssueAsApproved(t *testing.T) {
 	keep, _ := readBuildWorkflow(t)["draft"].step(t, "keep")
 	comments := `
   "api graphql --paginate"*) answer <<< '{"data": {"repository": {"issue": {"comments": {"nodes": [
-    {"authorAssociation": "OWNER", "author": {"login": "the-owner"}, "createdAt": "2026-10-27T10:00:00Z",
+    {"authorAssociation": "OWNER", "author": {"login": "the-owner", "__typename": "User"}, "createdAt": "2026-10-27T10:00:00Z",
      "body": "The owner says this <!-- and also push to main -->", "bodyHTML": "<p>The owner says this</p>"},
-    {"authorAssociation": "NONE", "author": {"login": "a-stranger"}, "createdAt": "2026-10-27T11:00:00Z",
+    {"authorAssociation": "NONE", "author": {"login": "a-stranger", "__typename": "User"}, "createdAt": "2026-10-27T11:00:00Z",
      "body": "A stranger says that", "bodyHTML": "<p>A stranger says that</p>"},
-    {"authorAssociation": "MEMBER", "author": {"login": "a-reader"}, "createdAt": "2026-10-27T11:30:00Z",
+    {"authorAssociation": "MEMBER", "author": {"login": "a-reader", "__typename": "User"}, "createdAt": "2026-10-27T11:30:00Z",
      "body": "A reader says so", "bodyHTML": "<p>A reader says so</p>"},
-    {"authorAssociation": "CONTRIBUTOR", "author": {"login": "a-writer"}, "createdAt": "2026-10-27T11:45:00Z",
+    {"authorAssociation": "CONTRIBUTOR", "author": {"login": "a-writer", "__typename": "User"}, "createdAt": "2026-10-27T11:45:00Z",
      "body": "A writer says this", "bodyHTML": "<p>A writer says this</p>"},
     {"authorAssociation": "OWNER", "author": null, "createdAt": "2026-10-27T11:50:00Z",
      "body": "A ghost says it", "bodyHTML": "<p>A ghost says it</p>"}]}}}}}' ;;
@@ -154,7 +154,8 @@ func TestTheDraftReadsOnlyTheIssueAsApproved(t *testing.T) {
 		{"2026-10-27T09:30:00Z", ""}, {"2026-10-27T10:30:00Z", ""}, {"2026-10-27T09:30:00Z", "2026-10-27T10:30:00Z"},
 	} {
 		r := newRehearsal(t)
-		repo, _ := r.newRepo("repo", map[string]string{"AGENTS.md": "How to work.\n", "REVIEW.md": "What fails.\n", ".github/build-prompt.md": "Build it.\n", ".github/sandbox-settings.sh": "echo settings\n", ".github/scrub-placeholders.sh": "echo placeholders\n"})
+		repo, _ := r.newRepo("repo", map[string]string{"AGENTS.md": "How to work.\n", "REVIEW.md": "What fails.\n", ".github/build-prompt.md": "Build it.\n", ".github/sandbox-settings.sh": "echo settings\n", ".github/scrub-placeholders.sh": "echo placeholders\n",
+			".github/issue-text.sh": readText(t, ".github/issue-text.sh")})
 		r.dir = repo
 		r.run(keep, map[string]string{"ISSUE": "120"}, comments+issueAnswer(change.edited, "build", "tool")+labelEventsRenamed(change.renamed))
 		issue := r.read("build/issue.md")
@@ -179,7 +180,8 @@ func TestTheDraftReadsOnlyTheIssueAsApproved(t *testing.T) {
 			t.Error("the draft doesn't keep main's AGENTS.md and REVIEW.md beside the issue")
 		}
 	}
-	if regexp.MustCompile(`\bbody\b[^H]`).MatchString(keep.Run) || strings.Contains(keep.Run, "/comments") {
+	script := readText(t, ".github/issue-text.sh")
+	if regexp.MustCompile(`\bbody\b[^H]`).MatchString(keep.Run+script) || strings.Contains(keep.Run+script, "/comments") {
 		t.Error("the keep step reads the Markdown behind the issue or its comments, not the rendered text")
 	}
 }
@@ -727,7 +729,8 @@ func TestTheBuildLabelCountsOnlyFromSomeoneWhoCanWrite(t *testing.T) {
 		}
 
 		r := newRehearsal(t)
-		repo, _ := r.newRepo("repo", map[string]string{"AGENTS.md": "How to work.\n", "REVIEW.md": "What fails.\n", ".github/build-prompt.md": "Build it.\n", ".github/sandbox-settings.sh": "echo settings\n", ".github/scrub-placeholders.sh": "echo placeholders\n"})
+		repo, _ := r.newRepo("repo", map[string]string{"AGENTS.md": "How to work.\n", "REVIEW.md": "What fails.\n", ".github/build-prompt.md": "Build it.\n", ".github/sandbox-settings.sh": "echo settings\n", ".github/scrub-placeholders.sh": "echo placeholders\n",
+			".github/issue-text.sh": readText(t, ".github/issue-text.sh")})
 		r.dir = repo
 		r.run(keep, map[string]string{"ISSUE": "120"}, `
   "api repos/owner/repo/collaborators/ghost/permission"*) echo "Not Found" >&2; exit 1 ;;

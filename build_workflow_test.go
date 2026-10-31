@@ -489,8 +489,8 @@ func TestAppTokensAreScopedToThisRepository(t *testing.T) {
 			}
 		}
 	})
-	if tokens != 5 {
-		t.Errorf("found %d app tokens, want CI's report, the build's, land's, the fixer's and the rebase's", tokens)
+	if tokens != 6 {
+		t.Errorf("found %d app tokens, want CI's report, the build's, land's, the fixer's two and the rebase's", tokens)
 	}
 }
 
@@ -1380,11 +1380,12 @@ func TestNoSessionCanReachDocker(t *testing.T) {
 // requests to open, edit or merge one, issues to open one. Anything left out is denied.
 func TestEveryAppTokenNamesOnlyThePermissionsItNeeds(t *testing.T) {
 	want := map[string]map[string]string{
-		"build.yml open":   {"permission-contents": "write", "permission-pull-requests": "write"},
-		"fix.yml write":    {"permission-contents": "write"},
-		"land.yml land":    {"permission-contents": "write", "permission-pull-requests": "write"},
-		"resolve.yml push": {"permission-contents": "write"},
-		"ci.yml report":    {"permission-issues": "write"},
+		"build.yml open app":   {"permission-contents": "write", "permission-pull-requests": "write"},
+		"fix.yml write app":    {"permission-contents": "write"},
+		"fix.yml write asker":  {"permission-issues": "write"},
+		"land.yml land app":    {"permission-contents": "write", "permission-pull-requests": "write"},
+		"resolve.yml push app": {"permission-contents": "write"},
+		"ci.yml report app":    {"permission-issues": "write"},
 	}
 	found := 0
 	eachJob(t, func(file, name string, job workflowJob) {
@@ -1393,9 +1394,9 @@ func TestEveryAppTokenNamesOnlyThePermissionsItNeeds(t *testing.T) {
 				continue
 			}
 			found++
-			expected, ok := want[file+" "+name]
+			expected, ok := want[file+" "+name+" "+step.ID]
 			if !ok {
-				t.Errorf("%s's %s mints an app token no test expects", file, name)
+				t.Errorf("%s's %s mints an app token no test expects in %q", file, name, step.ID)
 				continue
 			}
 			got := map[string]string{}
