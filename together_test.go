@@ -463,7 +463,7 @@ func TestTheMapDrawsAnUntrustedPartsOutline(t *testing.T) {
 func TestTheMapDrawsABoxForEachWorkflowAndEachSharedPartOnce(t *testing.T) {
 	got := DrawMap(together(t, "plan.yaml", planWorkflow, "shop.yaml", shopWorkflow))
 	for _, want := range []string{
-		"  w1_thu([\"Thursday 19#58;00\"])\n  w2_ready([\"The shopping list is ready\"])\n  s1[(\"Shopping list\")]\n" +
+		"  w1_thu(\"Thursday 19#58;00\")\n  w2_ready(\"The shopping list is ready\")\n  s1[(\"Shopping list\")]\n" +
 			"  subgraph w1[\"Dinners\"]\n    direction TB\n    w1_ready>\"Start the shopping#58; Allow\"]\n  end\n" +
 			"  subgraph w2[\"Shopping\"]\n    direction TB\n  end\n",
 		"  w1_thu --> w1\n  w2_ready --> w2\n  w1 -.-> s1\n  s1 -.-> w2\n  w1_ready --> w2_ready\n",
@@ -508,7 +508,7 @@ func TestTheMapDrawsAnOutsideActionOnlyWhereItStartsAWorkflowGiven(t *testing.T)
 	sorting = strings.Replace(sorting, "lines:\n", "lines:\n  - { from: step, to: tell, kind: start }\n  - { from: tell, to: done, kind: start }\n", 1)
 	got := DrawMap(together(t, "plan.yaml", planWorkflow, "sorting.yaml", sorting))
 	for _, want := range []string{
-		"  w1_thu([\"Thursday 19#58;00\"])\n  w2_go([\"Go\"])\n" +
+		"  w1_thu(\"Thursday 19#58;00\")\n  w2_go(\"Go\")\n" +
 			"  subgraph w1[\"Dinners\"]\n    direction TB\n  end\n  subgraph w2[\"Sorting\"]\n    direction TB\n  end\n",
 	} {
 		if !strings.Contains(got, want) {
@@ -524,7 +524,7 @@ func TestTheMapDrawsAnOutsideActionOnlyWhereItStartsAWorkflowGiven(t *testing.T)
 func TestTheMapDrawsEveryTrigger(t *testing.T) {
 	plan := strings.Replace(planWorkflow, "  - { id: plan,", "  - { id: sun, kind: trigger, label: Sunday, wait: PT1H }\n  - { id: plan,", 1)
 	got := DrawMap(together(t, "plan.yaml", plan, "shop.yaml", shopWorkflow))
-	if want := "  w1_thu([\"Thursday 19#58;00\"])\n  w1_sun([\"Sunday\"])\n"; !strings.Contains(got, want) {
+	if want := "  w1_thu(\"Thursday 19#58;00\")\n  w1_sun(\"Sunday\")\n"; !strings.Contains(got, want) {
 		t.Errorf("the map lacks\n%s\nin\n%s", want, got)
 	}
 }

@@ -36,7 +36,7 @@ A part is its id followed straight away by its node, with the label in place of 
 
 | Part `kind` | Class | Node, after the id |
 |---|---|---|
-| `trigger` | `trig` | `(["label"])` |
+| `trigger` | `trig` | `("label")` |
 | `ai` | `ai` | `("label")` |
 | `code` | `code` | `("label")` |
 | `person` | `person` | `("label")` |

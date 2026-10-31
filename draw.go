@@ -22,7 +22,7 @@ func drawnRed(l *Map) bool {
 
 // UML activity shapes where Mermaid has them; our own where UML has nothing.
 var shapes = map[string]string{
-	"trigger":   `(["%s"])`,                          // accept event or accept time event, drawn as a pill
+	"trigger":   `("%s")`,                            // accept event or accept time event, a rounded box whose corners stay small however tall it grows
 	"context":   `[("%s")]`,                          // data store node, drawn as a cylinder
 	"connector": `{{"%s"}}`,                          // connector: ours
 	"surface":   `@{ shape: win-pane, label: "%s" }`, // surface: ours

@@ -27,7 +27,7 @@ func has(t *testing.T, out, want string) {
 
 func TestEachPartKindHasItsShapeAndColour(t *testing.T) {
 	for _, c := range []struct{ kind, node, class string }{
-		{"trigger", `p(["Label"])`, "trig"},
+		{"trigger", `p("Label")`, "trig"},
 		{"ai", `p("<small style='color:rgb(61,67,79)'>🤖</small><br>Label")`, "ai"},
 		{"code", `p("<small style='color:rgb(61,67,79)'>⚙️</small><br>Label")`, "code"},
 		{"person", `p("<small style='color:rgb(61,67,79)'>👤</small><br>Label")`, "person"},
@@ -448,7 +448,7 @@ func TestATriggerSitsInTheGroupOfWhatItStarts(t *testing.T) {
 parts: [{id: t, kind: trigger, label: "Thursday 19:00"}, {id: s, kind: ai, label: Plan, in: family}]
 lines: [{from: t, to: s, kind: start}]
 groups: [{id: family, label: family}]`)
-	has(t, out, "  subgraph family[\"family\"]\n    direction TB\n    t([\"Thursday 19#58;00\"])\n    s(\"<small style='color:rgb(61,67,79)'>🤖</small><br>Plan\")\n  end")
+	has(t, out, "  subgraph family[\"family\"]\n    direction TB\n    t(\"Thursday 19#58;00\")\n    s(\"<small style='color:rgb(61,67,79)'>🤖</small><br>Plan\")\n  end")
 }
 
 func TestATriggerPlacedByHandStaysPut(t *testing.T) {
@@ -456,7 +456,7 @@ func TestATriggerPlacedByHandStaysPut(t *testing.T) {
 parts: [{id: t, kind: trigger, label: Daily, in: a}, {id: s, kind: ai, label: Plan, in: b}]
 lines: [{from: t, to: s, kind: start}]
 groups: [{id: a, label: a}, {id: b, label: b}]`)
-	has(t, out, "  subgraph a[\"a\"]\n    direction TB\n    t([\"Daily\"])\n  end")
+	has(t, out, "  subgraph a[\"a\"]\n    direction TB\n    t(\"Daily\")\n  end")
 }
 
 func TestACommentSitsInTheGroupOfWhatItIsTiedTo(t *testing.T) {
@@ -472,7 +472,7 @@ func TestHiddenLinesDontPlaceATrigger(t *testing.T) {
 parts: [{id: t, kind: trigger, label: Daily}, {id: s, kind: ai, label: Plan, in: g}]
 lines: [{from: t, to: s, kind: hidden}]
 groups: [{id: g, label: g}]`)
-	if !strings.HasPrefix(body(out), "flowchart TB\n  t([\"Daily\"])\n") {
+	if !strings.HasPrefix(body(out), "flowchart TB\n  t(\"Daily\")\n") {
 		t.Errorf("the drawing starts\n%s", body(out))
 	}
 }
@@ -565,7 +565,7 @@ flowchart TB
     cCar[("Carers notes")]
     subgraph zFamily["family#58; parents#44; kids"]
       direction TB
-      tAsk(["Someone in the family chat asks what time swimming is"])
+      tAsk("Someone in the family chat asks what time swimming is")
       cFam[("Family notes")]
       sFind("<small style='color:rgb(61,67,79)'>⚙️</small><br>Find the notes that speak to it")
       sWord("<small style='color:rgb(61,67,79)'>🤖</small><br>Word the answer from those notes alone")

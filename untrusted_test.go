@@ -173,7 +173,7 @@ func TestUntrustedTextThatReachesAnOutsideActionUnstoppedIsAnErrorDrawnRed(t *te
 		}
 	}
 	out := Draw(doc) + "\n"
-	has(t, out, "\n    form([\"An order on the website#39;s form\"])\n")
+	has(t, out, "\n    form(\"An order on the website#39;s form\")\n")
 	has(t, out, "\n  tag -->|\"untrusted text from part #34;form#34; reaches outside action #34;box#34; with nothing to stop it or accept the risk\"| box\n")
 	has(t, out, "\n  classDef untrusted "+untrustedOutline+"\n  classDef unstopped "+unstoppedOutline+"\n")
 	has(t, out, "\n  class form trig\n")
