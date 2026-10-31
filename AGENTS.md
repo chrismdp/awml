@@ -89,4 +89,4 @@ To release:
 
 The AWML registry runs this package as WebAssembly: `check`, `summary`, `draw`, `graph`, `fit` and `convert`, through `cmd/awml-wasm` and `wasm/awml.js`. `wasm/parity.test.mjs` keeps them giving the same answers as the CLI.
 
-After a release that changes what any of them return, tell the registry on its own issue tracker, so it can update its copy of the engine.
+After a release that changes what any of them return, update the registry's copy of the engine yourself: in a worktree of the registry, run `npm run engine:update -- vx.y.z`, check its tests pass, and open the change as its own pull request. The registry's factory builds without the network, so it can't. Then open an issue on the registry's tracker for what the registry should do with the change, saying it builds once the engine update is on main.
