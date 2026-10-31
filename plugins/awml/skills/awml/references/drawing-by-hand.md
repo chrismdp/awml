@@ -112,6 +112,17 @@ Then write these lines, unchanged:
 Where any part has `untrusted: true`, add the two lines of section 5 here.
 
 In a platform view, match each block's `platform` id to the platform descriptions given. A code step whose own block's description has `steps: agent` keeps its green fill and takes a dashed orange outline. A missing description adds no outline. No other kind of part gets it, and the security view never does. Where any code step gets this outline, add this line after the untrusted class definitions, if present:
+<<<<<<< HEAD
+=======
+
+```
+  classDef agentrun stroke:#d97a00,stroke-width:3px,stroke-dasharray:6 3
+```
+
+Then one line for each class that any part has, in the order `trig`, `ctx`, `con`, `surf`, `out`, `ai`, `code`, `person`, `gap`, `untrusted`, `unstopped`, `agentrun`, naming its parts in the file's order: `  class plan ai`, or `  class approve,edit person`. A part is in the class of its kind. A part with `untrusted: true` is in `untrusted` or `unstopped` too, as section 5 says. A code step carried out by a model is in `agentrun` too, as in `  class count agentrun`. Its dashed outline reads apart from an untrusted part's solid outline, and no part has both.
+
+Then one line for each group, in the file's order: `  style id STYLE`. In the security view, every group's `STYLE` is:
+>>>>>>> origin/main
 
 ```
   classDef agentrun stroke:#d97a00,stroke-width:3px,stroke-dasharray:6 3
