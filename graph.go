@@ -21,13 +21,15 @@ type Graph struct {
 
 // A GraphGroup is a box: a scope, a block in a platform view, or a workflow on a map, with the
 // file it was given by and, where a ref among the workflows given names it so, its owner/slug. In
-// is the box it's drawn inside.
+// is the box it's drawn inside. A security scope gives its edge's Stroke and label's Color.
 type GraphGroup struct {
 	ID        string `json:"id"`
 	Label     string `json:"label"`
 	In        string `json:"in,omitempty"`
 	File      string `json:"file,omitempty"`
 	Published string `json:"published,omitempty"`
+	Stroke    string `json:"stroke,omitempty"`
+	Color     string `json:"color,omitempty"`
 }
 
 // A GraphPart is a part other than a comment, with the box it's drawn in. Decider is who decides
@@ -109,7 +111,12 @@ func GraphOf(doc *Map) Graph {
 		g.Parts = append(g.Parts, part)
 	}
 	for i, group := range groups {
-		g.Groups = append(g.Groups, GraphGroup{ID: str(group, "id"), Label: str(group, "label"), In: str(group, "in")})
+		box := GraphGroup{ID: str(group, "id"), Label: str(group, "label"), In: str(group, "in")}
+		if g.View == "security" {
+			colour := scopeColours[i%len(scopeColours)]
+			box.Stroke, box.Color = colour.stroke, colour.label
+		}
+		g.Groups = append(g.Groups, box)
 		if g.View == "platform" {
 			fill, stroke, _ := strings.Cut(pastel[i%len(pastel)], ",")
 			g.Places = append(g.Places, GraphPlace{ID: str(group, "id"), Fill: strings.TrimPrefix(fill, "fill:"), Stroke: strings.TrimPrefix(stroke, "stroke:")})
@@ -420,7 +427,7 @@ func (g Graph) Mermaid() string {
 		places[p.ID] = p
 	}
 	for _, group := range g.Groups {
-		look := scope
+		look := fmt.Sprintf(scope, group.Stroke, group.Color)
 		if place, ok := places[group.ID]; ok {
 			look = fmt.Sprintf("fill:%s,stroke:%s,color:#16171b", place.Fill, place.Stroke)
 		} else if g.View == "map" {

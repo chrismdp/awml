@@ -119,11 +119,14 @@ In a platform view, match each block's `platform` id to the platform description
 
 Then one line for each class that any part has, in the order `trig`, `ctx`, `con`, `surf`, `out`, `ai`, `code`, `person`, `gap`, `untrusted`, `unstopped`, `agentrun`, naming its parts in the file's order: `  class plan ai`, or `  class approve,edit person`. A part is in the class of its kind. A part with `untrusted: true` is in `untrusted` or `unstopped` too, as section 5 says. A code step carried out by a model is in `agentrun` too, as in `  class count agentrun`. Its dashed outline reads apart from an untrusted part's solid outline, and no part has both.
 
-Then one line for each group, in the file's order: `  style id STYLE`. In the security view, every group's `STYLE` is:
+Then one line for each group, in the file's order: `  style id STYLE`. In the security view, take each `STYLE` in this order, starting again after the sixth:
 
-```
-fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
-```
+1. `fill:transparent,stroke:#127c8c,stroke-width:1.5px,stroke-dasharray:6 4,color:#0d5c68`
+2. `fill:transparent,stroke:#8c2f6b,stroke-width:1.5px,stroke-dasharray:6 4,color:#6b2251`
+3. `fill:transparent,stroke:#52677c,stroke-width:1.5px,stroke-dasharray:6 4,color:#394a5c`
+4. `fill:transparent,stroke:#6c7026,stroke-width:1.5px,stroke-dasharray:6 4,color:#4e511b`
+5. `fill:transparent,stroke:#655294,stroke-width:1.5px,stroke-dasharray:6 4,color:#493b6d`
+6. `fill:transparent,stroke:#66616b,stroke-width:1.5px,stroke-dasharray:6 4,color:#49464d`
 
 In the platform view, the first group takes the first of these, the second group the second, and so on, starting again after the seventh, each followed by `,color:#16171b`:
 
