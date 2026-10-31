@@ -46,6 +46,23 @@ func TestThereAreExamples(t *testing.T) {
 	}
 }
 
+func TestTheLegendShowsCodeCarriedOutByAModel(t *testing.T) {
+	var sources []Source
+	for _, path := range append([]string{"examples/legend.yaml"}, platformExamples(t)...) {
+		text, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sources = append(sources, Source{File: path, Text: text})
+	}
+	out, err := DrawSources(sources, "agent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	has(t, out, "  class code agentrun\n")
+	has(t, out, "  class strangers untrusted\n")
+}
+
 // The security view shows where untrusted text goes, so no example keeps an untrusted view.
 func TestNoExampleHasAnUntrustedView(t *testing.T) {
 	var found []string
@@ -116,8 +133,16 @@ func TestEachExampleIsSoundAndItsDrawingsAreCurrent(t *testing.T) {
 			if !IsCanonical(file) {
 				t.Fatal("example is not a workflow")
 			}
+			sources := []Source{{File: path, Text: src}}
+			for _, description := range platformExamples(t) {
+				text, err := os.ReadFile(description)
+				if err != nil {
+					t.Fatal(err)
+				}
+				sources = append(sources, Source{File: description, Text: text})
+			}
 			for _, name := range ImplementationIDs(file) {
-				view, err := View(file, name)
+				drawn, err := DrawSources(sources, name)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -126,7 +151,7 @@ func TestEachExampleIsSoundAndItsDrawingsAreCurrent(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if string(mmd) != Draw(view)+"\n" {
+				if string(mmd) != drawn+"\n" {
 					t.Errorf("%s.mmd is stale", stem)
 				}
 				if _, err := os.Stat(stem + ".svg"); err != nil {

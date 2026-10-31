@@ -103,7 +103,7 @@ func main() {
 	})
 	// __awmlDraw draws one workflow's view, or the map of several, as awml draw does.
 	expose("__awmlDraw", func(args []js.Value) string {
-		sources, err := given(args[0].String())
+		sources, err := drawingSources(args)
 		if err != nil {
 			return errorJSON(err.Error())
 		}
@@ -117,13 +117,30 @@ func main() {
 	// the file wrote it, and no text in the JSON is escaped, so a page that shows it must escape it
 	// itself, unlike __awmlDraw, whose Mermaid escapes it.
 	expose("__awmlGraph", func(args []js.Value) string {
-		sources, err := given(args[0].String())
+		sources, err := drawingSources(args)
 		if err != nil {
 			return errorJSON(err.Error())
 		}
 		return encoded(awml.GraphSources(sources, optionalImplementation(args)))
 	})
 	select {}
+}
+
+// drawingSources adds optional platform descriptions after the workflow and implementation.
+// Older callers give only the first one or two arguments.
+func drawingSources(args []js.Value) ([]awml.Source, error) {
+	sources, err := given(args[0].String())
+	if err != nil {
+		return nil, err
+	}
+	if len(args) > 2 && args[2].Type() == js.TypeString {
+		descriptions, err := given(args[2].String())
+		if err != nil {
+			return nil, err
+		}
+		sources = append(sources, descriptions...)
+	}
+	return sources, nil
 }
 
 // given decodes the files given as a JSON list, each its text or { file, source }. A file's name is

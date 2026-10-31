@@ -101,9 +101,10 @@ async function start(source) {
       }
       return decoded.file;
     },
-    // draw draws one workflow's view, or the map of several workflows drawn together.
-    draw(sourceText, implementation = "") {
-      const output = globalThis.__awmlDraw(JSON.stringify(given(sourceText)), implementation);
+    // draw draws one workflow's view, or the map of several workflows drawn together. Optional
+    // platform descriptions show where a model carries out a platform view's code steps.
+    draw(sourceText, implementation = "", descriptions = []) {
+      const output = globalThis.__awmlDraw(JSON.stringify(given(sourceText)), implementation, JSON.stringify(given(descriptions)));
       if (output.startsWith("{")) throw new Error(JSON.parse(output).error);
       return output;
     },
@@ -111,11 +112,11 @@ async function start(source) {
     // or the map of several workflows given together. It takes what draw takes, and throws what draw
     // throws. Every label is given exactly as the file wrote it, and no text in it is escaped, so a
     // page that shows it must escape it itself, unlike draw, whose Mermaid escapes it.
-    graphJSON(sourceText, implementation = "") {
-      return answer(globalThis.__awmlGraph(JSON.stringify(given(sourceText)), implementation));
+    graphJSON(sourceText, implementation = "", descriptions = []) {
+      return answer(globalThis.__awmlGraph(JSON.stringify(given(sourceText)), implementation, JSON.stringify(given(descriptions))));
     },
-    graph(sourceText, implementation = "") {
-      return JSON.parse(this.graphJSON(sourceText, implementation));
+    graph(sourceText, implementation = "", descriptions = []) {
+      return JSON.parse(this.graphJSON(sourceText, implementation, descriptions));
     },
   };
 }

@@ -33,7 +33,8 @@ type GraphGroup struct {
 // A GraphPart is a part other than a comment, with the box it's drawn in. Decider is who decides
 // a step, a review or a standing approval: ai, code or person. Tier is an outside action's tier.
 // Untrusted is whether the part is marked untrusted, and Unstopped whether its text reaches an
-// outside action with nothing to stop it or accept the risk.
+// outside action with nothing to stop it or accept the risk. AgentRun is whether a platform view's
+// code step is carried out by a model, from its block's platform description.
 type GraphPart struct {
 	ID        string `json:"id"`
 	Kind      string `json:"kind"`
@@ -44,6 +45,7 @@ type GraphPart struct {
 	Tier      string `json:"tier,omitempty"`
 	Untrusted bool   `json:"untrusted,omitempty"`
 	Unstopped bool   `json:"unstopped,omitempty"`
+	AgentRun  bool   `json:"agentRun,omitempty"`
 }
 
 // A GraphLine is a line from one part or box to another. A publish is a data line that Publishes,
@@ -381,20 +383,28 @@ func (g Graph) Mermaid() string {
 		out = append(out, fmt.Sprintf("  %s %s%s %s", from, arrow, mid, to))
 	}
 	out = append(out, defs)
-	// A part marked untrusted keeps its own class, and takes a second for its outline: orange, or
-	// red where its text reaches an outside action unstopped.
+	// Each outline keeps the part's own fill. AgentRun applies only to code steps in a platform
+	// view, while only triggers, connectors and contexts can be untrusted.
 	outline := map[string]string{}
+	hasUntrusted, hasAgentRun := false, false
 	for _, p := range g.Parts {
 		if p.Unstopped {
 			outline[p.ID] = "unstopped"
 		} else if p.Untrusted {
 			outline[p.ID] = "untrusted"
+		} else if g.View == "platform" && p.Kind == "code" && p.AgentRun {
+			outline[p.ID] = "agentrun"
+			hasAgentRun = true
 		}
+		hasUntrusted = hasUntrusted || p.Untrusted || p.Unstopped
 	}
-	if len(outline) > 0 {
+	if hasUntrusted {
 		out = append(out, "  classDef untrusted "+untrustedOutline, "  classDef unstopped "+unstoppedOutline)
 	}
-	for _, cls := range []string{"trig", "ctx", "con", "surf", "out", "ai", "code", "person", "gap", "untrusted", "unstopped"} {
+	if hasAgentRun {
+		out = append(out, "  classDef agentrun "+agentRunOutline)
+	}
+	for _, cls := range []string{"trig", "ctx", "con", "surf", "out", "ai", "code", "person", "gap", "untrusted", "unstopped", "agentrun"} {
 		var ids []string
 		for _, n := range nodes {
 			if n.group < 0 && (classes[kinds[n.id]] == cls || outline[n.id] == cls) {

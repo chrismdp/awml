@@ -76,6 +76,10 @@ const red = "stroke:#d0342c,stroke-width:2.5px,color:#b0271f"
 const orange, green = "stroke:#d97a00,stroke-width:2.5px", "stroke:#109a74,stroke-width:2.5px"
 const untrustedOutline, unstoppedOutline = "stroke:#d97a00,stroke-width:3px", "stroke:#d0342c,stroke-width:3px"
 
+// A code step a model carries out keeps its green fill, with a dashed orange outline so it reads
+// apart from an untrusted part's solid outline.
+const agentRunOutline = "stroke:#d97a00,stroke-width:3px,stroke-dasharray:6 3"
+
 // A tie is grey, the colour of a comment's border. Mermaid has no thick dotted arrow, so a dotted
 // publish line is a thick one given dashes.
 const grey, dotted = "stroke:#8a93a3", "stroke-dasharray:3"

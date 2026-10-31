@@ -124,12 +124,16 @@ func graphSources(sources []Source, implementation, verb string) (Graph, error) 
 	if len(sources) == 0 {
 		return Graph{}, Refusal("no workflow was given")
 	}
-	if implementation != "" && len(sources) > 1 {
-		return Graph{}, Refusal("argument --implementation: " + verb + " one workflow, not several")
-	}
-	workflows, err := ReadSources(sources)
+	workflows, descriptions, err := readGiven(sources)
 	if err != nil {
 		return Graph{}, err
+	}
+	if len(workflows) == 0 {
+		_, err := View(descriptions[0], implementation)
+		return Graph{}, err
+	}
+	if implementation != "" && len(workflows) > 1 {
+		return Graph{}, Refusal("argument --implementation: " + verb + " one workflow, not several")
 	}
 	if len(workflows) > 1 {
 		for _, w := range workflows {
@@ -144,7 +148,19 @@ func graphSources(sources []Source, implementation, verb string) (Graph, error) 
 	if err != nil {
 		return Graph{}, err
 	}
-	return GraphOf(view), nil
+	graph := GraphOf(view)
+	if graph.View == "platform" {
+		_, described, _ := describePlatforms(descriptions)
+		agentBlocks := map[string]bool{}
+		for _, block := range items(view, "groups") {
+			agentBlocks[str(block, "id")] = described[str(block, "platform")].steps == "agent"
+		}
+		for i := range graph.Parts {
+			part := &graph.Parts[i]
+			part.AgentRun = part.Kind == "code" && agentBlocks[part.In]
+		}
+	}
+	return graph, nil
 }
 
 // FitSources judges each platform described as running every workflow given, as awml fit does,
@@ -189,6 +205,18 @@ func FitPartsSources(sources []Source) (PartsReport, error) {
 // what they hold: a file with platform is a platform description. It refuses where no workflow was
 // given.
 func fitGiven(sources []Source) ([]Workflow, []*Map, error) {
+	workflows, descriptions, err := readGiven(sources)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(workflows) == 0 {
+		return nil, nil, Refusal("no workflow was given")
+	}
+	return workflows, descriptions, nil
+}
+
+// readGiven reads workflows and platform descriptions, telling them apart as fit does.
+func readGiven(sources []Source) ([]Workflow, []*Map, error) {
 	read, err := ReadSources(sources)
 	if err != nil {
 		return nil, nil, err
@@ -201,9 +229,6 @@ func fitGiven(sources []Source) ([]Workflow, []*Map, error) {
 		} else {
 			workflows = append(workflows, w)
 		}
-	}
-	if len(workflows) == 0 {
-		return nil, nil, Refusal("no workflow was given")
 	}
 	return workflows, descriptions, nil
 }
