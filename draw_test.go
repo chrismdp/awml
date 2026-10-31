@@ -426,7 +426,7 @@ groups: [{id: outer, label: carers}, {id: inner, label: family, in: outer}]`)
 
 func TestAScopeIsADashedBox(t *testing.T) {
 	out := drawing(t, "security", "parts: []\ngroups: [{id: g, label: family}]")
-	has(t, out, "\n  style g fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f")
+	has(t, out, "\n  style g fill:transparent,stroke:#127c8c,stroke-width:1.5px,stroke-dasharray:6 4,color:#0d5c68")
 }
 
 func TestAPlatformIsATintedBlockEachInTheNextTint(t *testing.T) {
@@ -597,9 +597,9 @@ flowchart TB
   class uChat surf
   class sWord ai
   class sFind code
-  style zCarers fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
-  style zFamily fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f
-  style zNadia fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f`
+  style zCarers fill:transparent,stroke:#127c8c,stroke-width:1.5px,stroke-dasharray:6 4,color:#0d5c68
+  style zFamily fill:transparent,stroke:#8c2f6b,stroke-width:1.5px,stroke-dasharray:6 4,color:#6b2251
+  style zNadia fill:transparent,stroke:#52677c,stroke-width:1.5px,stroke-dasharray:6 4,color:#394a5c`
 
 func TestTheQuestionDrawsAsTheApprovedPageDrewIt(t *testing.T) {
 	if got := Draw(parsed(t, questionFile)); got != approved {

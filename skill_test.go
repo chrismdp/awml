@@ -118,7 +118,10 @@ func TestTheGuideToDrawingByHandMatchesDraw(t *testing.T) {
 		t.Fatal(err)
 	}
 	guide := string(src)
-	want := []string{strings.Join(header, "\n"), defs, scope, red, "`" + grey + "`", "`" + dotted + "`", fmt.Sprintf(operation, "🤖 ✏️ draft")}
+	want := []string{strings.Join(header, "\n"), defs, red, "`" + grey + "`", "`" + dotted + "`", fmt.Sprintf(operation, "🤖 ✏️ draft")}
+	for i, colour := range scopeColours {
+		want = append(want, fmt.Sprintf("%d. `%s`", i+1, fmt.Sprintf(scope, colour.stroke, colour.label)))
+	}
 	for _, shape := range shapes {
 		want = append(want, fmt.Sprintf(shape, "label"))
 	}

@@ -245,6 +245,8 @@ A **scope** is a set of people. Everything in a workflow belongs to one scope, w
 
 In the security view, each scope is a dashed box, labelled with its name and members, such as `family: parents, kids`. A box around another can name only the people it adds, with `+`, as in `carers: + June, Beth` around the family's box.
 
+Each scope's edge and label take their own colour, cycling in file order, with no fill.
+
 ### Where each part sits
 
 - A **context** sits in the box of its scope.

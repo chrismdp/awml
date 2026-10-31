@@ -77,7 +77,10 @@ parts:
 }
 
 func TestTheGraphOfAWorkflowHasItsGroups(t *testing.T) {
-	want := []GraphGroup{{ID: "shop", Label: "shop: Ana, Ben"}, {ID: "owner", Label: "owner: Ana", In: "shop"}}
+	want := []GraphGroup{
+		{ID: "shop", Label: "shop: Ana, Ben", Stroke: "#127c8c", Color: "#0d5c68"},
+		{ID: "owner", Label: "owner: Ana", In: "shop", Stroke: "#8c2f6b", Color: "#6b2251"},
+	}
 	if g := graphOf(t, bakeryReplies, ""); !reflect.DeepEqual(g.Groups, want) || len(g.Places) != 0 {
 		t.Errorf("groups are %+v and places %+v", g.Groups, g.Places)
 	}
@@ -309,7 +312,7 @@ func TestAGraphReadBackFromItsJSONDrawsTheSame(t *testing.T) {
 func TestTheMermaidWritesWhatTheGraphListsInItsOrder(t *testing.T) {
 	g := Graph{
 		View:     "security",
-		Groups:   []GraphGroup{{ID: "inner", Label: "Inner", In: "outer"}, {ID: "outer", Label: "Outer"}},
+		Groups:   []GraphGroup{{ID: "inner", Label: "Inner", In: "outer", Stroke: "#127c8c", Color: "#0d5c68"}, {ID: "outer", Label: "Outer", Stroke: "#8c2f6b", Color: "#6b2251"}},
 		Parts:    []GraphPart{{ID: "b", Kind: "context", Label: "B", In: "outer"}, {ID: "a", Kind: "trigger", Label: "A"}, {ID: "d", Kind: "context", Label: "D", In: "inner"}},
 		Comments: []GraphComment{{ID: "c", Label: "C", In: "outer", Ties: []string{"b"}}},
 		Lines:    []GraphLine{{From: "b", To: "a", Kind: "data", Points: "to"}, {From: "c", To: "b", Kind: "tie", Points: "none"}},

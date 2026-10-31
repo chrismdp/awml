@@ -61,7 +61,20 @@ const defs = `  classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
   classDef person fill:#f7d79a,stroke:#9a6100,color:#16171b
   classDef gap fill:#ffffff,stroke:#8a93a3,stroke-dasharray:4 3,color:#6b7280`
 
-const scope = "fill:transparent,stroke:#8a93a3,stroke-dasharray:6 4,color:#3d434f"
+const scope = "fill:transparent,stroke:%s,stroke-width:1.5px,stroke-dasharray:6 4,color:%s"
+
+// Scope edges and labels cycle in file order, with no fill so nesting leaves backgrounds alone.
+// Dark teal, plum, slate, olive, violet and graphite read apart from the parts' and blocks' pale
+// fills and the orange, red and green of untrusted text. Labels contrast with white by at least
+// 4.5 to one, and edges by at least three to one.
+var scopeColours = []struct{ stroke, label string }{
+	{"#127c8c", "#0d5c68"},
+	{"#8c2f6b", "#6b2251"},
+	{"#52677c", "#394a5c"},
+	{"#6c7026", "#4e511b"},
+	{"#655294", "#493b6d"},
+	{"#66616b", "#49464d"},
+}
 
 var pastel = []string{"fill:#e3ebfa,stroke:#b9c8e8", "fill:#fbe9df,stroke:#ecc7b2", "fill:#efe6fa,stroke:#d3c2ea",
 	"fill:#fbf3d9,stroke:#e8d9a6", "fill:#dff3ef,stroke:#b4ddd4", "fill:#f6e3ea,stroke:#e3bccb", "fill:#e9f2dc,stroke:#c7dcae"}
