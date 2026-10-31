@@ -135,7 +135,7 @@ The operating model has little to do with AI: it's how work is organised, whoeve
 
 ![Every kind of part, laid out as a key](examples/legend.svg)
 
-- A **trigger** is a pink pill. It starts the workflow: a time, such as `Weekdays 07:00`, or an event, such as someone asking in a chat or an email arriving.
+- A **trigger** is a pink rounded box. It starts the workflow: a time, such as `Weekdays 07:00`, or an event, such as someone asking in a chat or an email arriving.
 - A **step** is a rounded box: one piece of work, with the colour and emoji of who decides it.
 - A **review** is an amber rounded box, like a step, with `👤 ✅ review` above its label: a person's yes to exact content before it goes ahead. Its one way out is a line with the guard `[yes]`.
 - A **standing approval** is an amber rounded box too, with `👤 📜 standing approval` above its label: a person's yes given once, in advance, to each action of named kinds that a scheduled task takes, within limits.

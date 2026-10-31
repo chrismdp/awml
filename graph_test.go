@@ -315,7 +315,7 @@ func TestTheMermaidWritesWhatTheGraphListsInItsOrder(t *testing.T) {
 		Lines:    []GraphLine{{From: "b", To: "a", Kind: "data", Points: "to"}, {From: "c", To: "b", Kind: "tie", Points: "none"}},
 	}
 	has(t, g.Mermaid(), `flowchart TB
-  a(["A"])
+  a("A")
   subgraph outer["Outer"]
     direction TB
     b[("B")]

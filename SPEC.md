@@ -16,7 +16,7 @@ One canonical file holds the workflow's design and any **implementations**, the 
 
 | Part | `kind` | Drawn as | Colour | UML element |
 |---|---|---|---|---|
-| Trigger | `trigger` | A pill, with its time if it has one | Pink `#fbe1ee` | Accept event, or accept time event |
+| Trigger | `trigger` | A rounded box, with its time if it has one | Pink `#fbe1ee` | Accept event, or accept time event |
 | Step decided by AI | `ai` | A rounded box, with 🤖 and its operation above its label | Blue `#cdd3fb` | Action |
 | Step decided by code | `code` | A rounded box, with ⚙️ and its operation above its label | Green `#c4e3d1` | Action |
 | Step decided by a person | `person` | A rounded box, with 👤 and its operation above its label | Amber `#f7d79a` | Action |
