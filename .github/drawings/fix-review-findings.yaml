@@ -1,24 +1,28 @@
-# When CI finishes on a pull request with Bug review or Security review failed, because a review
-# found something Important, a fresh Claude session fixes every finding of both reviews, Nits
-# included, and the repository's app pushes the fix to the pull request's branch as one commit. It
-# reads only GitHub and git: the head commit's checks, the pull request, and the fix commits
-# already on the branch, which are its tries. It runs no checks of its own: the push starts CI, and
-# CI judges the fix as it judges every commit. It stops after two fix commits on a branch, exits
-# quietly if anyone has pushed since the review, and offers a fix to .github/ or Claude Code's own
-# files as the run's artifact, with the commands to download and apply it in a new comment. A finding
-# whose fix would change a decision recorded on the build's issue, by someone with write
-# access, isn't fixed: the session refers it back, and a new comment on the issue asks the
-# maintainer, with the decision it would change and the options. A session that refers any finding
-# back changes nothing, so nothing is pushed and the pull request waits for the answer.
+# When CI finishes on a pull request with failed tests, Bug review or Security review failed
+# with something Important, or both, one fresh Claude session fixes the failing tests and every
+# finding of both reviews, Nits included. It reads the end of the failed tests' log as
+# untrusted, read-only data beside the findings and the patch. The repository's app pushes the
+# fix to the pull request's own branch as one commit. It reads only GitHub and git: the head
+# commit's checks, the failed tests' log, the pull request, and the fix commits already on the
+# branch, which are its tries. It runs no checks of its own: the push starts CI, which judges
+# the fix as it judges every commit. It stops after two fix commits on a branch, exits quietly
+# if anyone has pushed since CI ran, or the pull request is closed, and offers a fix to .github/
+# or Claude Code's own files as the run's artifact, with the commands to download and apply it
+# in a new comment. A finding whose fix would change a decision recorded on the build's issue,
+# by someone with write access, isn't fixed: the session refers it back, and a new comment on
+# the issue asks the maintainer, with the decision it would change and the options. A session
+# that refers any finding back changes nothing, so nothing is pushed and the pull request waits
+# for the answer.
 awml: "0.10"
-title: A failed review is fixed
+title: A failed pull request is fixed
 description: |
-  The factory's fixer: when a review fails on a pull request, a session fixes the findings and the
-  app pushes one commit, which CI then judges. Its tries are the fix commits on the branch.
+  The factory's fixer: when tests fail or a review finds something Important on a pull request,
+  one session fixes the failing tests and every finding of both reviews. The app pushes one
+  commit to the same branch, which CI then judges, up to two fix commits on a branch.
 scopes:
   - { id: public, label: "public: anyone who reads the repository", processing: any }
 parts:
-  - { id: failed, kind: trigger, label: "CI finishes on a pull request from a branch of this repository with the tests passed and Bug review or Security review failed", wait: PT1H }
+  - { id: failed, kind: trigger, label: "CI finishes on a pull request from a branch of this repository: tests failed, Bug review or Security review failed with something Important, or both", wait: PT1H }
   - { id: token, kind: connector, label: "The repository, through its own Actions token", in: public, ref: issue-to-pull-request.yaml#token }
   - { id: app, kind: connector, label: "The repository, through its own GitHub App", in: public, ref: issue-to-pull-request.yaml#app }
   - { id: checks, kind: context, label: "The review jobs' checks on the head commit: Bug review, Security review and Classify, carrying the reviews' findings and Classify's verdict", in: public, ref: ci-a-commit.yaml#checks }
@@ -26,79 +30,84 @@ parts:
   - { id: issue, kind: context, label: "The build's issue, named by its build/issue-N branch, and its comments, which anyone can write", in: public, untrusted: true }
   - { id: keep, kind: code, op: sort, cleans: true, label: "Keep only what's approved of the issue, by the build's own script: its text if someone with write access wrote it, or last added the build label with it unedited since, the comments of people with admin, maintain or write permission on the repository, by each author's collaborator permission, and the app's own posted before the build label was last added and unedited since", in: public }
   - { id: decisions, kind: context, label: "The decisions on the issue: its approved text and comments, as GitHub renders them, made read-only", in: public }
-  - { id: tries, kind: code, op: sort, cleans: true, label: "Sort by GitHub's record, passing on only the reviewed commit's sha and a count: is the pull request open, opened by someone with write access or the app, its head still the reviewed commit, and how many fix commits does the branch carry? Past this gate the patch and the findings come only from trusted people and models: the opener or the build, from an issue kept to writers, and review sessions with no Bash, no web tools and no host allowed", in: public }
-  - { id: bring, kind: code, op: bring-in, label: "Bring in both reviews' findings from their checks, and the patch, as read-only files for the session", in: public }
+  - { id: tries, kind: code, op: sort, cleans: true, label: "Sort by GitHub's record, passing on only CI's commit sha and a count: is the pull request open, opened by someone with write access or the app, its head still CI's commit, and how many fix commits does the branch carry? Past this gate the patch and the findings come only from trusted people and models: the opener or the build, from an issue kept to writers, and review sessions with no Bash, no web tools and no host allowed. The tests' log stays untrusted", in: public }
+  - { id: bring, kind: code, op: bring-in, label: "Bring in both reviews' findings from their checks, the patch, and the end of the failed tests' log from this CI run if tests failed, as read-only files for one session", in: public }
   - { id: asked, kind: context, label: "The findings and the patch, made read-only", in: public }
+  - { id: failedlog, kind: context, label: "The end of the failed tests' log, failed.log, made read-only: output of the branch's code", in: public, untrusted: true }
   - { id: repo, kind: context, label: "Main's fix prompt, AGENTS.md and REVIEW.md, copied out before the session starts", in: public }
   - { id: weigh, kind: ai, op: sort, label: "For each finding: would fixing it change a decision on the issue?", in: public }
   - { id: referred, kind: context, label: "The findings referred back, each with the decision it would change and the options, in the session's out folder", in: public }
-  - { id: ask, kind: code, op: do, label: "Post the referred findings in a new comment on the build's issue, with the app's token, inside stop-commands, the session's text escaped, since a mention or a workflow command in it would still act", in: public }
+  - { id: ask, kind: code, op: do, cleans: true, label: "Post the referred findings in a new comment on the build's issue, with the app's token, inside stop-commands, the session's text escaped: every < escaped and every mention broken, since a mention or a workflow command in it would still act", in: public }
   - { id: askout, kind: outside, label: "Comment on the build's issue: Allow", in: public }
-  - { id: fix, kind: ai, op: draft, label: "Fix every finding of both reviews, Important ones and Nits, test first", in: public }
+  - { id: fix, kind: ai, op: draft, label: "In the same session, make the failing tests pass and fix every finding of both reviews, Important ones and Nits, test first", in: public }
   - { id: change, kind: context, label: "The fix, as a patch", in: public }
-  - { id: guard, kind: code, op: sort, label: "Sort by git: does the fix touch .github/ or Claude Code's own files, and is the branch still at the reviewed commit?", in: public }
-  - { id: push, kind: code, op: do, label: "Push the fix as one commit carrying the fix line in its message, with --force-with-lease at the reviewed commit", in: public }
-  - { id: standpush, kind: approval, label: "The maintainer's standing approval: one fix commit a failed review, to the pull request's own branch, up to two a branch, accepted by the maintainer in #160, under rule 4", in: public }
+  - { id: guard, kind: code, op: sort, label: "Sort by git and GitHub: does the fix touch .github/ or Claude Code's own files, is the branch still at CI's commit, and is the pull request still open?", in: public }
+  - { id: push, kind: code, op: do, label: "Push the fix as one commit carrying the fix line in its message, with --force-with-lease at CI's commit", in: public }
+  - { id: standpush, kind: approval, label: "The maintainer's standing approval: one fix commit after failed tests, an Important review finding, or both, to the pull request's own branch, up to two a branch, accepted by the maintainer in #160 under rule 4 and extended to failed tests in #212", in: public }
   - { id: pushed, kind: outside, label: "Push one commit to the pull request's branch: Ask", in: public }
   - { id: offer, kind: code, op: do, cleans: true, label: "Offer the fix in a new comment from fixed text: gh run download <run> -n fix, the git apply command, and that the artifact lasts 30 days, quoting none of the fix", in: public }
   - { id: offered, kind: outside, label: "Comment on the pull request with the commands: Allow", in: public }
   - { id: listed, kind: surface, label: "The pull request's commits and thread, where each push and comment is listed", in: public }
-  - { id: giveup, kind: code, op: do, cleans: true, label: "Say in a new comment, from fixed text, that the findings need a person, linking the failed checks and the run", in: public }
+  - { id: giveup, kind: code, op: do, cleans: true, label: "Say in a new comment, from fixed text, that the failed tests or findings need a person, linking the failed checks and the run", in: public }
   - { id: gaveup, kind: outside, label: "Comment on the pull request: Allow", in: public }
   - { id: count, kind: comment, label: "Its tries are derived, not stored: the fix commits on the branch, counted by the line each one's message carries, which survives a rebase. Someone pushed since means the head isn't the commit that was judged (#160 rule 3)" }
-  - { id: quiet, kind: comment, label: "A person's push since the review, or a closed pull request, means there is nothing to fix: it exits with no comment. Only giving up, after two fix commits, or a fix it may not push, posts one, since a person must act (#160 rule 5)" }
-  - { id: nojudge, kind: comment, label: "It pushes and doesn't judge. The push starts CI, so a fix that breaks a test or brings its own Important finding fails there and comes back here, up to two tries. A bad push costs a CI run (#160 rule 4)" }
-  - { id: testsown, kind: comment, label: "Decided in #160's follow-up: the tests own a run where both failed, so retry-a-build acts then, not this. A fix commit that breaks a test wakes retry, which redrafts and uses a try; the tries cap stops it" }
-  - { id: loose, kind: comment, label: "Loosely coupled: it reads only the checks on the head commit and the branch. Builds and landing don't call it or wait for it, so a person's pull request is fixed the same way as a build's" }
+  - { id: quiet, kind: comment, label: "A person's push since CI ran, or a closed pull request, means there is nothing to fix: it exits with no comment. Only giving up, after two fix commits, or a fix it may not push, posts one, since a person must act (#160 rule 5)" }
+  - { id: nojudge, kind: comment, label: "It pushes and doesn't judge. The push starts CI. Decided in awml#212: a fix that breaks a test wakes this fixer again, as does an Important review finding, within the same two-commit cap. A bad push costs a CI run (#160 rule 4)" }
+  - { id: together, kind: comment, label: "Decided in awml#212: failed tests and Important review findings go to this fixer. When both fail, one session fixes both in one commit on the existing pull request. Failed tests never start a fresh build" }
+  - { id: loose, kind: comment, label: "Loosely coupled: it reads CI's checks and failed tests' log, the pull request and the branch from GitHub and git. Builds and landing don't call it or wait for it, so a person's pull request is fixed the same way as a build's (awml#212)" }
   - { id: ownfiles, kind: comment, label: "The app may not change a workflow, and Claude Code's own files, .claude/, .mcp.json or a CLAUDE.md, are never pushed by a session, so a fix touching either is offered for a person: decided in #160's follow-up, the comment carries the gh run download command for the run's fix artifact, not the patch, so nothing is escaped or capped" }
   - { id: refer, kind: comment, label: "Decided by the maintainer after #200: a finding whose fix would undo a decision recorded on the build's issue, such as #197's, is referred back to him, not fixed. Any other branch has no issue and refers nothing. If any finding is referred back, the session changes nothing, not even the other findings or the Nits, and nothing is pushed: a pushed fix would start the reviews again, which would find the same finding to refer back, in a loop. A session that refers and changes something too is refused" }
-  - { id: steer, kind: comment, label: "Decided with the opener gate: past it, the findings and the patch are trusted, as trusted people's and models' text, not as clean text. The findings came from sessions that read the patch, and a build's patch from a session that read an issue a writer's label approved and the failed tests' log, so text in either can still steer this session. Nothing can stop it before the push, so the push goes under a standing approval. The offer and giving up quote none of it, and the referral is posted with every < escaped and every mention broken" }
+  - { id: steer, kind: comment, label: "The findings and patch are trusted people's and models' text, not clean text. The failed tests' log is output of the branch's code and stays untrusted, even on a person's pull request. Read-only files don't stop text steering the session. The push goes under the standing approval extended in awml#212. The offer and giving up quote none of it, and the referral escapes every < and breaks every mention" }
 lines:
   - { from: failed, to: tries, kind: start, label: "CI's run and its commit" }
+  - { from: tries, to: keep, kind: start, label: "[open, not moved, fewer than two fix commits]" }
+  - { from: keep, to: bring, kind: start }
+  - { from: tries, to: giveup, kind: start, label: "[two fix commits]" }
+  - { from: bring, to: weigh, kind: start }
+  - { from: weigh, to: fix, kind: start, label: "[no finding would change a decision]" }
+  - { from: weigh, to: guard, kind: start, label: "[some would change one, so nothing is changed]" }
+  - { from: fix, to: guard, kind: start, label: "the fix" }
+  - { from: guard, to: push, kind: start, label: "[touches neither, not moved, still open]" }
+  - { from: guard, to: ask, kind: start, label: "[findings referred, nothing changed, not moved, still open]" }
+  - { from: ask, to: askout, kind: data }
+  - { from: push, to: standpush, kind: start }
+  - { from: standpush, to: pushed, kind: data, label: "[within limits]" }
+  - { from: guard, to: offer, kind: start, label: "[touches either, not moved, still open]" }
+  - { from: offer, to: offered, kind: data }
+  - { from: fix, to: giveup, kind: start, label: "[gave up]" }
+  - { from: giveup, to: gaveup, kind: data }
   - { from: token, to: tries, kind: data, label: "the pull request and its head" }
   - { from: branch, to: tries, kind: data, label: "the branch's commits" }
-  - { from: tries, to: keep, kind: start, label: "[open, not moved, fewer than two fix commits]" }
   - { from: token, to: keep, kind: data, label: "each author's permission" }
   - { from: issue, to: keep, kind: data, label: "the issue's comments" }
   - { from: keep, to: decisions, kind: data }
-  - { from: keep, to: bring, kind: start }
-  - { from: tries, to: giveup, kind: start, label: "[two fix commits]" }
   - { from: checks, to: bring, kind: data, label: "the findings" }
   - { from: branch, to: bring, kind: data, label: "the patch" }
+  - { from: token, to: bring, kind: data, label: "the end of this CI run's failed tests' log, if any" }
   - { from: bring, to: asked, kind: data }
-  - { from: bring, to: weigh, kind: start }
+  - { from: bring, to: failedlog, kind: data }
   - { from: asked, to: weigh, kind: data }
+  - { from: failedlog, to: weigh, kind: data, label: "untrusted data for the same session" }
   - { from: decisions, to: weigh, kind: data }
-  - { from: weigh, to: fix, kind: start, label: "[no finding would change a decision]" }
   - { from: weigh, to: referred, kind: data, label: "[those that would change one]" }
-  - { from: weigh, to: guard, kind: start, label: "[some would change one, so nothing is changed]" }
   - { from: asked, to: fix, kind: data }
+  - { from: failedlog, to: fix, kind: data, label: "why the tests failed" }
   - { from: repo, to: fix, kind: data }
   - { from: fix, to: change, kind: data }
-  - { from: fix, to: guard, kind: start, label: "the fix" }
   - { from: change, to: guard, kind: data }
-  - { from: guard, to: push, kind: start, label: "[a fix touching none of those files, not moved]" }
-  - { from: guard, to: ask, kind: start, label: "[findings referred back and nothing changed, so nothing is pushed, not moved]" }
   - { from: referred, to: ask, kind: data, label: "the comment's text" }
-  - { from: ask, to: askout, kind: data }
   - { from: askout, to: app, kind: data }
   - { from: change, to: push, kind: data }
-  - { from: push, to: standpush, kind: start }
-  - { from: standpush, to: pushed, kind: data, label: "[within limits]" }
   - { from: standpush, to: listed, kind: data, label: "each fix commit, as pushed" }
   - { from: pushed, to: app, kind: data }
-  - { from: guard, to: offer, kind: start, label: "[touches .github/ or Claude's files, not moved]" }
-  - { from: offer, to: offered, kind: data }
   - { from: offered, to: token, kind: data }
-  - { from: fix, to: giveup, kind: start, label: "[gave up]" }
-  - { from: giveup, to: gaveup, kind: data }
   - { from: gaveup, to: token, kind: data }
   - { from: count, to: tries, kind: tie }
   - { from: quiet, to: tries, kind: tie }
   - { from: nojudge, to: pushed, kind: tie }
   - { from: loose, to: failed, kind: tie }
-  - { from: testsown, to: failed, kind: tie }
-  - { from: ownfiles, to: guard, kind: tie }
+  - { from: together, to: failed, kind: tie }
+  - { from: ownfiles, to: offer, kind: tie }
   - { from: steer, to: fix, kind: tie }
   - { from: refer, to: weigh, kind: tie }
 implementations:
@@ -107,7 +116,7 @@ implementations:
     blocks:
       - { id: github, label: "GitHub: pull requests, checks and comments", parts: [failed, token, app, checks, branch, issue, standpush, pushed, offered, gaveup, askout, listed] }
       - { id: decidejob, label: "Actions job: decide, reading only GitHub, with a token that only reads, in no concurrency group", platform: actions-code, parts: [tries] }
-      - { id: fixjob, label: "Actions job: fix, with a token that only reads, one at a time on the pull request decided", platform: actions-code, parts: [keep, decisions, bring, asked, repo, referred, change] }
+      - { id: fixjob, label: "Actions job: fix, with a token that only reads, one at a time on the pull request decided", platform: actions-code, parts: [keep, decisions, bring, asked, failedlog, repo, referred, change] }
       - { id: agent, label: "Claude Code, claude-opus-5-5, on the maintainer's subscription", platform: actions-agent, in: fixjob, parts: [weigh, fix] }
       - { id: writejob, label: "Actions job: push or comment, running nothing from the change, one at a time on the pull request decided", platform: actions-code, parts: [guard, push, offer, giveup, ask] }
     comments:
