@@ -150,7 +150,9 @@ func TestTheFixerReadsTheIssuesDecisions(t *testing.T) {
 	}
 	prompt := strings.Join(strings.Fields(readText(t, ".github/fix-prompt.md")), " ")
 	for _, want := range []string{"FIX_DIR/decisions.md", "OUT_DIR/referred.md", "would change a decision",
-		"If you refer any finding back, change nothing"} {
+		"If you refer any finding back, change nothing",
+		"Weigh each finding and each failing test against those decisions",
+		"if making a failing test pass would change a decision"} {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("the fix prompt doesn't say %q", want)
 		}

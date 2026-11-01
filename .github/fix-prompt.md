@@ -16,10 +16,12 @@ describes. Read FIX_DIR/REVIEW.md too: once your fix is pushed, CI's two fresh r
 request to it again.
 
 - If FIX_DIR/decisions.md exists, it is the pull request's issue: its text and the comments of
-  the people who decided what the pull request builds, each with its link. Weigh each finding
-  against those decisions before you fix anything. If fixing a finding would change a decision,
-  write it to OUT_DIR/referred.md, with the finding, the decision it would change, quoted, with the
-  comment's link, and the options as you see them. If you refer any finding back, change nothing
+  the people who decided what the pull request builds, each with its link. Weigh each finding and
+  each failing test against those decisions before you fix anything: a test may still hold the
+  behaviour a decision changed. If fixing a finding would change a decision, or if making a failing
+  test pass would change a decision, write it to OUT_DIR/referred.md, with the finding or test, the
+  decision it would change, quoted, with the comment's link, and the options as you see them. If
+  you refer any finding back, change nothing
   at all, not even the failing tests, other findings or Nits: the pull request waits for the
   answer, and a fix pushed now would start the reviews again, which would find the same finding.
   The app posts OUT_DIR/referred.md on the issue for a person to answer. A run that refers findings back and

@@ -35,7 +35,7 @@ parts:
   - { id: asked, kind: context, label: "The findings and the patch, made read-only", in: public }
   - { id: failedlog, kind: context, label: "The end of the failed tests' log, failed.log, made read-only: output of the branch's code", in: public, untrusted: true }
   - { id: repo, kind: context, label: "Main's fix prompt, AGENTS.md and REVIEW.md, copied out before the session starts", in: public }
-  - { id: weigh, kind: ai, op: sort, label: "For each finding: would fixing it change a decision on the issue?", in: public }
+  - { id: weigh, kind: ai, op: sort, label: "For each finding and each failing test: would fixing it, or making it pass, change a decision on the issue?", in: public }
   - { id: referred, kind: context, label: "The findings referred back, each with the decision it would change and the options, in the session's out folder", in: public }
   - { id: ask, kind: code, op: do, cleans: true, label: "Post the referred findings in a new comment on the build's issue, with the app's token, inside stop-commands, the session's text escaped: every < escaped and every mention broken, since a mention or a workflow command in it would still act", in: public }
   - { id: askout, kind: outside, label: "Comment on the build's issue: Allow", in: public }
@@ -64,7 +64,7 @@ lines:
   - { from: keep, to: bring, kind: start }
   - { from: tries, to: giveup, kind: start, label: "[two fix commits]" }
   - { from: bring, to: weigh, kind: start }
-  - { from: weigh, to: fix, kind: start, label: "[no finding would change a decision]" }
+  - { from: weigh, to: fix, kind: start, label: "[nothing would change a decision]" }
   - { from: weigh, to: guard, kind: start, label: "[some would change one, so nothing is changed]" }
   - { from: fix, to: guard, kind: start, label: "the fix" }
   - { from: guard, to: push, kind: start, label: "[touches neither, not moved, still open]" }
@@ -87,10 +87,10 @@ lines:
   - { from: bring, to: asked, kind: data }
   - { from: bring, to: failedlog, kind: data }
   - { from: asked, to: weigh, kind: data }
-  - { from: failedlog, to: weigh, kind: data, label: "untrusted data for the same session" }
   - { from: decisions, to: weigh, kind: data }
   - { from: weigh, to: referred, kind: data, label: "[those that would change one]" }
   - { from: asked, to: fix, kind: data }
+  - { from: failedlog, to: weigh, kind: data, label: "which tests failed" }
   - { from: failedlog, to: fix, kind: data, label: "why the tests failed" }
   - { from: repo, to: fix, kind: data }
   - { from: fix, to: change, kind: data }
