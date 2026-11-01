@@ -5,7 +5,7 @@
 # fresh Claude sessions read its patch against main, one for bugs and one for security, and on a
 # factory branch, once both have passed, a third classifies the change: ship, show or ask. None of
 # them runs any of the change's code. Each job's result is its own check on the commit, so the
-# commit as pushed has one judge, and land.yml, fix.yml and retry.yml read its verdict from GitHub.
+# commit as pushed has one judge, and land.yml and fix.yml read its verdict from GitHub.
 # A fork's pull request, or one a stranger opened, gets no review: its review jobs fail at a gate
 # that holds no secret, rather than being skipped, which GitHub would count as passed, so a person
 # reviews and merges it. But on pull_request a fork's own ci.yml runs, and it could add jobs named

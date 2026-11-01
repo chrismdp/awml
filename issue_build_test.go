@@ -53,7 +53,7 @@ func issueAnswer(edited string, labels ...string) string {
 
 // A build says on the issue that it has started, in a new comment linking its run, from a job
 // that may write only to issues and checks out and runs nothing but gh. Each run is named for its
-// issue, so retry.yml can count the builds of an issue.
+// issue, so a person can find its builds.
 func TestABuildSaysOnTheIssueThatItStarted(t *testing.T) {
 	workflow := readFactoryWorkflow(t, "build.yml")
 	start := workflow.Jobs["start"]
@@ -65,17 +65,14 @@ func TestABuildSaysOnTheIssueThatItStarted(t *testing.T) {
 			t.Errorf("start uses %s, but should run only gh", step.Uses)
 		}
 	}
-	if !strings.Contains(workflow.RunName, "format('Build of issue {0}', inputs.issue || github.event.issue.number)") {
+	if !strings.Contains(workflow.RunName, "format('Build of issue {0}', github.event.issue.number)") {
 		t.Errorf("build.yml's run-name is %q, which doesn't name the issue", workflow.RunName)
-	}
-	if !strings.Contains(readText(t, ".github/workflows/retry.yml"), `--arg title "Build of issue $issue"`) {
-		t.Error("retry.yml doesn't count the builds by the name build.yml gives them")
 	}
 
 	still, _ := start.step(t, "still")
 	started, _ := start.step(t, "started")
 	r := newRehearsal(t)
-	r.run(still, map[string]string{"ISSUE": "120", "EVENT": "issues"}, labelEvents)
+	r.run(still, map[string]string{"ISSUE": "120"}, labelEvents)
 	r.mustPass()
 	if r.outputs["go"] != "true" || strings.Contains(r.calls, "graphql") {
 		t.Errorf("a label's build didn't go on with only the labeller checked: %v\n%s", r.outputs, r.calls)
@@ -85,44 +82,6 @@ func TestABuildSaysOnTheIssueThatItStarted(t *testing.T) {
 	if bodies := r.bodies(); len(bodies) != 1 || !strings.Contains(bodies[0], "Building this issue") ||
 		!strings.Contains(bodies[0], "https://github.com/owner/repo/actions/runs/1000") {
 		t.Errorf("the start comment is %q, want a new one linking the run", bodies)
-	}
-}
-
-// A build started by dispatch, as retry.yml starts one, trusts nothing but the issue's number: it
-// goes on only if the issue still carries the build label and hasn't been edited since the label's
-// last labelled event, by GraphQL's lastEditedAt. Otherwise a new comment asks for the label again.
-func TestARetriedBuildDraftsOnlyFromTheTextTheLabelApproved(t *testing.T) {
-	still, _ := readBuildWorkflow(t)["start"].step(t, "still")
-	tests := []struct {
-		name, edited, renamed string
-		labels                []string
-		goes                  bool
-		said                  string
-	}{
-		{name: "never edited", labels: []string{"build"}, goes: true},
-		{name: "edited before the label", edited: "2026-10-27T09:30:00Z", labels: []string{"tool", "build"}, goes: true},
-		{name: "renamed before the label", renamed: "2026-10-27T09:30:00Z", labels: []string{"build"}, goes: true},
-		{name: "edited after the label", edited: "2026-10-27T10:00:01Z", labels: []string{"build"}, said: "edited or renamed after the build label"},
-		{name: "edited as the label went on", edited: "2026-10-27T10:00:00Z", labels: []string{"build"}, said: "edited or renamed after the build label"},
-		{name: "renamed after the label", renamed: "2026-10-27T10:30:00Z", labels: []string{"build"}, said: "edited or renamed after the build label"},
-		{name: "the label taken off", labels: []string{"tool"}, said: "no longer carries the build label"},
-	}
-	for _, tt := range tests {
-		r := newRehearsal(t)
-		r.run(still, map[string]string{"ISSUE": "120", "EVENT": "workflow_dispatch"},
-			issueAnswer(tt.edited, tt.labels...)+labelEventsRenamed(tt.renamed)+`
-  "issue comment 120"*) ;;`)
-		r.mustPass()
-		if got := r.outputs["go"] == "true"; got != tt.goes {
-			t.Errorf("%s: the build goes on is %v, want %v", tt.name, got, tt.goes)
-		}
-		bodies := r.bodies()
-		if tt.goes && len(bodies) != 0 {
-			t.Errorf("%s: the build commented %q", tt.name, bodies)
-		}
-		if !tt.goes && (len(bodies) != 1 || !strings.Contains(bodies[0], tt.said) || !strings.Contains(bodies[0], "remove the build label and add it again")) {
-			t.Errorf("%s: the build said %q, want a new comment that it %s, asking for the label again", tt.name, bodies, tt.said)
-		}
 	}
 }
 
@@ -186,52 +145,29 @@ func TestTheDraftReadsOnlyTheIssueAsApproved(t *testing.T) {
 	}
 }
 
-// Why the last try failed is the failed tests' log of CI's latest pull_request run on the issue's
-// branch in this repository, never a fork's run on a branch of the same name, and only if it failed.
-func TestTheDraftReadsWhyTheLastTryFailedFromCI(t *testing.T) {
-	failed, _ := readBuildWorkflow(t)["draft"].step(t, "failed")
-	runs := func(conclusion string) string {
-		return `
-  "api repos/owner/repo/actions/workflows/ci.yml/runs?branch=build/issue-120&event=pull_request"*) answer <<< '{"workflow_runs": [
-    {"id": 9, "status": "completed", "conclusion": "failure", "head_repository": {"full_name": "a-stranger/repo"}},
-    {"id": 7, "status": "completed", "conclusion": "` + conclusion + `", "head_repository": {"full_name": "owner/repo"}}]}' ;;
-  "api --paginate repos/owner/repo/actions/runs/7/jobs"*) answer <<< '{"jobs": [
-    {"id": 71, "name": "test (1.22)", "conclusion": "failure"},
-    {"id": 72, "name": "Bug review", "conclusion": "failure"}]}' ;;
-  "run view --repo owner/repo --job 71 --log-failed"*) echo "FAIL: TestScones" ;;`
+// Failed tests belong to the fixer. A fresh build starts only from adding the label.
+func TestTheBuildHasNoManualStartOrFailedLog(t *testing.T) {
+	workflow := readFactoryWorkflow(t, "build.yml")
+	if len(workflow.On) != 1 || workflow.On["issues"] == nil {
+		t.Errorf("the build starts on %v, want only issues", workflow.On)
 	}
-	r := newRehearsal(t)
-	r.write("build/.kept", "")
-	r.run(failed, map[string]string{"ISSUE": "120"}, runs("failure"))
-	r.mustPass()
-	if got := r.read("build/failed.md"); !strings.Contains(got, "FAIL: TestScones") {
-		t.Errorf("the draft's failed log is %q, want the failed tests' log", got)
+	for _, step := range workflow.Jobs["draft"].Steps {
+		if step.ID == "failed" || strings.Contains(step.Run, "--log-failed") {
+			t.Errorf("the build still reads failed test logs in %q", step.Name)
+		}
 	}
-	if strings.Contains(r.calls, "runs/9") || strings.Contains(r.calls, "--job 72") {
-		t.Errorf("the draft read a fork's run or a review's log:\n%s", r.calls)
-	}
-
-	passed := newRehearsal(t)
-	passed.write("build/.kept", "")
-	passed.run(failed, map[string]string{"ISSUE": "120"}, runs("success"))
-	passed.mustPass()
-	if passed.read("build/failed.md") != "" {
-		t.Error("the draft read a failed log when CI's latest run passed")
-	}
-
-	// A run that failed only by a review has no failed test to tell of, so there's no failed.md,
-	// whose presence tells Claude a test failed.
-	reviewed := newRehearsal(t)
-	reviewed.write("build/.kept", "")
-	reviewed.run(failed, map[string]string{"ISSUE": "120"}, strings.Replace(runs("failure"), `"name": "test (1.22)", "conclusion": "failure"`, `"name": "test (1.22)", "conclusion": "success"`, 1))
-	reviewed.mustPass()
-	if _, err := os.Stat(filepath.Join(reviewed.temp, "build", "failed.md")); err == nil {
-		t.Error("the draft has a failed.md when only a review failed")
+	for _, file := range []string{".github/workflows/build.yml", ".github/build-prompt.md", ".github/drawings/issue-to-pull-request.yaml"} {
+		text := readText(t, file)
+		for _, gone := range []string{"workflow_dispatch", "inputs.issue", "failed.md", "id: dispatch,", "id: failed,", "id: noinputs,", "id: logtext,"} {
+			if strings.Contains(text, gone) {
+				t.Errorf("%s still contains %q", file, gone)
+			}
+		}
 	}
 }
 
 // The build runs no checks of its own: CI judges the commit it pushes. So nothing in build.yml runs
-// the change's code outside Claude's sandbox, and nothing starts a retry: retry.yml wakes on CI.
+// the change's code outside Claude's sandbox, and failed checks go to the fixer.
 func TestTheBuildRunsNoChecksOfItsOwn(t *testing.T) {
 	jobs := readBuildWorkflow(t)
 	var names []string
@@ -244,7 +180,7 @@ func TestTheBuildRunsNoChecksOfItsOwn(t *testing.T) {
 	text := readText(t, ".github/workflows/build.yml")
 	for _, never := range []string{"go test", "go vet", "make test-wasm", "gh workflow run", "classify-prompt", "review-bugs-prompt"} {
 		if strings.Contains(text, never) {
-			t.Errorf("build.yml has %q, but CI does the checking and retry.yml the retrying", never)
+			t.Errorf("build.yml has %q, but CI does the checking and the fixer handles failed checks", never)
 		}
 	}
 	for _, name := range []string{"draft"} {
@@ -642,8 +578,8 @@ func TestTheOffersNameTheSameFiles(t *testing.T) {
 	}
 }
 
-// A build that stops before its change reaches a pull request leaves CI nothing to run on, so retry
-// never wakes. A last job says so on the issue in a new comment from fixed text, linking the run,
+// A build that stops before its change reaches a pull request leaves CI nothing to run on, so the
+// fixer never wakes. A last job says so on the issue in a new comment from fixed text, linking the run,
 // checking out nothing and running only gh, with the Actions token and only issues: write.
 func TestABuildThatStopsSaysSo(t *testing.T) {
 	jobs := readBuildWorkflow(t)
@@ -708,27 +644,25 @@ func TestTheBuildLabelCountsOnlyFromSomeoneWhoCanWrite(t *testing.T) {
 		{"a user named as the app", "awml-factory[bot]", "User", false},
 		{"a deleted account", "ghost", "User", false},
 	} {
-		for _, event := range []string{"issues", "workflow_dispatch"} {
-			r := newRehearsal(t)
-			r.run(still, map[string]string{"ISSUE": "120", "EVENT": event},
-				labelledBy(issueAnswer("", "build")+labelEvents, c.login, c.kind)+`
+		r := newRehearsal(t)
+		r.run(still, map[string]string{"ISSUE": "120"},
+			labelledBy(issueAnswer("", "build")+labelEvents, c.login, c.kind)+`
   "api repos/owner/repo/collaborators/ghost/permission"*) echo "Not Found" >&2; exit 1 ;;
   "issue comment 120"*) ;;`)
-			r.mustPass()
-			if goes := r.outputs["go"] == "true"; goes != c.goes {
-				t.Errorf("%s, by %s: the build goes on is %v, want %v", c.name, event, goes, c.goes)
-			}
-			bodies := r.bodies()
-			if c.goes && len(bodies) != 0 {
-				t.Errorf("%s, by %s: the build commented %q", c.name, event, bodies)
-			}
-			if !c.goes && (len(bodies) != 1 || !strings.Contains(bodies[0], "added by someone with write access") ||
-				strings.Contains(bodies[0], c.login)) {
-				t.Errorf("%s, by %s: the build said %q, want a fixed-text comment that someone with write access must add the label", c.name, event, bodies)
-			}
+		r.mustPass()
+		if goes := r.outputs["go"] == "true"; goes != c.goes {
+			t.Errorf("%s: the build goes on is %v, want %v", c.name, goes, c.goes)
+		}
+		bodies := r.bodies()
+		if c.goes && len(bodies) != 0 {
+			t.Errorf("%s: the build commented %q", c.name, bodies)
+		}
+		if !c.goes && (len(bodies) != 1 || !strings.Contains(bodies[0], "added by someone with write access") ||
+			strings.Contains(bodies[0], c.login)) {
+			t.Errorf("%s: the build said %q, want a fixed-text comment that someone with write access must add the label", c.name, bodies)
 		}
 
-		r := newRehearsal(t)
+		r = newRehearsal(t)
 		repo, _ := r.newRepo("repo", map[string]string{"AGENTS.md": "How to work.\n", "REVIEW.md": "What fails.\n", ".github/build-prompt.md": "Build it.\n", ".github/sandbox-settings.sh": "echo settings\n", ".github/scrub-placeholders.sh": "echo placeholders\n",
 			".github/issue-text.sh": readText(t, ".github/issue-text.sh")})
 		r.dir = repo
@@ -742,9 +676,9 @@ func TestTheBuildLabelCountsOnlyFromSomeoneWhoCanWrite(t *testing.T) {
 	}
 }
 
-// AGENTS.md counts the builds as retry.yml and its drawing do: up to three in all.
-func TestAgentsCountsTheBuildsAsRetryDoes(t *testing.T) {
-	if !strings.Contains(readText(t, "AGENTS.md"), "up to three builds in all") {
-		t.Error("AGENTS.md doesn't say a build runs up to three builds in all")
+// Failed tests and failed reviews go to the same fixer on the existing pull request.
+func TestAgentsSendsFailedChecksToTheFixer(t *testing.T) {
+	if !strings.Contains(readText(t, "AGENTS.md"), "Failed tests and failed reviews go to fix.yml") {
+		t.Error("AGENTS.md doesn't send failed tests and failed reviews to fix.yml")
 	}
 }

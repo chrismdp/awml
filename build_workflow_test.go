@@ -16,7 +16,7 @@ import (
 )
 
 // The factory's workflows, which #160 rebuilt. release.yml publishes a tag and isn't one of them.
-var factoryFiles = []string{"build.yml", "ci.yml", "fix.yml", "land.yml", "resolve.yml", "retry.yml"}
+var factoryFiles = []string{"build.yml", "ci.yml", "fix.yml", "land.yml", "resolve.yml"}
 
 type workflowStep struct {
 	ID              string            `yaml:"id"`
@@ -148,7 +148,7 @@ func onlyReads(t *testing.T, workflow, name string, job workflowJob) {
 	}
 }
 
-// The factory is the six workflows #160 describes, and review.yml's jobs live in ci.yml now.
+// The factory keeps build, CI, fix, land and resolve, with review jobs in CI.
 func TestTheFactoryIsTheWorkflowsOf160(t *testing.T) {
 	files, err := filepath.Glob(".github/workflows/*.yml")
 	if err != nil {
@@ -170,12 +170,11 @@ func TestTheFactoryIsTheWorkflowsOf160(t *testing.T) {
 // main's secrets for a stranger's pull request.
 func TestEachWorkflowStartsFromItsEvent(t *testing.T) {
 	want := map[string][]string{
-		"build.yml":   {"issues", "workflow_dispatch"},
+		"build.yml":   {"issues"},
 		"ci.yml":      {"pull_request", "push", "workflow_dispatch"},
 		"fix.yml":     {"workflow_run"},
 		"land.yml":    {"workflow_run"},
 		"resolve.yml": {"push", "workflow_dispatch"},
-		"retry.yml":   {"workflow_run"},
 	}
 	for _, file := range append(append([]string{}, factoryFiles...), "release.yml") {
 		on := readFactoryWorkflow(t, file).On
@@ -201,7 +200,7 @@ func TestEachWorkflowStartsFromItsEvent(t *testing.T) {
 	if got := fmt.Sprint(push["branches"]); got != "[main]" {
 		t.Errorf("CI runs on pushes to %s, want only [main], so each commit has one run", got)
 	}
-	for _, file := range []string{"fix.yml", "land.yml", "retry.yml"} {
+	for _, file := range []string{"fix.yml", "land.yml"} {
 		run, _ := readFactoryWorkflow(t, file).On["workflow_run"].(map[string]any)
 		if fmt.Sprint(run["workflows"]) != "[CI]" || fmt.Sprint(run["types"]) != "[completed]" {
 			t.Errorf("%s wakes on %v, want CI completed", file, run)
@@ -213,11 +212,6 @@ func TestEachWorkflowStartsFromItsEvent(t *testing.T) {
 		if file != "fix.yml" && branches != "[build/issue-*]" {
 			t.Errorf("%s wakes on %s, want only factory branches", file, branches)
 		}
-	}
-	dispatch, _ := readFactoryWorkflow(t, "build.yml").On["workflow_dispatch"].(map[string]any)
-	inputs, _ := dispatch["inputs"].(map[string]any)
-	if len(inputs) != 1 || inputs["issue"] == nil {
-		t.Errorf("build.yml takes %v by dispatch, want only the issue's number", inputs)
 	}
 	resolve, _ := readFactoryWorkflow(t, "resolve.yml").On["push"].(map[string]any)
 	if fmt.Sprint(resolve["branches"]) != "[main]" {
@@ -679,6 +673,7 @@ func (r *rehearsal) run(step workflowStep, env map[string]string, answers string
 		"PATH":                    bin + string(os.PathListSeparator) + os.Getenv("PATH"),
 		"HOME":                    r.root,
 		"RUNNER_TEMP":             r.temp,
+		"TMPDIR":                  r.temp,
 		"HOST_DIR":                filepath.Join(r.temp, "host"),
 		"GITHUB_OUTPUT":           filepath.Join(r.root, "output"),
 		"GITHUB_STEP_SUMMARY":     filepath.Join(r.root, "summary"),
@@ -844,7 +839,7 @@ func TestEverySessionRunsInItsOwnSandbox(t *testing.T) {
 }
 
 // The settings turn the sandbox on, fail rather than run a command without it, refuse every
-// unsandboxed retry, and allow no host at all. No command may write the runner's files, its actions,
+// unsandboxed second attempt, and allow no host at all. No command may write the runner's files, its actions,
 // its tool cache, its file commands or event, any folder on PATH or Go's bin, the git and shell
 // settings of the runner's own home, or anything a caller names, and none may read the runner's
 // files or the Docker socket. They deny no .git: Claude Code's scrub protects a .git's hooks, config
@@ -1315,9 +1310,9 @@ func TestARehearsalRunsAStepUnderPipefail(t *testing.T) {
 func TestNoStrangersRunCanDisplaceARealOne(t *testing.T) {
 	grouped := map[string]string{
 		"fix.yml fix": "fix-session-${{ needs.decide.outputs.pr }}", "fix.yml write": "fix-push-${{ needs.decide.outputs.pr }}",
-		"retry.yml act": "retry-issue-${{ needs.retry.outputs.issue }}", "land.yml land": "land-pull-${{ needs.find.outputs.pr }}",
+		"land.yml land": "land-pull-${{ needs.find.outputs.pr }}",
 	}
-	for _, file := range []string{"fix.yml", "retry.yml", "land.yml"} {
+	for _, file := range []string{"fix.yml", "land.yml"} {
 		workflow := readFactoryWorkflow(t, file)
 		if workflow.Concurrency != nil {
 			t.Errorf("%s takes turns as a whole, where a stranger's run can displace a real one: %v", file, workflow.Concurrency)

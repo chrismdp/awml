@@ -7,7 +7,7 @@
 # is the session's own home and each PATH one more that no command may write, such as another
 # session's folder or the host's own.
 #
-# The sandbox is on, Claude Code refuses to start without it, and no command may retry outside it.
+# The sandbox is on, Claude Code refuses to start without it, and no command may run outside it.
 # CLAUDE_CODE_SUBPROCESS_ENV_SCRUB, which every session sets, runs each command in a PID namespace
 # of its own, so it can't read Claude Code's environment through /proc, and adds its own list of
 # paths no command may write, beside writes allowed anywhere under /home, /tmp, /opt and the like,

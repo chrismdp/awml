@@ -74,7 +74,7 @@ func landPulls(user, sha string) string {
 
 // land.yml exits quietly unless CI's run is a pull_request run on a factory branch of this
 // repository, the pull request is the app's and open, its head is CI's commit, and every check has
-// finished and passed: a failed check is retry-a-build's or the fixer's. It finds who last added
+// finished and passed: a failed check is the fixer's. It finds who last added
 // the issue's build label, a person, to tell or ask.
 func TestLandExitsQuietlyUnlessEveryCheckPassedOnTheHead(t *testing.T) {
 	ready, _ := readFactoryWorkflow(t, "land.yml").Jobs["find"].step(t, "ready")
@@ -362,7 +362,7 @@ func TestTheBuildRuleAsksAboutNpmsOwnFiles(t *testing.T) {
 
 // A Classify job that failed or was cancelled as a whole, by a timeout or a lost runner, gave no
 // verdict anyone can trust, and nothing else would act on the pull request: Classify's failure wakes
-// neither the fixer nor retry. So land goes on once every job has finished and the four required
+// no fixer. So land goes on once every job has finished and the four required
 // checks have passed, and reads such a Classify as giving no verdict, which asks.
 func TestLandAsksWhenClassifyEndedBadly(t *testing.T) {
 	ready, _ := readFactoryWorkflow(t, "land.yml").Jobs["find"].step(t, "ready")
@@ -485,7 +485,7 @@ func TestLandTellsWhoeverLastAddedTheLabel(t *testing.T) {
 }
 
 // A build label taken off the issue means a person has stepped in, so land never ships or shows the
-// pull request: it asks, with a fixed reason. It reads the issue's labels from GitHub, as retry does.
+// pull request: it asks, with a fixed reason. It reads the issue's labels from GitHub, as the build does.
 func TestLandAsksOnceTheBuildLabelIsTakenOff(t *testing.T) {
 	ready, _ := readFactoryWorkflow(t, "land.yml").Jobs["find"].step(t, "ready")
 	head := strings.Repeat("ab", 20)

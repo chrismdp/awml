@@ -150,7 +150,9 @@ func TestTheFixerReadsTheIssuesDecisions(t *testing.T) {
 	}
 	prompt := strings.Join(strings.Fields(readText(t, ".github/fix-prompt.md")), " ")
 	for _, want := range []string{"FIX_DIR/decisions.md", "OUT_DIR/referred.md", "would change a decision",
-		"If you refer any finding back, change nothing"} {
+		"If you refer any finding back, change nothing",
+		"Weigh each finding and each failing test against those decisions",
+		"if making a failing test pass would change a decision"} {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("the fix prompt doesn't say %q", want)
 		}
@@ -185,7 +187,7 @@ func fixPatchStep(t *testing.T, changed, referred bool) *rehearsal {
 }
 
 // When the session referred findings back and changed nothing, the run ends there, referred:
-// nothing is pushed, so no fix commit counts as a try and no CI run starts a retry. A session that
+// nothing is pushed, so no fix commit counts as a try and no CI run starts. A session that
 // referred findings back must change nothing, since a pushed fix would start the reviews again, which
 // would find the same finding to refer back: one that changed something too is refused, and nothing
 // is pushed.
