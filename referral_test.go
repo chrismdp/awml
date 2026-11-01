@@ -185,7 +185,7 @@ func fixPatchStep(t *testing.T, changed, referred bool) *rehearsal {
 }
 
 // When the session referred findings back and changed nothing, the run ends there, referred:
-// nothing is pushed, so no fix commit counts as a try and no CI run starts a retry. A session that
+// nothing is pushed, so no fix commit counts as a try and no CI run starts. A session that
 // referred findings back must change nothing, since a pushed fix would start the reviews again, which
 // would find the same finding to refer back: one that changed something too is refused, and nothing
 // is pushed.

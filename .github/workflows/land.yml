@@ -54,7 +54,7 @@ jobs:
       # GitHub matches the run by its workflow's name, which another workflow could share, so the run
       # is read back from the API. A required check that failed or hasn't finished, a pull request
       # that isn't the app's or isn't open, or a head that moved, means it exits quietly: a failed
-      # check is retry-a-build's or the fixer's, and a newer CI result decides a moved head. The
+      # check is the fixer's, and a newer CI result decides a moved head. The
       # person who last added the issue's build label is the one to tell or ask, if they can write
       # here, or else the owner, and a label taken off since means the rule asks. Classify isn't
       # required: once every job has finished, one that didn't pass is read as giving no verdict.
@@ -83,7 +83,7 @@ jobs:
             leave "A check on $head_sha hasn't finished, so a later run decides."
           for name in "test (1.22)" "test (stable)" "Bug review" "Security review"; do
             jq -e --arg name "$name" '[.[] | select(.name == $name and .conclusion == "success")] | length == 1' \
-              "$RUNNER_TEMP/jobs.json" > /dev/null || leave "$name didn't pass on $head_sha, so it's left to retry-a-build or the fixer."
+              "$RUNNER_TEMP/jobs.json" > /dev/null || leave "$name didn't pass on $head_sha, so it's left to the fixer."
           done
           # A re-run of a run an earlier attempt of which passed every required check: land acted on
           # that attempt, so it doesn't merge or ask again.
@@ -96,7 +96,7 @@ jobs:
               leave "Attempt $earlier of this run passed every required check, and land acted on it then."
           done
           # A Classify job that failed or was cancelled as a whole, by a timeout or a lost runner, gave
-          # no verdict to trust, and its failure wakes neither the fixer nor retry, so it's read as no
+          # no verdict to trust, and its failure wakes no fixer, so it's read as no
           # verdict, which asks.
           if jq -e '[.[] | select(.name == "Classify" and .conclusion == "success")] | length == 1' "$RUNNER_TEMP/jobs.json" > /dev/null; then
             classify_passed=true
@@ -129,7 +129,7 @@ jobs:
             jq -rs 'last // {} | if .type == "User" then .login // "" else "" end')"
           may_write "$labeller" || labeller="$GITHUB_REPOSITORY_OWNER"
           # A build label taken off the issue means a person has stepped in, so the rule asks. The
-          # labels are read from GitHub, as retry reads them.
+          # labels are read from GitHub, as the build reads them.
           state="$(gh api graphql -F owner="${GITHUB_REPOSITORY%%/*}" -F name="${GITHUB_REPOSITORY#*/}" -F number="$issue" -f query='
             query($owner: String!, $name: String!, $number: Int!) {
               repository(owner: $owner, name: $name) {

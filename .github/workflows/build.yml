@@ -6,13 +6,13 @@
 # redraws the examples the change alters and pictures those that look different. The app then
 # pushes the branch and the pictures and opens the pull request. The build runs no checks of its
 # own: CI judges the commit when the pull request opens, as it judges every pull request, and
-# land.yml, fix.yml and retry.yml each wake on CI finishing, reading GitHub rather than anything
+# land.yml and fix.yml each wake on CI finishing, reading GitHub rather than anything
 # this workflow writes. A draft that touches .github/ or Claude Code's own files is offered on the
 # issue instead, and the build stops.
 # Drawn in .github/drawings/issue-to-pull-request.yaml
 name: Build from an issue
-# Each build's run is named for its issue, so retry.yml counts the builds of an issue by their runs.
-run-name: ${{ (github.event_name == 'workflow_dispatch' || github.event.label.name == 'build') && format('Build of issue {0}', inputs.issue || github.event.issue.number) || format('A label added to issue {0}', github.event.issue.number) }}
+# Each build's run is named for its issue so a person can find its builds.
+run-name: ${{ github.event.label.name == 'build' && format('Build of issue {0}', github.event.issue.number) || format('A label added to issue {0}', github.event.issue.number) }}
 
 # Before it works, a repository needs:
 # - a GitHub App with read and write access to contents, pull requests and issues, installed on the
@@ -30,23 +30,15 @@ run-name: ${{ (github.event_name == 'workflow_dispatch' || github.event.label.na
 on:
   issues:
     types: [labeled]
-  # retry.yml starts each try after the first with only the issue's number, and a person can start
-  # one by hand. The build trusts nothing else from it: it checks the label and the issue's last
-  # edit itself.
-  workflow_dispatch:
-    inputs:
-      issue:
-        description: The number of the issue to build
-        required: true
 
 # Each label added to an issue starts a run, and the app opens an issue with three labels at once. So
 # only a build has the issue's group, and a run for any other label can't cancel the build.
 concurrency:
-  group: ${{ (github.event_name == 'workflow_dispatch' || github.event.label.name == 'build') && format('build-issue-{0}', inputs.issue || github.event.issue.number) || format('build-other-label-{0}', github.run_id) }}
+  group: ${{ github.event.label.name == 'build' && format('build-issue-{0}', github.event.issue.number) || format('build-other-label-{0}', github.run_id) }}
   cancel-in-progress: true
 
 env:
-  ISSUE: ${{ inputs.issue || github.event.issue.number }}
+  ISSUE: ${{ github.event.issue.number }}
 
 # Every step runs as bash --noprofile --norc -eo pipefail {0}, which GitHub uses only when the
 # shell is named, so a command that fails in a pipe fails its step, as in the rehearsals.
@@ -55,13 +47,11 @@ defaults:
     shell: bash
 
 jobs:
-  # Says on the issue that the build has started, in a new comment linking the run. A build started
-  # by dispatch first checks, from GitHub's record, that the issue still carries the build label and
-  # hasn't been edited since the label was last added, by comparing GraphQL's lastEditedAt with the
-  # label's last labelled event. If not, a new comment asks for the label again, and nothing is
-  # drafted. It checks out nothing and runs only gh.
+  # Says on the issue that the build has started, in a new comment linking the run, after
+  # checking that the last build label was added by someone with write access or the app.
+  # It checks out nothing and runs only gh. The draft checks the approved text again.
   start:
-    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'build'
+    if: github.event.label.name == 'build'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -69,17 +59,15 @@ jobs:
     outputs:
       go: ${{ steps.still.outputs.go }}
     steps:
-      - name: "Sort by GitHub's record: does the issue still carry the build label, unedited since it was added?"
+      - name: "Sort by GitHub's record: was the build label last added by someone with write access or the app?"
         id: still
         env:
           GH_TOKEN: ${{ github.token }}
-          EVENT: ${{ github.event_name }}
         run: |
           case "$ISSUE" in ''|*[!0-9]*) echo "The issue must be a number: $ISSUE"; exit 1 ;; esac
           run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          # A rename doesn't change lastEditedAt, so the issue's renamed events count as edits too.
           events="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$ISSUE/events?per_page=100" \
-            --jq '.[] | select((.event == "labeled" and .label.name == "build") or .event == "renamed")
+            --jq '.[] | select(.event == "labeled" and .label.name == "build")
               | {event, created_at, actor: {login: (.actor.login // ""), type: (.actor.type // "")}}' | jq -s .)"
           # Someone with triage can add a label without write access, so the last build label
           # approves the issue only if someone with write access, or the app's bot, added it.
@@ -97,34 +85,7 @@ jobs:
             echo "go=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if [ "$EVENT" != workflow_dispatch ]; then
-            echo "go=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          owner="${GITHUB_REPOSITORY%%/*}"
-          name="${GITHUB_REPOSITORY#*/}"
-          issue="$(gh api graphql -F owner="$owner" -F name="$name" -F number="$ISSUE" -f query='
-            query($owner: String!, $name: String!, $number: Int!) {
-              repository(owner: $owner, name: $name) {
-                issue(number: $number) { lastEditedAt labels(first: 100) { nodes { name } } }
-              }
-            }' --jq .data.repository.issue)"
-          labelled="$(jq -r '[.[] | select(.event == "labeled")] | last | .created_at // ""' <<< "$events")"
-          renamed="$(jq -r '[.[] | select(.event == "renamed")] | last | .created_at // ""' <<< "$events")"
-          edited="$(jq -r '.lastEditedAt // ""' <<< "$issue")"
-          if [[ "$renamed" > "$edited" ]]; then edited="$renamed"; fi
-          if ! jq -e '[.labels.nodes[].name] | index("build")' <<< "$issue" > /dev/null || [ -z "$labelled" ]; then
-            why="This issue no longer carries the build label"
-          elif [ -n "$edited" ] && ! [[ "$edited" < "$labelled" ]]; then
-            why="This issue was edited or renamed after the build label was last added"
-          else
-            echo "go=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          printf '**The build stopped before drafting.** %s, so the build no longer knows the text was approved. To build it as it reads now, remove the build label and add it again. [The run](%s)\n' \
-            "$why" "$run_url" > "$RUNNER_TEMP/stopped.md"
-          gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/stopped.md"
-          echo "go=false" >> "$GITHUB_OUTPUT"
+          echo "go=true" >> "$GITHUB_OUTPUT"
 
       - name: Post a new comment that the build has started
         id: started
@@ -137,9 +98,9 @@ jobs:
           gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/started.md"
 
   # Claude works here with a read-only token, sees only the issue's text if it's unedited since the
-  # label was last added, the comments of people who can write to it, and why the last try failed,
-  # and hands back a patch. Once its checks pass, it redraws the examples its change alters with
-  # .github/picture-drawings.sh, which puts the redrawn SVGs into the change and pictures, before
+  # label was last added and the comments of people who can write to it, and hands back a patch.
+  # Once its checks pass, it redraws the examples its change alters with .github/picture-drawings.sh,
+  # which puts the redrawn SVGs into the change and pictures, before
   # and after, those that look different. The job runs nothing of its own beside the login token:
   # Claude runs its commands, the tests among them, in its sandbox.
   draft:
@@ -152,7 +113,6 @@ jobs:
     env:
       HOST_DIR: /var/lib/awml-host
     permissions:
-      actions: read
       contents: read
       issues: read
     outputs:
@@ -197,33 +157,6 @@ jobs:
             exit 1
           fi
           mv "$RUNNER_TEMP/issue.md" "$build/issue.md"
-
-      # Why the last try failed: the failed tests' log of CI's latest pull_request run on the issue's
-      # branch in this repository, if it failed. It's the output of the branch's code, so Claude
-      # reads it as untrusted.
-      - name: Bring in the failed tests' log of CI's latest run on the issue's branch
-        id: failed
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          branch="build/issue-$ISSUE"
-          run="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=$branch&event=pull_request&per_page=20" |
-            jq -r --arg repository "$GITHUB_REPOSITORY" '[.workflow_runs[]
-              | select(.head_repository.full_name == $repository and .status == "completed")]
-              | first | select(. != null and .conclusion == "failure") | .id')"
-          case "$run" in
-            '') echo "CI hasn't failed on $branch, so there's no failed log."; exit 0 ;;
-            *[!0-9]*) echo "CI's run isn't a number: $run"; exit 1 ;;
-          esac
-          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs?per_page=100" \
-            --jq '.jobs[] | select((.name | startswith("test (")) and .conclusion == "failure") | .id' |
-          while read -r job; do
-            case "$job" in ''|*[!0-9]*) continue ;; esac
-            gh run view --repo "$GITHUB_REPOSITORY" --job "$job" --log-failed || true
-          done | tail -n 300 > "$RUNNER_TEMP/failed.log"
-          # Only a failed test's log is a reason a test failed: a run that failed by a review alone
-          # leaves no failed.md, whose presence tells Claude a test failed.
-          if [ -s "$RUNNER_TEMP/failed.log" ]; then mv "$RUNNER_TEMP/failed.log" "$RUNNER_TEMP/build/failed.md"; fi
 
       # The session runs offline, so nothing it runs can carry data out through a proxy. Its home's
       # Go module cache is filled here, before it starts, by fetching alone: go mod download, from the
@@ -765,7 +698,7 @@ jobs:
           gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$BRANCH" \
             --title "$(cat "$RUNNER_TEMP/title.txt")" --body-file "$RUNNER_TEMP/pull-request.md"
 
-  # A draft or open job that fails leaves no pull request, so CI never runs on it and retry.yml never
+  # A draft or open job that fails leaves no pull request, so CI never runs on it and the fixer never
   # wakes. This says so on the issue, in a new comment from fixed text linking the run, so a person
   # knows. A build that stopped on purpose, offering its change or finding nothing to push, has said
   # why already and passed. It checks out nothing and runs only gh.

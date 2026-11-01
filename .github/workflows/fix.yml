@@ -1,13 +1,15 @@
-# When CI finishes on a pull request with Bug review or Security review failed, because a review
-# found something Important, a fresh Claude session fixes every finding of both reviews, Nits
-# included, and the repository's app pushes the fix to the pull request's branch as one commit. It
-# reads only GitHub and git: the head commit's checks, the pull request, and the fix commits
-# already on the branch, which are its tries. It runs no checks of its own: the push starts CI, and
-# CI judges the fix as it judges every commit. It stops after two fix commits on a branch, exits
-# quietly if anyone has pushed since the review, and offers a fix to .github/ or Claude Code's own
-# files as the run's artifact, with the commands to download and apply it in a new comment.
+# When CI finishes on a pull request with failed tests, an Important review finding, or both,
+# one fresh Claude session makes the tests pass and fixes both reviews' findings, Nits included.
+# The repository's app pushes one fix commit to the pull request's branch. The session reads the
+# end of the failed tests' log as untrusted, read-only data beside the findings and the patch. It
+# reads only GitHub and git: the head commit's checks, the failed tests' log, the pull request,
+# and the fix commits already on the branch, which are its tries. It runs no checks of its own:
+# the push starts CI, which judges the fix as it judges every commit. It stops after two fix
+# commits on a branch and exits quietly if anyone has pushed since CI ran or closed the pull
+# request. A fix to .github/ or Claude Code's own files is offered as the run's artifact, with
+# the commands to download and apply it in a new comment.
 # Drawn in .github/drawings/fix-review-findings.yaml
-name: Fix a failed review
+name: Fix a failed pull request
 
 # Before it works, a repository needs the GitHub App, its two secrets and the
 # CLAUDE_CODE_OAUTH_TOKEN secret that build.yml lists. The app pushes the fix, because GitHub starts
@@ -63,9 +65,8 @@ jobs:
 
       # Only a pull request CI reviews is fixed: one into main from a branch of this repository,
       # opened by someone with write access to this repository, or the build's app, by GitHub's
-      # record of who opened it. It acts only when both test jobs passed and a review failed: when a
-      # test failed too, the tests own the run, and retry-a-build acts. Someone has pushed since the
-      # review when the pull request's head isn't the commit CI ran on, and then it exits quietly.
+      # record of who opened it. It acts when tests failed, a review failed with an Important
+      # finding, or both. A pull request whose head isn't the commit CI ran on is left quietly.
       # Its tries are the fix commits on the branch, known by the line each one's message carries.
       # It passes on only the reviewed commit's sha, the pull request's number and branch, and a
       # decision.
@@ -90,12 +91,10 @@ jobs:
 
           gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN/jobs?per_page=100" --jq '.jobs[]' |
             jq -s . > "$RUNNER_TEMP/jobs.json"
-          for name in "test (1.22)" "test (stable)"; do
-            jq -e --arg name "$name" '[.[] | select(.name == $name and .conclusion == "success")] | length == 1' \
-              "$RUNNER_TEMP/jobs.json" > /dev/null || leave "$name didn't pass, so the run is retry-a-build's."
-          done
-          jq -e '[.[] | select((.name | IN("Bug review", "Security review")) and .conclusion == "failure")] | length > 0' \
-            "$RUNNER_TEMP/jobs.json" > /dev/null || leave "Neither review failed, so there's nothing to fix."
+          tests_failed="$(jq -r 'any(.[]; (.name | IN("test (1.22)", "test (stable)")) and .conclusion == "failure")' \
+            "$RUNNER_TEMP/jobs.json")"
+          jq -e 'any(.[]; (.name | IN("test (1.22)", "test (stable)", "Bug review", "Security review")) and .conclusion == "failure")' \
+            "$RUNNER_TEMP/jobs.json" > /dev/null || leave "Neither tests nor reviews failed, so there's nothing to fix."
 
           # Trust is by the opener's permission on this repository, read from GitHub, or the app's
           # exact login and type, checked for each pull request on the branch, newest first.
@@ -131,16 +130,15 @@ jobs:
           fi
           [ "$(jq -r .head.sha <<< "$pull")" = "$head_sha" ] ||
             leave "Someone has pushed to #$pr since the reviews read $head_sha."
-          # A re-run of a run an earlier attempt of which passed its tests and failed a review, on
-          # this same head: the fixer acted on that attempt, so it doesn't comment again or start
+          # A re-run of a run an earlier attempt of which failed tests or a review, on this same
+          # head: the fixer acted on that attempt, so it doesn't comment again or start
           # another session.
           attempt="$(jq -r '.run_attempt // 1' <<< "$run")"
           [[ "$attempt" =~ ^[0-9]+$ ]] || leave "CI's run attempt isn't a number."
           for ((earlier = 1; earlier < attempt; earlier++)); do
             gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN/attempts/$earlier/jobs?per_page=100" --jq '.jobs[]' |
-              jq -se '([.[] | select((.name | IN("test (1.22)", "test (stable)")) and .conclusion == "success")] | length == 2) and
-                ([.[] | select((.name | IN("Bug review", "Security review")) and .conclusion == "failure")] | length > 0)' > /dev/null &&
-              leave "Attempt $earlier of this run failed a review on $head_sha, and the fixer acted on it then."
+              jq -se 'any(.[]; (.name | IN("test (1.22)", "test (stable)", "Bug review", "Security review")) and .conclusion == "failure")' > /dev/null &&
+              leave "Attempt $earlier of this run failed tests or a review on $head_sha, and the fixer acted on it then."
           done
           {
             echo "pr=$pr"
@@ -158,7 +156,8 @@ jobs:
             exit 0
           fi
           bash "$RUNNER_TEMP/read-findings.sh" "$CI_RUN" "$RUNNER_TEMP/checks"
-          if ! jq -e '[.[] | select(.severity == "Important")] | length > 0' "$RUNNER_TEMP/checks/findings.json" > /dev/null; then
+          if [ "$tests_failed" != true ] &&
+            ! jq -e '[.[] | select(.severity == "Important")] | length > 0' "$RUNNER_TEMP/checks/findings.json" > /dev/null; then
             echo "A review failed, but its check carries no Important finding to fix."
             printf 'decision=giveup\nreason=unread\n' >> "$GITHUB_OUTPUT"
             exit 0
@@ -200,6 +199,24 @@ jobs:
           mkdir -p "$RUNNER_TEMP/fix/in" "$RUNNER_TEMP/fix/out"
           cp .github/read-findings.sh .github/fix-prompt.md .github/sandbox-settings.sh .github/scrub-placeholders.sh .github/issue-text.sh "$RUNNER_TEMP/"
           cp AGENTS.md REVIEW.md "$RUNNER_TEMP/fix/in/"
+
+      # Read only this CI run's failed test jobs, as build.yml used to. The output is untrusted
+      # data, never shell code or part of the prompt. The bring step makes it read-only with the
+      # other inputs. If GitHub has no log to give, the session still has the patch and findings.
+      - name: Bring in the end of this CI run's failed tests' log
+        id: failed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_RUN: ${{ github.event.workflow_run.id }}
+        run: |
+          case "$CI_RUN" in ''|*[!0-9]*) echo "CI's run isn't a number: $CI_RUN"; exit 1 ;; esac
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN/jobs?per_page=100" \
+            --jq '.jobs[] | select((.name | startswith("test (")) and .conclusion == "failure") | .id' |
+          while read -r job; do
+            case "$job" in ''|*[!0-9]*) continue ;; esac
+            gh run view --repo "$GITHUB_REPOSITORY" --job "$job" --log-failed || true
+          done | tail -n 300 > "$RUNNER_TEMP/failed.log"
+          if [ -s "$RUNNER_TEMP/failed.log" ]; then mv "$RUNNER_TEMP/failed.log" "$RUNNER_TEMP/fix/in/failed.log"; fi
 
       # The findings, as both reviews' checks carry them, the patch, GitHub's diff of the reviewed
       # commit against main, and the commits, one line each, go to the session as read-only files.
@@ -304,7 +321,7 @@ jobs:
       # output folder is read only once it holds nothing but plain files and folders.
       # The step is one { } group, which bash parses whole before it starts, and its sandbox can't
       # write the step's own script, "$0", so nothing a command writes there runs after the session.
-      - name: Fix every finding of both reviews, Important ones and Nits, test first
+      - name: Make failing tests pass and fix both reviews' findings in one session, test first
         id: session
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -339,7 +356,7 @@ jobs:
             # refuses an empty package.json, and an empty commondir stops every use of the repository.
             cp "$RUNNER_TEMP/scrub-placeholders.sh" "$HOST_DIR/"
             bash "$HOST_DIR/scrub-placeholders.sh" before "$GITHUB_WORKSPACE" "$HOST_DIR/baseline/absent" standin
-            bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/session/home" "$HOST_DIR" "$0"
+            bash "$RUNNER_TEMP/sandbox-settings.sh" "$RUNNER_TEMP/session/home" "$FIX_DIR" "$HOST_DIR" "$0"
             prompt="$(sed -e "s|FIX_DIR|$FIX_DIR|g" -e "s|OUT_DIR|$OUT_DIR|g" "$RUNNER_TEMP/fix-prompt.md")"
             status=0
             HOME="$RUNNER_TEMP/session/home" claude -p "$prompt" --model opus --max-turns 200 --permission-mode default \
@@ -435,7 +452,7 @@ jobs:
           if [ -f "$out/message.md" ]; then cp "$out/message.md" "$fix/"; fi
           if [ -s "$out/referred.md" ]; then cp "$out/referred.md" "$fix/"; fi
           # Findings referred back and nothing changed: nothing is pushed, so no fix commit counts as
-          # a try and no CI run starts a retry, and the referral is posted on the issue. A session
+          # a try and no CI run starts, and the referral is posted on the issue. A session
           # that referred findings back must change nothing, since a pushed fix would start the
           # reviews again, which would find the same finding to refer back, so one that did is
           # refused.
@@ -532,12 +549,13 @@ jobs:
 
       # The fix must be the one the fix job gave the digest of. Then it's applied, staged, to the
       # reviewed commit, and every name it stages is checked, a renamed file by both its names. A
-      # branch that has moved since the review means it exits quietly, with a fix or a referral. A
+      # closed pull request or a branch that has moved since CI ran is left quietly, with a fix or a referral. A
       # fix that touches .github/ or Claude Code's own files is offered to a person. A run that
       # referred findings back pushes nothing, and the referral is posted on the build's issue.
       - name: "Sort by git: does the fix touch .github/ or Claude Code's own files, and is the branch still at the reviewed commit?"
         id: guard
         env:
+          GH_TOKEN: ${{ github.token }}
           CHANGE_DIGEST: ${{ needs.fix.outputs.digest }}
           STOPPED: ${{ needs.fix.outputs.reason || needs.decide.outputs.reason }}
           SESSION: ${{ needs.fix.outputs.session }}
@@ -549,6 +567,11 @@ jobs:
           if ! [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || ! [[ "$BRANCH" =~ ^[A-Za-z0-9._/-]+$ ]]; then
             echo "The reviewed commit, or its branch, isn't one this workflow handles."
             exit 1
+          fi
+          if [ "$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .state)" != open ]; then
+            echo "The pull request is closed, so it's left alone."
+            echo "outcome=closed" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
           give_up() { printf 'outcome=giveup\nreason=%s\n' "$1" >> "$GITHUB_OUTPUT"; exit 0; }
           if [ "$DECISION" = giveup ]; then
@@ -634,8 +657,8 @@ jobs:
           message="$RUNNER_TEMP/commit.md"
           jq -Rrs '.[0:5000] | gsub("@(?=[A-Za-z0-9])"; "@​")
           | gsub("(?<keyword>\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\\b[:\\s]+(?:(?:[\\w.-]+/[\\w.-]+)?#|https?://[^\\s/]+/[\\w.-]+/[\\w.-]+/(?:issues|pull)/))(?=[0-9])"; "\(.keyword)​"; "i")' "$RUNNER_TEMP/fix/message.md" > "$message" 2> /dev/null || true
-          [ -s "$message" ] || echo "Fix what the reviews found" > "$message"
-          printf '\nFixes what the reviews found on %s.\n\nFixed-by: fix-review-findings\n' "$HEAD_SHA" >> "$message"
+          [ -s "$message" ] || echo "Fix the failed tests and review findings" > "$message"
+          printf '\nFixes the failed tests or review findings on %s.\n\nFixed-by: fix-review-findings\n' "$HEAD_SHA" >> "$message"
           git config user.name "$APP_SLUG[bot]"
           git config user.email "$id+$APP_SLUG[bot]@users.noreply.github.com"
           git -c core.hooksPath=/dev/null -c core.fsmonitor=false commit -q -F "$message"
@@ -691,7 +714,7 @@ jobs:
         run: |
           run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           {
-            printf '**The fix for the reviews'"'"' findings changes `.github/`, Claude Code'"'"'s own files** (`.claude/`, `.mcp.json` or a `CLAUDE.md`) **or npm'"'"'s** (`.npmrc`, `.yarnrc` or `node_modules/`), or makes a symbolic link, which the app never pushes, so it'"'"'s here for a person to apply. [The run](%s)\n' "$run_url"
+            printf '**The fix for the failed tests or review findings changes `.github/`, Claude Code'"'"'s own files** (`.claude/`, `.mcp.json` or a `CLAUDE.md`) **or npm'"'"'s** (`.npmrc`, `.yarnrc` or `node_modules/`), or makes a symbolic link, which the app never pushes, so it'"'"'s here for a person to apply. [The run](%s)\n' "$run_url"
             echo
             echo "To look at it and apply it, in a checkout of this branch at $HEAD_SHA, the commit the reviews read:"
             echo
@@ -705,7 +728,7 @@ jobs:
           gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/offer.md"
 
       # From fixed text, linking the failed checks and the run, since a person must act.
-      - name: Say in a new comment that the findings need a person
+      - name: Say in a new comment that the failed tests or findings need a person
         id: giveup
         if: ${{ !cancelled() && (steps.guard.outputs.outcome == 'giveup' || failure()) }}
         env:
@@ -721,12 +744,12 @@ jobs:
             nothing) why="Claude changed nothing." ;;
             mixed) why="Claude referred findings back to the issue but changed the tree too, which a referral mustn't, so nothing is pushed or posted." ;;
             noissue) why="Claude referred findings back, but this branch names no issue to post them on, so nothing is pushed or posted." ;;
-            session) why="The Claude session that fixes the findings failed or ran out of time." ;;
+            session) why="The Claude session that fixes the failed tests or findings failed or ran out of time." ;;
             unkept) why="The fix job failed before the fix was kept. The run says why." ;;
             apply) why="The fix didn't apply to the commit the reviews read." ;;
             *) why="The fix stopped before it finished. The run says why." ;;
           esac
           run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          printf '**The reviews'"'"' findings need a person.** %s [The failed checks](%s) · [The run](%s)\n' \
+          printf '**The failed tests or review findings need a person.** %s [The failed checks](%s) · [The run](%s)\n' \
             "$why" "$CI_URL" "$run_url" > "$RUNNER_TEMP/giveup.md"
           gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/giveup.md"
