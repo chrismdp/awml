@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-const agentRunWorkflow = `awml: "0.10"
+const agentRunWorkflow = `awml: "0.11"
 title: The bakery's stock
 scopes:
   - { id: bakery, label: Bakery }
@@ -50,7 +50,7 @@ func TestPlatformViewOutlinesOnlyCodeInItsOwnAgentBlock(t *testing.T) {
 			if tc.description != "" {
 				sources = append(sources, source("session.yaml", tc.description))
 			}
-			out, err := DrawSources(sources, tc.implementation)
+			out, err := DrawSources(sources, tc.implementation, false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -67,7 +67,7 @@ func TestPlatformViewOutlinesOnlyCodeInItsOwnAgentBlock(t *testing.T) {
 			}
 			has(t, out, "  class morning untrusted\n")
 			if tc.implementation == "" {
-				plain, err := DrawSources(sources[:1], "")
+				plain, err := DrawSources(sources[:1], "", false)
 				if err != nil || out != plain {
 					t.Errorf("descriptions changed the security view: %v", err)
 				}
@@ -93,11 +93,11 @@ func TestPlatformViewOutlinesOnlyCodeInItsOwnAgentBlock(t *testing.T) {
 
 func TestPlatformDescriptionsDoNotBecomeWorkflowsOnAMap(t *testing.T) {
 	sources := []Source{source("plan.yaml", planWorkflow), source("shop.yaml", shopWorkflow)}
-	want, err := DrawSources(sources, "")
+	want, err := DrawSources(sources, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := DrawSources(append(sources, source("server.yaml", soundDescription)), "")
+	got, err := DrawSources(append(sources, source("server.yaml", soundDescription)), "", false)
 	if err != nil || got != want {
 		t.Errorf("description changed the map: %v\n%s", err, got)
 	}

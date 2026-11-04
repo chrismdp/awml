@@ -1,0 +1,19 @@
+awml: "0.11"
+title: Ordering flour
+description: |
+  Title and detail. Each part's label is a short title, and leaves out what its lines already say.
+  A part may also have a description, which awml draw --detail shows in a note tied to it.
+  The bakery and its people are fictional.
+scopes:
+  - { id: bakery, label: "bakery: Ana, Ben" }
+parts:
+  - { id: monday, kind: trigger, label: "Every Monday 06:00" }
+  - { id: stock, kind: context, label: "Stock levels", in: bakery }
+  - { id: check, kind: code, op: check, label: "Is the flour running low?", in: bakery, description: "sacks in stock against the sacks the week's bakes need" }
+  - { id: order, kind: code, op: do, label: "Order flour", in: bakery, description: "Two sacks from the usual mill. A fixed order stays within the spending limit, so it needs no yes. The owner set the limit in March." }
+  - { id: mill, kind: outside, label: "Place the order with the mill: Allow", in: bakery }
+lines:
+  - { from: monday, to: check, kind: start }
+  - { from: stock, to: check, kind: data }
+  - { from: check, to: order, kind: start, label: "[running low]" }
+  - { from: order, to: mill, kind: start }

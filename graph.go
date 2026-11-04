@@ -36,18 +36,20 @@ type GraphGroup struct {
 // a step, a review or a standing approval: ai, code or person. Tier is an outside action's tier.
 // Untrusted is whether the part is marked untrusted, and Unstopped whether its text reaches an
 // outside action with nothing to stop it or accept the risk. AgentRun is whether a platform view's
-// code step is carried out by a model, from its block's platform description.
+// code step is carried out by a model, from its block's platform description. Description is the
+// detail left out of its label, its title.
 type GraphPart struct {
-	ID        string `json:"id"`
-	Kind      string `json:"kind"`
-	Label     string `json:"label"`
-	In        string `json:"in,omitempty"`
-	Decider   string `json:"decider,omitempty"`
-	Op        string `json:"op,omitempty"`
-	Tier      string `json:"tier,omitempty"`
-	Untrusted bool   `json:"untrusted,omitempty"`
-	Unstopped bool   `json:"unstopped,omitempty"`
-	AgentRun  bool   `json:"agentRun,omitempty"`
+	ID          string `json:"id"`
+	Kind        string `json:"kind"`
+	Label       string `json:"label"`
+	In          string `json:"in,omitempty"`
+	Decider     string `json:"decider,omitempty"`
+	Op          string `json:"op,omitempty"`
+	Tier        string `json:"tier,omitempty"`
+	Untrusted   bool   `json:"untrusted,omitempty"`
+	Unstopped   bool   `json:"unstopped,omitempty"`
+	AgentRun    bool   `json:"agentRun,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 // A GraphLine is a line from one part or box to another. A publish is a data line that Publishes,
@@ -228,9 +230,11 @@ func emptyGraph(view string) Graph {
 	return Graph{View: view, Groups: []GraphGroup{}, Parts: []GraphPart{}, Lines: []GraphLine{}, Comments: []GraphComment{}, Places: []GraphPlace{}}
 }
 
-// graphPart gives a part as a graph names it, with who decides it, its operation and its tier.
+// graphPart gives a part as a graph names it, with who decides it, its operation, its tier and its
+// detail.
 func graphPart(p *Map, id string) GraphPart {
-	part := GraphPart{ID: id, Kind: str(p, "kind"), Label: str(p, "label"), Untrusted: p.get("untrusted") == true}
+	part := GraphPart{ID: id, Kind: str(p, "kind"), Label: str(p, "label"), Untrusted: p.get("untrusted") == true,
+		Description: str(p, "description")}
 	switch part.Kind {
 	case "ai", "code", "person":
 		part.Decider, part.Op = part.Kind, str(p, "op")
@@ -307,6 +311,12 @@ func publishedNames(workflows []Workflow) []string {
 // line from its from to its to, but a tie from its part to its comment, and a two-way line from its
 // part to its box.
 func (g Graph) Mermaid() string {
+	return g.mermaid(false)
+}
+
+// mermaid draws the graph as Mermaid does. With detail, each part that has a description
+// has a note tied to it, as awml draw --detail draws, after the comments and their lines.
+func (g Graph) mermaid(detail bool) string {
 	out := append([]string{}, header...)
 	type node struct {
 		group         int
@@ -321,6 +331,32 @@ func (g Graph) Mermaid() string {
 	for _, c := range g.Comments {
 		kinds[c.ID] = "comment"
 		nodes = append(nodes, node{-1, c.In, c.ID, fmt.Sprintf(shapes["comment"], text(c.Label))})
+	}
+	lines := g.Lines
+	if detail {
+		lines = append([]GraphLine{}, g.Lines...)
+		taken := map[string]bool{}
+		for _, n := range nodes {
+			taken[n.id] = true
+		}
+		for _, group := range g.Groups {
+			taken[group.ID] = true
+		}
+		for _, p := range g.Parts {
+			note := p.detailNote()
+			if note == "" {
+				continue
+			}
+			// A note's id is the part's with _detail added, as often as it takes to be one nothing
+			// else has.
+			id := p.ID + "_detail"
+			for taken[id] {
+				id += "_detail"
+			}
+			taken[id], kinds[id] = true, "comment"
+			nodes = append(nodes, node{-1, p.In, id, fmt.Sprintf(shapes["comment"], note)})
+			lines = append(lines, GraphLine{From: p.ID, To: id, Kind: "tie", Points: "none"})
+		}
 	}
 	for i, group := range g.Groups {
 		nodes = append(nodes, node{i, group.In, group.ID, ""})
@@ -353,7 +389,7 @@ func (g Graph) Mermaid() string {
 		}
 		return l.Kind
 	}
-	for _, l := range g.Lines {
+	for _, l := range lines {
 		from, to, kind := l.From, l.To, kindOf(l)
 		// A tie has no direction, so it runs from the part to the comment, and the comment hangs
 		// below or beside what it explains.
@@ -440,7 +476,7 @@ func (g Graph) Mermaid() string {
 	// the order of the first of them.
 	var looks []string
 	numbers := map[string][]string{}
-	for i, l := range g.Lines {
+	for i, l := range lines {
 		var look []string
 		switch {
 		case len(l.Breaks) > 0 || l.Untrusted == "unstopped":
@@ -486,6 +522,15 @@ func (p GraphPart) mermaidLabel() string {
 		who += " " + ops[p.Op] + " " + p.Op
 	}
 	return fmt.Sprintf(operation, who) + label
+}
+
+// detailNote is the label of the note awml draw --detail ties to a part: its title in bold, then
+// its description, or nothing where it has none.
+func (p GraphPart) detailNote() string {
+	if description := text(p.Description); description != "" {
+		return "<b>" + text(p.Label) + "</b><br>" + description
+	}
+	return ""
 }
 
 // nonEmpty gives a list of the text, or none when it's empty.

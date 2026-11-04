@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-const pulledDescription = `awml: "0.10"
+const pulledDescription = `awml: "0.11"
 platform: { id: acme/platforms/ops-runner, label: "The ops runner" }
 off_for_up_to: PT0S
 steps: code

@@ -57,3 +57,5 @@ done
 redraw -map examples/family-map.mmd examples/dinners.yaml examples/shopping.yaml examples/bills.yaml examples/pickups.yaml examples/question.yaml
 redraw -map examples/bakery-map.mmd examples/bakery-stock.yaml examples/bakery-order.yaml
 redraw -map examples/tour/15-split-map.mmd examples/tour/15-split-count.yaml examples/tour/15-split-order.yaml
+# The tour's title and detail example is drawn with its detail too.
+redraw -detail examples/tour/18-title-and-detail.yaml

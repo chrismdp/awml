@@ -1,4 +1,4 @@
-awml: "0.10"
+awml: "0.11"
 title: Answering customers on the bakery's website
 description: |
   A standing approval over actions that can't be undone. Every 15 minutes, the bakery answers the
@@ -15,9 +15,9 @@ parts:
   - { id: chat, kind: connector, label: "The website's chat", in: bakery, untrusted: true }
   - { id: bring, kind: code, op: bring-in, label: "Bring in the questions that arrived", in: bakery }
   - { id: sheet, kind: context, label: "Ana's answer sheet: hours and allergens", in: bakery }
-  - { id: draft, kind: ai, op: draft, label: "Draft a reply to each question about opening hours or allergens, from the answer sheet", in: bakery }
-  - { id: send, kind: code, op: do, label: "Send each reply made only of sentences from the answer sheet", in: bakery, cleans: true }
-  - { id: approval, kind: approval, label: "Ana's standing approval: hours and allergens replies only, up to fifty a day, risk accepted by Ana and the bakery's insurer on the March test set", in: bakery }
+  - { id: draft, kind: ai, op: draft, label: "Draft a reply to each question about opening hours or allergens", in: bakery }
+  - { id: send, kind: code, op: do, label: "Send each reply", in: bakery, cleans: true, description: "only a reply made of sentences from the answer sheet" }
+  - { id: approval, kind: approval, label: "Ana's standing approval: hours and allergens replies only, up to fifty daily", in: bakery, description: "risk accepted by Ana and the bakery's insurer on the March test set" }
   - { id: reply, kind: outside, label: "Send the reply to the customer: Ask", in: bakery }
   - { id: list, kind: surface, label: "Ana's list", in: bakery }
 lines:

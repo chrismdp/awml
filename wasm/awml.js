@@ -84,7 +84,7 @@ async function start(source) {
       return JSON.parse(this.fitPartsJSON(sourceTexts));
     },
     // convert upgrades one file of an older version, or joins a legacy security view and its
-    // platform view given as [security, platform], into one 0.10 file, as awml convert does. When it
+    // platform view given as [security, platform], into one 0.11 file, as awml convert does. When it
     // notes something it couldn't carry over, or the current rules find the file invalid, it throws
     // them, one to a line, notes first. The error's notes and mistakes hold each, and its
     // converted holds the file, which awml convert still writes.
@@ -102,9 +102,10 @@ async function start(source) {
       return decoded.file;
     },
     // draw draws one workflow's view, or the map of several workflows drawn together. Optional
-    // platform descriptions show where a model carries out a platform view's code steps.
-    draw(sourceText, implementation = "", descriptions = []) {
-      const output = globalThis.__awmlDraw(JSON.stringify(given(sourceText)), implementation, JSON.stringify(given(descriptions)));
+    // platform descriptions show where a model carries out a platform view's code steps. With
+    // detail, as with awml draw --detail, a note tied to each part gives its description.
+    draw(sourceText, implementation = "", descriptions = [], detail = false) {
+      const output = globalThis.__awmlDraw(JSON.stringify(given(sourceText)), implementation, JSON.stringify(given(descriptions)), Boolean(detail));
       if (output.startsWith("{")) throw new Error(JSON.parse(output).error);
       return output;
     },

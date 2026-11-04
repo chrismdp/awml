@@ -40,7 +40,8 @@ func TestThereAreExamples(t *testing.T) {
 		"tour/01-draft-and-send", "tour/02-two-start-lines", "tour/03-refused-read", "tour/04-publishing", "tour/05-side-by-side",
 		"tour/07-person-step", "tour/08-gap", "tour/09-platform-view", "tour/10-operations",
 		"tour/11-do", "tour/12-standing-approval", "tour/13-check-by-code", "tour/14-untrusted-text",
-		"tour/15-several-workflows", "tour/15-split-count", "tour/15-split-order", "tour/16-accepted-risk", "tour/17-untrusted-risk-accepted"}
+		"tour/15-several-workflows", "tour/15-split-count", "tour/15-split-order", "tour/16-accepted-risk", "tour/17-untrusted-risk-accepted",
+		"tour/18-title-and-detail"}
 	if !reflect.DeepEqual(names, want) {
 		t.Errorf("examples = %q\nwant %q", names, want)
 	}
@@ -55,7 +56,7 @@ func TestTheLegendShowsCodeCarriedOutByAModel(t *testing.T) {
 		}
 		sources = append(sources, Source{File: path, Text: text})
 	}
-	out, err := DrawSources(sources, "agent")
+	out, err := DrawSources(sources, "agent", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +143,7 @@ func TestEachExampleIsSoundAndItsDrawingsAreCurrent(t *testing.T) {
 				sources = append(sources, Source{File: description, Text: text})
 			}
 			for _, name := range ImplementationIDs(file) {
-				drawn, err := DrawSources(sources, name)
+				drawn, err := DrawSources(sources, name, false)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -214,6 +215,35 @@ func TestTheExamplesThatShareAPartAreDrawnTogether(t *testing.T) {
 		script, err := os.ReadFile("examples/render.sh")
 		if err != nil || !strings.Contains(string(script), "-map "+example.drawing+" "+strings.Join(example.paths, " ")) {
 			t.Errorf("examples/render.sh doesn't draw %s", example.drawing)
+		}
+	}
+}
+
+// The tour's title and detail example is drawn with --detail too, so its notes show beside the
+// drawing of titles alone. examples/render.sh draws its SVG.
+func TestTheExamplesDrawnWithDetailAreCurrent(t *testing.T) {
+	for _, path := range []string{"examples/tour/18-title-and-detail.yaml"} {
+		src, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		drawn, err := DrawSources([]Source{{File: path, Text: src}}, "", true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		stem := strings.TrimSuffix(path, ".yaml") + "-detail"
+		if mmd, err := os.ReadFile(stem + ".mmd"); err != nil || string(mmd) != drawn+"\n" {
+			t.Errorf("%s.mmd isn't what awml draw --detail draws now: run examples/render.sh", stem)
+		}
+		if !strings.Contains(drawn, "_detail@{ shape: notch-rect") {
+			t.Errorf("%s has no detail to draw", path)
+		}
+		if _, err := os.Stat(stem + ".svg"); err != nil {
+			t.Error(err)
+		}
+		script, err := os.ReadFile("examples/render.sh")
+		if err != nil || !strings.Contains(string(script), "redraw -detail "+path+"\n") {
+			t.Errorf("examples/render.sh doesn't draw %s with its detail", path)
 		}
 	}
 }

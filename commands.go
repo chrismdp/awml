@@ -102,13 +102,14 @@ func once(sources []Source) []Source {
 	return given
 }
 
-// DrawSources draws what GraphSources gives, as awml draw does.
-func DrawSources(sources []Source, implementation string) (string, error) {
+// DrawSources draws what GraphSources gives, as awml draw does. With detail, as with --detail, each
+// part that has a description has a note tied to it that gives it.
+func DrawSources(sources []Source, implementation string, detail bool) (string, error) {
 	graph, err := graphSources(sources, implementation, "draws")
 	if err != nil {
 		return "", err
 	}
-	return graph.Mermaid(), nil
+	return graph.mermaid(detail), nil
 }
 
 // GraphSources gives what awml graph gives: the view of one workflow, its security view or the

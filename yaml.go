@@ -410,6 +410,10 @@ func writeScalar(out *strings.Builder, value any, key string, parent *Map) {
 	if key == "label" && !simpleLabel(text) {
 		quote = true
 	}
+	// A part's detail is prose, like its label, so it's quoted as a part's label is.
+	if key == "description" && parent != nil && parent.has("kind") {
+		quote = true
+	}
 	if quote {
 		out.WriteString(doubleQuoted(text))
 		return

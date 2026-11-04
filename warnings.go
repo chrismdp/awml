@@ -103,5 +103,21 @@ func warningList(doc any) mistakeList {
 		}
 	}
 	warnings = append(warnings, shapeWarnings(parts, lines)...)
-	return append(warnings, untrustedSurfaces(parts, lines)...)
+	warnings = append(warnings, untrustedSurfaces(parts, lines)...)
+	return append(warnings, longLabels(parts)...)
+}
+
+// titleWords is the most words a part's label, its title, should take.
+const titleWords = 12
+
+// longLabels warns of each part but a comment whose label is longer than a title, since what the
+// rest says belongs in its description.
+func longLabels(parts []*Map) mistakeList {
+	var warnings mistakeList
+	for _, part := range parts {
+		if words := len(strings.Fields(str(part, "label"))); words > titleWords && part.get("kind") != "comment" {
+			warnings.add("warn.long-label", fmt.Sprintf(`part "%s" has a label of %d words: make it a short title, and move the rest into description`, show(part.get("id")), words))
+		}
+	}
+	return warnings
 }

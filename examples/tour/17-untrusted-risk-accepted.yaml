@@ -1,4 +1,4 @@
-awml: "0.10"
+awml: "0.11"
 title: Thanking reviewers on the bakery's page
 description: |
   Untrusted text whose risk is accepted. Each evening, the bakery thanks the customers who left a
@@ -14,7 +14,7 @@ parts:
   - { id: reviews, kind: connector, label: "The bakery's review page", in: bakery, untrusted: true }
   - { id: draft, kind: ai, op: draft, label: "Draft a short thank-you to each new review", in: bakery }
   - { id: post, kind: code, op: do, label: "Post each thank-you", in: bakery }
-  - { id: approval, kind: approval, label: "Ana's standing approval: thank-yous only, up to twenty a day, risk accepted by Ana on a month of drafted thanks", in: bakery }
+  - { id: approval, kind: approval, label: "Ana's standing approval: thank-yous only, up to twenty a day", in: bakery, description: "risk accepted by Ana on a month of drafted thanks" }
   - { id: reply, kind: outside, label: "Post the thank-you under the review: Ask", in: bakery }
   - { id: list, kind: surface, label: "Ana's list", in: bakery }
 lines:
