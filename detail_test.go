@@ -41,9 +41,10 @@ func TestMarshalQuotesEachDetail(t *testing.T) {
 }
 
 func TestHowWhyAndDecidedAreText(t *testing.T) {
-	mistakes(t, changed(t, "parts.1.how", true, "parts.1.why", 12, "parts.1.decided", "2026-11-04"),
+	mistakes(t, changed(t, "parts.1.how", true, "parts.1.why", 12, "parts.1.decided", false),
 		`part "plan": YAML read its how as true, not text: put it in quotes`,
-		`part "plan": YAML read its why as 12, not text: put it in quotes`)
+		`part "plan": YAML read its why as 12, not text: put it in quotes`,
+		`part "plan": YAML read its decided as false, not text: put it in quotes`)
 }
 
 // A comment says all it has to say in its label, so it has no detail of its own.
@@ -160,6 +161,48 @@ lines:
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("decided = %#v\nwant %#v", got, want)
 	}
+}
+
+// On a map, a shared part has the detail of the copy every ref leads back to, its owner's, as it has
+// that copy's title, and a note only where that copy has a detail.
+func TestAMapGivesASharedPartItsOwnersDetail(t *testing.T) {
+	owner := strings.Replace(keep, `in: public, how: "from GitHub's record" }`, `in: public }`, 1)
+	copied := `awml: "0.11"
+title: Reads
+scopes:
+  - { id: public, label: "public: anyone", processing: any }
+parts:
+  - { id: daily, kind: trigger, label: "Every day" }
+  - { id: read, kind: ai, op: learn, label: "Read it", in: public }
+  - { id: asked, kind: context, label: "What was asked", in: public, ref: builds.yaml#asked, decided: "The maintainer" }
+lines:
+  - { from: daily, to: read, kind: start }
+  - { from: asked, to: read, kind: data }
+`
+	sources := func(owner string) []Source {
+		return []Source{{File: "builds.yaml", Text: []byte(owner)}, {File: "reads.yaml", Text: []byte(copied)}}
+	}
+	detailed, err := DrawSources(sources(owner), "", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(detailed, "s1_detail") {
+		t.Errorf("the map draws the copy's detail for the shared part:\n%s", detailed)
+	}
+	withHow := strings.Replace(owner, `label: "What was asked", in: public }`, `label: "What was asked", in: public, how: "from GitHub's record" }`, 1)
+	g, err := GraphSources(sources(withHow), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range g.Parts {
+		if p.ID == "s1" {
+			if p.How != "from GitHub's record" || p.Decided != "" {
+				t.Errorf("the shared part has how %q and decided %q, want only its owner's how", p.How, p.Decided)
+			}
+			return
+		}
+	}
+	t.Errorf("the map has no shared part s1 in %#v", g.Parts)
 }
 
 // Only a shared part's copies are listed once: two parts that aren't shared are each listed, however

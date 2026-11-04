@@ -282,7 +282,7 @@ Content moves between scopes in only two ways.
 
 Nobody marks a publish. A `data` line publishes whenever its scopes make it one, and the drawing adds to its label who it adds, what it loosens, or both, as in `standing rule: dinners to carers · adds June and Beth`. So a step put in the wrong scope by mistake shows up as a publish when you read the drawing.
 
-Publishing waits for a person's yes, unless a **standing rule** names that target for that kind of item. A standing rule moves only the words of people who agreed to that target, and the thick line's label names the rule and who they are, as in `co-op notes, under the bakery's rule, for customers who ticked the box`. Only the item crosses, never what lies behind it. Nothing reaches the public without a person's yes to that item, and a standing rule never takes an item public. The one exception is an outside action that is public, under a [standing approval](#standing-approvals) whose label says who accepted the risk and on what evidence.
+Publishing waits for a person's yes, unless a **standing rule** names that target for that kind of item. A standing rule moves only the words of people who agreed to that target, and the thick line's label names the rule and who they are, as in `co-op notes, under the bakery's rule, for customers who ticked the box`. Only the item crosses, never what lies behind it. Nothing reaches the public without a person's yes to that item, and a standing rule never takes an item public. The one exception is an outside action that is public, under a [standing approval](#standing-approvals) whose `decided` says who accepted the risk and on what evidence.
 
 ## Connectors
 
