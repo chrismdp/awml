@@ -12,7 +12,8 @@ import (
 // version comes back as it is. The file needn't pass Check, and the result may not either, since
 // newer versions hold a file to rules older ones didn't.
 //
-// From 0.9, only the version changes, since 0.10 changed only a rule: that only a step writes to a
+// From 0.10, only the version changes, since 0.11 only added fields a part may have: how, why and
+// decided. From 0.9, likewise, since 0.10 changed only a rule: that only a step writes to a
 // context. A line into a context from anything else stays for the check to report, since which step
 // it meant, such as a code step that records a review's yes, a bring-in step that reads a connector
 // or a step that copies one context into another, is the author's call. From 0.8, likewise, since

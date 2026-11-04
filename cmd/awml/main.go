@@ -34,7 +34,7 @@ positional arguments:
     check            report warnings, errors and what makes a file invalid
     fit              judge where workflows can run
     summary          count the parts and lines in workflows
-    convert          upgrade an older file, or join a legacy pair, into one 0.10 file
+    convert          upgrade an older file, or join a legacy pair, into one 0.11 file
     login            save a registry API token
     push             push a new workflow version
     pull             download a workflow or platform version
@@ -46,11 +46,12 @@ options:
 `
 
 var commands = map[string]struct{ usage, help string }{
-	"draw": {"usage: awml draw [-h] [--implementation ID] files [files ...] [DESCRIPTIONS ...]\n", `
+	"draw": {"usage: awml draw [-h] [--detail] [--implementation ID] files [files ...] [DESCRIPTIONS ...]\n", `
 Draw a workflow's security view, or the map of several workflows drawn together.
 With --implementation, draw its platform view. Give platform descriptions to show where a model
 carries out code steps. Code steps on a platform with steps: agent have a dashed orange outline.
-A description that wasn't given leaves the drawing unchanged.
+A description that wasn't given leaves the drawing unchanged. Each part shows its title, its
+label; with --detail, a note tied to it gives its how, why and decided too.
 
 positional arguments:
   files         workflows, or folders of them
@@ -58,6 +59,7 @@ positional arguments:
 
 options:
   -h, --help  show this help message and exit
+  --detail    tie a note to each part that gives its how, why and decided
   --implementation ID  draw one implementation of one workflow
 `},
 	"graph": {"usage: awml graph [-h] [--implementation ID] files [files ...]\n", `
@@ -72,7 +74,7 @@ options:
   --implementation ID  give one implementation of one workflow
 `},
 	"convert": {"usage: awml convert [-h] [--implementation ID] file [PLATFORM]\n", `
-Upgrade a file of an older version into one 0.10 file, or join a legacy security view and platform
+Upgrade a file of an older version into one 0.11 file, or join a legacy security view and platform
 view into one.
 
 positional arguments:
@@ -160,6 +162,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	jsonOutput := false
 	parts := false
 	failOnErrors := false
+	detail := false
 	private := false
 	var registryFlag *string
 	flags := true
@@ -219,6 +222,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			parts = true
 		case flags && command == "check" && a == "--fail-on-errors":
 			failOnErrors = true
+		case flags && command == "draw" && a == "--detail":
+			detail = true
 		case flags && command == "push" && a == "--private":
 			private = true
 		case flags && strings.HasPrefix(a, "-") && a != "-":
@@ -328,7 +333,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if command == "draw" {
-		drawn, err := awml.DrawSources(given, implementation)
+		drawn, err := awml.DrawSources(given, implementation, detail)
 		if err != nil {
 			return refused(err)
 		}
@@ -440,7 +445,7 @@ func checkJSON(sources []awml.Source, failOnErrors bool, stdout, stderr io.Write
 	return 0
 }
 
-// convert prints one 0.10 file, upgraded from a file of an older version or joined from a legacy
+// convert prints one 0.11 file, upgraded from a file of an older version or joined from a legacy
 // pair, as awml.ConvertSources writes it. It fails when the files can't be converted, when it notes
 // something it couldn't carry over, and when the converted file is invalid, as newer versions' rules
 // can find a file that older ones passed. It lists those on standard error.
@@ -546,6 +551,11 @@ func printSummary(out io.Writer, s awml.Summary) {
 		fmt.Fprintf(out, "  %s\n", label)
 	}
 	fmt.Fprintf(out, "refused reads: %d\nred lines: %d\n", s.RefusedReads, s.RedLines)
+	// Each decided is the part's title, then who decided it, and where.
+	fmt.Fprintf(out, "decided: %d\n", len(s.Decided))
+	for _, d := range s.Decided {
+		fmt.Fprintf(out, "  %s\n    %s\n", d.Label, d.Decided)
+	}
 	fmt.Fprintf(out, "untrusted parts: %d\n", len(s.Untrusted))
 	for _, u := range s.Untrusted {
 		fmt.Fprintf(out, "  %s\n", u.Part)

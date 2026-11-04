@@ -749,6 +749,14 @@ func SummariseTogether(workflows []Workflow) Summary {
 	}
 	j := l.join()
 	out.Untrusted = summariseUntrusted(j.parts, j.carrying())
+	// A part they share whose copies say the same of who decided it is listed once.
+	var decided []DecidedSummary
+	for _, d := range out.Decided {
+		if !slices.Contains(decided, d) {
+			decided = append(decided, d)
+		}
+	}
+	out.Decided = decided
 	return out
 }
 

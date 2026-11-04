@@ -145,6 +145,8 @@ The operating model has little to do with AI: it's how work is organised, whoeve
 - An **outside action** is a coral flag: something that changes the world outside the system, such as sending an email or paying a bill. Its label gives its [tier](#tiers-and-yeses) after its last colon, such as `Send the reply: Ask`.
 - A **comment** is a dashed box with a cut corner. It points out a gap, or gives an example of what a part could carry, and is tied to what it explains, below or beside it.
 
+Each part's label is a short title, and leaves out what the drawing says already: the verb its kind and operation give, where a line takes the result, and what a line's own label says moves along it. A part may also say `how` it works, `why` it's shaped as it is and who `decided` it. A drawing shows the titles, and `awml draw --detail` ties a note giving the rest to each part, as in the [gallery](#title-and-detail). A comment that would explain one part goes in that part's `why` or `decided` instead.
+
 Posting on a shared surface to the people it serves is delivery, not an outside action, so a family chat needs no flag and no review. Where people outside every scope of the design see the result, as in a customer chat or a public page, posting it is an outside action, public and so Ask, carried out through the connector.
 
 ### Who decides each step
@@ -332,14 +334,14 @@ An **approver** is a role, such as the approver of sends, held by one or more pe
 
 Asking for a yes to every small action soon trains people to say yes without looking. A **standing approval** is the way out. The person who answers for a scheduled task approves it once, in advance, to take named kinds of action within limits such as how many and how often, so each item doesn't wait for a yes. One that acts in someone else's name needs their yes too, and ends when their access does.
 
-It may cover two kinds of action, and its label says which:
+It may cover two kinds of action, and what it says differs for each:
 
 - **Actions that can be undone,** such as renewing a library book. The label says whose it is and gives its kinds and limits, as in `Sam's standing approval: renewals only, up to six a week`.
-- **Actions that can't be undone, or that are public,** such as a reply to a customer, where someone has knowingly accepted the risk of each one going out without a yes. The label also says who accepted the risk and on what evidence, as in `Ana's standing approval: hours and allergens replies only, up to fifty a day, risk accepted by Ana and the bakery's insurer on the March test set`.
+- **Actions that can't be undone, or that are public,** such as a reply to a customer, where someone has knowingly accepted the risk of each one going out without a yes. The label gives its kinds and limits, as in `Ana's standing approval: hours and allergens replies only, up to fifty daily`, and its `decided` says who accepted the risk and on what evidence, as in `risk accepted by Ana and the bakery's insurer on the March test set`.
 
 Nobody looks at each item before it goes, so a standing approval suits frequent, low-stakes actions, or ones whose risk someone has knowingly accepted. Anything else waits for a review.
 
-A standing approval is a part of its own, in the box of the person who gives it, between the `do` step and the Ask actions it covers. Each action under it is recorded and listed for that person: with how to undo it where it can be undone, and as sent where it can't. A line from it goes to the surface where they're listed, and `awml check` reports one without. No drawing shows whether an action can be undone, or whether someone accepted its risk, so `awml check` accepts a standing approval in front of any Ask action. When you read one, check that its kinds and limits are as narrow as the work needs, that each action it covers can be undone or its label says who accepted the risk and on what evidence, and that its line goes to a surface the person who gave it reads.
+A standing approval is a part of its own, in the box of the person who gives it, between the `do` step and the Ask actions it covers. Each action under it is recorded and listed for that person: with how to undo it where it can be undone, and as sent where it can't. A line from it goes to the surface where they're listed, and `awml check` reports one without. No drawing shows whether an action can be undone, or whether someone accepted its risk, so `awml check` accepts a standing approval in front of any Ask action. When you read one, check that its kinds and limits are as narrow as the work needs, that each action it covers can be undone or its `decided` says who accepted the risk and on what evidence, and that its line goes to a surface the person who gave it reads.
 
 ![Library renewals under a standing approval](examples/tour/12-standing-approval.svg)
 
@@ -347,7 +349,7 @@ Here Sam approved the morning renewals once, for renewals only and up to six a w
 
 ## Untrusted text
 
-Text that anyone can write, such as a web form or a public inbox, can try to steer the AI step that reads it. Mark the trigger, connector or context it comes in through with `untrusted: true`, and it's drawn with a thick orange outline. The text goes wherever the lines lead on, until a person's review, a person's own step or a code step marked `cleans: true` stops it. A `cleans` step promises to pass on only what's safe, such as an order number and a quantity, and its label says how. Only code can promise that, since strangers' text can steer AI however it's instructed. A standing approval never sees the text, so it doesn't stop it, but one in front of an outside action accepts the risk of the text reaching it, and its label says who accepted it and on what evidence.
+Text that anyone can write, such as a web form or a public inbox, can try to steer the AI step that reads it. Mark the trigger, connector or context it comes in through with `untrusted: true`, and it's drawn with a thick orange outline. The text goes wherever the lines lead on, until a person's review, a person's own step or a code step marked `cleans: true` stops it. A `cleans` step promises to pass on only what's safe, such as an order number and a quantity, and its `how` says how. Only code can promise that, since strangers' text can steer AI however it's instructed. A standing approval never sees the text, so it doesn't stop it, but one in front of an outside action accepts the risk of the text reaching it, and its `decided` says who accepted it and on what evidence.
 
 The security view shows where the text goes. Each line it goes along is thick orange, up to and including the line into what stops it, and the line out of that is thick green. A line that brings the text into an outside action with nothing to stop it or accept the risk breaks a rule, so `awml check` reports it as an error, and `awml draw` draws it and every line on the text's way there thick red, with the source's outline red too. `awml check` also warns of a surface the text reaches with nothing to stop it, since the people reading it see text a stranger could have written, but not of a standing approval's line to the surface that lists what went out. `awml summary` lists what each untrusted part's text reaches, what stops it and the risks accepted.
 
@@ -445,15 +447,25 @@ Split at the triggers, each file holds one workflow with one line running throug
 
 ### Replies under an accepted risk
 
-Every 15 minutes, the bakery answers the questions about opening hours and allergens that customers asked on its website's chat. A reply can't be taken back, but Ana and the bakery's insurer read the replies to the March test set and accepted the risk, so each goes under Ana's standing approval, whose label says so, and is listed on Ana's list as sent. A code step sends only replies made of sentences from Ana's answer sheet, so the customers' text stops there.
+Every 15 minutes, the bakery answers the questions about opening hours and allergens that customers asked on its website's chat. A reply can't be taken back, but Ana and the bakery's insurer read the replies to the March test set and accepted the risk, so each goes under Ana's standing approval, whose `decided` says so, and is listed on Ana's list as sent. A code step sends only replies made of sentences from Ana's answer sheet, so the customers' text stops there.
 
 ![Replies to customers under Ana's standing approval](examples/tour/16-accepted-risk.svg)
 
 ### Untrusted text under an accepted risk
 
-Each evening, the bakery thanks the customers who left a review on its page that day. Anyone can write a review, and the AI step that drafts each thank-you reads it, so nothing stops the review's text. Ana read a month of drafted thanks and accepted the risk, so each thank-you goes under her standing approval, whose label says so. The lines the text goes along stay orange all the way to the post, and the check passes.
+Each evening, the bakery thanks the customers who left a review on its page that day. Anyone can write a review, and the AI step that drafts each thank-you reads it, so nothing stops the review's text. Ana read a month of drafted thanks and accepted the risk, so each thank-you goes under her standing approval, whose `decided` says so. The lines the text goes along stay orange all the way to the post, and the check passes.
 
 ![Thank-yous to reviewers under Ana's standing approval](examples/tour/17-untrusted-risk-accepted.svg)
+
+### Title and detail
+
+Each Monday, code checks whether the bakery's flour is running low and, if so, orders more from the mill. Each part's label is a short title. The check says how it decides, and the order says how much it orders, why it needs no yes and who decided that. `awml draw` shows the titles alone:
+
+![The flour order, drawn with its titles](examples/tour/18-title-and-detail.svg)
+
+`awml draw --detail` ties a note to each part that has more to say, with its title in bold, then its how, why and decided:
+
+![The flour order, drawn with its detail](examples/tour/18-title-and-detail-detail.svg)
 
 ## Improving one step at a time
 
@@ -483,6 +495,7 @@ awml fit examples/client-email.yaml examples/platforms/*.yaml
 awml draw examples/question.yaml         # print the Mermaid
 awml draw --implementation home examples/dinners.yaml
 awml draw --implementation agent examples/legend.yaml examples/platforms/*.yaml
+awml draw --detail examples/tour/18-title-and-detail.yaml   # each part's how, why and decided too
 awml page examples/dinners.yaml -o dinners.html
 awml summary examples/dinners.yaml --json
 awml draw examples/dinners.yaml examples/question.yaml   # the map of workflows that share parts
@@ -495,12 +508,12 @@ awml pull family/dinners@1 -o dinners
 - `check`, `draw`, `graph`, `summary` and `fit` take any number of files, and a folder stands for every `.yaml` file directly inside it, with a file named twice read once. Given several workflows, they follow each `ref` between them, as the next section says.
 - `awml check` checks the design and each implementation. It prints each warning, then each error, saying that it's an error, then each mistake that makes the file invalid, or `ok` when there are no errors or mistakes. It exits 1 only for an invalid file, or with `--fail-on-errors`, for a drawing with errors too. `--json` lists every check it makes, passing ones included, each with a stable id and its result: `pass`, `fail`, `error`, `skipped` or `warn`. Each finding says whether it makes the file `invalid`, is an `error` or is a `warning`.
 - `awml fit` judges the design against platform descriptions, telling the two apart by what each file holds. Given several workflows, it judges each platform as running them all, and names each part after its file, as `dinners#plan`, or `x/dinners#plan` where two files share a name. Add `--implementation ID` to judge one workflow's placement, `--parts` to judge each part on its own and list each set of platforms that holds them all with none to spare, and `--json` for the report's JSON form. An implementation can be given without descriptions, and then each block says it has no platform or that its platform wasn't described.
-- `awml draw` prints the security view's Mermaid, or the map of several workflows. Add `--implementation ID` for a platform view, with optional platform descriptions after the workflow to outline code steps carried out by a model. It draws a drawing with errors, and refuses an invalid file, printing why instead. Every other command does the same.
-- `awml graph` takes what `awml draw` takes, and prints what it would draw as JSON, with nothing laid out, for a tool that lays the drawing out itself. Each id is the one `awml draw` gives it, and the spec lists the fields. Its text isn't escaped and keeps its line breaks, so a tool that shows it must escape it and handle them.
+- `awml draw` prints the security view's Mermaid, or the map of several workflows. Add `--implementation ID` for a platform view, with optional platform descriptions after the workflow to outline code steps carried out by a model, and `--detail` to tie a note to each part that gives its `how`, `why` and `decided`. It draws a drawing with errors, and refuses an invalid file, printing why instead. Every other command does the same.
+- `awml graph` takes what `awml draw` takes, and prints what it would draw as JSON, with nothing laid out, for a tool that lays the drawing out itself. Each id is the one `awml draw` gives it, each part gives its `how`, `why` and `decided` apart, and the spec lists the fields. Its text isn't escaped and keeps its line breaks, so a tool that shows it must escape it and handle them.
 - `awml page` writes one standalone HTML page with the security view, then every implementation, each with a heading. Given several files, it draws their map first, then each file's views in the order given. The page takes their shared title, or Workflows when they differ.
-- `awml summary` counts the scopes, platforms, parts and lines in one workflow, and lists every publish with what it adds or loosens. It includes platforms from every implementation and counts the design once, and lists what each untrusted part's text reaches, what stops it and the risks accepted. Given several workflows, it counts each part they share once, and lists those parts. `--json` prints the registry's JSON form.
-- `awml convert old.yaml` upgrades a file of any older version to 0.10, printed to standard output, and every other command refuses an older file. Each fork goes, and each line into it joins each line out of it, with the line out's kind and label, or the label of the line in where the line out has none, and convert names a fork that nothing leads into, which goes with every line out of it. A trigger of another workflow that only `do` steps lead into becomes their outside action, which starts that workflow, and convert says where any untrusted mark it drops belongs. A `publish` line becomes a `data` line, and a line marked red with `breaks` loses it, gaining a comment if the check doesn't find what it breaks. `awml convert security.yaml platform.yaml` joins a matching 0.3 or 0.2 pair into one file, turning platform groups into blocks of the `default` implementation. Add `--implementation ID` to name the implementation. The comment block a file starts with becomes its `description`, unless it has one, and other YAML comments move to the top. If it notes something to do by hand, or the new version's rules find the result invalid, it lists them and exits 1. A result with errors is valid, so they're left for `awml check`.
-- `awml login` saves an API token for the registry. `awml push` checks and uploads one 0.10 file in the API's workflow field. `awml pull` downloads the latest or a numbered version as `<slug>.yaml`, and `awml pull owner/platforms/slug` does the same for a published platform description. It still downloads an older pair as `security.yaml` and `platform.yaml`. The commands use `https://awml.io` unless `--registry` or `AWML_REGISTRY_URL` says otherwise. Add `--private` to the first push of a private organisation workflow.
+- `awml summary` counts the scopes, platforms, parts and lines in one workflow, and lists every publish with what it adds or loosens. It includes platforms from every implementation and counts the design once, and lists every `decided` with its part's title, and what each untrusted part's text reaches, what stops it and the risks accepted. Given several workflows, it counts each part they share once, and lists those parts. `--json` prints the registry's JSON form.
+- `awml convert old.yaml` upgrades a file of any older version to 0.11, printed to standard output, and every other command refuses an older file. Each fork goes, and each line into it joins each line out of it, with the line out's kind and label, or the label of the line in where the line out has none, and convert names a fork that nothing leads into, which goes with every line out of it. A trigger of another workflow that only `do` steps lead into becomes their outside action, which starts that workflow, and convert says where any untrusted mark it drops belongs. A `publish` line becomes a `data` line, and a line marked red with `breaks` loses it, gaining a comment if the check doesn't find what it breaks. `awml convert security.yaml platform.yaml` joins a matching 0.3 or 0.2 pair into one file, turning platform groups into blocks of the `default` implementation. Add `--implementation ID` to name the implementation. The comment block a file starts with becomes its `description`, unless it has one, and other YAML comments move to the top. If it notes something to do by hand, or the new version's rules find the result invalid, it lists them and exits 1. A result with errors is valid, so they're left for `awml check`.
+- `awml login` saves an API token for the registry. `awml push` checks and uploads one 0.11 file in the API's workflow field. `awml pull` downloads the latest or a numbered version as `<slug>.yaml`, and `awml pull owner/platforms/slug` does the same for a published platform description. It still downloads an older pair as `security.yaml` and `platform.yaml`. The commands use `https://awml.io` unless `--registry` or `AWML_REGISTRY_URL` says otherwise. Add `--private` to the first push of a private organisation workflow.
 
 For example, the client email workflow can run on the scheduled scripts platform, while the other descriptions show why they don't fit:
 
@@ -569,7 +582,7 @@ Workflows hand work on through a context one writes and another reads, and may s
 One file holds one workflow and its implementations:
 
 ```yaml
-awml: "0.10"
+awml: "0.11"
 title: The family's dinners
 description: |
   Plans the family's dinners each Thursday. The family is fictional.
@@ -593,9 +606,9 @@ implementations:
       - { id: phone, label: Family phone, parts: [chat] }
 ```
 
-- The file needs `awml`, the version `"0.10"`; `title`, the workflow's name; and `parts`. It may have `description`, what the workflow is for in Markdown, and `scopes`, `lines` and `implementations`. Upgrade a file of an older version with `awml convert`.
+- The file needs `awml`, the version `"0.11"`; `title`, the workflow's name; and `parts`. It may have `description`, what the workflow is for in Markdown, and `scopes`, `lines` and `implementations`. Upgrade a file of an older version with `awml convert`.
 - A **scope** has an `id` and a `label`, and may have `in`, the id of its parent scope, and `processing`, the companies it allows.
-- A **part** has an `id`, a `kind` and a `label`. Its `in` names its scope. A step may have `op`, a trigger `wait`, and a context `at`. A trigger, connector or context may have `untrusted`, and a code step `cleans`. A context, connector or surface may have `ref`, the part of another workflow it is, and an outside action `ref`, the trigger of the workflow it starts.
+- A **part** has an `id`, a `kind` and a `label`. Its `in` names its scope. A step may have `op`, a trigger `wait`, and a context `at`. A trigger, connector or context may have `untrusted`, and a code step `cleans`. A context, connector or surface may have `ref`, the part of another workflow it is, and an outside action `ref`, the trigger of the workflow it starts. Any part but a comment may have `how`, `why` and `decided`, free text that nothing parses.
 - An **implementation** has an id in the `implementations` map, a `label` and `blocks`. Each block has an `id`, a `label` and `parts`, the ids it holds. It may have `in`, its parent block, and `platform`, a platform description id: a bare id for your own, or `owner/platforms/slug` for one published to the registry. Every part except a trigger or comment needs exactly one block per implementation.
 - An implementation may have **comments**, each with `id`, `label`, `in`, its block, and `ties`, a list of design part ids. These comments appear only in its platform view.
 - A **line** has `from` and `to`, the ids of two parts, and a `kind`. It may have a `label`.
@@ -607,7 +620,7 @@ Every id, label, kind and reference to an id is text. `awml` reads YAML 1.2, whi
 
 ### What `awml check` reports
 
-`awml check` reports structural mistakes, invalid operations, tiers that disagree with the drawing, and untrusted text that reaches an outside action with nothing to stop it or accept the risk. It reports a line into a context from anything but a step, since only a step writes to a context: a sign-off a later run reads back is a review whose `[yes]` leads to a code `do` step that writes it, something brought in from outside is a connector that a `bring-in` step reads, then writes, and a copy from one context into another is a step that reads one and writes the other, or, where the copy publishes, a step in the first one's scope that hands it to a step in the other's, which writes it. It also checks each implementation's block references, nesting and placement, and its comments' ties, and how each `ref` is written. It warns when AI decides a `do` step, when one `do` step leads to more than one change, when the file's triggers start more than one workflow, when no line links a part to a trigger, when a comment is tied to nothing, when no trigger's run reaches a step, review or standing approval, and when untrusted text reaches a surface with nothing to stop it. A line that breaks a rule, such as one into a Block action, is an error, which `awml draw` draws red. Every other mistake makes the file invalid. Only an invalid file makes the check exit 1: warnings and errors leave the exit status alone, unless `--fail-on-errors` asks for errors to fail it. [`SPEC.md`](SPEC.md) gives the exact rules.
+`awml check` reports structural mistakes, invalid operations, tiers that disagree with the drawing, and untrusted text that reaches an outside action with nothing to stop it or accept the risk. It reports a line into a context from anything but a step, since only a step writes to a context: a sign-off a later run reads back is a review whose `[yes]` leads to a code `do` step that writes it, something brought in from outside is a connector that a `bring-in` step reads, then writes, and a copy from one context into another is a step that reads one and writes the other, or, where the copy publishes, a step in the first one's scope that hands it to a step in the other's, which writes it. It also checks each implementation's block references, nesting and placement, and its comments' ties, and how each `ref` is written. It warns when AI decides a `do` step, when one `do` step leads to more than one change, when the file's triggers start more than one workflow, when no line links a part to a trigger, when a comment is tied to nothing, when no trigger's run reaches a step, review or standing approval, when untrusted text reaches a surface with nothing to stop it, and when a part's label, other than a comment's, is more than 12 words, saying to move the rest into its `how`, `why` or `decided`. A line that breaks a rule, such as one into a Block action, is an error, which `awml draw` draws red. Every other mistake makes the file invalid. Only an invalid file makes the check exit 1: warnings and errors leave the exit status alone, unless `--fail-on-errors` asks for errors to fail it. [`SPEC.md`](SPEC.md) gives the exact rules.
 
 ### Examples to start from
 
@@ -621,6 +634,6 @@ Besides the gallery, [`examples/`](examples) has workflows to start from. The fa
 
 ## Status and licence
 
-Draft 0.10. The notation and the file format may still change.
+Draft 0.11. The notation and the file format may still change.
 
 MIT. See `LICENSE`.

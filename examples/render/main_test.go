@@ -83,6 +83,33 @@ func TestTheHelperUsesDescriptionsOnlyForThePlatformView(t *testing.T) {
 	}
 }
 
+// With -detail, the helper writes only the security view drawn with its detail, beside the others.
+func TestTheHelperDrawsTheDetailAlone(t *testing.T) {
+	path := copyExample(t, "../tour/18-title-and-detail.yaml", func(s string) string { return s })
+	stem := strings.TrimSuffix(path, ".yaml")
+	drawn, err := drawDetail(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if drawn != stem+"-detail.mmd" {
+		t.Errorf("drew %q, want %q", drawn, stem+"-detail.mmd")
+	}
+	got, err := os.ReadFile(drawn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := os.ReadFile("../tour/18-title-and-detail-detail.mmd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("the helper drew\n%s\nwant\n%s", got, want)
+	}
+	if _, err := os.Stat(stem + ".mmd"); err == nil {
+		t.Error("the helper drew the titles alone too")
+	}
+}
+
 func TestTheHelperRefusesAFileWithAMistakeThatIsntALine(t *testing.T) {
 	path := copyExample(t, "../live/red-line.yaml", func(s string) string {
 		return strings.Replace(s, "kind: trigger", "kind: nonsense", 1)

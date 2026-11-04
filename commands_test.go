@@ -9,7 +9,7 @@ import (
 
 // A workflow whose line into a Block action breaks a rule, an error: it's a valid drawing with
 // errors, and draw draws the line red.
-const redLineWorkflow = `awml: "0.10"
+const redLineWorkflow = `awml: "0.11"
 title: The bakery's old files
 scopes:
   - { id: bakery, label: "bakery: Ana, Ben", processing: any }
@@ -177,7 +177,7 @@ func TestDrawingOneFileDrawsItsView(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		drawn, err := DrawSources([]Source{source("dinners.yaml", soundWorkflow)}, implementation)
+		drawn, err := DrawSources([]Source{source("dinners.yaml", soundWorkflow)}, implementation, false)
 		if err != nil || drawn != Draw(view) {
 			t.Errorf("%q: drew %q with %v", implementation, drawn, err)
 		}
@@ -193,7 +193,7 @@ func TestDrawingOneFileSaysWhyItHasNoView(t *testing.T) {
 		{"a platform description", soundDescription, "", "a platform description has no drawing"},
 		{"an unknown implementation", soundWorkflow, "office", `unknown implementation "office"`},
 	} {
-		if _, err := DrawSources([]Source{source("x.yaml", tc.text)}, tc.implementation); err == nil || err.Error() != tc.want {
+		if _, err := DrawSources([]Source{source("x.yaml", tc.text)}, tc.implementation, false); err == nil || err.Error() != tc.want {
 			t.Errorf("%s: draw gave %v, want %q", tc.name, err, tc.want)
 		}
 		if _, err := GraphSources([]Source{source("x.yaml", tc.text)}, tc.implementation); err == nil || err.Error() != tc.want {
@@ -205,7 +205,7 @@ func TestDrawingOneFileSaysWhyItHasNoView(t *testing.T) {
 func TestDrawingSeveralFilesDrawsTheirMap(t *testing.T) {
 	sources := []Source{source("plan.yaml", planWorkflow), source("shop.yaml", shopWorkflow)}
 	workflows := together(t, "plan.yaml", planWorkflow, "shop.yaml", shopWorkflow)
-	if drawn, err := DrawSources(sources, ""); err != nil || drawn != DrawMap(workflows) {
+	if drawn, err := DrawSources(sources, "", false); err != nil || drawn != DrawMap(workflows) {
 		t.Errorf("drew %q with %v", drawn, err)
 	}
 	if graph, err := GraphSources(sources, ""); err != nil || !reflect.DeepEqual(graph, GraphMap(workflows)) {
@@ -215,25 +215,25 @@ func TestDrawingSeveralFilesDrawsTheirMap(t *testing.T) {
 
 func TestDrawingOneWorkflowIgnoresDescriptionsInItsSecurityView(t *testing.T) {
 	sources := []Source{source("plan.yaml", planWorkflow), source("laptop.yaml", laptop)}
-	want, err := DrawSources(sources[:1], "")
+	want, err := DrawSources(sources[:1], "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, err := DrawSources(sources, ""); err != nil || got != want {
+	if got, err := DrawSources(sources, "", false); err != nil || got != want {
 		t.Errorf("draw gave %q with %v", got, err)
 	}
 }
 
 func TestDrawingAnImplementationTakesOneWorkflow(t *testing.T) {
 	sources := []Source{source("plan.yaml", planWorkflow), source("shop.yaml", shopWorkflow)}
-	if _, err := DrawSources(sources, "home"); refused(t, err) != "argument --implementation: draws one workflow, not several" {
+	if _, err := DrawSources(sources, "home", false); refused(t, err) != "argument --implementation: draws one workflow, not several" {
 		t.Errorf("draw refused with %q", err)
 	}
 	if _, err := GraphSources(sources, "home"); refused(t, err) != "argument --implementation: takes one workflow, not several" {
 		t.Errorf("graph refused with %q", err)
 	}
 	// A file given twice is one workflow.
-	if _, err := DrawSources([]Source{source("dinners.yaml", soundWorkflow), source("./dinners.yaml", soundWorkflow)}, "home"); err != nil {
+	if _, err := DrawSources([]Source{source("dinners.yaml", soundWorkflow), source("./dinners.yaml", soundWorkflow)}, "home", false); err != nil {
 		t.Errorf("draw of one file given twice gave %v", err)
 	}
 }
@@ -242,13 +242,13 @@ func TestDrawingSaysTheMistakesOfEveryFile(t *testing.T) {
 	shop := strings.Replace(shopWorkflow, "plan.yaml#list", "plan.yaml#lists", 1)
 	sources := []Source{source("plan.yaml", planWorkflow), source("shop.yaml", shop)}
 	_, want := ReadSources(sources)
-	if _, err := DrawSources(sources, ""); err == nil || err.Error() != want.Error() {
+	if _, err := DrawSources(sources, "", false); err == nil || err.Error() != want.Error() {
 		t.Errorf("draw gave %v, want %v", err, want)
 	}
-	if _, err := DrawSources([]Source{source("red.yaml", redLineWorkflow)}, ""); err != nil {
+	if _, err := DrawSources([]Source{source("red.yaml", redLineWorkflow)}, "", false); err != nil {
 		t.Errorf("draw of a line that breaks a rule gave %v", err)
 	}
-	if _, err := DrawSources(nil, ""); refused(t, err) != "no workflow was given" {
+	if _, err := DrawSources(nil, "", false); refused(t, err) != "no workflow was given" {
 		t.Errorf("draw of nothing gave %v", err)
 	}
 }

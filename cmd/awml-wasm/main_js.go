@@ -74,7 +74,7 @@ func main() {
 		}
 		return encoded(awml.FitPartsSources(sources))
 	})
-	// __awmlConvert gives the 0.10 file awml convert writes, from one file or a legacy pair, what it
+	// __awmlConvert gives the 0.11 file awml convert writes, from one file or a legacy pair, what it
 	// notes it couldn't carry over, and the mistakes that make it invalid under the current rules.
 	expose("__awmlConvert", func(args []js.Value) string {
 		var texts []string
@@ -101,13 +101,15 @@ func main() {
 			Mistakes []string `json:"mistakes"`
 		}{string(file), notes, mistakes}, nil)
 	})
-	// __awmlDraw draws one workflow's view, or the map of several, as awml draw does.
+	// __awmlDraw draws one workflow's view, or the map of several, as awml draw does, and with a
+	// fourth argument of true, as awml draw --detail does.
 	expose("__awmlDraw", func(args []js.Value) string {
 		sources, err := drawingSources(args)
 		if err != nil {
 			return errorJSON(err.Error())
 		}
-		drawn, err := awml.DrawSources(sources, optionalImplementation(args))
+		detail := len(args) > 3 && args[3].Type() == js.TypeBoolean && args[3].Bool()
+		drawn, err := awml.DrawSources(sources, optionalImplementation(args), detail)
 		if err != nil {
 			return errorJSON(err.Error())
 		}

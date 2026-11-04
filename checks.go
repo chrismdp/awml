@@ -112,7 +112,7 @@ type checkDefinition struct {
 
 var checkDefinitions = []checkDefinition{
 	{id: "file.yaml", name: "The file is YAML", about: "Each file can be read, and holds a YAML mapping of fields.", appliesTo: everyFile, early: true},
-	{id: "file.version", name: "The file is of the version this release reads", about: "awml is \"0.10\". An older file is upgraded with awml convert.", appliesTo: everyFile, early: true},
+	{id: "file.version", name: "The file is of the version this release reads", about: "awml is \"0.11\". An older file is upgraded with awml convert.", appliesTo: everyFile, early: true},
 	{id: "fields.known", name: "Every field is known and none is missing", about: "Each file, scope, part, line, implementation, block and comment has the fields it needs and no others, and each list is a list of mappings.", appliesTo: everyFile, early: true},
 	{id: "kinds.known", name: "Every kind is known", about: "Each part and line has a kind the spec defines.", appliesTo: workflows},
 	{id: "ids.unique", name: "No id is used twice", about: "Scope, part, block and comment ids are unique across the file.", appliesTo: workflows},
@@ -153,6 +153,7 @@ var checkDefinitions = []checkDefinition{
 	{id: "warn.unlinked-part", name: "Every part is linked to a trigger", about: "Following lines either way from the triggers, leaving out comments and their ties, reaches every part; this warns and never fails.", appliesTo: workflows, warn: true},
 	{id: "warn.untied-comment", name: "Every comment is tied to a part", about: "A comment explains what it is tied to, so each has a tie; this warns and never fails.", appliesTo: workflows, warn: true},
 	{id: "warn.unstarted-step", name: "Every step is started by a trigger", about: "Each step, review and standing approval is in some trigger's run, the parts its start lines reach; this warns and never fails.", appliesTo: workflows, warn: true},
+	{id: "warn.long-label", name: "Every part's label is a short title", about: "A label other than a comment's is a title of at most 12 words, with the rest in the part's how, why or decided; this warns and never fails.", appliesTo: workflows, warn: true},
 	{id: "warn.shared-writers", name: "No context is written by more than one workflow", about: "A context that workflows given together share is written by only one of them, since each may change what another relies on; this warns and never fails.", appliesTo: workflows, warn: true},
 	{id: "warn.shared-readers", name: "No connector is read by more than one workflow", about: "A connector that workflows given together share brings items in for only one of them, since each may take an item another expects; this warns and never fails.", appliesTo: workflows, warn: true},
 	{id: "description.values", name: "Every platform description value is of the right kind", about: "platform is a mapping, off_for_up_to a duration, steps code or agent, agents and calls lists of company ids, and holds a list.", appliesTo: []string{"platform-description"}, none: "no file given is a platform description"},

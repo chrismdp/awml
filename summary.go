@@ -24,6 +24,7 @@ type Summary struct {
 	ScopeNames      []string           `json:"scopeNames"`
 	PlatformNames   []string           `json:"platformNames"`
 	Untrusted       []UntrustedSummary `json:"untrusted"`
+	Decided         []DecidedSummary   `json:"decided"`
 	// Only workflows given together have parts they share. Their list is empty when they share none,
 	// and one workflow alone has no list.
 	Shared []SharedSummary `json:"shared,omitempty"`
@@ -34,6 +35,12 @@ type Summary struct {
 type PersonSummary struct {
 	Label string `json:"label"`
 	Kind  string `json:"kind"`
+}
+
+// DecidedSummary names a part by its title, its label, with who decided it, and where.
+type DecidedSummary struct {
+	Label   string `json:"label"`
+	Decided string `json:"decided"`
 }
 
 // StepCounts counts steps by who decides them.
@@ -90,6 +97,9 @@ func Summarise(docs ...*Map) Summary {
 				continue
 			}
 			seenParts[partID] = true
+			if decided := str(part, "decided"); decided != "" {
+				out.Decided = append(out.Decided, DecidedSummary{Label: str(part, "label"), Decided: decided})
+			}
 			switch kind := str(part, "kind"); kind {
 			case "ai":
 				out.Steps.AI++
@@ -186,6 +196,7 @@ func TotalSummaries(summaries ...Summary) Summary {
 		out.ScopeNames = append(out.ScopeNames, s.ScopeNames...)
 		out.PlatformNames = append(out.PlatformNames, s.PlatformNames...)
 		out.Untrusted = append(out.Untrusted, s.Untrusted...)
+		out.Decided = append(out.Decided, s.Decided...)
 	}
 	return out
 }

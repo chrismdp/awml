@@ -14,6 +14,7 @@ let passed = 0;
 let placements = 0;
 let untrustedDrawings = 0;
 let agentRunDrawings = 0;
+let detailDrawings = 0;
 let conversions = 0;
 for (const path of top.sort()) {
   const source = await readFile(path, "utf8");
@@ -41,6 +42,14 @@ for (const path of top.sort()) {
   }
   assert.equal(api.draw(source) + "\n", runNative(["draw", relative]), `${relative}: Mermaid`);
   assert.equal(api.graphJSON(source) + "\n", runNative(["graph", relative]), `${relative}: graph`);
+  // With detail, a note tied to each part gives its how, why and decided, the same from both.
+  const detailed = api.draw(source, "", [], true);
+  assert.equal(detailed + "\n", runNative(["draw", "--detail", relative]), `${relative}: Mermaid with detail`);
+  if (/_detail@\{/.test(detailed)) {
+    assert.notEqual(detailed, api.draw(source), `${relative}: detail changes the drawing`);
+    assert(api.graph(source).parts.some((part) => part.how || part.why || part.decided), `${relative}: the graph gives the detail`);
+    detailDrawings++;
+  }
   // The security view shows where untrusted text goes, in both.
   if (/untrusted: true/.test(source)) {
     assert(api.graph(source).lines.some((line) => line.untrusted), `${relative}: the graph says where untrusted text goes`);
@@ -103,7 +112,7 @@ try {
   const stockPath = `${temporary}/stock.yaml`;
   await writeFile(stockPath, stock);
   for (const steps of ["agent", "code"]) {
-    const description = `awml: "0.10"\nplatform: { id: scripts, label: Scripts }\noff_for_up_to: PT0S\nsteps: ${steps}\nagents: []\ncalls: any\nholds: [notes]\n`;
+    const description = `awml: "0.11"\nplatform: { id: scripts, label: Scripts }\noff_for_up_to: PT0S\nsteps: ${steps}\nagents: []\ncalls: any\nholds: [notes]\n`;
     const descriptionPath = `${temporary}/${steps}.yaml`;
     await writeFile(descriptionPath, description);
     for (const [name, source, path, implementation, supplied, outlined] of [
@@ -141,7 +150,7 @@ try {
 
   // An older file is refused, with a pointer to awml convert, in both engines.
   const older = [
-    { file: `${temporary}/older.yaml`, source: canonicalSource.replace('awml: "0.10"', 'awml: "0.5"') },
+    { file: `${temporary}/older.yaml`, source: canonicalSource.replace('awml: "0.11"', 'awml: "0.5"') },
     { file: `${temporary}/security.yaml`, source: "awml: \"0.3\"\ntitle: Pair\nview: security\nparts:\n  - { id: t, kind: trigger, label: T }\n" },
     { file: `${temporary}/broken.yaml`, source: "parts: [\n" },
   ];
@@ -151,7 +160,7 @@ try {
   assert.equal(api.checksJSON(older) + "\n", runNative(["check", "--json", ...older.map(({ file }) => file)], 1), "checks JSON for older files");
   assert.throws(() => api.draw(older[0].source), /upgrade the file with awml convert/);
 
-  // convert upgrades a file of each older version into one 0.10 file, workflow or platform
+  // convert upgrades a file of each older version into one 0.11 file, workflow or platform
   // description, and gives the file awml convert writes, byte for byte.
   const dinners = (version) => `# The family's dinners.
 awml: "${version}"
@@ -178,7 +187,7 @@ holds: [notes]
   const upgrades = {
     "dinners-0.2.yaml": dinners("0.2"),
     "dinners-0.3.yaml": dinners("0.3"),
-    "bread-0.4.yaml": canonicalSource.replace('awml: "0.10"', 'awml: "0.4"'),
+    "bread-0.4.yaml": canonicalSource.replace('awml: "0.11"', 'awml: "0.4"'),
     "renewals-0.5.yaml": `awml: "0.5"
 title: Renewals
 scopes:
@@ -233,10 +242,10 @@ lines:
 `,
     "description-0.7.yaml": description("0.7"),
     // A 0.7 file with no fork changes only its version.
-    "bread-0.7.yaml": canonicalSource.replace('awml: "0.10"', 'awml: "0.7"'),
+    "bread-0.7.yaml": canonicalSource.replace('awml: "0.11"', 'awml: "0.7"'),
     "description-0.8.yaml": description("0.8"),
     // A 0.8 file changes only its version.
-    "bread-0.8.yaml": canonicalSource.replace('awml: "0.10"', 'awml: "0.8"'),
+    "bread-0.8.yaml": canonicalSource.replace('awml: "0.11"', 'awml: "0.8"'),
     // A fork goes, and each line into it joins each line out of it.
     "newsletter-0.7.yaml": `awml: "0.7"
 title: The school newsletter
@@ -265,11 +274,11 @@ implementations:
   }
   assert.doesNotMatch(api.convert(upgrades["newsletter-0.7.yaml"]), /fork|split/, "convert of a file with a fork");
 
-  // A file already at 0.10 comes back unchanged.
+  // A file already at 0.11 comes back unchanged.
   const current = api.convert(upgrades["bread-0.4.yaml"]);
   await writeFile(`${temporary}/current.yaml`, current);
-  assert.equal(api.convert(current), current, "convert of a 0.10 file");
-  assert.equal(runNative(["convert", `${temporary}/current.yaml`]), current, "awml convert of a 0.10 file");
+  assert.equal(api.convert(current), current, "convert of a 0.11 file");
+  assert.equal(runNative(["convert", `${temporary}/current.yaml`]), current, "awml convert of a 0.11 file");
 
   // A legacy security view joins with its platform view, under the implementation named or default.
   const security = `# A bakery plans tomorrow's loaves. The bakery is fictional.
@@ -433,7 +442,7 @@ lines:
   assert.throws(() => api.convert([]), /^Error: convert takes one file, or a security view and its platform view$/);
 
   // Workflows given together follow each ref between them, a path from the referring file's folder.
-  const plan = `awml: "0.10"
+  const plan = `awml: "0.11"
 title: Dinners
 scopes:
   - { id: family, label: "family: parents, kids", processing: any }
@@ -451,7 +460,7 @@ lines:
   - { from: plan, to: tell, kind: start }
   - { from: tell, to: ready, kind: start }
 `;
-  const shop = `awml: "0.10"
+  const shop = `awml: "0.11"
 title: Shopping
 scopes:
   - { id: home, label: "home: parents, kids", processing: any }
@@ -617,7 +626,7 @@ lines:
   // A part they share is untrusted if any workflow's copy of it is marked untrusted. Its text reaches
   // the replier's send with nothing to stop it, a line that breaks a rule, so it's an error, and the
   // map and the summary are given, as awml gives them.
-  const sorter = `awml: "0.10"
+  const sorter = `awml: "0.11"
 title: Inbox sorter
 scopes:
   - { id: office, label: "office: Ana", processing: any }
@@ -631,7 +640,7 @@ lines:
   - { from: mail, to: sort, kind: data }
   - { from: sort, to: queue, kind: data }
 `;
-  const replier = `awml: "0.10"
+  const replier = `awml: "0.11"
 title: Replier
 scopes:
   - { id: office, label: "office: Ana", processing: any }
@@ -724,7 +733,7 @@ lines:
   // Each kind of line break in a label folds into one space in the Mermaid, in both engines, while
   // the graph gives the label as written.
   for (const [name, escape] of [["lf", "\\n"], ["crlf", "\\r\\n"], ["cr", "\\r"], ["u2028", "\\u2028"], ["u2029", "\\u2029"]]) {
-    const source = `awml: "0.10"
+    const source = `awml: "0.11"
 title: "Bakery${escape}replies"
 scopes:
   - { id: shop, label: "${escape}end${escape}", processing: any }
@@ -817,7 +826,8 @@ assert.equal(api.draw(family) + "\n", await readFile(new URL("../examples/family
 assert.equal(api.summaryJSON(family) + "\n", runNative(["summary", "--json", ...familyPaths]), "the family's summary JSON");
 
 assert(agentRunDrawings > 0, "no example outlines a code step carried out by a model");
-console.log(`Node wasm parity: ${passed} examples passed (check, warnings, summary, convert, Mermaid, graph); ${placements} implementations; ${untrustedDrawings} drawings of untrusted text; ${agentRunDrawings} drawings of code carried out by a model; ${conversions} conversions; invalid check messages and fit passed`);
+assert(detailDrawings > 0, "no example gives a part a how, why or decided");
+console.log(`Node wasm parity: ${passed} examples passed (check, warnings, summary, convert, Mermaid, graph); ${placements} implementations; ${untrustedDrawings} drawings of untrusted text; ${agentRunDrawings} drawings of code carried out by a model; ${detailDrawings} drawings with detail; ${conversions} conversions; invalid check messages and fit passed`);
 
 // said gives what awml check prints of one file: its warnings, its errors, each said to be one, and
 // the mistakes that make it invalid, or ok when it has neither.

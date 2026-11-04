@@ -62,9 +62,9 @@ func (m mistakeList) messages() []string {
 }
 
 // The version of the file format this release reads, and the older ones awml convert upgrades.
-const currentFormat = "0.10"
+const currentFormat = "0.11"
 
-var olderFormats = []string{"0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8", "0.9"}
+var olderFormats = []string{"0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8", "0.9", "0.10"}
 
 // checkDoc gives the mistakes in a document, and whether a mistake stopped the checks that follow
 // those of the file's own fields: a version this release doesn't read, or a broken list.
@@ -213,6 +213,12 @@ func checkView(file *Map, projected bool) (mistakeList, bool) {
 		if !projected {
 			errors = append(errors, marks(name, p)...)
 			errors = append(errors, refMistakes(name, p)...)
+			// A comment says all it has to say in its label.
+			for _, field := range details {
+				if p.get("kind") == "comment" && p.has(field) {
+					errors.add("fields.known", fmt.Sprintf("%s has a %s, but a comment takes no how, why or decided: its label says it all", name, field))
+				}
+			}
 		}
 		if in := p.get("in"); in != nil && !groupIDs[keyOf(in)] {
 			errors.add("references.known", fmt.Sprintf(`%s is in unknown group "%s"`, name, show(in)))
@@ -566,12 +572,16 @@ func tiers(parts, lines []*Map) mistakeList {
 var fieldSets = map[string][2][]string{
 	"file":  {{"awml", "title", "view", "parts"}, {"groups", "lines"}},
 	"group": {{"id", "label"}, {"in", "processing", "platform"}},
-	"part":  {{"id", "kind", "label"}, {"in", "op", "wait", "at", "untrusted", "cleans", "ref"}},
+	"part":  {{"id", "kind", "label"}, {"in", "op", "wait", "at", "untrusted", "cleans", "ref", "how", "why", "decided"}},
 	"line":  {{"from", "to", "kind"}, {"label"}},
 }
 
+// A part's detail, which its label, its title, leaves out: how it works, why it's shaped so, and
+// who decided it. Nothing parses them.
+var details = []string{"how", "why", "decided"}
+
 // The fields that must be text, when they're given at all.
-var textFields = map[string]bool{"title": true, "view": true, "id": true, "label": true, "in": true, "kind": true, "from": true, "to": true, "op": true, "ref": true}
+var textFields = map[string]bool{"title": true, "view": true, "id": true, "label": true, "in": true, "kind": true, "from": true, "to": true, "op": true, "ref": true, "how": true, "why": true, "decided": true}
 
 // Mermaid reads anything else in an id as part of the syntax around it.
 var id = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`)

@@ -5,13 +5,13 @@ Use this only where `awml check` can't run, as in a chat with no shell. It cover
 ## The file
 
 1. The file is one YAML mapping with `awml`, `title` and `parts`, and may have `description`, `scopes`, `lines` and `implementations`. It has no other field.
-2. `awml` is `"0.10"`, in quotes. There is no `view`.
+2. `awml` is `"0.11"`, in quotes. There is no `view`.
 3. `parts`, and `scopes` and `lines` where given, are lists, and each item in them is a mapping.
 
 ## Scopes and parts
 
 4. Each scope has `id` and `label`, and may have `in` and `processing`. Nothing else.
-5. Each part has `id`, `kind` and `label`, and may have `in`, `op`, `wait`, `at`, `untrusted`, `cleans` and `ref`. Nothing else. `untrusted` and `cleans`, where given, are `true` or `false`, with no quotes. Only a `trigger`, `connector` or `context` has `untrusted: true`, and only a `code` step has `cleans: true`. Only a `context`, `connector`, `surface` or `outside` part has a `ref`, never a `trigger`, written `owner/slug#id` or as a path to a file alongside, ending `.yaml`, then `#` and the part's id, as `shopping.yaml#list`, and never naming its own file. Following refs from file to file ends at a copy with no `ref`, never coming back round. Where the file it names is to hand, that file has a part with that id. For an `outside` part, it's a `trigger`, the one the action starts. For any other, it's of the same kind, label and `at`, in a scope with the same people and terms.
+5. Each part has `id`, `kind` and `label`, and may have `in`, `op`, `wait`, `at`, `untrusted`, `cleans`, `ref`, `how`, `why` and `decided`. Nothing else. A `comment` has no `how`, `why` or `decided`. `untrusted` and `cleans`, where given, are `true` or `false`, with no quotes. Only a `trigger`, `connector` or `context` has `untrusted: true`, and only a `code` step has `cleans: true`. Only a `context`, `connector`, `surface` or `outside` part has a `ref`, never a `trigger`, written `owner/slug#id` or as a path to a file alongside, ending `.yaml`, then `#` and the part's id, as `shopping.yaml#list`, and never naming its own file. Following refs from file to file ends at a copy with no `ref`, never coming back round. Where the file it names is to hand, that file has a part with that id. For an `outside` part, it's a `trigger`, the one the action starts. For any other, it's of the same kind, label and `at`, in a scope with the same people and terms.
 6. Each id is letters, digits and underscores, starting with a letter: `meal_plan`, never `meal-plan` or `2nd_plan`. No id is used twice, across scopes, parts, blocks and implementation comments.
 7. Each part's `kind` is one of `trigger`, `ai`, `code`, `person`, `review`, `approval`, `context`, `connector`, `surface`, `outside` and `comment`.
 8. A design part or scope's `in` names a scope. Follow each scope's `in` upwards: it never comes back to the scope it started from.
@@ -27,8 +27,8 @@ Use this only where `awml check` can't run, as in a chat with no shell. It cover
 
 ## Text
 
-16. Every `title`, `description`, `id`, `label`, `kind`, `in`, `from`, `to`, `op` and `ref` is text. YAML reads some bare values as something else, so each of these is in double quotes: `true` and `false`, numbers such as `12` or `0.5`, and dates such as `2026-10-20`. Quote `yes`, `no`, `on`, `off` and times such as `19:00` too, which YAML 1.1 tools misread.
-17. The file is YAML that reads at all. In the `{ id: …, label: … }` form the examples use, a comma ends a value and `: ` starts a new one, so quote any label with a comma, a colon followed by a space, a `#`, or a first character of `[`, `{`, `&`, `*`, `!`, `|`, `>`, `'`, `"`, `%` or `@`. `[yes]` is always quoted.
+16. Every `title`, `description`, `id`, `label`, `kind`, `in`, `from`, `to`, `op`, `ref`, `how`, `why` and `decided` is text. YAML reads some bare values as something else, so each of these is in double quotes: `true` and `false`, numbers such as `12` or `0.5`, and dates such as `2026-10-20`. Quote `yes`, `no`, `on`, `off` and times such as `19:00` too, which YAML 1.1 tools misread.
+17. The file is YAML that reads at all. In the `{ id: …, label: … }` form the examples use, a comma ends a value and `: ` starts a new one, so quote any label, `how`, `why` or `decided` with a comma, a colon followed by a space, a `#`, or a first character of `[`, `{`, `&`, `*`, `!`, `|`, `>`, `'`, `"`, `%` or `@`. `[yes]` is always quoted.
 
 ## Operations, tiers and untrusted text
 
@@ -50,6 +50,7 @@ These are warnings, which `awml check` prints without failing. Tell the person o
 26. **Every comment is tied to a part.** Each `comment` has a `tie` to a part. Tie it to what it explains, or remove it.
 27. **Every step is started by a trigger.** Each `ai`, `code` or `person` step, `review` and `approval` is in some trigger's run, whether item 25 found it or not. For one that isn't, add the start line it's missing, or split its work into a workflow of its own that an outside action starts.
 28. **No untrusted text reaches a surface unstopped.** Follow the text from each part with `untrusted: true` as item 23 does. Each `surface` you reach is a warning, unless every line you followed into it comes straight from an `approval`, whose line lists what went out. Say which part the text came from, that people reading the surface see text a stranger could have written, and that a review, a person's own step or a `cleans` step on the way would stop it.
+29. **Every part's label is a short title.** Count the words in each part's label but a comment's. For each one of more than 12, say to make it a short title and move the rest into the part's `how`, `why` or `decided`.
 
 ## Placement and fit fields
 

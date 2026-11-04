@@ -187,3 +187,7 @@ Then write the `classDef` lines of section 4, and the two of section 5 where any
 ```
 
 No line on a map is styled, so a map has no `linkStyle`.
+
+## 7. Detail
+
+`awml draw` draws each part's label alone, as its title. Only when the person asks for the detail, as `awml draw --detail` gives it, add a note for each part that has a `how`, `why` or `decided`, in any view or on a map. Take the parts in the order you wrote them. The note's id is the part's id followed by `_detail`, with `_detail` added again until no part, comment or group has it. It sits in the same group as its part, after the comments there, and is written as a comment's node whose label is the part's label, written as section 2 says, between `<b>` and `</b>`, then for each of `how`, `why` and `decided` the part has, in that order, `<br>`, the field's name, `: ` and its text, written as section 2 says. So `  plan_detail@{ shape: notch-rect, label: "<b>Plan the week#39;s dinners</b><br>how: from the favourites" }`. After all the other lines, write a `tie` from each part to its note, in the same order, as `  plan -.- plan_detail`. Each note is in the `gap` class, after the comments, and each tie is grey like any other, even on a map.
