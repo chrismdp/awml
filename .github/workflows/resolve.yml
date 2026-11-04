@@ -174,7 +174,8 @@ jobs:
   draft:
     needs: find
     if: needs.find.outputs.conflicts != '[]' && needs.find.outputs.conflicts != ''
-    runs-on: ubuntu-latest
+    # Ubuntu 26.04 stops the sandbox making the user namespace it needs, so every command fails.
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     # The host's own folder, under root's /var/lib, so nothing running as the runner's user can
     # rename it away. It holds each pull request's folder, main's prompt and sandbox settings, the
