@@ -384,6 +384,12 @@ jobs:
           stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
           echo "::stop-commands::$stop"
           trap 'echo "::$stop::"' EXIT
+          # The workspace and its .git must be the folders they were before the session before
+          # anything in them is removed.
+          if [ "$(stat -c %d:%i "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.git")" != "$(cat "$HOST_DIR/baseline/folders")" ]; then
+            echo "The workspace or its .git isn't the folder it was before the session, so git isn't run on it."
+            exit 1
+          fi
           # The sandbox's placeholders, and the stand-ins, go before git reads the tree: each must
           # still be empty, or unchanged, or nothing is made of the tree.
           bash "$HOST_DIR/scrub-placeholders.sh" after "$GITHUB_WORKSPACE" "$HOST_DIR/baseline/absent"
@@ -427,10 +433,6 @@ jobs:
           if ! cmp -s .git/config "$HOST_DIR/baseline/git-config"; then
             echo "The session's tree has a .git config other than the one it started with, so git isn't run on it. The keys added, removed or set to another value:"
             changed_keys "$HOST_DIR/baseline/git-config" .git/config
-            exit 1
-          fi
-          if [ "$(stat -c %d:%i "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.git")" != "$(cat "$HOST_DIR/baseline/folders")" ]; then
-            echo "The workspace or its .git isn't the folder it was before the session, so git isn't run on it."
             exit 1
           fi
           if [ -n "$(find . -path ./.git -prune -o -name .git -print -quit)" ]; then
@@ -697,7 +699,7 @@ jobs:
           {
             printf '**The fixer referred findings back.** Fixing them would change what was decided on this issue, so they need a person'"'"'s answer. [The pull request](%s) · [The run](%s)\n\n' "$pull_url" "$run_url"
             jq -Rrs '.[0:60000] | gsub("<"; "&lt;") | gsub("@(?=[A-Za-z0-9])"; "@​")' "$RUNNER_TEMP/fix/referred.md"
-            printf '\nTo go on, answer here, then remove the build label and add it again.\n'
+            printf '\nTo go on, answer here, then remove the build label and add it again. Adding it again approves this issue'"'"'s text as it reads then, so check it first.\n'
           } > "$RUNNER_TEMP/referred.md"
           stop="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
           echo "::stop-commands::$stop"

@@ -9,9 +9,11 @@
 # - the comments of people with admin, maintain or write permission count, by the same may_write
 #   as every workflow. Anyone can comment, so the text of strangers, and of members who can only
 #   read, is never passed on (awml #5);
-# - the app's own comments, its fixed text and the fixer's referrals, are model text no person
-#   wrote, so one counts only if it was posted before the build label was last added and not
-#   edited since.
+# - of the app's own comments, only the fixer's referrals count, each opening with the fixed text
+#   "The fixer referred findings back." in bold, which no model text can come before. They quote
+#   model text no person wrote, so one counts only if it was posted before the build label was last
+#   added and not edited since. The app's status notes, such as that a build started or changed
+#   nothing, with Claude's message quoted, are never passed on.
 # The label approves what the page shows, so the issue and its comments are read as GitHub renders
 # them, bodyHTML, never the Markdown behind them, whose HTML comments the page hides (#150).
 #
@@ -88,6 +90,7 @@ done < <(jq -r '[.[] | select(.author.__typename == "User") | .author.login // e
   jq -r --arg labelled "$labelled" --argjson writers "$(jq -nc '$ARGS.positional' --args "${writers[@]}")" \
     '.[] | select((.author.__typename == "User" and (.author.login | IN($writers[])))
         or (.author.__typename == "Bot" and (.author.login | IN("awml-factory", "awml-factory[bot]"))
+          and (.bodyHTML | test("^<p[^>]*><strong>The fixer referred findings back\\.</strong>"))
           and $labelled != "" and .createdAt < $labelled and (.lastEditedAt // "") < $labelled))
       | "## Comment by \(.author.login), \(.createdAt), \(.url)\n\n\(.bodyHTML)\n"' "$remarks"
 } > "$file"

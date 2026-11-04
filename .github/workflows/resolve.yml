@@ -349,7 +349,8 @@ jobs:
       # Each session's bundle is read as data into a fresh repository, whose config no session ever
       # touched, with no global or system config, no hooks and no fsmonitor, beside no login token.
       # It must sit on main and carry no conflict marker. The lines its resolution adds, beyond those
-      # the branch already added, and Claude's note, must carry nothing like the login token. Each
+      # the branch already added, its commits' messages, authors and committers, and Claude's note,
+      # must carry nothing like the login token. Each
       # bundle's and note's sha256 is the job's output, which the push job checks them against.
       - name: Check each rebase, read into a fresh repository
         id: check
@@ -424,6 +425,9 @@ jobs:
                   <(git -C "$fresh" diff --no-ext-diff --no-textconv "$base" "$head_sha" | LC_ALL=C grep -a '^+' | LC_ALL=C sort -u) |
                   looks_like_token; then
                 echo "The resolution of #$number adds what looks like a login token, so it isn't kept."
+              # Each rebased commit's message, author and committer are pushed publicly too.
+              elif git -C "$fresh" log --format='%an%n%ae%n%cn%n%ce%n%B' "$MAIN_SHA..refs/rebased" | looks_like_token; then
+                echo "A rebased commit of #$number has a message, author or committer that looks like a login token, so it isn't kept."
               else
                 cp "$bundle" "$resolved/$number.bundle"
               fi

@@ -134,6 +134,31 @@ func TestEverySessionTreeIsCleanedOfPlaceholdersBeforeGit(t *testing.T) {
 	}
 }
 
+// The scrub removes files and folders in the workspace, so the build's and the fixer's patch steps
+// check first that the workspace and its .git are the folders they were before the session, as
+// resolve's check step does, and a swapped workspace has nothing removed from it.
+func TestTheFoldersAreCheckedBeforeTheScrub(t *testing.T) {
+	for _, at := range []struct{ file, job string }{{"build.yml", "draft"}, {"fix.yml", "fix"}} {
+		patch, _ := readFactoryWorkflow(t, at.file).Jobs[at.job].step(t, "patch")
+		r := newRehearsal(t)
+		repo, _ := r.newRepo("repo", map[string]string{"recipes.md": "Bread\n"})
+		r.write("host/scrub-placeholders.sh", readText(t, ".github/scrub-placeholders.sh"))
+		r.write("host/baseline/absent", ".npmrc\n")
+		r.write("host/baseline/git-config", readText(t, filepath.Join(repo, ".git/config")))
+		r.write("host/baseline/head", gitIn(t, repo, "rev-parse", "HEAD")+"\n")
+		r.write("host/baseline/folders", "1:1\n1:2\n")
+		r.write(filepath.Join(repo, ".npmrc"), "")
+		r.dir = repo
+		r.run(patch, map[string]string{"GITHUB_WORKSPACE": repo, "HEAD_SHA": gitIn(t, repo, "rev-parse", "HEAD")}, "")
+		if !r.failed || !strings.Contains(r.printed, "isn't the folder it was before the session") {
+			t.Errorf("%s's patch step went on in a workspace that isn't the one kept:\n%s", at.file, r.printed)
+		}
+		if _, err := os.Stat(filepath.Join(repo, ".npmrc")); err != nil {
+			t.Errorf("%s's patch step removed a placeholder from a workspace that isn't the one kept", at.file)
+		}
+	}
+}
+
 // A rebase's session may run git add in its clone, so the clone's info/exclude names every path the
 // sandbox may leave a placeholder at, and none is committed into the rebase.
 func TestAResolveSessionCommitsNoPlaceholder(t *testing.T) {

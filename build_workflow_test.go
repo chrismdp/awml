@@ -1553,6 +1553,9 @@ func TestThePatchStepSaysHowTheGitConfigChanged(t *testing.T) {
 		if !strings.Contains(r.printed, want) {
 			t.Errorf("with a changed %s, the step said:\n%s\nwant it to name %s, escaped", change, r.printed, want)
 		}
+		if strings.Contains(r.printed, "pwned") || strings.Contains(r.printed, "elsewhere") {
+			t.Errorf("with a changed %s, the step printed a key's value:\n%s", change, r.printed)
+		}
 	}
 }
 
@@ -1672,7 +1675,7 @@ func TestSessionsMayRemoveTheirScratchFiles(t *testing.T) {
 		job := readFactoryWorkflow(t, at.file).Jobs[at.job]
 		session := job.Steps[job.session()].Run
 		for _, want := range []string{`"Bash(rm:*)"`, `"Bash(mv:*)"`} {
-			if !strings.Contains(session[strings.Index(session, "--allowedTools"):], want) {
+			if !strings.Contains(allowList(session), want) {
 				t.Errorf("%s's %s session doesn't allow %s", at.file, at.job, want)
 			}
 		}
@@ -1681,6 +1684,28 @@ func TestSessionsMayRemoveTheirScratchFiles(t *testing.T) {
 		if !strings.Contains(strings.Join(strings.Fields(readText(t, ".github/"+prompt)), " "), "Every untracked file left in the tree goes into the pull request") {
 			t.Errorf("%s doesn't say an untracked file goes into the pull request", prompt)
 		}
+	}
+}
+
+// allowList returns a session's --allowedTools rules, every line of them, up to the end of the
+// command, whose lines but the last end in a backslash.
+func allowList(run string) string {
+	allowed := run[strings.Index(run, "--allowedTools"):]
+	end := 0
+	for _, line := range strings.SplitAfter(allowed, "\n") {
+		end += len(line)
+		if !strings.HasSuffix(strings.TrimRight(line, " \n"), `\`) {
+			break
+		}
+	}
+	return allowed[:end]
+}
+
+func TestTheAllowListIsReadToTheEndOfTheCommand(t *testing.T) {
+	run := "claude -p \"$prompt\" \\\n  --allowedTools \"Glob\" \\\n    \"Bash(go:*)\" \\\n    \"Edit(./x/**)\" \\\n  > log 2>&1\nnext \"Edit(./y/**)\"\n"
+	allowed := allowList(run)
+	if !strings.Contains(allowed, "(./x/") || !strings.Contains(allowed, "> log") || strings.Contains(allowed, "next") {
+		t.Errorf("the allow list read is %q, want every line of it up to the end of the command", allowed)
 	}
 }
 
@@ -1697,8 +1722,7 @@ func TestWritingSessionsNameTheirTreeAbsolutely(t *testing.T) {
 		if step.Env["CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR"] != "1" {
 			t.Errorf("%s's %s session doesn't return to its start folder after each command", at.file, at.job)
 		}
-		allowed := step.Run[strings.Index(step.Run, "--allowedTools"):]
-		allowed = allowed[:strings.Index(allowed, "\n")+1]
+		allowed := allowList(step.Run)
 		for _, want := range []string{`"Read(/` + at.tree + `/**)"`, `"Edit(/` + at.tree + `/**)"`} {
 			if !strings.Contains(allowed, want) {
 				t.Errorf("%s's %s session doesn't allow %s", at.file, at.job, want)

@@ -518,6 +518,70 @@ func TestTheCheckKeepsOnlyAStraightRebase(t *testing.T) {
 	}
 }
 
+// The rebased commits are pushed publicly, so the check step keeps a bundle only if none of its
+// commits' messages, author or committer names and emails holds anything like the login token.
+func TestTheCheckRefusesACommitThatCarriesAToken(t *testing.T) {
+	check, _ := readFactoryWorkflow(t, "resolve.yml").Jobs["draft"].step(t, "check")
+	token := "sk-" + "ant-oat01-abc"
+	for _, field := range []string{"nothing", "message", "author name", "author email", "committer name", "committer email"} {
+		r := newRehearsal(t)
+		workspace := keptWorkspace(t, r)
+		gitIn(t, workspace, "switch", "-q", "-c", "scones")
+		r.write(filepath.Join(workspace, "scones.md"), "Scones\n")
+		gitIn(t, workspace, "add", "-A")
+		gitIn(t, workspace, "-c", "user.name=x", "-c", "user.email=x@example.invalid", "commit", "-qm", "Scones")
+		head := gitIn(t, workspace, "rev-parse", "HEAD")
+		gitIn(t, workspace, "switch", "-q", "main")
+		r.write(filepath.Join(workspace, "bread.md"), "Rye\n")
+		gitIn(t, workspace, "add", "-A")
+		gitIn(t, workspace, "-c", "user.name=x", "-c", "user.email=x@example.invalid", "commit", "-qm", "Rye")
+		main := gitIn(t, workspace, "rev-parse", "HEAD")
+
+		clone := filepath.Join(r.root, "clone")
+		gitIn(t, r.root, "clone", "-q", workspace, clone)
+		gitIn(t, clone, "switch", "-q", "--detach", head)
+		gitIn(t, clone, "-c", "user.name=x", "-c", "user.email=x@example.invalid", "rebase", "-q", main)
+		author, email, committer, from, message := "x", "x@example.invalid", "x", "x@example.invalid", "Scones"
+		switch field {
+		case "message":
+			message = "Scones\n\n" + token
+		case "author name":
+			author = token
+		case "author email":
+			email = token + "@example.invalid"
+		case "committer name":
+			committer = token
+		case "committer email":
+			from = token + "@example.invalid"
+		}
+		gitIn(t, clone, "-c", "user.name="+committer, "-c", "user.email="+from, "commit", "-q", "--amend",
+			"--author="+author+" <"+email+">", "-m", message)
+		out := filepath.Join(r.temp, "host", "pr-5", "out")
+		if err := os.MkdirAll(out, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		gitIn(t, clone, "bundle", "create", "-q", filepath.Join(out, "rebased.bundle"), main+"..HEAD")
+		r.write("host/pulls.tsv", "5\t"+head+"\n")
+		r.dir = workspace
+		r.run(check, map[string]string{"MAIN_SHA": main, "GITHUB_WORKSPACE": workspace}, "")
+		r.mustPass()
+		_, kept := os.Stat(filepath.Join(r.temp, "host", "resolved", "5.bundle"))
+		if field == "nothing" {
+			if kept != nil {
+				t.Errorf("a rebase whose commits carry no token wasn't kept:\n%s", r.printed)
+			}
+			continue
+		}
+		if kept == nil || !strings.Contains(r.printed, "looks like a login token") {
+			t.Errorf("with a token in its commit's %s, the check kept the rebase or didn't say why:\n%s", field, r.printed)
+		}
+	}
+	// The commits are read by the one scan the rest of the step uses, not a copy of its pattern.
+	if n := strings.Count(check.Run, "grep -aoiE"); n != 1 {
+		t.Errorf("resolve's check step spells out the token's pattern %d times, want once", n)
+	}
+}
+
 // The rebase's session runs on Sonnet; every other session, the build's, the fix's and CI's
 // reviews and Classify, runs on Opus. Each workflow's drawing names the model its session runs on.
 func TestEachSessionRunsOnItsModel(t *testing.T) {
