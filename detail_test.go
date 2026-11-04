@@ -161,3 +161,24 @@ lines:
 		t.Errorf("decided = %#v\nwant %#v", got, want)
 	}
 }
+
+// Only a shared part's copies are listed once: two parts that aren't shared are each listed, however
+// alike their title and decided read.
+func TestPartsNotSharedAreEachListedThoughTheyReadAlike(t *testing.T) {
+	twice := strings.Replace(keep, "  - { id: asked,", `  - { id: again, kind: code, op: bring-in, label: "Keep only what's approved", in: public, decided: "The maintainer, in #160 under rule 4" }
+  - { id: asked,`, 1)
+	twice = strings.Replace(twice, "  - { from: keep, to: asked, kind: data }", "  - { from: keep, to: asked, kind: data }\n  - { from: label, to: again, kind: start }", 1)
+	alone := Summarise(parsed(t, twice)).Decided
+	if len(alone) != 2 {
+		t.Fatalf("alone, decided = %#v, want both parts", alone)
+	}
+	other := strings.Replace(keep, "title: Builds", "title: Rebuilds", 1)
+	for _, workflows := range [][]Workflow{
+		together(t, "builds.yaml", twice, "reads.yaml", good),
+		together(t, "builds.yaml", keep, "rebuilds.yaml", other),
+	} {
+		if got := SummariseTogether(workflows).Decided; len(got) != 2 {
+			t.Errorf("together, decided = %#v, want both parts", got)
+		}
+	}
+}
