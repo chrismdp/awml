@@ -8,7 +8,7 @@ import (
 
 // IsCanonical reports whether a document holds a workflow of the current version.
 func IsCanonical(doc *Map) bool {
-	return doc != nil && doc.get("awml") == currentFormat && !doc.has("platform")
+	return doc != nil && doc.get("awml") == CurrentFormat && !doc.has("platform")
 }
 
 // ImplementationIDs gives implementations in the order they were written.
@@ -52,7 +52,7 @@ func View(doc *Map, implementation string) (*Map, error) {
 		return nil, fmt.Errorf("a platform description has no drawing")
 	}
 	if !IsCanonical(doc) {
-		return nil, fmt.Errorf(`awml draws only a workflow whose awml is "%s": upgrade an older file with awml convert`, currentFormat)
+		return nil, fmt.Errorf(`awml draws only a workflow whose awml is "%s": upgrade an older file with awml convert`, CurrentFormat)
 	}
 	view, err := project(doc, implementation)
 	if err != nil {

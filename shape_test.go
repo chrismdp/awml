@@ -6,8 +6,7 @@ import (
 )
 
 // A bakery counts its stock each evening and orders each morning, each from its own trigger.
-const twoTriggers = `
-awml: "0.11"
+const twoTriggers = currentAwml + `
 title: The bakery
 parts:
   - {id: evening, kind: trigger, label: "Every day 18:00"}

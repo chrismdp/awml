@@ -61,8 +61,9 @@ func (m mistakeList) messages() []string {
 	return messages
 }
 
-// The version of the file format this release reads, and the older ones awml convert upgrades.
-const currentFormat = "0.11"
+// CurrentFormat is the version of the file format this release reads, and olderFormats the ones awml
+// convert upgrades.
+const CurrentFormat = "0.11"
 
 var olderFormats = []string{"0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8", "0.9", "0.10"}
 
@@ -94,8 +95,8 @@ func checkVersion(file *Map) mistakeList {
 		return mistakeList{{check: "file.version", message: fmt.Sprintf("awml: YAML read it as %s, not text: put it in quotes", show(file.get("awml")))}}
 	case isOneOf(version, olderFormats...):
 		return mistakeList{{check: "file.version", message: fmt.Sprintf(`awml is "%s", which this release no longer reads: upgrade the file with awml convert`, version)}}
-	case version != currentFormat:
-		return mistakeList{{check: "file.version", message: fmt.Sprintf(`awml must be "%s", not "%s"`, currentFormat, version)}}
+	case version != CurrentFormat:
+		return mistakeList{{check: "file.version", message: fmt.Sprintf(`awml must be "%s", not "%s"`, CurrentFormat, version)}}
 	}
 	return nil
 }

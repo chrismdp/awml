@@ -6,8 +6,7 @@ import (
 	"testing"
 )
 
-const fitSecurity = `
-awml: "0.11"
+const fitSecurity = currentAwml + `
 title: Mail
 scopes:
   - {id: private, label: private, processing: any}
@@ -52,12 +51,12 @@ func fitDocs(t *testing.T, sources ...string) []*Map {
 
 func TestFitAppliesAllFiveRules(t *testing.T) {
 	platforms := []string{
-		`{awml: "0.11", platform: {id: fitting, label: Fitting}, off_for_up_to: PT1H, steps: code, agents: [], calls: [anthropic], holds: [notes]}`,
-		`{awml: "0.11", platform: {id: slow, label: Slow}, off_for_up_to: P1D, steps: code, agents: [], calls: [anthropic], holds: [notes]}`,
-		`{awml: "0.11", platform: {id: exposed, label: Exposed}, off_for_up_to: PT0S, steps: code, agents: [openai], calls: [anthropic], holds: [notes]}`,
-		`{awml: "0.11", platform: {id: no-model, label: No model}, off_for_up_to: PT0S, steps: code, agents: [], calls: [openai], holds: [notes]}`,
-		`{awml: "0.11", platform: {id: no-notes, label: No notes}, off_for_up_to: PT0S, steps: code, agents: [], calls: [anthropic], holds: []}`,
-		`{awml: "0.11", platform: {id: agent, label: Agent}, off_for_up_to: PT0S, steps: agent, agents: [anthropic], calls: any, holds: [notes]}`,
+		"{" + currentAwml + `, platform: {id: fitting, label: Fitting}, off_for_up_to: PT1H, steps: code, agents: [], calls: [anthropic], holds: [notes]}`,
+		"{" + currentAwml + `, platform: {id: slow, label: Slow}, off_for_up_to: P1D, steps: code, agents: [], calls: [anthropic], holds: [notes]}`,
+		"{" + currentAwml + `, platform: {id: exposed, label: Exposed}, off_for_up_to: PT0S, steps: code, agents: [openai], calls: [anthropic], holds: [notes]}`,
+		"{" + currentAwml + `, platform: {id: no-model, label: No model}, off_for_up_to: PT0S, steps: code, agents: [], calls: [openai], holds: [notes]}`,
+		"{" + currentAwml + `, platform: {id: no-notes, label: No notes}, off_for_up_to: PT0S, steps: code, agents: [], calls: [anthropic], holds: []}`,
+		"{" + currentAwml + `, platform: {id: agent, label: Agent}, off_for_up_to: PT0S, steps: agent, agents: [anthropic], calls: any, holds: [notes]}`,
 	}
 	docs := fitDocs(t, append([]string{fitSecurity}, platforms...)...)
 	got, gaps := Fit(docs[0], nil, docs[1:])
@@ -75,8 +74,7 @@ func TestFitAppliesAllFiveRules(t *testing.T) {
 }
 
 func TestFitReportsSecurityGaps(t *testing.T) {
-	security := `
-awml: "0.11"
+	security := currentAwml + `
 title: Gaps
 scopes: [{id: private, label: private}]
 parts:
@@ -107,8 +105,8 @@ func TestFitJudgesADrawnPlacement(t *testing.T) {
       - {id: session, label: Session, in: machine, platform: session, parts: [bring, mail]}
       - {id: phone, label: Phone, parts: []}
 `)
-	host := `{awml: "0.11", platform: {id: host, label: Host}, off_for_up_to: PT0S, steps: code, agents: [openai], calls: [anthropic], holds: [notes]}`
-	session := `{awml: "0.11", platform: {id: session, label: Session}, off_for_up_to: P1D, steps: agent, agents: [anthropic], calls: any, holds: [notes]}`
+	host := "{" + currentAwml + `, platform: {id: host, label: Host}, off_for_up_to: PT0S, steps: code, agents: [openai], calls: [anthropic], holds: [notes]}`
+	session := "{" + currentAwml + `, platform: {id: session, label: Session}, off_for_up_to: P1D, steps: agent, agents: [anthropic], calls: any, holds: [notes]}`
 	got, gaps := Fit(doc, placement, fitDocs(t, host, session))
 	want := []string{
 		"machine  no: openai's agents run here, and business doesn't allow openai",
@@ -149,8 +147,7 @@ func TestFitReportsBlocksWithoutDescriptionsAsNotJudged(t *testing.T) {
 // Every trigger is one the workflow runs on, so even a trigger with no line out needs a wait, and is
 // judged against the platform.
 func TestFitAsksForAWaitOnATriggerWithNoLineOut(t *testing.T) {
-	security := `
-awml: "0.11"
+	security := currentAwml + `
 title: Gaps
 scopes: [{id: private, label: private, processing: any}]
 parts:
@@ -171,9 +168,9 @@ parts:
 // Three platforms that each hold only some of the fit workflow's parts: the laptop is off too long
 // for the trigger, the server holds no notes and calls no model, and the agent can't run code.
 var splitPlatforms = []string{
-	`{awml: "0.11", platform: {id: laptop, label: Laptop}, off_for_up_to: P1D, steps: code, agents: [], calls: [anthropic], holds: [notes]}`,
-	`{awml: "0.11", platform: {id: server, label: Server}, off_for_up_to: PT0S, steps: code, agents: [], calls: [], holds: []}`,
-	`{awml: "0.11", platform: {id: cowork, label: Cowork}, off_for_up_to: PT0S, steps: agent, agents: [anthropic], calls: any, holds: [notes]}`,
+	"{" + currentAwml + `, platform: {id: laptop, label: Laptop}, off_for_up_to: P1D, steps: code, agents: [], calls: [anthropic], holds: [notes]}`,
+	"{" + currentAwml + `, platform: {id: server, label: Server}, off_for_up_to: PT0S, steps: code, agents: [], calls: [], holds: []}`,
+	"{" + currentAwml + `, platform: {id: cowork, label: Cowork}, off_for_up_to: PT0S, steps: agent, agents: [anthropic], calls: any, holds: [notes]}`,
 }
 
 func TestFitPartsListsEveryOptionWithNoSparePlatformAndItsPlacement(t *testing.T) {
@@ -236,7 +233,7 @@ func TestFitPartsListsEveryOptionWithNoSparePlatformAndItsPlacement(t *testing.T
 // Where one platform holds every part, it is an option of its own, listed first, and no option that
 // adds a platform to it is listed. The options of two that leave it out still are.
 func TestFitPartsListsAnOptionOfOnePlatformBeforeLargerOnes(t *testing.T) {
-	fitting := `{awml: "0.11", platform: {id: fitting, label: Fitting}, off_for_up_to: PT1H, steps: code, agents: [], calls: [anthropic], holds: [notes]}`
+	fitting := "{" + currentAwml + `, platform: {id: fitting, label: Fitting}, off_for_up_to: PT1H, steps: code, agents: [], calls: [anthropic], holds: [notes]}`
 	docs := fitDocs(t, append([]string{fitSecurity}, append(append([]string{}, splitPlatforms...), fitting)...)...)
 	report := JudgeParts([]Workflow{{Doc: docs[0]}}, docs[1:])
 	var got [][]string

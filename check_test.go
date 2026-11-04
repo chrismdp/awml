@@ -9,8 +9,15 @@ import (
 	"testing"
 )
 
-const good = `
-awml: "0.11"
+// currentAwml opens a file in the format this release reads, for a test whose file only needs to be
+// sound. A test about versions writes its versions out.
+const currentAwml = `awml: "` + CurrentFormat + `"`
+
+func TestCurrentAwmlOpensAFileThisReleaseReads(t *testing.T) {
+	mistakes(t, parsed(t, currentAwml+"\ntitle: T\nparts: []\n"))
+}
+
+const good = currentAwml + `
 title: The family's dinners
 scopes:
   - { id: carers, label: carers }
@@ -98,8 +105,7 @@ func TestASoundFileHasNoMistakes(t *testing.T) {
 }
 
 func TestLabelsThatMarkdownWouldRecogniseHaveNoMistakes(t *testing.T) {
-	mistakes(t, parsed(t, `
-awml: "0.11"
+	mistakes(t, parsed(t, currentAwml+`
 title: Literal labels
 scopes: [{id: group, label: '# Team'}]
 parts:
@@ -130,7 +136,7 @@ func TestTheOldNamesForKindsAreUnknown(t *testing.T) {
 	mistakes(t, changed(t, "parts.1.kind", "human"), `part "plan" has unknown kind "human"`)
 }
 
-// Several start lines out of one part already show work side by side, so 0.11 has no fork.
+// Several start lines out of one part already show work side by side, so AWML has no fork.
 func TestAForkIsAnUnknownKind(t *testing.T) {
 	mistakes(t, changed(t, "parts.3.kind", "fork"), `part "screen" has unknown kind "fork"`)
 	mistakes(t, changed(t, "parts.3.kind", "fork", "parts.3.label", gone), `part "screen" has no label`, `part "screen" has unknown kind "fork"`)
@@ -222,8 +228,7 @@ func TestEveryMistakeIsReportedAtOnce(t *testing.T) {
 }
 
 func TestAValueYAMLReadsAsTrueMustBeQuoted(t *testing.T) {
-	d := parsed(t, `
-awml: "0.11"
+	d := parsed(t, currentAwml+`
 title: T
 parts:
   - { id: true, kind: review, label: True }
@@ -238,13 +243,12 @@ lines:
 }
 
 func TestANumberMustBeQuoted(t *testing.T) {
-	d := parsed(t, `{awml: "0.11", title: T, parts: [{id: t, kind: trigger, label: 12}]}`)
+	d := parsed(t, "{"+currentAwml+`, title: T, parts: [{id: t, kind: trigger, label: 12}]}`)
 	mistakes(t, d, `part "t": YAML read its label as 12, not text: put it in quotes`)
 }
 
 func TestYesNoOnOffAndTimesAreText(t *testing.T) {
-	d := parsed(t, `
-awml: "0.11"
+	d := parsed(t, currentAwml+`
 title: T
 parts:
   - { id: t, kind: trigger, label: 19:00 }
@@ -258,8 +262,7 @@ lines:
 	mistakes(t, d)
 }
 
-const reply = `
-awml: "0.11"
+const reply = currentAwml + `
 title: A reply
 parts:
   - { id: write, kind: ai, op: draft, label: Draft the reply }
@@ -288,7 +291,7 @@ func withLines(t *testing.T, lines ...string) *Map {
 func TestEachOperationNamesAStep(t *testing.T) {
 	for _, op := range []string{"bring-in", "sort", "learn", "prepare", "check", "reflect", "draft", "do", "answer", "other"} {
 		for _, kind := range []string{"ai", "code", "person"} {
-			d := parsed(t, fmt.Sprintf(`{awml: "0.11", title: T, parts: [{id: s, kind: %s, op: %s, label: S}]}`, kind, op))
+			d := parsed(t, fmt.Sprintf("{"+currentAwml+`, title: T, parts: [{id: s, kind: %s, op: %s, label: S}]}`, kind, op))
 			mistakes(t, d)
 		}
 	}
@@ -346,8 +349,7 @@ func TestHiddenAndRefusedLinesLeadNowhere(t *testing.T) {
 	mistakes(t, withLines(t, "{ from: write, to: send, kind: hidden }", "{ from: write, to: file, kind: refused }"))
 }
 
-const question = `
-awml: "0.11"
+const question = currentAwml + `
 title: A question
 parts:
   - { id: notes, kind: context, label: Family notes }
@@ -380,8 +382,7 @@ func TestACheckPassesItsVerdictOnAndAStepAfterItKeepsIt(t *testing.T) {
 }
 
 // The dinners start the shopping by asking it to start, as they would call any outside service.
-const startsShopping = `
-awml: "0.11"
+const startsShopping = currentAwml + `
 title: Dinners
 parts:
   - { id: thu, kind: trigger, label: "Thursday 19:00" }
