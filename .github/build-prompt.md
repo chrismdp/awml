@@ -24,7 +24,8 @@ reviews hold the change to it.
 - Keep the skill's copies of SPEC.md, GUIDE.md and the examples in step: run `make references`
   after changing any source it copies.
 - Run every check AGENTS.md lists until they all pass. If `awml draw`'s output changes, regenerate
-  the .mmd files, but don't run examples/render.sh yourself.
+  the .mmd files, and leave their SVGs to `.github/picture-drawings.sh`, below, since
+  `sh examples/render.sh` redraws every SVG, even those your change doesn't alter.
 - If your change alters how something is drawn and no example shows it, make one show it: the pull
   request's pictures come from the examples, and a reviewer should see the change, not only read the
   test that asks for it. A drawing that breaks a rule goes in a small new example in examples/live/,

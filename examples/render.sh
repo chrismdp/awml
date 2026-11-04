@@ -1,6 +1,8 @@
 #!/bin/sh
 # Draw each example as Mermaid with awml, then as SVG with the Mermaid CLI, which needs Node and a Chrome.
-# Point PUPPETEER_EXECUTABLE_PATH at your Chrome if Puppeteer can't find one.
+# Point PUPPETEER_EXECUTABLE_PATH at your Chrome if Puppeteer can't find one. The CLI's Puppeteer
+# expects chrome-headless-shell 131.0.6778.204. With MMDC set to an installed mmdc, at the versions
+# pinned below, it draws with that and fetches nothing, as the factory's sessions do offline.
 #
 # The drawings use Inter (examples/fonts, under the SIL Open Font License). Mermaid sizes each box
 # by measuring its text in the Chrome that draws it, so that Chrome must have Inter: on Linux this
@@ -35,7 +37,11 @@ fi
 printf '@font-face{font-family:"Inter";font-style:normal;font-weight:400;src:url(data:font/woff2;base64,%s) format("woff2")}\n' \
   "$(base64 < examples/fonts/Inter-Regular.woff2 | tr -d '\n')" > "$tmp/inter.css"
 render() {
-  npx -y -p @mermaid-js/mermaid-cli@11.4.1 -p mermaid@11.17.2 mmdc -q -p "$tmp/puppeteer.json" -C "$tmp/inter.css" -b white -i "$1" -o "${1%.mmd}.svg"
+  if [ -n "${MMDC:-}" ]; then
+    "$MMDC" -q -p "$tmp/puppeteer.json" -C "$tmp/inter.css" -b white -i "$1" -o "${1%.mmd}.svg"
+  else
+    npx -y -p @mermaid-js/mermaid-cli@11.4.1 -p mermaid@11.17.2 mmdc -q -p "$tmp/puppeteer.json" -C "$tmp/inter.css" -b white -i "$1" -o "${1%.mmd}.svg"
+  fi
   # Mermaid sometimes lays a line out as a path of NaN, which is drawn detached from its ends.
   if grep -q 'd="[^"]*NaN' "${1%.mmd}.svg"; then
     echo "$1: Mermaid drew a line as a path of NaN, detached from its ends" >&2

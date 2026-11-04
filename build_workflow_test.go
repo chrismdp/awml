@@ -232,15 +232,16 @@ func TestNothingInTheFactoryUsesAutoMerge(t *testing.T) {
 	}
 }
 
-// Installing Claude Code, at an exact version, and filling a session's caches before it starts, by
-// fetching alone: go mod download from the module proxy alone, with no version control to fall back
-// on, runs no module's code, and npx with npm's scripts off, from an empty folder, reading no npm
-// config but its own and naming npm's registry, runs only true. So nothing in the tree, an .npmrc or
-// a node_modules of its own, can make either run anything.
+// Installing Claude Code, at an exact version, and filling a session's caches and installing its
+// renderer before it starts, by fetching alone: go mod download from the module proxy alone, with no
+// version control to fall back on, runs no module's code, and npm install with npm's scripts off,
+// in a folder of its own, reading no npm config but its own and naming npm's registry, runs none of
+// the packages it installs. So nothing in the tree, an .npmrc or a node_modules of its own, can
+// make either run anything.
 var claudeInstall = regexp.MustCompile(`npm install -g @anthropic-ai/claude-code@[0-9]+\.[0-9]+\.[0-9]+\n`)
 var moduleFetch = regexp.MustCompile(`(?m)^.*HOME="[^"]+" GOTOOLCHAIN=local GOPROXY=https://proxy\.golang\.org GOVCS='\*:off' go mod download\)?$|` +
-	`^\s*\(cd "\$\(mktemp -d\)" && HOME="[^"]+" npm_config_userconfig="\$[a-z_]+" npm_config_globalconfig="\$[a-z_]+" ` +
-	`npm_config_registry=https://registry\.npmjs\.org/ PUPPETEER_SKIP_DOWNLOAD=true npm_config_ignore_scripts=true npx --yes (-p \S+ )+-- true\)$`)
+	`^\s*\(cd "\$renderer" && HOME="[^"]+" npm_config_userconfig="\$[a-z_]+" npm_config_globalconfig="\$[a-z_]+" ` +
+	`npm_config_registry=https://registry\.npmjs\.org/ PUPPETEER_SKIP_DOWNLOAD=true npm_config_ignore_scripts=true npm install --no-audit --no-fund( \S+@[0-9.]+)+\)$`)
 
 // A command a script runs, at the start of a line or after ;, &&, || or a pipe.
 // Variables set in front of the command don't hide it.
@@ -984,14 +985,23 @@ func TestUntrustedTextIsPrintedWithWorkflowCommandsStopped(t *testing.T) {
 
 // The sessions that build, the draft, the fix and the rebase, run offline: their Go module cache is
 // filled before the session, by fetching alone, in the session's own home, and the session runs
-// with GOPROXY off, so a Go command can't carry data out through the module proxy. The renderer's
-// packages are put in npm's cache the same way, at the versions examples/render.sh asks for, with
-// their scripts off, and npm runs offline. A new dependency then fails, so the prompts say to ask.
+// with GOPROXY off, so a Go command can't carry data out through the module proxy. The renderer is
+// installed the same way, before the session, in a folder root owns: the Mermaid CLI and Mermaid at
+// the versions examples/render.sh asks for, with their scripts off, and the Chrome headless shell
+// it names, at its version. The session finds them through MMDC and PUPPETEER_EXECUTABLE_PATH, and
+// npm runs offline. A new dependency then fails, so the prompts say to ask.
 func TestTheBuildingSessionsRunOffline(t *testing.T) {
-	render := regexp.MustCompile(`npx -y ((-p \S+ )+)mmdc`).FindStringSubmatch(readText(t, "examples/render.sh"))
+	script := readText(t, "examples/render.sh")
+	render := regexp.MustCompile(`npx -y ((-p \S+ )+)mmdc`).FindStringSubmatch(script)
 	if render == nil {
 		t.Fatal("examples/render.sh runs no npx mmdc")
 	}
+	packages := strings.TrimSpace(strings.ReplaceAll(render[1], "-p ", ""))
+	chrome := regexp.MustCompile(`chrome-headless-shell ([0-9]+(\.[0-9]+){3})\b`).FindStringSubmatch(script)
+	if chrome == nil {
+		t.Fatal("examples/render.sh doesn't name the version of the Chrome headless shell its CLI expects")
+	}
+	shell := "https://storage.googleapis.com/chrome-for-testing-public/" + chrome[1] + "/linux64/chrome-headless-shell-linux64.zip"
 	for _, at := range []struct {
 		file, job string
 		renders   bool
@@ -1012,7 +1022,10 @@ func TestTheBuildingSessionsRunOffline(t *testing.T) {
 			if regexp.MustCompile(`HOME="[^"]+" GOTOOLCHAIN=local GOPROXY=https://proxy\.golang\.org GOVCS='\*:off' go mod download`).MatchString(step.Run) {
 				fetched = true
 			}
-			if strings.Contains(step.Run, `(cd "$(mktemp -d)" && `) && strings.Contains(step.Run, "npm_config_ignore_scripts=true npx --yes "+render[1]+"-- true)") {
+			if strings.Contains(step.Run, "npm_config_ignore_scripts=true npm install --no-audit --no-fund "+packages+")") &&
+				strings.Contains(step.Run, shell) &&
+				strings.Contains(step.Run, `sudo chown -R root:root "$RENDERER_DIR"`) &&
+				strings.Contains(step.Run, `sudo chmod -R go-w "$RENDERER_DIR"`) {
 				rendered = true
 			}
 		}
@@ -1020,7 +1033,27 @@ func TestTheBuildingSessionsRunOffline(t *testing.T) {
 			t.Errorf("%s's %s doesn't fill its session's Go module cache before the session", at.file, at.job)
 		}
 		if rendered != at.renders {
-			t.Errorf("%s's %s puts the renderer's packages in npm's cache is %v, want %v", at.file, at.job, rendered, at.renders)
+			t.Errorf("%s's %s installs the renderer, read-only, before the session is %v, want %v", at.file, at.job, rendered, at.renders)
+		}
+		if !at.renders {
+			continue
+		}
+		if dir := job.Env["RENDERER_DIR"]; !strings.HasPrefix(dir, "/opt/") {
+			t.Errorf("%s's %s installs the renderer in %q, want a folder of root's under /opt", at.file, at.job, dir)
+		}
+		for key, want := range map[string]string{
+			"MMDC":                      "${{ env.RENDERER_DIR }}/node_modules/.bin/mmdc",
+			"PUPPETEER_EXECUTABLE_PATH": "${{ env.RENDERER_DIR }}/chrome-headless-shell-linux64/chrome-headless-shell",
+		} {
+			if session.Env[key] != want {
+				t.Errorf("%s's %s session runs with %s=%q, want %q", at.file, at.job, key, session.Env[key], want)
+			}
+		}
+	}
+	// No job fills npm's cache for npx any more: the installed CLI is the one the sessions run.
+	for _, file := range factoryFiles {
+		if strings.Contains(readText(t, ".github/workflows/"+file), "npx ") {
+			t.Errorf("%s runs npx", file)
 		}
 	}
 	for _, prompt := range []string{"build-prompt.md", "fix-prompt.md", "resolve-prompt.md"} {
@@ -1683,6 +1716,38 @@ func TestSessionsMayRemoveTheirScratchFiles(t *testing.T) {
 	for _, prompt := range []string{"build-prompt.md", "fix-prompt.md"} {
 		if !strings.Contains(strings.Join(strings.Fields(readText(t, ".github/"+prompt)), " "), "Every untracked file left in the tree goes into the pull request") {
 			t.Errorf("%s doesn't say an untracked file goes into the pull request", prompt)
+		}
+	}
+}
+
+// The build's and the fixer's sessions may redraw the examples with examples/render.sh, by the one
+// form, and run no other script through sh or bash. The rebase draws nothing.
+func TestTheBuildingSessionsMayRunTheRendererAlone(t *testing.T) {
+	wider := regexp.MustCompile(`"Bash\((sh|bash|examples/render)[^"]*\)"`)
+	for _, at := range []struct {
+		file, job string
+		renders   bool
+	}{{"build.yml", "draft", true}, {"fix.yml", "fix", true}, {"resolve.yml", "draft", false}} {
+		job := readFactoryWorkflow(t, at.file).Jobs[at.job]
+		allowed := allowList(job.Steps[job.session()].Run)
+		rules := wider.FindAllString(allowed, -1)
+		want := []string{}
+		if at.renders {
+			want = []string{`"Bash(sh examples/render.sh)"`}
+		}
+		if fmt.Sprint(rules) != fmt.Sprint(want) {
+			t.Errorf("%s's %s session allows %v to run scripts, want %v", at.file, at.job, rules, want)
+		}
+	}
+}
+
+// examples/render.sh draws with the Mermaid CLI at MMDC when it's set, as the sessions set it, and
+// otherwise fetches the pinned CLI with npx, as on a laptop.
+func TestRenderUsesTheInstalledCLIWhenThereIsOne(t *testing.T) {
+	script := readText(t, "examples/render.sh")
+	for _, want := range []string{`if [ -n "${MMDC:-}" ]; then`, `"$MMDC" -q -p "$tmp/puppeteer.json"`, `npx -y -p @mermaid-js/mermaid-cli@`} {
+		if !strings.Contains(script, want) {
+			t.Errorf("examples/render.sh doesn't have %s", want)
 		}
 	}
 }
