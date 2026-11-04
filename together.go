@@ -717,27 +717,9 @@ func SummariseTogether(workflows []Workflow) Summary {
 	for _, w := range workflows {
 		each = append(each, Summarise(w.Doc))
 	}
-	l := link(workflows)
-	// A shared part's copy that says the same of who decided it as an earlier copy is listed once.
-	for _, copies := range l.shared {
-		var said []string
-		for _, c := range copies {
-			decided := str(c.part, "decided")
-			if decided == "" {
-				continue
-			}
-			if !slices.Contains(said, decided) {
-				said = append(said, decided)
-				continue
-			}
-			list := each[c.workflow].Decided
-			if n := slices.Index(list, DecidedSummary{Label: str(c.part, "label"), Decided: decided}); n >= 0 {
-				each[c.workflow].Decided = slices.Delete(slices.Clone(list), n, n+1)
-			}
-		}
-	}
 	out := TotalSummaries(each...)
 	out.Shared = []SharedSummary{}
+	l := link(workflows)
 	for _, copies := range l.shared {
 		entry := SharedSummary{Label: str(copies[0].part, "label"), Kind: str(copies[0].part, "kind")}
 		var order []int

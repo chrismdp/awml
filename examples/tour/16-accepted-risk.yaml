@@ -16,8 +16,8 @@ parts:
   - { id: bring, kind: code, op: bring-in, label: "Bring in the questions that arrived", in: bakery }
   - { id: sheet, kind: context, label: "Ana's answer sheet: hours and allergens", in: bakery }
   - { id: draft, kind: ai, op: draft, label: "Draft a reply to each question about opening hours or allergens", in: bakery }
-  - { id: send, kind: code, op: do, label: "Send each reply", in: bakery, cleans: true, how: "only a reply made of sentences from the answer sheet" }
-  - { id: approval, kind: approval, label: "Ana's standing approval: hours and allergens replies only, up to fifty daily", in: bakery, decided: "risk accepted by Ana and the bakery's insurer on the March test set" }
+  - { id: send, kind: code, op: do, label: "Send each reply", in: bakery, cleans: true, description: "only a reply made of sentences from the answer sheet" }
+  - { id: approval, kind: approval, label: "Ana's standing approval: hours and allergens replies only, up to fifty daily", in: bakery, description: "risk accepted by Ana and the bakery's insurer on the March test set" }
   - { id: reply, kind: outside, label: "Send the reply to the customer: Ask", in: bakery }
   - { id: list, kind: surface, label: "Ana's list", in: bakery }
 lines:

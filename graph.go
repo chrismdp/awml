@@ -36,22 +36,20 @@ type GraphGroup struct {
 // a step, a review or a standing approval: ai, code or person. Tier is an outside action's tier.
 // Untrusted is whether the part is marked untrusted, and Unstopped whether its text reaches an
 // outside action with nothing to stop it or accept the risk. AgentRun is whether a platform view's
-// code step is carried out by a model, from its block's platform description. How, Why and
-// Decided are its detail, which its label, its title, leaves out.
+// code step is carried out by a model, from its block's platform description. Description is the
+// detail left out of its label, its title.
 type GraphPart struct {
-	ID        string `json:"id"`
-	Kind      string `json:"kind"`
-	Label     string `json:"label"`
-	In        string `json:"in,omitempty"`
-	Decider   string `json:"decider,omitempty"`
-	Op        string `json:"op,omitempty"`
-	Tier      string `json:"tier,omitempty"`
-	Untrusted bool   `json:"untrusted,omitempty"`
-	Unstopped bool   `json:"unstopped,omitempty"`
-	AgentRun  bool   `json:"agentRun,omitempty"`
-	How       string `json:"how,omitempty"`
-	Why       string `json:"why,omitempty"`
-	Decided   string `json:"decided,omitempty"`
+	ID          string `json:"id"`
+	Kind        string `json:"kind"`
+	Label       string `json:"label"`
+	In          string `json:"in,omitempty"`
+	Decider     string `json:"decider,omitempty"`
+	Op          string `json:"op,omitempty"`
+	Tier        string `json:"tier,omitempty"`
+	Untrusted   bool   `json:"untrusted,omitempty"`
+	Unstopped   bool   `json:"unstopped,omitempty"`
+	AgentRun    bool   `json:"agentRun,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 // A GraphLine is a line from one part or box to another. A publish is a data line that Publishes,
@@ -236,7 +234,7 @@ func emptyGraph(view string) Graph {
 // detail.
 func graphPart(p *Map, id string) GraphPart {
 	part := GraphPart{ID: id, Kind: str(p, "kind"), Label: str(p, "label"), Untrusted: p.get("untrusted") == true,
-		How: str(p, "how"), Why: str(p, "why"), Decided: str(p, "decided")}
+		Description: str(p, "description")}
 	switch part.Kind {
 	case "ai", "code", "person":
 		part.Decider, part.Op = part.Kind, str(p, "op")
@@ -316,7 +314,7 @@ func (g Graph) Mermaid() string {
 	return g.mermaid(false)
 }
 
-// mermaid draws the graph as Mermaid does. With detail, each part that has a how, why or decided
+// mermaid draws the graph as Mermaid does. With detail, each part that has a description
 // has a note tied to it, as awml draw --detail draws, after the comments and their lines.
 func (g Graph) mermaid(detail bool) string {
 	out := append([]string{}, header...)
@@ -526,19 +524,13 @@ func (p GraphPart) mermaidLabel() string {
 	return fmt.Sprintf(operation, who) + label
 }
 
-// detailNote is the label of the note awml draw --detail ties to a part: its title in bold, then a
-// line each for its how, why and decided, or nothing where it has none of them.
+// detailNote is the label of the note awml draw --detail ties to a part: its title in bold, then
+// its description, or nothing where it has none.
 func (p GraphPart) detailNote() string {
-	var rows []string
-	for _, field := range [][2]string{{"how", p.How}, {"why", p.Why}, {"decided", p.Decided}} {
-		if said := text(field[1]); said != "" {
-			rows = append(rows, field[0]+": "+said)
-		}
+	if description := text(p.Description); description != "" {
+		return "<b>" + text(p.Label) + "</b><br>" + description
 	}
-	if rows == nil {
-		return ""
-	}
-	return "<b>" + text(p.Label) + "</b><br>" + strings.Join(rows, "<br>")
+	return ""
 }
 
 // nonEmpty gives a list of the text, or none when it's empty.

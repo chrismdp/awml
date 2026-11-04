@@ -103,7 +103,7 @@ async function start(source) {
     },
     // draw draws one workflow's view, or the map of several workflows drawn together. Optional
     // platform descriptions show where a model carries out a platform view's code steps. With
-    // detail, as with awml draw --detail, a note tied to each part gives its how, why and decided.
+    // detail, as with awml draw --detail, a note tied to each part gives its description.
     draw(sourceText, implementation = "", descriptions = [], detail = false) {
       const output = globalThis.__awmlDraw(JSON.stringify(given(sourceText)), implementation, JSON.stringify(given(descriptions)), Boolean(detail));
       if (output.startsWith("{")) throw new Error(JSON.parse(output).error);

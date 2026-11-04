@@ -51,7 +51,7 @@ Draw a workflow's security view, or the map of several workflows drawn together.
 With --implementation, draw its platform view. Give platform descriptions to show where a model
 carries out code steps. Code steps on a platform with steps: agent have a dashed orange outline.
 A description that wasn't given leaves the drawing unchanged. Each part shows its title, its
-label; with --detail, a note tied to it gives its how, why and decided too.
+label; with --detail, a note tied to it gives its description too.
 
 positional arguments:
   files         workflows, or folders of them
@@ -59,7 +59,7 @@ positional arguments:
 
 options:
   -h, --help  show this help message and exit
-  --detail    tie a note to each part that gives its how, why and decided
+  --detail    tie a note to each part that gives its description
   --implementation ID  draw one implementation of one workflow
 `},
 	"graph": {"usage: awml graph [-h] [--implementation ID] files [files ...]\n", `
@@ -551,11 +551,6 @@ func printSummary(out io.Writer, s awml.Summary) {
 		fmt.Fprintf(out, "  %s\n", label)
 	}
 	fmt.Fprintf(out, "refused reads: %d\nred lines: %d\n", s.RefusedReads, s.RedLines)
-	// Each decided is the part's title, then who decided it, and where.
-	fmt.Fprintf(out, "decided: %d\n", len(s.Decided))
-	for _, d := range s.Decided {
-		fmt.Fprintf(out, "  %s\n    %s\n", d.Label, d.Decided)
-	}
 	fmt.Fprintf(out, "untrusted parts: %d\n", len(s.Untrusted))
 	for _, u := range s.Untrusted {
 		fmt.Fprintf(out, "  %s\n", u.Part)

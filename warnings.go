@@ -111,12 +111,12 @@ func warningList(doc any) mistakeList {
 const titleWords = 12
 
 // longLabels warns of each part but a comment whose label is longer than a title, since what the
-// rest says belongs in its how, why or decided.
+// rest says belongs in its description.
 func longLabels(parts []*Map) mistakeList {
 	var warnings mistakeList
 	for _, part := range parts {
 		if words := len(strings.Fields(str(part, "label"))); words > titleWords && part.get("kind") != "comment" {
-			warnings.add("warn.long-label", fmt.Sprintf(`part "%s" has a label of %d words: make it a short title, and move the rest into how, why or decided`, show(part.get("id")), words))
+			warnings.add("warn.long-label", fmt.Sprintf(`part "%s" has a label of %d words: make it a short title, and move the rest into description`, show(part.get("id")), words))
 		}
 	}
 	return warnings

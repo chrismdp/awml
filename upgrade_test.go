@@ -123,8 +123,7 @@ implementations:
       - {id: runner, label: Runner, platform: acme/platforms/ops-runner, parts: [renew, standing, library, phone, board]}
 `
 
-// 0.11 only added fields a part may have, how, why and decided, so a 0.10 file changes only its
-// version.
+// 0.11 only added an optional description to a part, so a 0.10 file changes only its version.
 func TestUpgradeFrom010ChangesOnlyTheVersion(t *testing.T) {
 	if got, want := upgraded(t, strings.Replace(canonical, `awml: "0.11"`, `awml: "0.10"`, 1)), upgraded(t, canonical); got != want {
 		t.Fatalf("Upgrade gave\n%s\nwant\n%s", got, want)

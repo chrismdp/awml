@@ -42,12 +42,12 @@ for (const path of top.sort()) {
   }
   assert.equal(api.draw(source) + "\n", runNative(["draw", relative]), `${relative}: Mermaid`);
   assert.equal(api.graphJSON(source) + "\n", runNative(["graph", relative]), `${relative}: graph`);
-  // With detail, a note tied to each part gives its how, why and decided, the same from both.
+  // With detail, a note tied to each part gives its description, the same from both.
   const detailed = api.draw(source, "", [], true);
   assert.equal(detailed + "\n", runNative(["draw", "--detail", relative]), `${relative}: Mermaid with detail`);
   if (/_detail@\{/.test(detailed)) {
     assert.notEqual(detailed, api.draw(source), `${relative}: detail changes the drawing`);
-    assert(api.graph(source).parts.some((part) => part.how || part.why || part.decided), `${relative}: the graph gives the detail`);
+    assert(api.graph(source).parts.some((part) => part.description), `${relative}: the graph gives the detail`);
     detailDrawings++;
   }
   // The security view shows where untrusted text goes, in both.
@@ -65,6 +65,10 @@ for (const path of top.sort()) {
     for (const [, implementation] of (source.split("implementations:\n")[1] || "").matchAll(/^  (\w+):\s*$/gm)) {
       assert.equal(api.draw(source, implementation) + "\n",
         runNative(["draw", "--implementation", implementation, relative]), `${relative}: ${implementation} Mermaid`);
+      assert.equal(api.draw(source, implementation, [], true) + "\n",
+        runNative(["draw", "--detail", "--implementation", implementation, relative]), `${relative}: ${implementation} Mermaid with detail`);
+      assert.equal(api.draw(source, implementation, descriptionSources, true) + "\n",
+        runNative(["draw", "--detail", "--implementation", implementation, relative, ...descriptions]), `${relative}: ${implementation} Mermaid with detail and descriptions`);
       assert.equal(api.graphJSON(source, implementation) + "\n",
         runNative(["graph", "--implementation", implementation, relative]), `${relative}: ${implementation} graph`);
       const withDescriptions = api.draw(source, implementation, descriptionSources);
@@ -108,9 +112,12 @@ assert(api.check(canonicalSource.replace("parts: [plan, notes]", "parts: [plan]"
 const temporary = await mkdtemp(new URL("../build/parity-", import.meta.url));
 try {
   // Platform descriptions are optional after the implementation, and in the list of files.
-  const stock = canonicalSource.replace("kind: ai, label: Plan", "kind: code, label: Plan");
+  const stock = canonicalSource.replace("kind: ai, label: Plan", 'kind: code, label: Plan, description: "From the stock count"');
   const stockPath = `${temporary}/stock.yaml`;
   await writeFile(stockPath, stock);
+  const stockDetail = api.draw(stock, "home", descriptionSources, true);
+  assert.match(stockDetail, /<b>Plan<\/b><br>From the stock count/);
+  assert.equal(stockDetail + "\n", runNative(["draw", "--detail", "--implementation", "home", stockPath, ...descriptions]), "implementation Mermaid with a description");
   for (const steps of ["agent", "code"]) {
     const description = `awml: "0.11"\nplatform: { id: scripts, label: Scripts }\noff_for_up_to: PT0S\nsteps: ${steps}\nagents: []\ncalls: any\nholds: [notes]\n`;
     const descriptionPath = `${temporary}/${steps}.yaml`;
@@ -450,7 +457,7 @@ parts:
   - { id: thu, kind: trigger, label: "Thursday 19:00", wait: PT1H }
   - { id: form, kind: connector, label: The order form, in: family }
   - { id: plan, kind: ai, op: draft, label: "Plan next week's dinners", in: family }
-  - { id: list, kind: context, label: Shopping list, at: notes/list, in: family }
+  - { id: list, kind: context, label: Shopping list, at: notes/list, in: family, description: "The next shopping trip" }
   - { id: tell, kind: code, op: do, label: Tell the shopping the list is ready, in: family }
   - { id: ready, kind: outside, label: "Start the shopping: Allow", in: family, ref: shop.yaml#ready }
 lines:
@@ -466,7 +473,7 @@ scopes:
   - { id: home, label: "home: parents, kids", processing: any }
 parts:
   - { id: ready, kind: trigger, label: The shopping list is ready, wait: PT1H }
-  - { id: list, kind: context, label: Shopping list, at: notes/list, in: home, ref: plan.yaml#list }
+  - { id: list, kind: context, label: Shopping list, at: notes/list, in: home, ref: plan.yaml#list, description: "The next shopping trip" }
   - { id: fill, kind: code, op: do, label: Fill the basket, in: home }
   - { id: basket, kind: outside, label: "Fill the basket: Allow", in: home }
 lines:
@@ -483,6 +490,11 @@ lines:
   const handOffPaths = handOff.map(({ file }) => file);
   assert.equal(api.checksJSON(handOff) + "\n", runNative(["check", "--json", ...handOffPaths]), "checks JSON together");
   assert.equal(api.draw(handOff) + "\n", runNative(["draw", ...handOffPaths]), "map Mermaid");
+  const mapDetail = api.draw(handOff, "", [], true);
+  assert.equal(mapDetail + "\n", runNative(["draw", "--detail", ...handOffPaths]), "map Mermaid with detail");
+  assert.equal((mapDetail.match(/<b>Shopping list<\/b><br>The next shopping trip/g) || []).length, 1, "the shared description is drawn once");
+  assert.match(mapDetail, /linkStyle .*stroke:#8a93a3/);
+  assert(api.graph(handOff).parts.some((part) => part.description === "The next shopping trip"), "the map graph gives the shared description");
   assert.throws(() => api.draw(handOff, "home"), /one workflow, not several/);
   assert.equal(api.graphJSON(handOff) + "\n", runNative(["graph", ...handOffPaths]), "map graph");
   assert.throws(() => api.graph(handOff, "home"), /one workflow, not several/);
@@ -826,7 +838,7 @@ assert.equal(api.draw(family) + "\n", await readFile(new URL("../examples/family
 assert.equal(api.summaryJSON(family) + "\n", runNative(["summary", "--json", ...familyPaths]), "the family's summary JSON");
 
 assert(agentRunDrawings > 0, "no example outlines a code step carried out by a model");
-assert(detailDrawings > 0, "no example gives a part a how, why or decided");
+assert(detailDrawings > 0, "no example gives a part a description");
 console.log(`Node wasm parity: ${passed} examples passed (check, warnings, summary, convert, Mermaid, graph); ${placements} implementations; ${untrustedDrawings} drawings of untrusted text; ${agentRunDrawings} drawings of code carried out by a model; ${detailDrawings} drawings with detail; ${conversions} conversions; invalid check messages and fit passed`);
 
 // said gives what awml check prints of one file: its warnings, its errors, each said to be one, and

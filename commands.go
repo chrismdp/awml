@@ -103,7 +103,7 @@ func once(sources []Source) []Source {
 }
 
 // DrawSources draws what GraphSources gives, as awml draw does. With detail, as with --detail, each
-// part that has a how, why or decided has a note tied to it that gives them.
+// part that has a description has a note tied to it that gives it.
 func DrawSources(sources []Source, implementation string, detail bool) (string, error) {
 	graph, err := graphSources(sources, implementation, "draws")
 	if err != nil {

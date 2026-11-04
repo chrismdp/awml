@@ -582,7 +582,7 @@ func TestSummaryPrintsJSONForOneOrMoreFiles(t *testing.T) {
 
 func TestSummaryPrintsPlainCounts(t *testing.T) {
 	r := awmlRun("summary", write(t, "good.yaml", good))
-	want := "steps: AI 1, code 0, person 0\noperations: none\noutside actions: Allow 0, Ask 0, Block 0\ntriggers: 1\nreviews: 0\ncontexts: 0\nconnectors: 0\nsurfaces: 0\nscopes: 1\nplatforms: 0\npublishing lines: 0\nrefused reads: 0\nred lines: 0\ndecided: 0\nuntrusted parts: 0\n"
+	want := "steps: AI 1, code 0, person 0\noperations: none\noutside actions: Allow 0, Ask 0, Block 0\ntriggers: 1\nreviews: 0\ncontexts: 0\nconnectors: 0\nsurfaces: 0\nscopes: 1\nplatforms: 0\npublishing lines: 0\nrefused reads: 0\nred lines: 0\nuntrusted parts: 0\n"
 	if r != (result{0, want, ""}) {
 		t.Errorf("summary gave %+v", r)
 	}

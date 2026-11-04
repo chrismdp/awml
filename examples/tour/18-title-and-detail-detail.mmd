@@ -16,8 +16,8 @@ flowchart TB
     check("<small style='color:rgb(61,67,79)'>⚙️ 🔍 check</small><br>Is the flour running low#63;")
     order("<small style='color:rgb(61,67,79)'>⚙️ 🛠️ do</small><br>Order flour")
     mill>"Place the order with the mill#58; Allow"]
-    check_detail@{ shape: notch-rect, label: "<b>Is the flour running low#63;</b><br>how: sacks in stock against the sacks the week#39;s bakes need" }
-    order_detail@{ shape: notch-rect, label: "<b>Order flour</b><br>how: two sacks from the usual mill<br>why: a fixed order stays within the spending limit#44; so it needs no yes<br>decided: Ana#44; when she set the spending limit in March" }
+    check_detail@{ shape: notch-rect, label: "<b>Is the flour running low#63;</b><br>sacks in stock against the sacks the week#39;s bakes need" }
+    order_detail@{ shape: notch-rect, label: "<b>Order flour</b><br>Two sacks from the usual mill#46; A fixed order stays within the spending limit#44; so it needs no yes#46; The owner set the limit in March#46;" }
   end
 
   monday --> check

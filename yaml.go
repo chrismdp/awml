@@ -411,7 +411,7 @@ func writeScalar(out *strings.Builder, value any, key string, parent *Map) {
 		quote = true
 	}
 	// A part's detail is prose, like its label, so it's quoted as a part's label is.
-	if isOneOf(key, details...) {
+	if key == "description" && parent != nil && parent.has("kind") {
 		quote = true
 	}
 	if quote {
