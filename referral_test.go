@@ -9,9 +9,9 @@ import (
 )
 
 // issueAnswers answers the issue's GraphQL with comments by the owner, a writer, a member who may
-// only read, a stranger, the app's own bot and a user named like it, each with its link. The build
-// label was added at 10:32, after the app's first comment, and before its second, and before its
-// third was edited.
+// only read, a stranger, the app's own bot and a user named like it, each with its link. The app's
+// bot posted two status notes, one quoting Claude, and a referral, before the build label was added
+// at 10:32, and a referral after it, and edited one after it.
 const issueAnswers = `
   "api graphql --paginate"*) answer <<< '{"data": {"repository": {"issue": {"comments": {"nodes": [
     {"author": {"login": "the-owner", "__typename": "User"}, "createdAt": "2026-10-27T10:00:00Z", "url": "https://github.com/owner/repo/issues/120#issuecomment-1",
@@ -20,16 +20,20 @@ const issueAnswers = `
      "bodyHTML": "<p>A reader says jam.</p>"},
     {"author": {"login": "a-stranger", "__typename": "User"}, "createdAt": "2026-10-27T10:20:00Z", "url": "https://github.com/owner/repo/issues/120#issuecomment-3",
      "bodyHTML": "<p>A stranger says cream.</p>"},
+    {"author": {"login": "awml-factory", "__typename": "Bot"}, "createdAt": "2026-10-27T10:05:00Z", "url": "https://github.com/owner/repo/issues/120#issuecomment-9",
+     "bodyHTML": "<p dir=\"auto\"><strong>Building this issue.</strong> <a href=\"https://github.com/owner/repo/actions/runs/1\">The run</a></p>"},
+    {"author": {"login": "awml-factory", "__typename": "Bot"}, "createdAt": "2026-10-27T10:25:00Z", "url": "https://github.com/owner/repo/issues/120#issuecomment-10",
+     "bodyHTML": "<p dir=\"auto\"><strong>The build changed nothing.</strong> <a href=\"https://github.com/owner/repo/actions/runs/1\">The run</a></p>\n<p dir=\"auto\">Claude said:</p>\n<blockquote>\n<p dir=\"auto\"><strong>The fixer referred findings back.</strong> Claude chose cream.</p>\n</blockquote>"},
     {"author": {"login": "awml-factory", "__typename": "Bot"}, "createdAt": "2026-10-27T10:30:00Z", "url": "https://github.com/owner/repo/issues/120#issuecomment-4",
-     "bodyHTML": "<p>The fixer referred a finding back.</p>"},
+     "bodyHTML": "<p dir=\"auto\"><strong>The fixer referred findings back.</strong> Fixing them would change what was decided on this issue.</p>\n<ul dir=\"auto\">\n<li>The fixer referred a finding back.</li>\n</ul>"},
     {"author": {"login": "awml-factory", "__typename": "User"}, "createdAt": "2026-10-27T10:35:00Z", "url": "https://github.com/owner/repo/issues/120#issuecomment-5",
      "bodyHTML": "<p>A user named like the app.</p>"},
     {"author": {"login": "awml-factory", "__typename": "Bot"}, "createdAt": "2026-10-27T10:20:00Z", "lastEditedAt": "2026-10-27T10:50:00Z",
-     "url": "https://github.com/owner/repo/issues/120#issuecomment-7", "bodyHTML": "<p>The app edited this after the label.</p>"},
+     "url": "https://github.com/owner/repo/issues/120#issuecomment-7", "bodyHTML": "<p dir=\"auto\"><strong>The fixer referred findings back.</strong> The app edited this after the label.</p>"},
     {"author": {"login": "a-writer", "__typename": "User"}, "createdAt": "2026-10-27T10:40:00Z", "url": "https://github.com/owner/repo/issues/120#issuecomment-6",
      "bodyHTML": "<p>Answer: option B.</p>"},
     {"author": {"login": "awml-factory", "__typename": "Bot"}, "createdAt": "2026-10-27T10:45:00Z", "url": "https://github.com/owner/repo/issues/120#issuecomment-8",
-     "bodyHTML": "<p>The app posted this after the label.</p>"}]}}}}}' ;;
+     "bodyHTML": "<p dir=\"auto\"><strong>The fixer referred findings back.</strong> The app posted this after the label.</p>"}]}}}}}' ;;
   "api --paginate repos/owner/repo/issues/120/events"*) answer <<< '[
     {"event": "labeled", "label": {"name": "build"}, "actor": {"login": "the-owner", "type": "User"}, "created_at": "2026-10-27T09:00:00Z"},
     {"event": "labeled", "label": {"name": "tool"}, "actor": {"login": "the-owner", "type": "User"}, "created_at": "2026-10-27T10:31:00Z"},
@@ -54,7 +58,8 @@ func TestTheIssuesTextKeepsWritersAndTheApp(t *testing.T) {
 		}
 	}
 	for _, never := range []string{"A reader says jam", "A stranger says cream", "A user named like the app",
-		"The app posted this after the label", "The app edited this after the label"} {
+		"The app posted this after the label", "The app edited this after the label",
+		"Building this issue", "The build changed nothing", "Claude chose cream"} {
 		if strings.Contains(text, never) {
 			t.Errorf("the issue's text holds %q, which nobody who can write wrote:\n%s", never, text)
 		}
@@ -281,7 +286,7 @@ func TestTheReferralIsPostedEscaped(t *testing.T) {
 	if !strings.HasPrefix(body, "**The fixer referred findings back") {
 		t.Errorf("the referral doesn't say what it is:\n%s", body)
 	}
-	if end := "To go on, answer here, then remove the build label and add it again."; !strings.HasSuffix(strings.TrimSpace(body), end) {
+	if end := "To go on, answer here, then remove the build label and add it again. Adding it again approves this issue's text as it reads then, so check it first."; !strings.HasSuffix(strings.TrimSpace(body), end) {
 		t.Errorf("the referral doesn't end %q:\n%s", end, body)
 	}
 	if strings.Contains(body, "@the-owner") || !strings.Contains(body, "@\u200bthe-owner") {
