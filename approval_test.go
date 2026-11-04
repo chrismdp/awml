@@ -8,7 +8,7 @@ import (
 
 // A workflow in which a standing approval stands between a code do step and the action it covers,
 // and lists each action on the person's own surface.
-const standing = `awml: "0.11"
+const standing = currentAwml + `
 title: Prices
 scopes:
   - { id: owner, label: "owner: Ana" }
@@ -51,7 +51,7 @@ func TestAStandingApprovalIsDrawnAsAPersonsYes(t *testing.T) {
 // tiered is a file with the parts every tier test needs, and the lines given.
 func tiered(t *testing.T, outside string, lines ...string) *Map {
 	t.Helper()
-	src := `awml: "0.11"
+	src := currentAwml + `
 title: Tiers
 parts:
   - { id: go, kind: trigger, label: Go }
@@ -164,12 +164,12 @@ func TestTheTierChecksPassOrFindAnError(t *testing.T) {
 }
 
 func TestAWorkflowIsWrittenInTheCanonicalOrder(t *testing.T) {
-	doc := parsed(t, "title: Prices\nparts: []\nawml: \"0.11\"\n")
+	doc := parsed(t, "title: Prices\nparts: []\n"+currentAwml+"\n")
 	got, err := Marshal(doc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := "awml: \"0.11\"\ntitle: Prices\nparts: []\n"; string(got) != want {
+	if want := currentAwml + "\ntitle: Prices\nparts: []\n"; string(got) != want {
 		t.Errorf("Marshal gave\n%s\nwant\n%s", got, want)
 	}
 }

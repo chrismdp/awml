@@ -22,7 +22,7 @@ var wantScopeColours = [][2]string{
 // More than two rounds check every colour and the return to the start of the list.
 func manyScopes() string {
 	var src strings.Builder
-	src.WriteString("awml: \"0.11\"\ntitle: Scope colours\nscopes:\n")
+	src.WriteString(currentAwml + "\ntitle: Scope colours\nscopes:\n")
 	for i := 0; i < 2*len(wantScopeColours)+1; i++ {
 		parent := ""
 		if i == 0 {

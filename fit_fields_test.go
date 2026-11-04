@@ -6,8 +6,7 @@ import (
 )
 
 // A workflow with each field that awml fit reads, and a block that names a platform description.
-const fitFields = `
-awml: "0.11"
+const fitFields = currentAwml + `
 title: A reply
 scopes:
   - {id: private, label: private, processing: any}
@@ -96,8 +95,7 @@ func TestAtIsARelativeStorePath(t *testing.T) {
 	}
 }
 
-const goodPlatform = `
-awml: "0.11"
+const goodPlatform = currentAwml + `
 platform: {id: worker, label: Worker}
 off_for_up_to: PT0S
 steps: code
@@ -115,12 +113,11 @@ func TestAPlatformDescriptionNeedsAllItsFields(t *testing.T) {
 	mistakes(t, parsed(t, src),
 		`the file has no steps`,
 		`the file has unknown field "title"`)
-	mistakes(t, parsed(t, strings.Replace(goodPlatform, "awml: \"0.11\"\n", "", 1)), `the file has no awml`)
+	mistakes(t, parsed(t, strings.Replace(goodPlatform, currentAwml+"\n", "", 1)), `the file has no awml`)
 }
 
 func TestAPlatformDescriptionChecksEveryKindAndValue(t *testing.T) {
-	src := `
-awml: "0.11"
+	src := currentAwml + `
 platform: {id: Worker_1, label: 1, extra: x}
 off_for_up_to: P1M
 steps: person

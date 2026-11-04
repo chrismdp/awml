@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-const agentRunWorkflow = `awml: "0.11"
+const agentRunWorkflow = currentAwml + `
 title: The bakery's stock
 scopes:
   - { id: bakery, label: Bakery }

@@ -219,13 +219,13 @@ func upgradeFile(doc any) (*Map, error) {
 	}
 	version := file.get("awml")
 	switch {
-	case version == currentFormat:
+	case version == CurrentFormat:
 		return file, nil
 	case !isOneOf(version, olderFormats...):
-		return nil, fmt.Errorf(`awml convert reads versions %s to %s, not "%s"`, olderFormats[0], currentFormat, show(version))
+		return nil, fmt.Errorf(`awml convert reads versions %s to %s, not "%s"`, olderFormats[0], CurrentFormat, show(version))
 	case file.has("platform") || !isOneOf(version, rewrittenFormats...):
 		out := copyMap(file)
-		out.set("awml", currentFormat)
+		out.set("awml", CurrentFormat)
 		return out, nil
 	}
 	legacy := isOneOf(version, "0.2", "0.3")
@@ -244,7 +244,7 @@ func upgradeFile(doc any) (*Map, error) {
 		value := file.get(key)
 		switch {
 		case key == "awml":
-			out.set(key, currentFormat)
+			out.set(key, CurrentFormat)
 		case legacy && key == "view":
 		case legacy && key == "groups":
 			out.set("scopes", value)
@@ -495,7 +495,7 @@ func ConvertSources(sources []Source, implementation string) (file []byte, notes
 	}
 	var converted *Map
 	if len(docs) == 1 {
-		if file, ok := docs[0].(*Map); ok && file.get("awml") == currentFormat {
+		if file, ok := docs[0].(*Map); ok && file.get("awml") == CurrentFormat {
 			return sources[0].Text, nil, Unsound(file), nil
 		}
 		if converted, notes, err = upgrade(docs[0]); err != nil {

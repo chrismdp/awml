@@ -8,7 +8,7 @@ import (
 )
 
 // keep is a step whose label is its title, with a description for its detail.
-const keep = `awml: "0.11"
+const keep = currentAwml + `
 title: Builds
 scopes:
   - { id: public, label: "public: anyone", processing: any }
@@ -147,7 +147,7 @@ func TestSummaryDoesNotListDescriptions(t *testing.T) {
 
 // A note's id also skips ids taken by earlier notes.
 func TestDetailNotesHaveDistinctIds(t *testing.T) {
-	src := `awml: "0.11"
+	src := currentAwml + `
 title: Notes
 parts:
   - { id: a, kind: trigger, label: First, description: "The first part" }
@@ -172,7 +172,7 @@ lines:
 // that copy's title, and a note only where that copy has a detail.
 func TestAMapGivesASharedPartItsOwnersDetail(t *testing.T) {
 	owner := strings.Replace(keep, `in: public, description: "from GitHub's record" }`, `in: public }`, 1)
-	copied := `awml: "0.11"
+	copied := currentAwml + `
 title: Reads
 scopes:
   - { id: public, label: "public: anyone", processing: any }
