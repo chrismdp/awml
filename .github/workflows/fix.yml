@@ -176,8 +176,10 @@ jobs:
     timeout-minutes: 60
     # The host's own folder: what the host reads after a session, which no session can write, in a
     # folder under root's /var/lib, so nothing running as the runner's user can rename it away.
+    # The renderer's folder, which root owns, so the session runs from it but can't change it.
     env:
       HOST_DIR: /var/lib/awml-host
+      RENDERER_DIR: /opt/awml-renderer
     permissions:
       actions: read
       checks: read
@@ -269,12 +271,14 @@ jobs:
       # The session runs offline, so nothing it runs can carry data out through a proxy. Its home's
       # Go module cache is filled here, before it starts, by fetching alone: go mod download, from the
       # module proxy alone with no version control to fall back on, runs no module's code. The
-      # renderer's packages, at the versions examples/render.sh asks for, go into npm's cache the
-      # same way, with their scripts off, from an empty folder, reading no npm config but naming
-      # npm's registry, so nothing in the tree, an .npmrc or a node_modules, changes what npx runs,
-      # which is only true. A draft that needs a module or package not fetched here fails, which the
-      # prompt says.
-      - name: Fill the session's Go module and npm caches, by fetching alone
+      # renderer is installed the same way, so the session can draw the examples' SVGs: the Mermaid
+      # CLI and Mermaid, at the versions examples/render.sh asks for, with their scripts off, in a
+      # folder of their own, reading no npm config but naming npm's registry, so nothing in the
+      # tree, an .npmrc or a node_modules, changes what is installed; and the Chrome headless shell
+      # the CLI's Puppeteer expects, at the version render.sh names, from Chrome for Testing. Both go
+      # into a folder root owns, which the session runs from but can't change. A fix that needs a
+      # module or package not fetched here fails, which the prompt says.
+      - name: Fill the session's Go module cache and install its renderer, by fetching alone
         id: caches
         run: |
           home="$RUNNER_TEMP/session/home"
@@ -284,7 +288,15 @@ jobs:
           # file of its own.
           user_npmrc="$(mktemp)"
           global_npmrc="$(mktemp)"
-          (cd "$(mktemp -d)" && HOME="$home" npm_config_userconfig="$user_npmrc" npm_config_globalconfig="$global_npmrc" npm_config_registry=https://registry.npmjs.org/ PUPPETEER_SKIP_DOWNLOAD=true npm_config_ignore_scripts=true npx --yes -p @mermaid-js/mermaid-cli@11.4.1 -p mermaid@11.17.2 -- true)
+          renderer="$(mktemp -d)"
+          echo '{"private": true}' > "$renderer/package.json"
+          (cd "$renderer" && HOME="$renderer/home" npm_config_userconfig="$user_npmrc" npm_config_globalconfig="$global_npmrc" npm_config_registry=https://registry.npmjs.org/ PUPPETEER_SKIP_DOWNLOAD=true npm_config_ignore_scripts=true npm install --no-audit --no-fund @mermaid-js/mermaid-cli@11.4.1 mermaid@11.17.2)
+          curl -fsSL --retry 3 -o "$renderer/shell.zip" https://storage.googleapis.com/chrome-for-testing-public/131.0.6778.204/linux64/chrome-headless-shell-linux64.zip
+          unzip -q "$renderer/shell.zip" -d "$renderer"
+          sudo install -d -o root -g root -m 755 "$RENDERER_DIR"
+          sudo cp -R "$renderer/node_modules" "$renderer/chrome-headless-shell-linux64" "$RENDERER_DIR/"
+          sudo chown -R root:root "$RENDERER_DIR"
+          sudo chmod -R go-w "$RENDERER_DIR"
 
       # Claude Code runs its commands in a sandbox, bubblewrap with socat for its network, so that it
       # can scrub its login token from them, and they can't start without both. Ubuntu's runners
@@ -332,7 +344,9 @@ jobs:
           CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR: "1"
           FIX_DIR: ${{ runner.temp }}/fix/in
           OUT_DIR: ${{ runner.temp }}/fix/out
-          PUPPETEER_EXECUTABLE_PATH: /usr/bin/google-chrome
+          # The installed renderer, which examples/render.sh and .github/picture-drawings.sh use.
+          MMDC: ${{ env.RENDERER_DIR }}/node_modules/.bin/mmdc
+          PUPPETEER_EXECUTABLE_PATH: ${{ env.RENDERER_DIR }}/chrome-headless-shell-linux64/chrome-headless-shell
           PUPPETEER_SKIP_DOWNLOAD: "true"
           GOPROXY: "off"
           GOFLAGS: -mod=mod
@@ -365,7 +379,7 @@ jobs:
               --disallowedTools "Read(//proc/**)" "Edit(./.git/**)" "Edit(/$GITHUB_WORKSPACE/.git/**)" \
               --allowedTools "Read(/$GITHUB_WORKSPACE/**)" "Read(/$FIX_DIR/**)" "Read(/$OUT_DIR/**)" "Edit(/$GITHUB_WORKSPACE/**)" "Edit(/$OUT_DIR/**)" "Glob" "Grep" \
                 "Bash(go:*)" "Bash(gofmt:*)" "Bash(make:*)" "Bash(node:*)" \
-                "Bash(.github/picture-drawings.sh:*)" \
+                "Bash(.github/picture-drawings.sh:*)" "Bash(sh examples/render.sh)" \
                 "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" \
                 "Bash(ls:*)" "Bash(cp:*)" "Bash(mkdir:*)" "Bash(rm:*)" "Bash(mv:*)" \
               > "$HOST_DIR/session.log" 2>&1 || status=$?
