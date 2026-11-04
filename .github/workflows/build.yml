@@ -106,7 +106,8 @@ jobs:
   draft:
     needs: start
     if: needs.start.outputs.go == 'true'
-    runs-on: ubuntu-latest
+    # Ubuntu 26.04 stops the sandbox making the user namespace it needs, so every command fails.
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     # The host's own folder: what the host reads after a session, which no session can write, in a
     # folder under root's /var/lib, so nothing running as the runner's user can rename it away.
