@@ -346,3 +346,155 @@ func TestTheGraphGivesLabelsAsWrittenAndTheMermaidEscapesThem(t *testing.T) {
 		t.Errorf("the Mermaid doesn't escape the label:\n%s", out)
 	}
 }
+
+// A review whose yes starts a step and hands it the reply, as a start line and a data line between
+// the same two parts, with a data line between other parts in between.
+const startAndData = currentAwml + `
+title: Replies
+parts:
+  - { id: mail, kind: trigger, label: "A customer emails" }
+  - { id: ok, kind: review, label: "Ana's yes" }
+  - { id: post, kind: code, op: do, label: "Post the reply" }
+lines:
+  - { from: mail, to: ok, kind: start }
+  - { from: ok, to: post, kind: start, label: "[yes]" }
+  - { from: mail, to: post, kind: data, label: the mail }
+  - { from: ok, to: post, kind: data, label: the reply }
+`
+
+// A start line and a data line between the same two parts are drawn as one solid line, with both
+// labels, in the place of the first of them.
+func TestAStartLineAndADataLineBetweenTheSamePartsAreOneLine(t *testing.T) {
+	g := graphOf(t, startAndData, "")
+	want := []GraphLine{
+		{From: "mail", To: "ok", Kind: "start", Points: "to"},
+		{From: "ok", To: "post", Kind: "start", Label: "[yes] · the reply", Points: "to"},
+		{From: "mail", To: "post", Kind: "data", Label: "the mail", Points: "to"},
+	}
+	if !reflect.DeepEqual(g.Lines, want) {
+		t.Errorf("lines are\n%+v", g.Lines)
+	}
+	encoded, err := json.Marshal(g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if line := `{"from":"ok","to":"post","kind":"start","label":"[yes] · the reply","points":"to"}`; !strings.Contains(string(encoded), line) {
+		t.Errorf("the JSON has no %s in\n%s", line, encoded)
+	}
+	if out := g.Mermaid(); strings.Count(out, "\n  ok -->") != 1 {
+		t.Errorf("the drawing hasn't one line from the review:\n%s", out)
+	}
+}
+
+// The drawn line's label is the start line's, then the data line's, or either alone where the other
+// has none, and the start line's isn't repeated where the data line's begins with it.
+func TestAStartAndDataLinesLabelSaysEachOnce(t *testing.T) {
+	for _, c := range []struct{ start, data, want string }{
+		{`, label: "[yes]"`, ", label: the reply", "[yes] · the reply"},
+		{`, label: "[text claim]"`, `, label: "[text claim] exact words, kind"`, "[text claim] exact words, kind"},
+		{"", ", label: the reply", "the reply"},
+		{`, label: "[yes]"`, "", "[yes]"},
+		{"", "", ""},
+	} {
+		src := strings.Replace(strings.Replace(startAndData, `kind: start, label: "[yes]"`, "kind: start"+c.start, 1),
+			"kind: data, label: the reply", "kind: data"+c.data, 1)
+		if got := graphOf(t, src, "").Lines[1]; got.Label != c.want || got.Kind != "start" {
+			t.Errorf("start%s and data%s give %+v, want label %q", c.start, c.data, got, c.want)
+		}
+	}
+}
+
+// The drawn line publishes, and widens, as its data line does.
+func TestAStartAndDataLineThatPublishesStillPublishes(t *testing.T) {
+	src := strings.Replace(startAndData, "title: Replies\n", "title: Replies\nscopes:\n  - { id: shop, label: \"shop: Ana, Ben\" }\n  - { id: owner, label: \"owner: Ana\", in: shop }\n", 1)
+	src = strings.Replace(src, `label: "Ana's yes" }`, `label: "Ana's yes", in: owner }`, 1)
+	src = strings.Replace(src, `label: "Post the reply" }`, `label: "Post the reply", in: shop }`, 1)
+	g := graphOf(t, src, "")
+	want := GraphLine{From: "ok", To: "post", Kind: "start", Label: "[yes] · the reply", Points: "to", Publishes: true, Widens: []string{"adds Ben"}}
+	if len(g.Lines) != 3 || !reflect.DeepEqual(g.Lines[1], want) {
+		t.Errorf("lines are\n%+v", g.Lines)
+	}
+	has(t, g.Mermaid(), "\n  ok ==>|")
+}
+
+// An untrusted email drafted into a reply that goes straight out, along a start line and a data line.
+const redStartAndData = currentAwml + `
+title: Replies
+parts:
+  - { id: mail, kind: trigger, label: "A customer emails", untrusted: true }
+  - { id: draft, kind: ai, op: draft, label: "Draft a reply" }
+  - { id: send, kind: outside, label: "Send the reply: Ask" }
+lines:
+  - { from: mail, to: draft, kind: start }
+  - { from: draft, to: send, kind: start }
+  - { from: draft, to: send, kind: data, label: the reply }
+`
+
+// The drawn line keeps every rule either line breaks, once each, and is red if either is.
+func TestAStartAndDataLineKeepsEachBreach(t *testing.T) {
+	g := graphOf(t, redStartAndData, "")
+	if len(g.Lines) != 2 {
+		t.Fatalf("lines are\n%+v", g.Lines)
+	}
+	all := g.Lines[1].Breaks
+	if len(all) != 3 || g.Lines[1].Label != "the reply" || g.Lines[1].Untrusted != "unstopped" {
+		t.Errorf("the red line is %+v", g.Lines[1])
+	}
+	for _, clean := range []int{1, 2} {
+		view := mustView(t, parsed(t, redStartAndData), "")
+		items(view, "lines")[clean].set("breaks", []any{})
+		items(view, "lines")[clean].set("untrusted", "")
+		g := GraphOf(view)
+		if len(g.Lines) != 2 || !reflect.DeepEqual(g.Lines[1].Breaks, all) {
+			t.Errorf("with line %d clean, lines are\n%+v", clean, g.Lines)
+		}
+		has(t, g.Mermaid(), "\n  linkStyle 0,1 "+red)
+	}
+}
+
+// The drawn line keeps the stronger of its lines' untrusted marks: unstopped, carries, stopped, none.
+func TestAStartAndDataLineKeepsTheStrongerUntrustedMark(t *testing.T) {
+	for _, c := range []struct{ start, data, want string }{
+		{"carries", "stopped", "carries"},
+		{"stopped", "carries", "carries"},
+		{"", "stopped", "stopped"},
+		{"stopped", "", "stopped"},
+		{"unstopped", "carries", "unstopped"},
+		{"carries", "unstopped", "unstopped"},
+		{"", "", ""},
+	} {
+		view := mustView(t, parsed(t, startAndData), "")
+		lines := items(view, "lines")
+		lines[1].set("untrusted", c.start)
+		lines[3].set("untrusted", c.data)
+		if got := GraphOf(view).Lines[1]; got.Untrusted != c.want {
+			t.Errorf("start %q and data %q give %+v, want %q", c.start, c.data, got, c.want)
+		}
+	}
+}
+
+// Only one start line and one data line with the same ends are drawn as one.
+func TestOtherLinesStayApart(t *testing.T) {
+	for name, src := range map[string]string{
+		"a second data line":  startAndData + "  - { from: ok, to: post, kind: data, label: the name }\n",
+		"a second start line": startAndData + "  - { from: ok, to: post, kind: start, label: \"[now]\" }\n",
+		"two data lines":      strings.Replace(startAndData, `kind: start, label: "[yes]"`, "kind: data, label: the name", 1),
+		"a hidden line":       strings.Replace(startAndData, `kind: start, label: "[yes]"`, "kind: hidden", 1),
+		"a data line back":    strings.Replace(startAndData, "{ from: ok, to: post, kind: data", "{ from: post, to: ok, kind: data", 1),
+	} {
+		if g := graphOf(t, src, ""); len(g.Lines) != len(items(parsed(t, src), "lines")) {
+			t.Errorf("with %s, lines are\n%+v", name, g.Lines)
+		}
+	}
+}
+
+// The check and the summary still read both lines of the pair.
+func TestTheCheckAndSummaryStillReadBothLines(t *testing.T) {
+	doc := parsed(t, redStartAndData)
+	if s := Summarise(doc); s.RedLines != 2 {
+		t.Errorf("the summary counts %d red lines", s.RedLines)
+	}
+	if found := Check(doc); len(found) != 3 {
+		t.Errorf("the check gives %q", found)
+	}
+}

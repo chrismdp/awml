@@ -93,6 +93,8 @@ A dotted `publish` line keeps its thick arrow and takes its dots from its style,
 
 A line is **red** when it breaks a rule: each line that rule 18, 19, 21 or 23 of [checking by hand](checking-by-hand.md) finds. For 18, that's the lines from the step that isn't a `do` step on its way to the action; for 19, the line into the context; for 21, the lines from each part that breaks the rule on its way to the action; for 23, each line that brings the text into the action. A red line's label adds, for each rule it breaks, `<br>` and the words `awml check` reports for it, up to the colon before its advice, in the order the rules come. For example, `part "write" leads to outside action "send", but its op is draft`. Write the label's own words first, if it has any, and write the punctuation in the added words as entities too, but not the `<br>`.
 
+A `start` line and a `data` or `publish` line with the same `from` and the same `to` are written as one line, in the place of the first of them, where no other `start` line and no other `data` or `publish` line has those ends. It takes the data line's arrow, so it's `-->`, or `==>` where the data line publishes. Its label is the start line's own words, then ` · `, then the data line's, as `[yes] · the reply`, or either alone where the other has none, or the data line's alone where it already begins with the start line's. What a publish does and each rule either line breaks follow, as above, each rule once. It's red where either line is, and otherwise orange or green as section 5 makes either line, orange first. Count it as one line when styling the lines, below.
+
 ## 4. The colours
 
 Then write these lines, unchanged:
