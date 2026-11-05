@@ -175,7 +175,7 @@ The solid lines are the path the work takes, from the trigger through each step 
 
 A line may carry a label. Words in square brackets are a **guard**, the condition the line is taken on. A line drawn red is a finding: see [The red line](#the-red-line). A part marked untrusted, which takes in text anyone can write, has a thick orange outline. A thick orange line carries that text on, and a thick green one leaves what stopped it: see [Untrusted text](#untrusted-text).
 
-Several `start` lines out of one part start work that runs side by side. A trigger's **run** is everything its `start` lines reach, through steps, reviews and standing approvals alike. A `data` line says what a step reads, and never carries the run on, so a `start` line leads to each step from the one before. Triggers whose runs share a part start one workflow, and a file whose triggers start more than one is better split, as [the tour shows](#several-workflows-in-one-file).
+Several `start` lines out of one part start work that runs side by side. A trigger's **run** is everything its `start` lines reach, through steps, reviews and standing approvals alike. A `data` line says what a step reads, and never carries the run on, so a `start` line leads to each step from the one before. Where a step both starts the next and hands it something, the file holds a `start` line and a `data` line between them, and the drawing shows the two as one line, labelled with both, as in `[yes] · the reply`. Triggers whose runs share a part start one workflow, and a file whose triggers start more than one is better split, as [the tour shows](#several-workflows-in-one-file).
 
 ## Operations
 

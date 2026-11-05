@@ -146,7 +146,62 @@ func GraphOf(doc *Map) Graph {
 		}
 		g.Lines = append(g.Lines, line)
 	}
+	g.Lines = joinPairs(g.Lines)
 	return g
+}
+
+// joinPairs draws a start line and a data line with the same from and to as one line, in the place
+// of the first of them, so the connection shows once. Where more than one start line or data line
+// joins the same two parts, each is drawn as it is.
+func joinPairs(lines []GraphLine) []GraphLine {
+	type ends struct{ from, to string }
+	starts, data := map[ends][]int{}, map[ends][]int{}
+	for i, l := range lines {
+		switch l.Kind {
+		case "start":
+			starts[ends{l.From, l.To}] = append(starts[ends{l.From, l.To}], i)
+		case "data":
+			data[ends{l.From, l.To}] = append(data[ends{l.From, l.To}], i)
+		}
+	}
+	joined := []GraphLine{}
+	for i, l := range lines {
+		s, d := starts[ends{l.From, l.To}], data[ends{l.From, l.To}]
+		if !isOneOf(l.Kind, "start", "data") || len(s) != 1 || len(d) != 1 {
+			joined = append(joined, l)
+		} else if i == min(s[0], d[0]) {
+			joined = append(joined, oneLine(lines[s[0]], lines[d[0]]))
+		}
+	}
+	return joined
+}
+
+// untrustedRank orders how a line is drawn for untrusted text, from none to unstopped.
+var untrustedRank = map[string]int{"stopped": 1, "carries": 2, "unstopped": 3}
+
+// oneLine is a start line and a data line between the same parts drawn as one: solid, as the start
+// line is, labelled with the start line's label, then the data line's, and keeping every rule
+// either breaks and the stronger untrusted mark. It publishes and widens as the data line does.
+func oneLine(start, data GraphLine) GraphLine {
+	line := data
+	line.Kind = "start"
+	switch {
+	case start.Label == "" || strings.HasPrefix(data.Label, start.Label):
+	case data.Label == "":
+		line.Label = start.Label
+	default:
+		line.Label = start.Label + " · " + data.Label
+	}
+	line.Breaks = nil
+	for _, breach := range append(append([]string{}, start.Breaks...), data.Breaks...) {
+		if !isOneOf(breach, line.Breaks...) {
+			line.Breaks = append(line.Breaks, breach)
+		}
+	}
+	if untrustedRank[start.Untrusted] > untrustedRank[data.Untrusted] {
+		line.Untrusted = start.Untrusted
+	}
+	return line
 }
 
 // GraphMap gives what the map of workflows given together draws, as DrawMap describes it. The
