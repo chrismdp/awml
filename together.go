@@ -490,6 +490,39 @@ func (l linked) join() joined {
 	return j
 }
 
+// sharedTriggers gives the triggers that more than one workflow has with exactly the same label,
+// since they're the same event, such as a timer several run on. Each comes as every trigger with its
+// label, in the order the workflows and their parts are given, and they come in the order of the
+// first of each. A trigger never has a ref, so this is the only way workflows share one.
+func (l linked) sharedTriggers() [][]partAt {
+	byLabel := map[string]int{}
+	var all [][]partAt
+	for w, workflow := range l.workflows {
+		if !IsCanonical(workflow.Doc) {
+			continue
+		}
+		for _, p := range items(workflow.Doc, "parts") {
+			if str(p, "kind") != "trigger" {
+				continue
+			}
+			n, ok := byLabel[str(p, "label")]
+			if !ok {
+				n = len(all)
+				byLabel[str(p, "label")] = n
+				all = append(all, nil)
+			}
+			all[n] = append(all[n], partAt{w, p})
+		}
+	}
+	var shared [][]partAt
+	for _, copies := range all {
+		if copies[0].workflow != copies[len(copies)-1].workflow {
+			shared = append(shared, copies)
+		}
+	}
+	return shared
+}
+
 // copiesOf gives every copy of a part, the one every ref leads back to first: just that one, where
 // no other workflow shares it.
 func (l linked) copiesOf(root partAt) []partAt {
@@ -682,9 +715,10 @@ const workflowBox = "fill:#f6f7f9,stroke:#5d6472,color:#16171b"
 // DrawMap draws workflows given together as their map: a box for each workflow, with its title and
 // each outside action that starts a workflow given, and its triggers outside it, each with a line
 // into it; and each shared part once, between the boxes, with a line from each workflow that leads
-// into it and to each that it leads into. Each hand-off is a line from the action to the trigger it
-// starts. Each workflow must have no mistakes but lines that break a rule. It draws what GraphMap
-// gives.
+// into it and to each that it leads into. Triggers with the same label in several workflows are the
+// same event, drawn once with a line into each of their boxes. Each hand-off is a line from the
+// action to the trigger it starts. Each workflow must have no mistakes but lines that break a rule.
+// It draws what GraphMap gives.
 func DrawMap(workflows []Workflow) string {
 	return GraphMap(workflows).Mermaid()
 }
@@ -707,8 +741,8 @@ type SharedSummary struct {
 
 // SummariseTogether summarises workflows given together: each counted as Summarise counts it, a
 // part they share counted once, and untrusted text followed through what they share and into each
-// workflow one starts. It names the
-// shared parts. One workflow is summarised as Summarise does.
+// workflow one starts. It names the shared parts, then the triggers with the same label that several
+// workflows share, counting each of those once too. One workflow is summarised as Summarise does.
 func SummariseTogether(workflows []Workflow) Summary {
 	if len(workflows) == 1 {
 		return Summarise(workflows[0].Doc)
@@ -720,7 +754,7 @@ func SummariseTogether(workflows []Workflow) Summary {
 	out := TotalSummaries(each...)
 	out.Shared = []SharedSummary{}
 	l := link(workflows)
-	for _, copies := range l.shared {
+	for _, copies := range append(append([][]partAt{}, l.shared...), l.sharedTriggers()...) {
 		entry := SharedSummary{Label: str(copies[0].part, "label"), Kind: str(copies[0].part, "kind")}
 		var order []int
 		for _, c := range copies {

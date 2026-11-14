@@ -58,7 +58,8 @@ type GraphPart struct {
 // breaks. Untrusted says how the line is drawn for untrusted text: carries where the text goes
 // along it, stopped where it leaves what stopped the text, and unstopped where it's on the text's
 // way to an outside action that nothing stops and nobody accepted. On a map, Joins holds the parts
-// inside the workflow that a line to its box joins.
+// inside the workflow that a line to its box joins, or, from a trigger several workflows share, the
+// workflow's own trigger it stands for.
 type GraphLine struct {
 	From      string   `json:"from"`
 	To        string   `json:"to"`
@@ -206,7 +207,8 @@ func oneLine(start, data GraphLine) GraphLine {
 
 // GraphMap gives what the map of workflows given together draws, as DrawMap describes it. The
 // workflows' boxes are w1, w2 and so on, each part drawn on its workflow's box is named by its box
-// and its id, as w1_thu, and the shared parts are s1, s2 and so on.
+// and its id, as w1_thu, and the shared parts are s1, s2 and so on, then the triggers several
+// workflows share.
 func GraphMap(workflows []Workflow) Graph {
 	l := link(workflows)
 	g := emptyGraph("map")
@@ -217,6 +219,16 @@ func GraphMap(workflows []Workflow) Graph {
 	}
 	published := publishedNames(workflows)
 	unstopped := l.unstopped()
+	// Triggers with the same label in several workflows are drawn once, after the parts shared by
+	// ref, in the place of the first of them, with a start line into each workflow's box that joins
+	// its own trigger.
+	sameEvent := map[*Map][]partAt{}
+	for n, copies := range l.sharedTriggers() {
+		id := fmt.Sprintf("s%d", len(l.shared)+n+1)
+		for _, c := range copies {
+			node[c.part], sameEvent[c.part] = id, copies
+		}
+	}
 	var starts []GraphLine
 	for w, workflow := range workflows {
 		box := fmt.Sprintf("w%d", w+1)
@@ -224,6 +236,27 @@ func GraphMap(workflows []Workflow) Graph {
 		for _, p := range items(workflow.Doc, "parts") {
 			trigger := str(p, "kind") == "trigger"
 			if _, shared := l.root[p]; shared || !trigger && !ends[p] {
+				continue
+			}
+			if copies := sameEvent[p]; copies != nil {
+				var mine []string
+				for _, c := range copies {
+					if c.workflow == w {
+						mine = append(mine, box+"_"+str(c.part, "id"))
+					}
+				}
+				if mine[0] != box+"_"+str(p, "id") {
+					continue
+				}
+				if copies[0].part == p {
+					part := graphPart(p, node[p])
+					for _, c := range copies {
+						part.Untrusted = part.Untrusted || c.part.get("untrusted") == true
+						part.Unstopped = part.Unstopped || unstopped[c.part]
+					}
+					g.Parts = append(g.Parts, part)
+				}
+				starts = append(starts, GraphLine{From: node[p], To: box, Kind: "start", Points: "to", Joins: mine})
 				continue
 			}
 			node[p] = box + "_" + str(p, "id")

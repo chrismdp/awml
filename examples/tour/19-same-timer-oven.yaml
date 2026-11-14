@@ -1,0 +1,16 @@
+awml: "0.11"
+title: The bakery's oven check
+description: |
+  The first of two workflows on the same timer. Every hour code checks the oven's temperature and
+  shows on the kitchen screen whether it's running hot. The bakery is fictional.
+scopes:
+  - { id: bakery, label: "bakery: Ana, Sam" }
+parts:
+  - { id: hour, kind: trigger, label: "Every hour" }
+  - { id: sensor, kind: connector, label: "The oven's temperature sensor", in: bakery }
+  - { id: check, kind: code, op: check, label: "Is the oven running hot?", in: bakery }
+  - { id: screen, kind: surface, label: "The kitchen screen", in: bakery }
+lines:
+  - { from: hour, to: check, kind: start }
+  - { from: sensor, to: check, kind: data }
+  - { from: check, to: screen, kind: data }

@@ -41,7 +41,7 @@ func TestThereAreExamples(t *testing.T) {
 		"tour/07-person-step", "tour/08-gap", "tour/09-platform-view", "tour/10-operations",
 		"tour/11-do", "tour/12-standing-approval", "tour/13-check-by-code", "tour/14-untrusted-text",
 		"tour/15-several-workflows", "tour/15-split-count", "tour/15-split-order", "tour/16-accepted-risk", "tour/17-untrusted-risk-accepted",
-		"tour/18-title-and-detail"}
+		"tour/18-title-and-detail", "tour/19-same-timer-orders", "tour/19-same-timer-oven"}
 	if !reflect.DeepEqual(names, want) {
 		t.Errorf("examples = %q\nwant %q", names, want)
 	}
@@ -177,7 +177,8 @@ func TestEachExampleIsSoundAndItsDrawingsAreCurrent(t *testing.T) {
 
 // The family's workflows share the meal plan, the favourites, the kitchen screen and the family
 // chat, the bakery's stock count shares its stock levels with the supplier order and starts it, and
-// the tour's split count and order share the stock levels, so each set is drawn together as a map.
+// the tour's split count and order share the stock levels, and the tour's oven and order checks
+// share their timer and the kitchen screen, so each set is drawn together as a map.
 // examples/render.sh draws their SVGs.
 func TestTheExamplesThatShareAPartAreDrawnTogether(t *testing.T) {
 	for _, example := range []struct {
@@ -189,6 +190,7 @@ func TestTheExamplesThatShareAPartAreDrawnTogether(t *testing.T) {
 			"examples/pickups.yaml", "examples/question.yaml"}, false},
 		{"examples/bakery-map.mmd", []string{"examples/bakery-stock.yaml", "examples/bakery-order.yaml"}, true},
 		{"examples/tour/15-split-map.mmd", []string{"examples/tour/15-split-count.yaml", "examples/tour/15-split-order.yaml"}, false},
+		{"examples/tour/19-same-timer-map.mmd", []string{"examples/tour/19-same-timer-oven.yaml", "examples/tour/19-same-timer-orders.yaml"}, false},
 	} {
 		var workflows []Workflow
 		for _, path := range example.paths {

@@ -1,0 +1,17 @@
+awml: "0.11"
+title: The bakery's order check
+description: |
+  The second of two workflows on the same timer. Every hour code checks the website's orders and
+  shows any cake due today that nobody has started on the kitchen screen, which it shares with the
+  oven check by ref. The bakery is fictional.
+scopes:
+  - { id: bakery, label: "bakery: Ana, Sam" }
+parts:
+  - { id: hour, kind: trigger, label: "Every hour" }
+  - { id: orders, kind: connector, label: "The bakery's order inbox", in: bakery }
+  - { id: check, kind: code, op: check, label: "Has every cake due today been started?", in: bakery }
+  - { id: screen, kind: surface, label: "The kitchen screen", in: bakery, ref: 19-same-timer-oven.yaml#screen }
+lines:
+  - { from: hour, to: check, kind: start }
+  - { from: orders, to: check, kind: data }
+  - { from: check, to: screen, kind: data }
