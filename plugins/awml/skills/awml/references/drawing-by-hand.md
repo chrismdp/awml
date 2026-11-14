@@ -166,7 +166,7 @@ Every view of a file that marks a part `untrusted: true` shows where that part's
 
 So an order form whose text reaches a printed label with nothing between has `  class form trig`, then later `  class form unstopped`.
 
-On a map of several workflows, a part marked untrusted in any workflow's copy takes `untrusted` or `unstopped` the same way, following the text through the parts they share and from each outside action into the trigger it starts, and no line is coloured.
+On a map of several workflows, a part marked untrusted in any workflow's copy takes `untrusted` or `unstopped` the same way, following the text through the parts they share and from each outside action into the trigger it starts, and no line is coloured. A trigger several workflows share takes `untrusted` where any copy is marked, and `unstopped` where any copy's text breaks rule 23.
 
 ## 6. A map of several workflows
 
@@ -174,11 +174,13 @@ A map draws one box for each workflow and only what links them. Number the workf
 
 A part is shared when a context, connector or surface in one workflow has a `ref` naming a part of another workflow given. Follow the refs to the copy that has none. That copy owns the part, and its label is the one drawn. Number the shared parts `s1`, `s2` and so on, in the order of the first copy of each, taking the workflows in the order given and each one's parts in its file's order. An outside action whose `ref` names the trigger of a workflow given starts that workflow, and is a hand-off. The map draws no other part.
 
-After the header of section 1, write at the top level, indented two spaces, each workflow's triggers, taking the workflows in the order given and each one's triggers in its file's order, then each shared part in its order, each with its node from section 2. Then write each workflow's box: `subgraph w1["title"]`, with the workflow's `title` as its label, then `direction TB`, then each of its hand-offs in its file's order, indented two more spaces, then `end`. Write every label as section 2 says.
+Triggers with exactly the same label in more than one workflow given are one shared trigger, so a label that differs even in case or spacing is another. Number the shared triggers after the shared parts, in the order of the first copy of each, so with two shared parts the first shared trigger is `s3`. A shared trigger is drawn once, in the place of its first copy, with that copy's label, and every copy, including one that a hand-off's `ref` names, is that one node.
+
+After the header of section 1, write at the top level, indented two spaces, each workflow's triggers, taking the workflows in the order given and each one's triggers in its file's order and leaving out a shared trigger after its first copy, then each shared part in its order, each with its node from section 2. Then write each workflow's box: `subgraph w1["title"]`, with the workflow's `title` as its label, then `direction TB`, then each of its hand-offs in its file's order, indented two more spaces, then `end`. Write every label as section 2 says.
 
 Leave one empty line, then write the lines, indented two spaces. None has a label.
 
-1. For each workflow in the order given, a line from each of its triggers into its box, as `w1_thu --> w1`.
+1. For each workflow in the order given, a line from each of its triggers into its box, as `w1_thu --> w1`, or from a shared trigger, as `s3 --> w1`, once for each workflow it starts.
 2. For each shared part in its order, a line for each workflow with a copy of it, in the order given. Read that workflow's own `start`, `data` and `publish` lines to and from its copy. Where some lead into the copy and none out of it, write `w1 -.-> s1`. Where some lead out and none in, write `s1 -.-> w1`. Where some lead each way, write `s1 <-.-> w1`, and where none do, `w1 -.- s1`. A shared part is a context, a connector or a surface, so each of these lines is dotted.
 3. For each hand-off, in the order of the workflows and their parts, a line from the action to the trigger it starts, as `w1_start --> w2_low`.
 

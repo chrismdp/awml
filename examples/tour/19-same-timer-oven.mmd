@@ -1,0 +1,36 @@
+---
+config:
+  theme: default
+  fontFamily: Inter, sans-serif
+  flowchart:
+    useMaxWidth: false
+    subGraphTitleMargin:
+      top: 6
+      bottom: 30
+---
+flowchart TB
+  subgraph bakery["bakery#58; Ana#44; Sam"]
+    direction TB
+    hour("Every hour")
+    sensor{{"The oven#39;s temperature sensor"}}
+    check("<small style='color:rgb(61,67,79)'>⚙️ 🔍 check</small><br>Is the oven running hot#63;")
+    screen@{ shape: win-pane, label: "The kitchen screen" }
+  end
+
+  hour --> check
+  sensor -.-> check
+  check -.-> screen
+  classDef trig fill:#fbe1ee,stroke:#a33a74,color:#16171b
+  classDef ctx fill:#e2eef9,stroke:#3d6fa3,color:#16171b
+  classDef con fill:#eceef2,stroke:#5d6472,color:#16171b
+  classDef surf fill:#ffffff,stroke:#2a2d35,stroke-width:1.5px,color:#16171b
+  classDef out fill:#fde4dc,stroke:#b5532f,color:#16171b
+  classDef ai fill:#cdd3fb,stroke:#3b4bb0,color:#16171b
+  classDef code fill:#c4e3d1,stroke:#2b7a4f,color:#16171b
+  classDef person fill:#f7d79a,stroke:#9a6100,color:#16171b
+  classDef gap fill:#ffffff,stroke:#8a93a3,stroke-dasharray:4 3,color:#6b7280
+  class hour trig
+  class sensor con
+  class screen surf
+  class check code
+  style bakery fill:transparent,stroke:#127c8c,stroke-width:1.5px,stroke-dasharray:6 4,color:#0d5c68

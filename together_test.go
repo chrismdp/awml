@@ -529,6 +529,133 @@ func TestTheMapDrawsEveryTrigger(t *testing.T) {
 	}
 }
 
+// hourly is a workflow started by a trigger with the label given, with the trigger's own fields
+// after it, which posts one thing to the shop's notes.
+func hourly(title, id, label, fields string) string {
+	return currentAwml + `
+title: ` + title + `
+scopes:
+  - { id: shop, label: "shop: the owner", processing: any }
+parts:
+  - { id: ` + id + `, kind: trigger, label: "` + label + `"` + fields + ` }
+  - { id: step, kind: code, op: do, label: "` + title + `", in: shop }
+  - { id: notes, kind: context, label: "` + title + ` notes", in: shop }
+lines:
+  - { from: ` + id + `, to: step, kind: start }
+  - { from: step, to: notes, kind: data }
+`
+}
+
+// Triggers with the same label in two workflows are the same event, so the map draws one trigger,
+// with the shared kind of id, and a start line into each workflow's box. Each line joins the trigger
+// of the workflow it stands for.
+func TestTheMapDrawsTwoWorkflowsOnTheSameTimerFromOneTrigger(t *testing.T) {
+	workflows := together(t, "stock.yaml", hourly("Count the stock", "hour", "Every hour", ", wait: PT10M"),
+		"oven.yaml", hourly("Check the oven", "tick", "Every hour", ", wait: PT10M"))
+	got := DrawMap(workflows) + "\n"
+	has(t, got, "\n  s1(\"Every hour\")\n  subgraph w1[\"Count the stock\"]\n")
+	has(t, got, "\n  s1 --> w1\n  s1 --> w2\n")
+	has(t, got, "\n  class s1 trig\n")
+	if strings.Count(got, "Every hour") != 1 || strings.Contains(got, "w1_hour") || strings.Contains(got, "w2_tick") {
+		t.Errorf("the timer is drawn more than once:\n%s", got)
+	}
+	g := GraphMap(workflows)
+	if want := []GraphPart{{ID: "s1", Kind: "trigger", Label: "Every hour"}}; !reflect.DeepEqual(g.Parts, want) {
+		t.Errorf("the map's parts are %+v\nwant %+v", g.Parts, want)
+	}
+	want := []GraphLine{
+		{From: "s1", To: "w1", Kind: "start", Points: "to", Joins: []string{"w1_hour"}},
+		{From: "s1", To: "w2", Kind: "start", Points: "to", Joins: []string{"w2_tick"}},
+	}
+	if !reflect.DeepEqual(g.Lines, want) {
+		t.Errorf("the map's lines are %+v\nwant %+v", g.Lines, want)
+	}
+	// Each workflow's own drawing still draws its own trigger.
+	has(t, Draw(workflows[1].Doc), "  tick(\"Every hour\")\n")
+}
+
+// A shared trigger comes after the parts shared by ref, in the order of its first copy, and an
+// outside action that starts one of its workflows leads to it.
+func TestASharedTriggerIsNumberedAfterThePartsSharedByRef(t *testing.T) {
+	shop := strings.Replace(shopWorkflow, "label: The shopping list is ready, wait: PT1H }", "label: \"Thursday 19:00\" }", 1)
+	workflows := together(t, "plan.yaml", planWorkflow, "shop.yaml", shop)
+	g := GraphMap(workflows)
+	var ids []string
+	for _, p := range g.Parts {
+		ids = append(ids, p.ID+" "+p.Label)
+	}
+	if want := []string{"s2 Thursday 19:00", "w1_ready Start the shopping: Allow", "s1 Shopping list"}; !reflect.DeepEqual(ids, want) {
+		t.Errorf("the map's parts are %q\nwant %q", ids, want)
+	}
+	has(t, DrawMap(workflows)+"\n", "\n  w1_ready --> s2\n")
+}
+
+func TestTheMapDrawsThreeWorkflowsOnTheSameTimerFromOneTrigger(t *testing.T) {
+	workflows := together(t, "stock.yaml", hourly("Count the stock", "hour", "Every hour", ""),
+		"oven.yaml", hourly("Check the oven", "hour", "Every hour", ""),
+		"till.yaml", hourly("Total the till", "hour", "Every hour", ""))
+	got := DrawMap(workflows) + "\n"
+	has(t, got, "\n  s1 --> w1\n  s1 --> w2\n  s1 --> w3\n")
+	if strings.Count(got, "Every hour") != 1 {
+		t.Errorf("the timer is drawn more than once:\n%s", got)
+	}
+	summary := SummariseTogether(workflows)
+	want := []SharedSummary{{Label: "Every hour", Kind: "trigger", Workflows: []string{"Count the stock", "Check the oven", "Total the till"}}}
+	if !reflect.DeepEqual(summary.Shared, want) {
+		t.Errorf("shared parts are %+v\nwant %+v", summary.Shared, want)
+	}
+	if summary.Triggers != 1 {
+		t.Errorf("the summary counts %d triggers, want 1", summary.Triggers)
+	}
+}
+
+// Triggers whose waits differ are still the same event. The shared trigger shows no wait, and each
+// workflow keeps its own.
+func TestTriggersWithTheSameLabelAndDifferentWaitsAreShared(t *testing.T) {
+	workflows := together(t, "stock.yaml", hourly("Count the stock", "hour", "Every hour", ", wait: PT10M"),
+		"oven.yaml", hourly("Check the oven", "hour", "Every hour", ", wait: PT2H"))
+	encoded, err := json.Marshal(GraphMap(workflows))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(string(encoded), `"label":"Every hour"`) != 1 || strings.Contains(string(encoded), "PT") {
+		t.Errorf("the map gives %s", encoded)
+	}
+	if got := SummariseTogether(workflows).Shared; len(got) != 1 || got[0].Kind != "trigger" {
+		t.Errorf("shared parts are %+v", got)
+	}
+	if got := str(partsByID(workflows[1].Doc)["hour"], "wait"); got != "PT2H" {
+		t.Errorf("the oven's own trigger waits %q", got)
+	}
+}
+
+// A shared trigger is untrusted if any workflow's copy is marked untrusted.
+func TestASharedTriggerIsUntrustedIfAnyCopyIsMarked(t *testing.T) {
+	workflows := together(t, "stock.yaml", hourly("Count the stock", "hour", "A form is sent", ""),
+		"oven.yaml", hourly("Check the oven", "hour", "A form is sent", ", untrusted: true"))
+	g := GraphMap(workflows)
+	if len(g.Parts) != 1 || !g.Parts[0].Untrusted || g.Parts[0].Unstopped {
+		t.Errorf("the map's parts are %+v", g.Parts)
+	}
+	has(t, DrawMap(workflows)+"\n", "\n  class s1 untrusted\n")
+}
+
+// Only exactly the same label names the same event: labels that differ in case or spacing stay apart.
+func TestTriggersWhoseLabelsDifferInCaseOrSpacingStayApart(t *testing.T) {
+	workflows := together(t, "stock.yaml", hourly("Count the stock", "hour", "Every hour", ""),
+		"oven.yaml", hourly("Check the oven", "hour", "every hour", ""),
+		"till.yaml", hourly("Total the till", "hour", "Every  hour", ""),
+		"bins.yaml", hourly("Empty the bins", "hour", "Every hour ", ""))
+	got := DrawMap(workflows) + "\n"
+	has(t, got, "\n  w1_hour --> w1\n  w2_hour --> w2\n  w3_hour --> w3\n  w4_hour --> w4\n")
+	if strings.Contains(got, "s1") {
+		t.Errorf("the map shares a trigger:\n%s", got)
+	}
+	if summary := SummariseTogether(workflows); len(summary.Shared) != 0 || summary.Triggers != 4 {
+		t.Errorf("the summary shares %+v and counts %d triggers", summary.Shared, summary.Triggers)
+	}
+}
+
 func TestTheSummaryOfSeveralCountsASharedPartOnceAndNamesIt(t *testing.T) {
 	workflows := together(t, "plan.yaml", planWorkflow, "shop.yaml", shopWorkflow)
 	got := SummariseTogether(workflows)

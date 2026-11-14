@@ -92,6 +92,14 @@ assert.equal(api.checksJSON(everySource) + "\n", runNative(["check", "--json", .
 // Each file named twice is read once, where it's first named, in both.
 assert.deepEqual(api.checks(everySource).files.map((file) => file.file), [...new Set(everyPath)]);
 
+// Workflows on the same timer share one trigger on their map, its graph and their summary, in both.
+const sameTimer = ["examples/tour/19-same-timer-oven.yaml", "examples/tour/19-same-timer-orders.yaml"];
+const sameTimerSources = await Promise.all(sameTimer.map(async (file) => ({ file, source: await readFile(new URL(`../${file}`, import.meta.url), "utf8") })));
+assert.equal(api.draw(sameTimerSources) + "\n", runNative(["draw", ...sameTimer]), "map of workflows on the same timer");
+assert.equal(api.graphJSON(sameTimerSources) + "\n", runNative(["graph", ...sameTimer]), "map graph of workflows on the same timer");
+assert.equal(api.summaryJSON(sameTimerSources) + "\n", runNative(["summary", "--json", ...sameTimer]), "summary of workflows on the same timer");
+assert.equal(api.graph(sameTimerSources).parts.filter((part) => part.kind === "trigger").length, 1, "the timer is drawn once");
+
 const canonicalPath = new URL("testdata/canonical.yaml", import.meta.url).pathname;
 const canonicalSource = await readFile(canonicalPath, "utf8");
 assert.deepEqual(api.check(canonicalSource), []);
